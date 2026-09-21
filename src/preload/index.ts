@@ -111,6 +111,7 @@ const computerBridge = {
   completeSession: (input: unknown) => invokeBridge("bridge:computer:completeSession", input),
   setSessionState: (input: unknown) => invokeBridge("bridge:computer:setSessionState", input),
   updateSessionPlan: (input: unknown) => invokeBridge("bridge:computer:updateSessionPlan", input),
+  buildSkillDraft: (input: unknown) => invokeBridge("bridge:computer:buildSkillDraft", input),
   subscribeSession: (listener: (event: unknown) => void): (() => void) => {
     const handler = (_e: unknown, event: unknown) => listener(event);
     ipcRenderer.on("bridge:computer:session-event", handler);

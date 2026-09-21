@@ -1,6 +1,6 @@
 # Kiro Computer Use V2 升级执行计划
 
-> 状态：执行中
+> 状态：已完成（V2.1–V2.6）
 > 参考实现：Agent S / S2 / S3（ACI + 分层规划 + 经验记忆）、Microsoft UFO / UFO² / UFO³（UIA Control Automator + SoM + 双代理）、Claude Computer Use（截图→动作→验证循环）
 > 约束：不重写现有 Computer Agent；Filesystem / Terminal / GUI 继续共用同一 Policy / Approval / Audit / Kiro 主循环
 
@@ -34,7 +34,13 @@
   - 剪贴板：新增设置开关「允许 Kiro 读写剪贴板」（默认关闭，关闭观察 / 操作时级联关闭）；未开启在 executor / Main 双重拒绝，开启后 sensitive → allow-once（写入提示覆盖剪贴板）；读写集中在 `src/main/computer/clipboard.ts`（Electron clipboard，读取 ≤4096 字符 + 控制字符清洗，不落日志）
   - 文件上传：`upload_file` 仅接受「系统文件选择对话框」（标题锚定 + 文件名 / 打开按钮控件事实双重确认）+ 已授权本机工作区文件；renderer 只传 `rootId + 相对路径` → grantId，Main 用 `resolveComputerUploadPath`（realpath + 防逃逸 + 必须存在文件）解析绝对路径并填入对话框（路径绝不回传模型 / audit）；沙盒工作区拒绝
   - 测试：归一化 / 风险 / 对话框识别 14 项、运行时 12 项、执行器 7 项；真实模型 live smoke 5/5（新增 right_click 打开菜单场景）
-- [ ] V2.6 经验记忆（轨迹 → Skill）
+- [x] **V2.6 经验记忆（轨迹 → Skill）**
+  - T1 轨迹记录：Session 内存轨迹（`src/main/computer/trajectory.ts`）只记结构化事实 `{ action, targetLabel, risk, verificationPassed, at }`（≤40 步，标签清洗 / 截断）；绝不记录输入文本 / 剪贴板内容 / 路径 / 截图
+  - T2 成功轨迹 → Skill 草稿：`buildDesktopSkillDraft` 生成 `desktop-<app>-<task>`（步骤 + expect 验证 + 安全门控说明，确定性无 AI）；IPC `bridge:computer:buildSkillDraft`（仅 completed 且 ≥3 步）；Sidecar 完成后显示「保存为 Skill」→ `SkillDistillDialog` 预生成草稿模式（跳过 AI 蒸馏，复用预览 / 测试 / 安装流程）
+  - T3 检索注入：Chat Route 在电脑能力开启时注入「本机成功配方」（`lib/ai/skills/recipes.ts`，≤3 条 `desktop-*` 已启用 Skill；摘要清洗绝对路径 / 限长），并提示必须按当前界面重新 observe
+  - 测试：轨迹 / 草稿 / 配方 11 项、Session+Runtime 7 项、Sidecar 组件 2 项
+
+> **V2 全部完成**（V2.1–V2.6）。后续评估口径见 §5。
 
 ---
 

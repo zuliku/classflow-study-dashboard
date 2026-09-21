@@ -368,6 +368,7 @@ export async function handleChat(req: Request) {
   // Task 07: Skill Catalog — progressive disclosure (only name/description for enabled skills)
   let skillCatalogSection = "";
   let slashSkillSection = "";
+  let desktopRecipeSection = "";
   try {
     const { listSkills } = await import("@/src/main/skills/skillStore");
     const { withBuiltinSkills } = await import("@/lib/ai/skills/builtin");
@@ -375,6 +376,11 @@ export async function handleChat(req: Request) {
     const catalog = pkgs.filter((p) => p.enabled).map((p) => ({ name: p.name, description: p.description, enabled: true }));
     const { buildSkillCatalogPromptSection, buildSkillActivationPrompt } = await import("@/lib/ai/skills/prompt");
     skillCatalogSection = buildSkillCatalogPromptSection(catalog);
+    // V2.6：桌面能力开启时注入「本机成功配方」（来自用户成功轨迹生成的 desktop-* Skill；≤3 条）
+    if (computerSnapshot?.enabled === true) {
+      const { buildDesktopRecipePromptSection } = await import("@/lib/ai/skills/recipes");
+      desktopRecipeSection = buildDesktopRecipePromptSection(pkgs);
+    }
     const lastUser = [...parsed.messages].reverse().find((m: { role: string }) => m.role === "user");
     const lastText: string =
       (lastUser as unknown as { parts?: { type?: string; text?: string }[]; content?: string })?.parts?.find((p) => p.type === "text")?.text ??
@@ -394,11 +400,12 @@ export async function handleChat(req: Request) {
   } catch {
     skillCatalogSection = "";
     slashSkillSection = "";
+    desktopRecipeSection = "";
   }
 
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}`
-    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection;
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);

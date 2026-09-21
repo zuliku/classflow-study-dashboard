@@ -24,6 +24,11 @@ import {
   resolveDesktopAppProfile,
 } from "@/src/main/computer/appProfiles";
 import { isSystemFileDialog } from "@/src/main/computer/upload";
+import {
+  MIN_TRAJECTORY_STEPS_FOR_SKILL,
+  buildDesktopSkillDraft,
+  type DesktopTrajectoryStep,
+} from "@/src/main/computer/trajectory";
 
 export interface FakeElement {
   elementId: string;
@@ -72,6 +77,8 @@ export class FakeDesktopWorld {
   readonly uploadedFiles: Array<{ grantId: string; path: string }> = [];
   /** V2.5：最近一次特殊动作（hover / right_click / drag / upload_file） */
   lastAction: string | null = null;
+  /** V2.6：轨迹（结构化事实；与 Main 相同语义） */
+  readonly trajectory: DesktopTrajectoryStep[] = [];
   /** 最近一次 Enter 的窗口（脚本化行为） */
   onEnter: ((world: FakeDesktopWorld) => void) | null = null;
   private observations = new Map<string, ObservationRecord>();
@@ -445,6 +452,14 @@ export class FakeDesktopWorld {
       this.ensureSession(input.sessionId ?? "cs-fake");
       this.emitSession("acting", input.action);
       this.session!.actions += 1;
+      this.trajectory.push({
+        index: this.trajectory.length,
+        action: input.action as never,
+        targetLabel: input.action === "clipboard_read" ? "剪贴板（读取）" : "剪贴板（覆盖写入）",
+        risk: "sensitive",
+        verificationPassed: null,
+        at: Date.now(),
+      });
       if (input.action === "clipboard_write") {
         this.clipboardText = input.clipboardText ?? null;
         return {
@@ -549,6 +564,15 @@ export class FakeDesktopWorld {
       }
     }
     const reflectionRequired = this.session?.reflectionRequired === true;
+    // V2.6：轨迹记录（与 Main 相同：只记结构化事实）
+    this.trajectory.push({
+      index: this.trajectory.length,
+      action: input.action as never,
+      targetLabel: element ? `${element.role}「${element.name}」` : "",
+      risk: "normal",
+      verificationPassed: verification ? verification.passed : null,
+      at: Date.now(),
+    });
     return {
       actionResult: {
         action: input.action as never,
@@ -570,8 +594,7 @@ export class FakeDesktopWorld {
     };
   });
 
-  cancelActions = vi.fn(async (input: { sessionId: string }) => {
-    this.emitSession("cancelled", null);
+  cancelActions = vi.fn(async (input: { sessionId: string }) => {    this.emitSession("cancelled", null);
     return { ok: true, cancelled: 1 };
   });
 
@@ -666,6 +689,31 @@ export class FakeDesktopWorld {
       return session;
     }
   );
+
+  /** V2.6：成功轨迹 → Skill 草稿（与 Main 同一纯函数实现） */
+  buildSkillDraft = vi.fn(async (input: { sessionId: string }) => {
+    this.ensureSession(input.sessionId);
+    if (this.trajectory.length < MIN_TRAJECTORY_STEPS_FOR_SKILL) {
+      throw { code: "INVALID_OPERATION", message: "轨迹步骤太少" };
+    }
+    const window = this.getActiveWindow();
+    const profile = resolveDesktopAppProfile({
+      appName: window?.appName ?? "",
+      windowTitle: window?.title ?? "",
+    });
+    const draft = buildDesktopSkillDraft(
+      {
+        appName: window?.appName ?? null,
+        appLabel: profile?.label ?? null,
+        goal: this.session!.goal,
+        steps: [...this.trajectory],
+        result: this.session!.state === "completed" ? "completed" : "in-progress",
+        startedAt: this.session!.createdAt,
+      },
+      input.sessionId
+    );
+    return { draft, steps: this.trajectory.length };
+  });
 
   subscribeSession = (listener: (event: ClassFlowDesktopComputerSessionEvent) => void): (() => void) => {
     this.listeners.add(listener);

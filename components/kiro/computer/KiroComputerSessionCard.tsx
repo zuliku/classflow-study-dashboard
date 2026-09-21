@@ -1,14 +1,17 @@
 ﻿"use client";
 
-import React, { useEffect } from "react";
-import { Pause, Play, Square } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Pause, Play, Sparkles, Square } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { getClassFlowDesktopComputerSessionBridge } from "@/lib/desktop/bridge";
 import type {
   ClassFlowDesktopComputerAppProfileInfo,
   ClassFlowDesktopComputerSessionStatus,
+  ClassFlowDesktopComputerSkillDraftResult,
 } from "@/lib/desktop/types";
 import { useDesktopSessionStore, isActiveDesktopSessionState } from "@/store/useDesktopSessionStore";
+import { useToastStore } from "@/store/useToastStore";
 
 /** Main 侧动作标签 → 人类可读状态文案（Sidecar） */
 function describeState(input: {
@@ -102,6 +105,10 @@ export function KiroComputerSessionCard() {
   const goal = useDesktopSessionStore((s) => s.goal);
   const reflectionRequired = useDesktopSessionStore((s) => s.reflectionRequired);
   const appProfile = useDesktopSessionStore((s) => s.appProfile);
+  // V2.6：完成后的轨迹草稿（点击「保存为 Skill」时向 Main 拉取；不进入模型 context）
+  const [skillDraftResult, setSkillDraftResult] = useState<ClassFlowDesktopComputerSkillDraftResult | null>(null);
+  const [skillDialogOpen, setSkillDialogOpen] = useState(false);
+  const pushToast = useToastStore((s) => s.pushToast);
 
   // 订阅 Main session 事件（仅 Desktop Runtime；Web 版永不出现）
   useEffect(() => {
@@ -112,6 +119,28 @@ export function KiroComputerSessionCard() {
     });
     return unsubscribe;
   }, []);
+
+  // V2.6：session 完成 → 预取轨迹草稿（只有存在可用能力与足够步骤时才显示按钮）
+  useEffect(() => {
+    if (state !== "completed" || !sessionId) {
+      setSkillDraftResult(null);
+      return;
+    }
+    const bridge = getClassFlowDesktopComputerSessionBridge();
+    if (!bridge?.buildSkillDraft) return;
+    let cancelled = false;
+    void bridge
+      .buildSkillDraft({ sessionId })
+      .then((result) => {
+        if (!cancelled) setSkillDraftResult(result);
+      })
+      .catch(() => {
+        if (!cancelled) setSkillDraftResult(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state, sessionId]);
 
   if (!sessionId || !state) return null;
   if (state === "idle" && actions === 0) return null;
@@ -217,6 +246,34 @@ export function KiroComputerSessionCard() {
           需要调整策略：Kiro 正在重新观察并更新计划
         </p>
       )}
+
+      {/* V2.6：成功轨迹 → Skill（desktop-<app>-<task>） */}
+      {state === "completed" && skillDraftResult && (
+        <div className="flex items-center justify-between gap-2 pl-3.5">
+          <span className="text-[10px] text-sandrift truncate min-w-0">
+            本任务共 {skillDraftResult.steps} 步，可保存为 Skill 复用
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSkillDialogOpen(true)}
+            data-testid="computer-session-save-skill"
+          >
+            <Sparkles className="w-3 h-3" />
+            保存为 Skill
+          </Button>
+        </div>
+      )}
+
+      <SkillDistillDialog
+        open={skillDialogOpen}
+        onOpenChange={setSkillDialogOpen}
+        trace={null}
+        prebuiltDraft={skillDraftResult?.draft ?? null}
+        onSaved={(skillName) => {
+          pushToast({ type: "success", message: `已保存 Skill：${skillName}` });
+        }}
+      />
     </div>
   );
 }

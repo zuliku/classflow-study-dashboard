@@ -760,8 +760,19 @@ export interface ClassFlowDesktopComputerBridgeV3 {
     stepIndex?: number;
     completeStep?: boolean;
   }): Promise<ClassFlowDesktopComputerSessionStatus>;
+  /**
+   * V2.6：成功轨迹 → 确定性 Skill 草稿（desktop-<app>-<task>）。
+   * 可选能力（旧 preload 可能缺失）；不含输入文本 / 路径 / 截图。
+   */
+  buildSkillDraft?(input: { sessionId: string }): Promise<ClassFlowDesktopComputerSkillDraftResult>;
   /** Session 状态事件流；返回取消订阅函数 */
   subscribeSession(listener: (event: ClassFlowDesktopComputerSessionEvent) => void): () => void;
+}
+
+/** V2.6：Skill 草稿结果（renderer 侧展示 / 保存；draft 与 SkillDraft 同构） */
+export interface ClassFlowDesktopComputerSkillDraftResult {
+  draft: import("@/lib/ai/skills/types").SkillDraft;
+  steps: number;
 }
 
 export type ClassFlowDesktopComputerBridge =

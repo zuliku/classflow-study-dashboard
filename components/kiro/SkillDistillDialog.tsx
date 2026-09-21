@@ -11,9 +11,14 @@ interface SkillDistillDialogProps {
   onOpenChange: (open: boolean) => void;
   trace: WorkflowTrace | null;
   onSaved?: (skillName: string) => void;
+  /**
+   * V2.6：预生成草稿（如桌面成功轨迹 → desktop-<app>-<task>）。
+   * 提供时跳过 AI 蒸馏，直接进入预览 / 测试 / 安装流程。
+   */
+  prebuiltDraft?: SkillDraft | null;
 }
 
-export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: SkillDistillDialogProps) {
+export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuiltDraft }: SkillDistillDialogProps) {
   const [draft, setDraft] = useState<SkillDraft | null>(null);
   const [md, setMd] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -80,6 +85,8 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: Skill
     // 5. requiredTools 全部是真实存在的 ClassFlow Tool / MCP capability
     const knownTools = [
       "search_courses","get_course","get_week_schedule","search_assignments","get_assignment","get_assignment_schedule","get_assignment_health","get_available_time","propose_study_plan","get_upcoming_assignments","search_group_projects","get_group_project","get_group_tasks","get_calendar_range","get_material_metadata","read_material","read_project_file","search_project_file","read_project_visual","propose_task_breakdown","list_reminders","get_focus_status","query_learning_history","summarize_learning_history","get_learning_analytics","get_learning_outlook","propose_study_rebalance","propose_visual_actions","propose_timetable_import","activate_skill","mcp_search_tools","mcp_call_tool","create_assignment","update_assignment","set_assignment_ddl","create_study_blocks",
+      // V2.6：桌面 GUI 工具（desktop-* 配方使用）
+      "observe_desktop","find_desktop_element","desktop_action","desktop_session","list_desktop_windows","activate_window","open_application",
     ];
     for (const t of draft.requiredTools) {
       if (!knownTools.includes(t)) {
@@ -144,12 +151,20 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: Skill
     }
   };
 
-  // 自动触发蒸馏当 dialog 打开且有 trace 但无 draft
+  // 自动触发蒸馏当 dialog 打开且有 trace 但无 draft（V2.6：预生成草稿直接展示，跳过 AI 蒸馏）
   React.useEffect(() => {
-    if (open && trace && !draft && !loading) {
+    if (!open) return;
+    if (prebuiltDraft) {
+      setDraft(prebuiltDraft);
+      void import("@/lib/ai/skills/draft").then(({ renderSkillDraftToMd }) => {
+        setMd(renderSkillDraftToMd(prebuiltDraft));
+      });
+      return;
+    }
+    if (trace && !draft && !loading) {
       handleDistill();
     }
-  }, [open, trace]);
+  }, [open, trace, prebuiltDraft]);
 
   React.useEffect(() => {
     if (!open) {
@@ -168,11 +183,13 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: Skill
         </div>
         <div>
           <h4 className="text-sm font-bold text-charcoal">将工作流保存为 Skill</h4>
-          <p className="text-[11px] text-sandrift">Kiro 自动抽象 · 预览 · 测试 · 安装</p>
+          <p className="text-[11px] text-sandrift">
+            {prebuiltDraft ? "来自桌面成功轨迹 · 预览 · 测试 · 安装" : "Kiro 自动抽象 · 预览 · 测试 · 安装"}
+          </p>
         </div>
       </div>
 
-      {!trace ? (
+      {!trace && !prebuiltDraft ? (
         <p className="text-xs text-sandrift">请先在 Kiro 中完成一套可执行流程。</p>
       ) : loading ? (
         <div className="flex items-center gap-2 text-xs text-sandrift">

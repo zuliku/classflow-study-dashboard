@@ -92,6 +92,11 @@ import {
 import { guiKeyToVirtualKeys } from "@/lib/ai/computer/gui/keymap";
 import { classifyGuiAction } from "@/lib/ai/computer/gui/risk";
 import { isSystemFileDialog } from "./upload";
+import {
+  MIN_TRAJECTORY_STEPS_FOR_SKILL,
+  buildDesktopSkillDraft,
+} from "./trajectory";
+import type { SkillDraft } from "@/lib/ai/skills/types";
 
 export interface NativeScreenshotEvidence {
   mimeType: "image/jpeg";
@@ -786,6 +791,17 @@ export class DesktopObservationRuntime {
         verification ? verification.passed : null,
         this.deps.now()
       );
+      // V2.6：记录结构化轨迹（无输入文本 / 路径 / 截图）
+      this.sessions.recordTrajectoryStep(
+        input.sessionId,
+        {
+          action: input.action,
+          targetLabel: preparation.target.targetLabel,
+          risk: preparation.risk.level,
+          verificationPassed: verification ? verification.passed : null,
+        },
+        this.deps.now()
+      );
     }
 
     // V2.3：反思提示（模型必须重新观察 / 更新计划，而不是重复同一动作）
@@ -856,6 +872,17 @@ export class DesktopObservationRuntime {
       this.sessions.endAction(
         input.sessionId,
         { beforeUiSignature: null, newUiSignature: null, ok: true, actionFingerprint: fingerprint },
+        this.deps.now()
+      );
+      // V2.6：剪贴板动作同样进入轨迹（不含剪贴板内容）
+      this.sessions.recordTrajectoryStep(
+        input.sessionId,
+        {
+          action: input.action,
+          targetLabel: input.action === "clipboard_read" ? "剪贴板（读取）" : "剪贴板（覆盖写入）",
+          risk: "sensitive",
+          verificationPassed: null,
+        },
         this.deps.now()
       );
     }
@@ -1357,6 +1384,25 @@ export class DesktopObservationRuntime {
       },
       this.deps.now()
     );
+  }
+
+  /**
+   * V2.6：成功轨迹 → 确定性 Skill 草稿（desktop-<app>-<task>）。
+   * 只读取 Session 内的结构化轨迹；不含输入文本 / 路径 / 截图。
+   */
+  buildSkillDraft(rawInput: unknown): { draft: SkillDraft; steps: number } {
+    const { sessionId } = normalizeSessionOnlyInput(rawInput);
+    const trajectory = this.sessions.trajectorySnapshot(sessionId, this.deps.now());
+    if (!trajectory || trajectory.steps.length < MIN_TRAJECTORY_STEPS_FOR_SKILL) {
+      throw new DesktopComputerIpcError(
+        "INVALID_OPERATION",
+        `轨迹步骤太少（至少 ${MIN_TRAJECTORY_STEPS_FOR_SKILL} 步操作才能生成 Skill）。`
+      );
+    }
+    if (trajectory.result !== "completed") {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", "只有成功完成的轨迹才能生成 Skill。");
+    }
+    return { draft: buildDesktopSkillDraft(trajectory, sessionId), steps: trajectory.steps.length };
   }
 
   /** 校验 observation 强绑定（过期 / session / 窗口一致） */

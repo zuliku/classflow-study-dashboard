@@ -14,6 +14,13 @@
  * 绝不包含 native handle / path / 截图。
  */
 import type { DesktopAppProfileInfo } from "./appProfiles";
+import {
+  MAX_TRAJECTORY_STEPS,
+  sanitizeTrajectoryTargetLabel,
+  type DesktopTrajectory,
+  type DesktopTrajectoryResult,
+  type DesktopTrajectoryStep,
+} from "./trajectory";
 
 export type DesktopControlSessionState =
   | "idle"
@@ -125,6 +132,8 @@ interface SessionRecord {
   reflectionRequired: boolean;
   // V2.4：应用画像（进程名 / 标题解析；已脱敏）
   appProfile: DesktopAppProfileInfo | null;
+  // V2.6：轨迹（结构化事实；无输入文本 / 路径 / 截图）
+  trajectory: DesktopTrajectoryStep[];
 }
 
 const TERMINAL_STATES: ReadonlySet<DesktopControlSessionState> = new Set([
@@ -184,6 +193,7 @@ export class DesktopControlSessionStore {
       verificationFailStreak: 0,
       reflectionRequired: false,
       appProfile: null,
+      trajectory: [],
     };
     this.sessions.set(sessionId, record);
     return this.toStatus(record, now);
@@ -342,6 +352,57 @@ export class DesktopControlSessionStore {
     }
     this.touch(record, now);
     return this.toStatus(record, now);
+  }
+
+  /**
+   * V2.6：记录一次动作轨迹（结构化事实；调用方保证不含输入文本 / 路径 / 截图）。
+   * 超出上限丢弃最旧步骤。
+   */
+  recordTrajectoryStep(
+    sessionId: string,
+    step: {
+      action: DesktopTrajectoryStep["action"];
+      targetLabel: string;
+      risk: DesktopTrajectoryStep["risk"];
+      verificationPassed: boolean | null;
+    },
+    now: number = Date.now()
+  ): void {
+    const record = this.ensureRecord(sessionId, now);
+    record.trajectory.push({
+      index: record.trajectory.length,
+      action: step.action,
+      targetLabel: sanitizeTrajectoryTargetLabel(step.targetLabel),
+      risk: step.risk,
+      verificationPassed: step.verificationPassed,
+      at: now,
+    });
+    if (record.trajectory.length > MAX_TRAJECTORY_STEPS) {
+      record.trajectory = record.trajectory.slice(record.trajectory.length - MAX_TRAJECTORY_STEPS);
+    }
+    this.touch(record, now);
+  }
+
+  /** V2.6：轨迹快照（生成 Skill 草稿用；终态 → completed / failed / cancelled） */
+  trajectorySnapshot(sessionId: string, now: number = Date.now()): DesktopTrajectory | null {
+    const record = this.sessions.get(sessionId);
+    if (!record || record.trajectory.length === 0) return null;
+    const result: DesktopTrajectoryResult =
+      record.state === "completed"
+        ? "completed"
+        : record.state === "cancelled"
+          ? "cancelled"
+          : record.state === "failed"
+            ? "failed"
+            : "in-progress";
+    return {
+      appName: record.appName,
+      appLabel: record.appProfile?.label ?? null,
+      goal: record.goal,
+      steps: record.trajectory.map((step) => ({ ...step })),
+      result,
+      startedAt: record.createdAt,
+    };
   }
 
   /** V2.3：当前反思提示（消费式读取：由 runtime 在输出 reflectionHint 时调用） */
