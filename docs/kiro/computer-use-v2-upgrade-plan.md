@@ -8,7 +8,11 @@
 
 - [x] **V2.1 Grounding & 确定性验证**（commit `8d7a9db`）
   - `find_desktop_element`（确定性检索）、vision 候选 ↔ UIA 元素 IoU 关联、`desktop_action.expect` 验证、自适应 settle、Prompt/描述更新；Live smoke 3/3
-- [ ] V2.2 常驻 UIA Runtime（性能）
+- [x] **V2.2 常驻 UIA Runtime**（性能）
+  - `src/main/computer/uiaWorker.ts` + `uiaWorkerScript.ts` + `uiaWorkerClient.ts`：单进程 stdin/stdout JSON lines（ping/windows/inspect/resolve/act/activate）、RuntimeId 元素缓存（≤300）、超时/崩溃自动重启、空闲 5 分钟回收、启动失败回退一次性脚本（业务失败不重试）
+  - `resolveUiElement` 依赖：action 目标校验走单元素解析（缓存命中），不再每次全树扫描
+  - 实测（本机 Windows）：worker warm windows 437ms / inspect 121ms / resolve 40ms / act 24ms vs 一次性脚本 746 / 525 / 1681ms → 单步路径 ~0.5s vs ~2.7s（**≈80% 下降**，超过 ≥50% 目标）；启动成本 1.97s 一次性
+  - App 退出 `disposeUiaWorker()`；gated 真实 Windows smoke：`CLASSFLOW_UIA_WORKER_SMOKE=1 npx vitest run tests/uiaWorkerWindowsSmoke.test.ts`
 - [ ] V2.3 计划 / 反思 / Session 工件
 - [ ] V2.4 应用画像与敏感应用策略
 - [ ] V2.5 动作覆盖扩展

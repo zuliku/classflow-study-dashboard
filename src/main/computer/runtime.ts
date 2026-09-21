@@ -111,6 +111,11 @@ export interface DesktopObservationDeps {
     windowTitle?: string | null;
   }) => Promise<NativeScreenshotEvidence | null>;
   inspectUiTree: (hwnd: number) => Promise<{ elements: NativeUiElement[]; truncated: boolean }>;
+  /**
+   * V2.2：单元素解析（worker 缓存命中；不传则回退全树扫描）。
+   * 返回 null = 元素不存在；抛错 = UIA 读取失败。
+   */
+  resolveUiElement?: (hwnd: number, nativeRef: string) => Promise<NativeUiElement | null>;
   probeUiAutomation: () => Promise<boolean>;
   getPrimaryScreenSize: () => { width: number; height: number };
   /** Phase 2：native 输入执行器（UIA 语义 → bounds → 坐标） */
@@ -132,18 +137,21 @@ function platformName(platform: NodeJS.Platform): ClassFlowDesktopPlatform {
 }
 
 async function buildDefaultDeps(): Promise<DesktopObservationDeps> {
-  // screenshot.ts / guiAction.ts 依赖 electron 或 native 输入 → 动态加载，
+  // screenshot.ts 依赖 electron（desktopCapturer / screen）→ 动态加载，
   // 保证 runtime / observation 纯逻辑可在无 electron 的测试环境直接导入。
   const screenshotModule = await import("./screenshot");
+  // V2.2：UIA 走常驻 worker（缓存 + 无冷启动）；worker 不可用时各方法内部回退一次性脚本。
+  const workerClient = await import("./uiaWorkerClient");
   return {
     platform: process.platform,
-    listWindows: listNativeWindows,
+    listWindows: workerClient.workerListNativeWindows,
     captureScreenshot: screenshotModule.captureDesktopScreenshot,
-    inspectUiTree: inspectNativeUiTree,
+    inspectUiTree: workerClient.workerInspectNativeUiTree,
+    resolveUiElement: workerClient.workerResolveNativeUiElement,
     probeUiAutomation: () => probeUiAutomation(),
     getPrimaryScreenSize: screenshotModule.getPrimaryScreenSize,
-    runGuiAction: runNativeGuiAction,
-    activateWindow: activateNativeWindow,
+    runGuiAction: workerClient.workerRunNativeGuiAction,
+    activateWindow: workerClient.workerActivateNativeWindow,
     resolveApp: resolveDesktopApp,
     launchApp: launchResolvedDesktopApp,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -1061,8 +1069,12 @@ export class DesktopObservationRuntime {
       }
       let current: NativeUiElement | null = null;
       try {
-        const tree = await this.deps.inspectUiTree(window?.hwnd ?? 0);
-        current = tree.elements.find((element) => element.nativeRef === stored.nativeRef) ?? null;
+        if (this.deps.resolveUiElement) {
+          current = await this.deps.resolveUiElement(window?.hwnd ?? 0, stored.nativeRef);
+        } else {
+          const tree = await this.deps.inspectUiTree(window?.hwnd ?? 0);
+          current = tree.elements.find((element) => element.nativeRef === stored.nativeRef) ?? null;
+        }
       } catch {
         throw new DesktopComputerIpcError("OBSERVATION_FAILED", "界面读取失败，请重新 observe_desktop。");
       }

@@ -399,6 +399,10 @@ app.on("before-quit", async (event) => {
     closeAllPtySessions();
   } catch {}
   try {
+    const { disposeUiaWorker } = await import("./computer/uiaWorker");
+    disposeUiaWorker();
+  } catch {}
+  try {
     const { getMcpManager } = await import("./mcp/manager");
     await withQuitTimeout("mcp-disconnectAll", getMcpManager().disconnectAll());
   } catch (e) {

@@ -30,57 +30,69 @@ export const MAX_WINDOW_TITLE_LENGTH = 200;
 export const DESKTOP_WINDOW_ID_TTL_MS = 300_000;
 export const DESKTOP_WINDOW_ID_PATTERN = /^win-[A-Za-z0-9]{4,32}$/;
 
-const WINDOW_ENUMERATION_SCRIPT = String.raw`
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-Add-Type -TypeDefinition @"
+/**
+ * 窗口枚举 PowerShell 函数体（V2.2）：同时被一次性脚本与常驻 worker 复用，
+ * 避免两处枚举逻辑漂移。
+ */
+export const WINDOW_ENUMERATION_FUNCTION = String.raw`
+function Get-ClassFlowWindows {
+  Add-Type -AssemblyName UIAutomationClient
+  Add-Type -AssemblyName UIAutomationTypes
+  if (-not ([System.Management.Automation.PSTypeName]'ClassFlowForegroundWindow').Type) {
+    Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class ClassFlowForegroundWindow {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 }
 "@
-$root = [System.Windows.Automation.AutomationElement]::RootElement
-$foreground = [int64][ClassFlowForegroundWindow]::GetForegroundWindow()
-$items = New-Object System.Collections.ArrayList
-$procCache = @{}
-$children = $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
-$index = 0
-foreach ($element in $children) {
-  try {
-    $c = $element.Current
-    $name = $c.Name
-    if ([string]::IsNullOrWhiteSpace($name)) { continue }
-    $rect = $c.BoundingRectangle
-    $width = [int][Math]::Round($rect.Width)
-    $height = [int][Math]::Round($rect.Height)
-    if ($width -le 0 -or $height -le 0) { continue }
-    $hwnd = [int64]$c.NativeWindowHandle
-    $pidValue = [int]$c.ProcessId
-    $procName = ""
-    if ($procCache.ContainsKey($pidValue)) { $procName = $procCache[$pidValue] }
-    else {
-      try { $procName = [string](Get-Process -Id $pidValue -ErrorAction Stop).ProcessName } catch { $procName = "" }
-      $procCache[$pidValue] = $procName
-    }
-    [void]$items.Add([pscustomobject]@{
-      hwnd = $hwnd
-      pid = $pidValue
-      title = [string]$name
-      appName = $procName
-      x = [int][Math]::Round($rect.X)
-      y = [int][Math]::Round($rect.Y)
-      width = $width
-      height = $height
-      isActive = ($hwnd -eq $foreground -and $hwnd -ne 0)
-      isOffscreen = [bool]$c.IsOffscreen
-      zIndex = $index
-    })
-    $index = $index + 1
-    if ($index -ge 100) { break }
-  } catch { }
+  }
+  $root = [System.Windows.Automation.AutomationElement]::RootElement
+  $foreground = [int64][ClassFlowForegroundWindow]::GetForegroundWindow()
+  $items = New-Object System.Collections.ArrayList
+  $procCache = @{}
+  $children = $root.FindAll([System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+  $index = 0
+  foreach ($element in $children) {
+    try {
+      $c = $element.Current
+      $name = $c.Name
+      if ([string]::IsNullOrWhiteSpace($name)) { continue }
+      $rect = $c.BoundingRectangle
+      $width = [int][Math]::Round($rect.Width)
+      $height = [int][Math]::Round($rect.Height)
+      if ($width -le 0 -or $height -le 0) { continue }
+      $hwnd = [int64]$c.NativeWindowHandle
+      $pidValue = [int]$c.ProcessId
+      $procName = ""
+      if ($procCache.ContainsKey($pidValue)) { $procName = $procCache[$pidValue] }
+      else {
+        try { $procName = [string](Get-Process -Id $pidValue -ErrorAction Stop).ProcessName } catch { $procName = "" }
+        $procCache[$pidValue] = $procName
+      }
+      [void]$items.Add([pscustomobject]@{
+        hwnd = $hwnd
+        pid = $pidValue
+        title = [string]$name
+        appName = $procName
+        x = [int][Math]::Round($rect.X)
+        y = [int][Math]::Round($rect.Y)
+        width = $width
+        height = $height
+        isActive = ($hwnd -eq $foreground -and $hwnd -ne 0)
+        isOffscreen = [bool]$c.IsOffscreen
+        zIndex = $index
+      })
+      $index = $index + 1
+      if ($index -ge 100) { break }
+    } catch { }
+  }
+  return @{ foreground = $foreground; windows = @($items) }
 }
-ConvertTo-Json -InputObject @{ foreground = $foreground; windows = @($items) } -Compress -Depth 4
+`;
+
+const WINDOW_ENUMERATION_SCRIPT = `${WINDOW_ENUMERATION_FUNCTION}
+ConvertTo-Json -InputObject (Get-ClassFlowWindows) -Compress -Depth 4
 `;
 
 interface RawWindowEntry {

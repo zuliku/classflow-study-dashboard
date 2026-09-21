@@ -52,30 +52,38 @@ function sanitizeText(raw: unknown, maxLength: number): string {
   return raw.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
+/** 纯解析：单个 UIA 节点 → runtime 内部元素记录（V2.2 worker resolve 用） */
+export function parseUiElement(raw: unknown): NativeUiElement | null {
+  if (!raw || typeof raw !== "object") return null;
+  const node = raw as RawUiNode;
+  const role = sanitizeText(node.role, 64);
+  if (!role) return null;
+  return {
+    nativeRef: typeof node.nativeRef === "string" ? node.nativeRef.slice(0, 128) : "",
+    role,
+    name: sanitizeText(node.name, MAX_UI_ELEMENT_NAME_LENGTH),
+    enabled: node.enabled === true,
+    focused: node.focused === true,
+    isPassword: node.isPassword === true,
+    bounds: {
+      x: toInt(node.x),
+      y: toInt(node.y),
+      width: Math.max(0, toInt(node.width)),
+      height: Math.max(0, toInt(node.height)),
+    },
+    depth: Math.max(0, Math.min(toInt(node.depth), MAX_UI_DEPTH + 1)),
+  };
+}
+
 /** 纯解析：UIA 探测结果 → runtime 内部元素记录（可测试） */
 export function parseUiTree(raw: unknown): { elements: NativeUiElement[]; truncated: boolean } {
   const container = raw && typeof raw === "object" ? (raw as { elements?: unknown; truncated?: unknown }) : null;
   const list = Array.isArray(container?.elements) ? (container.elements as RawUiNode[]) : [];
   const elements: NativeUiElement[] = [];
   for (const node of list) {
-    if (!node || typeof node !== "object") continue;
-    const role = sanitizeText(node.role, 64);
-    if (!role) continue;
-    elements.push({
-      nativeRef: typeof node.nativeRef === "string" ? node.nativeRef.slice(0, 128) : "",
-      role,
-      name: sanitizeText(node.name, MAX_UI_ELEMENT_NAME_LENGTH),
-      enabled: node.enabled === true,
-      focused: node.focused === true,
-      isPassword: node.isPassword === true,
-      bounds: {
-        x: toInt(node.x),
-        y: toInt(node.y),
-        width: Math.max(0, toInt(node.width)),
-        height: Math.max(0, toInt(node.height)),
-      },
-      depth: Math.max(0, Math.min(toInt(node.depth), MAX_UI_DEPTH + 1)),
-    });
+    const element = parseUiElement(node);
+    if (!element) continue;
+    elements.push(element);
     if (elements.length >= MAX_UI_ELEMENTS) break;
   }
   return { elements, truncated: container?.truncated === true || elements.length >= MAX_UI_ELEMENTS };
