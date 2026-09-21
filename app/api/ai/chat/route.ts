@@ -54,6 +54,7 @@ import { buildClassFlowContextSection } from "@/lib/ai/prompts/classFlowContextS
 import { buildKiroMemoryIndexSection } from "@/lib/ai/prompts/memoryIndexSection";
 import { buildDesktopRuntimeCapabilityContext } from "@/lib/ai/computer/desktopCapabilityPrompt";
 import { resolveTerminalCapability } from "@/lib/ai/computer/terminalCapability";
+import { resolveDesktopObservationCapability } from "@/lib/ai/computer/desktopObservationCapability";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -214,6 +215,12 @@ export async function handleChat(req: Request) {
         `terminalEnabled=${computerSnapshot?.terminalEnabled ?? false} ` +
         `terminalAvailable=${computerSnapshot?.terminalAvailable ?? false} ` +
         `hasNativeRoot=${computerSnapshot?.hasNativeRoot ?? false} result=${cap.reason}`
+    );
+    const desktopCap = resolveDesktopObservationCapability(computerSnapshot);
+    console.info(
+      `[Kiro desktop observation capability] computerEnabled=${computerSnapshot?.enabled ?? false} ` +
+        `desktopControlEnabled=${computerSnapshot?.desktopControlEnabled ?? false} ` +
+        `desktopControlAvailable=${computerSnapshot?.desktopControlAvailable ?? false} result=${desktopCap.reason}`
     );
   }
 
@@ -412,6 +419,10 @@ export async function handleChat(req: Request) {
         const cap = resolveTerminalCapability(computerSnapshot);
         console.info(
           `[Kiro tools] terminalCapability=${cap.reason} run_terminal_command=${cap.available ? "exposed" : "hidden"}`
+        );
+        const desktopCap = resolveDesktopObservationCapability(computerSnapshot);
+        console.info(
+          `[Kiro tools] desktopObservationCapability=${desktopCap.reason} observe_desktop=${desktopCap.available ? "exposed" : "hidden"}`
         );
       }
 

@@ -22,6 +22,7 @@ import {
   isNativeAdapterRef,
   isClassFlowDesktopRuntime,
   hasClassFlowDesktopTerminal,
+  hasClassFlowDesktopComputer,
 } from "@/lib/desktop/bridge";
 import {
   authorizeLocalFolder,
@@ -74,11 +75,13 @@ export function KiroAgentSettings() {
     activeWorkspaceId,
     agentMode,
     terminalEnabled,
+    desktopControlEnabled,
     workspaces,
     setComputerEnabled,
     setActiveWorkspaceId,
     setAgentMode,
     setTerminalEnabled,
+    setDesktopControlEnabled,
     addWorkspace,
   } = useKiroComputerStore();
 
@@ -87,6 +90,8 @@ export function KiroAgentSettings() {
 
   // Desktop Terminal V1：仅在 Desktop runtime + terminal bridge 可用时显示（网页版完全不出现）
   const desktopTerminalAvailable = isClassFlowDesktopRuntime() && hasClassFlowDesktopTerminal();
+  // Computer Use Phase 1：仅在 Desktop runtime + computer bridge 可用时显示（网页版完全不出现）
+  const desktopObservationAvailable = isClassFlowDesktopRuntime() && hasClassFlowDesktopComputer();
   const [grantStatus, setGrantStatus] = useState<Record<string, BrowserGrantStatus>>({});
   // Native V1：root 运行时可用性（runtime facts；不持久化）
   const [rootAvailability, setRootAvailability] = useState<Record<string, WorkspaceRootAvailability>>({});
@@ -203,6 +208,24 @@ export function KiroAgentSettings() {
         "终端命令可能修改文件、安装依赖、运行程序，或访问工作区之外的系统资源。在「授权范围内自动」模式下，普通命令可能无需再次确认；识别到的删除、高风险或任意内联代码命令仍会请求许可。自动执行的脚本本身可能修改文件或访问工作区外资源。",
       confirmLabel: "允许",
       onConfirm: () => setTerminalEnabled(true),
+    });
+  };
+
+  /**
+   * Computer Use Phase 1：首次开启必须明确说明只读边界。
+   * Kiro 可以读取当前屏幕和应用界面，但本阶段不会执行点击或键盘操作。
+   */
+  const handleToggleDesktopObservation = (enabled: boolean) => {
+    if (!enabled) {
+      setDesktopControlEnabled(false);
+      return;
+    }
+    confirmRequest({
+      title: "允许 Kiro 查看桌面？",
+      description:
+        "Kiro 可以读取当前屏幕和应用界面（包括窗口标题、界面控件与截图），用于回答「我现在打开了什么」这类问题。本阶段不会执行点击或键盘操作，截图只在本次观察中使用，不会保存到磁盘。",
+      confirmLabel: "允许查看",
+      onConfirm: () => setDesktopControlEnabled(true),
     });
   };
 
@@ -330,6 +353,25 @@ export function KiroAgentSettings() {
                 onChange={() => undefined}
                 disabled
                 label="允许 Kiro 使用终端"
+              />
+            </SettingsRow>
+          )}
+
+          {/* Computer Use Phase 1：仅 Desktop runtime + computer bridge 可用时显示（网页版完全不出现） */}
+          {desktopObservationAvailable && (
+            <SettingsRow
+              settingId="kiro-desktop-observe-enabled"
+              title="允许 Kiro 查看桌面"
+              description={
+                desktopControlEnabled
+                  ? "只读观察 · 可读取当前屏幕与窗口控件树；不会点击或输入"
+                  : "开启后 Kiro 才能查看当前屏幕和应用界面（只读）。"
+              }
+            >
+              <SettingsToggle
+                checked={desktopControlEnabled}
+                onChange={handleToggleDesktopObservation}
+                label="允许 Kiro 查看桌面"
               />
             </SettingsRow>
           )}

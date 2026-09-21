@@ -57,6 +57,9 @@ export function riskOfCapability(capability: ComputerCapability): ComputerRisk {
     case "fs.list":
     case "fs.search":
     case "fs.read":
+    // Computer Use Phase 1：桌面观察 / UI 控件树读取均为只读风险等级
+    case "screen.observe":
+    case "ui.inspect":
       return "read";
     case "fs.create":
     case "document.create":

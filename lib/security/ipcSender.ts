@@ -27,6 +27,7 @@ export type IpcChannel = string;
 const SENSITIVE_PREFIXES = [
   "bridge:fs:",
   "bridge:terminal:",
+  "bridge:computer:",
   "bridge:credential:",
   "bridge:skill:",
   "bridge:mcp:",

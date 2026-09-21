@@ -9,6 +9,7 @@
  */
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { resolveTerminalCapability, TerminalCapabilityState } from "@/lib/ai/computer/terminalCapability";
+import { resolveDesktopObservationCapability } from "@/lib/ai/computer/desktopObservationCapability";
 
 /** 终端能力可用时的适用场景列表（写入 Prompt） */
 const TERMINAL_USE_CASES = [
@@ -113,6 +114,51 @@ function buildComputerDisabledSection(): string {
 }
 
 /**
+ * Computer Use Phase 1：Desktop Observation 能力段。
+ * 只读边界必须显式声明——用户要求点击/输入时必须如实说明当前不能执行。
+ */
+function buildDesktopObservationSection(snapshot: KiroComputerTurnSnapshot | null): string {
+  const capability = resolveDesktopObservationCapability(snapshot);
+  if (capability.reason === "computer-disabled") return "";
+  if (capability.reason === "permission-disabled") {
+    return [
+      "# Desktop Observation",
+      "",
+      "当前运行环境提供桌面观察能力（只读）。",
+      "- Runtime: available",
+      "- User permission: disabled",
+      "",
+      "用户询问能否看到屏幕 / 桌面时：说明桌面版本支持，但需要在 设置 → Agent 与权限 中开启「允许 Kiro 查看桌面」。",
+      "不要自动开启权限，也不要笼统回答「Kiro 不支持查看屏幕」。",
+    ].join("\n");
+  }
+  if (capability.reason === "runtime-unavailable") {
+    return [
+      "# Desktop Observation",
+      "",
+      "- Runtime: unavailable",
+      "",
+      "当前运行环境没有桌面观察能力（例如 Web 版 / Desktop Bridge 未加载）。",
+      "不要错误声称 ClassFlow Desktop 从来不支持查看桌面。",
+    ].join("\n");
+  }
+  return [
+    "# Desktop Observation",
+    "",
+    "- Runtime: available",
+    "- User permission: enabled",
+    "- observe_desktop（截图 + UI Automation 控件树）: available",
+    "- 只观察（Observe only）: 本阶段不会执行点击、键盘输入、剪贴板或启动应用",
+    "",
+    "用户询问「我现在电脑上打开了什么」「当前窗口有哪些按钮」「屏幕上显示什么」时，",
+    "使用 observe_desktop 读取当前活动窗口或屏幕，并基于返回的窗口标题、应用名称、窗口列表与 UI 元素作答。",
+    "返回的 windowId 是唯一允许使用的逻辑窗口 id；不要猜测或使用 HWND/PID。",
+    "用户要求「点击这个按钮」「输入文字」「关掉窗口」时：必须明确说明当前阶段只能观察、不能执行 GUI 操作，",
+    "不要声称已完成点击或输入，也不要描述不存在的执行能力。",
+  ].join("\n");
+}
+
+/**
  * 根据当前 Turn 的 frozen snapshot 生成能力声明段。
  * snapshot 为 null 或未启用 → computer-disabled 表达（与 resolver 判定一致）。
  */
@@ -120,18 +166,22 @@ export function buildDesktopRuntimeCapabilityContext(
   snapshot: KiroComputerTurnSnapshot | null
 ): string {
   const capability: TerminalCapabilityState = resolveTerminalCapability(snapshot);
-  switch (capability.reason) {
-    case "ready":
-      return buildReadySection();
-    case "permission-disabled":
-      return buildPermissionDisabledSection();
-    case "native-workspace-required":
-      return buildNativeWorkspaceMissingSection();
-    case "runtime-unavailable":
-      return buildRuntimeUnavailableSection();
-    case "computer-disabled":
-      return buildComputerDisabledSection();
-  }
+  const terminalSection = (() => {
+    switch (capability.reason) {
+      case "ready":
+        return buildReadySection();
+      case "permission-disabled":
+        return buildPermissionDisabledSection();
+      case "native-workspace-required":
+        return buildNativeWorkspaceMissingSection();
+      case "runtime-unavailable":
+        return buildRuntimeUnavailableSection();
+      case "computer-disabled":
+        return buildComputerDisabledSection();
+    }
+  })();
+  const observationSection = buildDesktopObservationSection(snapshot);
+  return observationSection ? `${terminalSection}\n\n${observationSection}` : terminalSection;
 }
 
 export type { TerminalCapabilityState };

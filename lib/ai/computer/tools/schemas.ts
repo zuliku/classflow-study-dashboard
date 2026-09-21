@@ -230,3 +230,23 @@ export const retrieveWorkspaceContextSchema = z.object({
   maxFiles: z.number().int().min(1).max(4).optional(),
   maxChars: z.number().int().min(1).max(6000).optional(),
 });
+
+/**
+ * Computer Use Phase 1：observe_desktop —— 只读桌面观察（截图 + UI Automation 控件树）。
+ * - windowId 只能是 Runtime 返回的 opaque logical id（win-…）；绝不接受 HWND/PID/路径。
+ * - 本阶段不存在任何点击/键盘/输入能力（Observe only）。
+ */
+export const observeDesktopSchema = z
+  .object({
+    target: z.enum(["active-window", "screen"]).optional(),
+    windowId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(/^win-[A-Za-z0-9]+$/, "windowId 必须是 observe_desktop 返回的逻辑窗口 id（win-…）")
+      .optional(),
+    includeScreenshot: z.boolean().optional(),
+    includeUiTree: z.boolean().optional(),
+  })
+  .strict();

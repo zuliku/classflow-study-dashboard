@@ -69,6 +69,27 @@ export function hasClassFlowDesktopTerminal(): boolean {
   return getClassFlowDesktopTerminalBridge() !== null;
 }
 
+/**
+ * Desktop Computer Bridge（Computer Use Phase 1：Observe only，optional capability）。
+ * Desktop Runtime 可以没有 computer（Native Folder / Terminal 保持 valid）——
+ * computer 缺失绝不使整个 Bridge invalid。
+ * 只接受 version === 1 的完整表面（capabilities + observe）。
+ */
+export function getClassFlowDesktopComputerBridge(): import("@/lib/desktop/types").ClassFlowDesktopComputerBridge | null {
+  const bridge = getClassFlowDesktopBridge();
+  if (!bridge) return null;
+  const computer = bridge.computer;
+  if (!computer || typeof computer !== "object") return null;
+  if (computer.version !== 1) return null;
+  if (typeof computer.capabilities !== "function" || typeof computer.observe !== "function") return null;
+  return computer;
+}
+
+/** Desktop Computer Bridge 是否可用（SSR safe；Web runtime → false） */
+export function hasClassFlowDesktopComputer(): boolean {
+  return getClassFlowDesktopComputerBridge() !== null;
+}
+
 /** Terminal V2 Streaming 是否可用 */
 export function hasClassFlowDesktopTerminalV2(): boolean {
   return getClassFlowDesktopTerminalBridgeV2() !== null;

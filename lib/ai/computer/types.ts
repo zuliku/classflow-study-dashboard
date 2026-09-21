@@ -22,7 +22,12 @@ export type ComputerCapability =
   | "app.open"
   | "app.reveal"
   | "shell.execute"
-  | "network.access";
+  | "network.access"
+  // Computer Use Phase 1（Desktop Observe；只读）：
+  // - screen.observe：读取当前桌面/窗口截图观察
+  // - ui.inspect：读取窗口 UI Automation 控件树
+  | "screen.observe"
+  | "ui.inspect";
 
 export type ComputerRisk = "read" | "create" | "modify" | "destructive" | "execute" | "external";
 

@@ -35,6 +35,12 @@ export interface KiroComputerState {
   /** Desktop Terminal V1：用户显式开启（默认 false；runtime availability 优先于 preference） */
   terminalEnabled: boolean;
   setTerminalEnabled: (enabled: boolean) => void;
+  /**
+   * Computer Use Phase 1：用户显式允许 Kiro 查看桌面（默认 false）。
+   * 只读观察；开启不授予任何点击 / 键盘能力（本阶段不存在）。
+   */
+  desktopControlEnabled: boolean;
+  setDesktopControlEnabled: (enabled: boolean) => void;
   addWorkspace: (workspace: KiroWorkspaceMeta) => void;
   updateWorkspace: (id: string, patch: Partial<Omit<KiroWorkspaceMeta, "id">>) => void;
   removeWorkspace: (id: string) => void;
@@ -54,6 +60,7 @@ const DEFAULT_STATE = {
   activeWorkspaceId: null,
   agentMode: DEFAULT_AGENT_MODE as KiroAgentMode,
   terminalEnabled: false,
+  desktopControlEnabled: false,
   workspaces: [] as KiroWorkspaceMeta[],
   permissionRules: [] as ComputerPermissionRule[],
 };
@@ -67,6 +74,7 @@ export const useKiroComputerStore = create<KiroComputerState>()(
       setActiveWorkspaceId: (id) => set({ activeWorkspaceId: id }),
       setAgentMode: (mode) => set({ agentMode: mode }),
       setTerminalEnabled: (enabled) => set({ terminalEnabled: enabled }),
+      setDesktopControlEnabled: (enabled) => set({ desktopControlEnabled: enabled }),
 
       addWorkspace: (workspace) =>
         set((state) => ({
@@ -185,6 +193,7 @@ export const useKiroComputerStore = create<KiroComputerState>()(
         activeWorkspaceId: state.activeWorkspaceId,
         agentMode: state.agentMode,
         terminalEnabled: state.terminalEnabled,
+        desktopControlEnabled: state.desktopControlEnabled,
         workspaces: state.workspaces,
         // 只持久化 persistent rules；session rules 仅内存
         permissionRules: state.permissionRules.filter((r) => r.scope === "persistent"),

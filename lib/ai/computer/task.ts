@@ -114,6 +114,8 @@ export function toolStepLabel(toolName: string): string {
       return "正在更新文档";
     case "run_terminal_command":
       return "正在运行终端命令";
+    case "observe_desktop":
+      return "正在观察桌面";
     default:
       return "正在执行操作";
   }
@@ -141,7 +143,9 @@ export function isComputerReadTool(toolName: string): boolean {
     toolName === "grep_files" ||
     toolName === "get_file_metadata" ||
     toolName === "read_text" ||
-    toolName === "inspect_document"
+    toolName === "inspect_document" ||
+    // Computer Use Phase 1：桌面观察是只读工具（无 mutation / 无 Undo）
+    toolName === "observe_desktop"
   );
 }
 

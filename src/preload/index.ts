@@ -88,6 +88,17 @@ const terminalBridge = {
   },
 };
 
+/**
+ * Computer Use Phase 1：Desktop Observe Bridge。
+ * 只暴露结构化 API（capabilities / observe）；不暴露通用 IPC / native handle / HWND / PID。
+ * 观察结果为只读事实，Renderer 无法通过该 Bridge 触发点击、键盘或 GUI 修改。
+ */
+const computerBridge = {
+  version: 1,
+  capabilities: () => invokeBridge("bridge:computer:capabilities", {}),
+  observe: (input: unknown) => invokeBridge("bridge:computer:observe", input),
+};
+
 // Credentials Bridge — 仅允许受限的 4 个操作（创建/替换/删除/列表），不暴露明文读取
 const credentialsBridge = {
   create: (input: unknown) => invokeBridge("bridge:credential:create", input),
@@ -175,6 +186,7 @@ contextBridge.exposeInMainWorld("classflowDesktop", {
   },
   filesystem: filesystemBridge,
   terminal: terminalBridge,
+  computer: computerBridge,
   credentials: credentialsBridge,
   skills: skillBridge,
   mcp: mcpBridge,

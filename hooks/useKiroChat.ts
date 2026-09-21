@@ -89,6 +89,7 @@ import { createVisualProposalRuntime } from "@/lib/ai/visual/receipt";
 import { clearLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import {
   getClassFlowDesktopTerminalBridge,
+  hasClassFlowDesktopComputer,
   isNativeAdapterRef,
 } from "@/lib/desktop/bridge";
 import { cancelAllActiveTerminalExecutions } from "@/lib/ai/computer/terminal/executor";
@@ -865,6 +866,9 @@ export function useKiroChat({
       terminalEnabled: cs.terminalEnabled,
       terminalAvailable: getClassFlowDesktopTerminalBridge() !== null,
       hasNativeRoot: ws ? ws.roots.some((r) => isNativeAdapterRef(r.adapterRef)) : false,
+      // Computer Use Phase 1：桌面观察 preference + runtime availability（只读；不含任何 native 标识）
+      desktopControlEnabled: cs.desktopControlEnabled,
+      desktopControlAvailable: hasClassFlowDesktopComputer(),
     };
   };
 
@@ -3389,6 +3393,8 @@ function capabilityForToolName(toolName: string): ComputerCapability {
       return "document.create";
     case "update_document":
       return "document.modify";
+    case "observe_desktop":
+      return "screen.observe";
     default:
       return "fs.read";
   }

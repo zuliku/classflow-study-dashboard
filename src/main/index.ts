@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { startApiServer, installPdfFontEnv, ApiServer } from "./httpServer";
 import { registerDesktopBridgeIpc } from "./desktopBridge";
+import { registerComputerIpc } from "./computer/ipc";
 import { buildClassFlowWebPreferences } from "@/lib/security/electronConfig";
 import { decideNavigation } from "@/lib/security/navigation";
 import { getCspHeader } from "@/lib/security/csp";
@@ -256,6 +257,12 @@ app.whenReady().then(async () => {
 
   // Desktop Bridge V1（Filesystem + Terminal）：通过 validateSender 统一校验
   registerDesktopBridgeIpc({
+    getAllowedOrigins: () => getAllowedOrigins(apiBase),
+    isTrustedSender,
+  });
+
+  // Computer Use Phase 1（Desktop Observe，只读）：同样受 trusted sender validation 保护
+  registerComputerIpc({
     getAllowedOrigins: () => getAllowedOrigins(apiBase),
     isTrustedSender,
   });

@@ -129,6 +129,12 @@ export interface ClassFlowDesktopBridgeV1 {
    * 版本协商独立于 Bridge version。
    */
   terminal?: ClassFlowDesktopTerminalBridge;
+  /**
+   * Optional Capability（Computer Use Phase 1）：Desktop Computer Bridge（Observe only）。
+   * 渐进能力：缺失 → Observe 工具不暴露（绝不使整个 Bridge invalid）。
+   * Computer 自己拥有 version（1 = Observe），版本协商独立于 Bridge version。
+   */
+  computer?: ClassFlowDesktopComputerBridge;
   channels?: ClassFlowDesktopChannelsBridge;
   inbox?: ClassFlowDesktopInboxBridge;
   credentials?: {
@@ -284,6 +290,100 @@ export type DesktopTerminalSessionEvent =
   | { type: "exit"; sessionId: string; exitCode: number };
 
 export type ClassFlowDesktopTerminalBridge = ClassFlowDesktopTerminalBridgeV1 | ClassFlowDesktopTerminalBridgeV2;
+
+/* ---------------- Desktop Computer Bridge（Computer Use Phase 1：Observe only） ---------------- */
+
+/**
+ * Computer Bridge 结构化错误（绝不向 Web throw raw OS error / stack）。
+ * - RUNTIME_UNAVAILABLE：桌面运行时当前不可用（Electron API / UI Automation 探测失败）
+ * - OBSERVATION_FAILED：观察失败（截图 / 窗口枚举 / UIA 读取异常，已脱敏）
+ * - INVALID_OPERATION：malformed IPC 输入 / 非法 target/windowId 组合
+ * - PERMISSION_DENIED：调用方不受信任
+ */
+export type DesktopComputerBridgeErrorCode =
+  | "PERMISSION_DENIED"
+  | "INVALID_OPERATION"
+  | "RUNTIME_UNAVAILABLE"
+  | "OBSERVATION_FAILED"
+  | "NOT_FOUND";
+
+/**
+ * UI 元素（模型可见的最小字段集）。
+ * elementId 是 Runtime 生成的 opaque 逻辑 id（每次观察重新生成）；
+ * 绝不暴露 native UI element / HWND / PID。
+ */
+export interface ClassFlowDesktopComputerElement {
+  elementId: string;
+  role: string;
+  name: string;
+  enabled: boolean;
+  focused: boolean;
+  bounds: { x: number; y: number; width: number; height: number };
+}
+
+/** 截图证据（dataUrl 仅存在于本次响应；绝不自动持久化到磁盘） */
+export interface ClassFlowDesktopComputerScreenshotEvidence {
+  captured: true;
+  mimeType: "image/jpeg";
+  width: number;
+  height: number;
+  bytes: number;
+  capturedAt: string;
+  /** dataUrl 为 renderer 侧证据；Executor 不会把原始像素转发给模型（避免无界 token） */
+  dataUrl: string;
+}
+
+export interface ClassFlowDesktopComputerObservation {
+  observationId: string;
+  target: "active-window" | "screen";
+  appName: string;
+  windowTitle: string;
+  /** opaque 逻辑窗口 id（win-…）；screen 观察无活动窗口时为 null */
+  windowId: string | null;
+  viewport: { width: number; height: number };
+  /** 有界可操作窗口列表（只含 opaque id/title/appName/active；hwnd/pid 不出现） */
+  windows: ClassFlowDesktopComputerWindow[];
+  windowsTruncated: boolean;
+  elements: ClassFlowDesktopComputerElement[];
+  elementCount: number;
+  elementsTruncated: boolean;
+  screenshot: ClassFlowDesktopComputerScreenshotEvidence | null;
+  /** 已脱敏的降级原因（如 screenshot-unavailable / ui-tree-unavailable） */
+  warnings: string[];
+  uiTreeRevision: number;
+  capturedAt: string;
+}
+
+/** 观察到的顶层窗口（模型可用于选择后续观察目标；只含 opaque windowId） */
+export interface ClassFlowDesktopComputerWindow {
+  windowId: string;
+  title: string;
+  appName: string;
+  active: boolean;
+}
+
+export interface ClassFlowDesktopComputerCapabilities {
+  available: boolean;
+  platform: ClassFlowDesktopPlatform;
+  screenshot: boolean;
+  uiAutomation: boolean;
+}
+
+/**
+ * Desktop Computer Bridge V1（Computer Use Phase 1）。
+ * 只读：Runtime MUST NOT 实现鼠标 / 键盘 / clipboard / launch app。
+ * 只接受 opaque windowId；Runtime 负责 opaque id ↔ native window 映射，绝不外传。
+ */
+export interface ClassFlowDesktopComputerBridge {
+  version: 1;
+  capabilities(): Promise<ClassFlowDesktopComputerCapabilities>;
+  observe(input: {
+    target?: "active-window" | "screen";
+    windowId?: string;
+    includeScreenshot?: boolean;
+    includeUiTree?: boolean;
+  }): Promise<ClassFlowDesktopComputerObservation>;
+}
 
 declare global {
   interface Window {

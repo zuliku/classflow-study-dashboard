@@ -24,6 +24,7 @@ import {
   updateDocumentV2ModelSchema,
   searchWorkspaceKnowledgeSchema,
   retrieveWorkspaceContextSchema,
+  observeDesktopSchema,
   runTerminalCommandSchema,
   writeTerminalInputSchema,
   startTerminalCommandSchema,
@@ -125,6 +126,21 @@ export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
     schema: getDiagnosticsSchema,
     capability: "fs.read",
     mutation: false,
+  },
+  {
+    // Computer Use Phase 1（Observe only）：只读桌面观察。绝不执行鼠标/键盘/GUI 修改。
+    name: "observe_desktop",
+    description:
+      "观察当前 Windows 桌面（只读，不会点击或输入）。默认观察当前活动窗口；可用 windowId 指定之前观察结果中返回的逻辑窗口 id。返回：observationId、应用名称、窗口标题、逻辑 windowId、当前打开窗口列表（opaque windowId/title/appName/active）、viewport 尺寸、UI 元素列表（elementId/role/name/enabled/focused/bounds）与截图证据。仅使用返回的 opaque windowId；不要猜测或使用 HWND/PID/路径。本阶段没有点击、键盘、剪贴板或启动应用能力——用户要求此类操作时必须明确说明当前只能观察，不能执行。",
+    schema: observeDesktopSchema,
+    capability: "screen.observe",
+    mutation: false,
+    inputExamples: [
+      { input: {} },
+      { input: { target: "active-window", includeScreenshot: true, includeUiTree: true } },
+      { input: { target: "screen" } },
+      { input: { windowId: "win-3f9a2c1b4d5e", includeUiTree: true } },
+    ],
   },
 ];
 

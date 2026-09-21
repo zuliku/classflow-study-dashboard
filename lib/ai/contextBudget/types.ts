@@ -120,4 +120,13 @@ export interface KiroComputerTurnSnapshot {
   terminalEnabled?: boolean;
   terminalAvailable?: boolean;
   hasNativeRoot?: boolean;
+  /**
+   * Computer Use Phase 1（Desktop Observe；runtime facts，冻结于 Send 边界）：
+   * desktopControlEnabled = 用户偏好（持久化，「允许 Kiro 查看桌面」）；
+   * desktopControlAvailable = Desktop Computer Bridge 存在（live runtime）。
+   * 两者同时满足才向模型暴露 observe_desktop（server tool list 条件过滤）。
+   * 绝不包含 native window handle / HWND / PID / absolute path / OS sensitive identifiers。
+   */
+  desktopControlEnabled?: boolean;
+  desktopControlAvailable?: boolean;
   }

@@ -54,6 +54,14 @@ export function validateComputerTurnSnapshot(value: unknown): KiroComputerTurnSn
     ...(typeof v.terminalEnabled === "boolean" ? { terminalEnabled: v.terminalEnabled } : {}),
     ...(typeof v.terminalAvailable === "boolean" ? { terminalAvailable: v.terminalAvailable } : {}),
     ...(typeof v.hasNativeRoot === "boolean" ? { hasNativeRoot: v.hasNativeRoot } : {}),
+    // Computer Use Phase 1：Desktop Observe runtime facts；只接受 boolean。
+    // 快照返回值是白名单重建对象——即使 client 注入 hwnd/pid/nativePath 等字段也不会进入快照。
+    ...(typeof v.desktopControlEnabled === "boolean"
+      ? { desktopControlEnabled: v.desktopControlEnabled }
+      : {}),
+    ...(typeof v.desktopControlAvailable === "boolean"
+      ? { desktopControlAvailable: v.desktopControlAvailable }
+      : {}),
   };
 }
 

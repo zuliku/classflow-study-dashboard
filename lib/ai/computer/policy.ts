@@ -38,6 +38,9 @@ function matchesResourcePattern(pattern: string, resourcePath: string): boolean 
 }
 
 function ruleMatches(rule: ComputerPermissionRule, context: PolicyContext): boolean {
+  // capability 必须精确匹配：deny/allow 规则只作用于声明的能力（Computer Use Phase 1
+  // 需要 screen.observe 与 ui.inspect 可独立控制；跨能力泄漏会使规则语义失效）。
+  if (rule.capability !== context.capability) return false;
   if (rule.workspaceId && rule.workspaceId !== context.workspaceId) return false;
   if (rule.rootId && rule.rootId !== context.rootId) return false;
   if (rule.resourcePattern && context.resourcePath !== undefined) {
@@ -69,6 +72,8 @@ const HARD_DENY_LABELS: Record<ComputerCapability, string> = {
   "fs.move": "fs.move",
   "document.create": "document.create",
   "document.modify": "document.modify",
+  "screen.observe": "观察桌面",
+  "ui.inspect": "读取界面控件",
 };
 
 function modeLabel(mode: KiroAgentMode): string {

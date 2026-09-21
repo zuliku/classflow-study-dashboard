@@ -22,6 +22,7 @@ import {
   buildApprovalRequest,
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
+import { executeKiroObserveDesktop } from "@/lib/ai/computer/desktop/observe";
 import { executeKiroTerminalCommand, writeKiroTerminalInput, startKiroTerminalCommand, waitKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
 import { createKiroPtySession, runKiroPtySessionCommand, writeKiroPtySessionInput, closeKiroPtySession } from "@/lib/ai/computer/terminal/ptyAgent";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
@@ -167,6 +168,22 @@ export async function executeKiroComputerTool(request: {
       kind: "completed",
       output: { ok: false, code: "PERMISSION_DENIED", message: `未知 Computer 工具：${toolName}` },
     };
+  }
+
+  // Computer Use Phase 1：observe_desktop（只读桌面观察；不进入 filesystem resource pipeline）。
+  // 独立预算（readCount）；policy 覆盖 screen.observe + ui.inspect；无任何鼠标/键盘路径。
+  if (toolName === "observe_desktop") {
+    return executeKiroObserveDesktop({
+      toolCallId,
+      toolInput,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      livePermissionRules,
+      counters: counters as ComputerCounterState,
+      oneShotApprovals: oneShotApprovals ?? [],
+      taskId: context.taskId ?? "",
+      readLimitPerTurn: COMPUTER_READ_LIMIT_PER_TURN,
+    });
   }
 
   // Desktop Terminal V1/V2：独立预算（terminalCount；不走 filesystem read/mutation 计数）

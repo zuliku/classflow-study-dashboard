@@ -17,6 +17,8 @@ import {
  * - Hard Deny（任何 mode / 规则不能覆盖）：app.open / app.reveal / network.access。
  * - shell.execute **不再是** hard deny：受 Desktop runtime / 用户 terminalEnabled 偏好 /
  *   workspace native root / policy / Terminal Risk Gate / approval 全链控制。
+ * - Computer Use Phase 1（Desktop Observe，只读）：screen.observe / ui.inspect 在
+ *   Plan / Guided / Workspace Auto 默认全部 allow（观察不修改任何 GUI 状态）。
  * 显式 deny 规则与 read-only root 仍优先于 mode default（policy pipeline 保证）。
  */
 export const AGENT_MODE_DEFAULTS: Record<
@@ -38,6 +40,9 @@ export const AGENT_MODE_DEFAULTS: Record<
     "app.reveal": "deny",
     "shell.execute": "deny",
     "network.access": "deny",
+    // Desktop Observe：Plan 也允许只读观察（不执行点击/键盘）
+    "screen.observe": "allow",
+    "ui.inspect": "allow",
   },
   guided: {
     "workspace.list": "allow",
@@ -55,6 +60,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     "app.open": "deny",
     "app.reveal": "deny",
     "network.access": "deny",
+    "screen.observe": "allow",
+    "ui.inspect": "allow",
   },
   "workspace-auto": {
     "workspace.list": "allow",
@@ -75,6 +82,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     "app.open": "deny",
     "app.reveal": "deny",
     "network.access": "deny",
+    "screen.observe": "allow",
+    "ui.inspect": "allow",
   },
 };
 

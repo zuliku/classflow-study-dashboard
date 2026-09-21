@@ -11,6 +11,10 @@ import {
 } from "@/lib/ai/tools/finalAnswer";
 import { resolveDocumentAuthoringVersion, DocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 import { resolveTerminalCapability, TerminalCapabilityState } from "@/lib/ai/computer/terminalCapability";
+import {
+  resolveDesktopObservationCapability,
+  DesktopObservationCapabilityState,
+} from "@/lib/ai/computer/desktopObservationCapability";
 
 /** Kiro 全部基础工具（Read + Write + Memory）：Server 提供 schema，Client 按同名执行 */
 export const KIRO_TOOLS = {
@@ -87,6 +91,8 @@ export function getKiroToolsForRequest(input: {
     terminalEnabled?: boolean;
     terminalAvailable?: boolean;
     hasNativeRoot?: boolean;
+    desktopControlEnabled?: boolean;
+    desktopControlAvailable?: boolean;
   };
   documentAuthoringVersion?: unknown;
 }): ToolSet {
@@ -99,6 +105,12 @@ export function getKiroToolsForRequest(input: {
   const terminalCapability = resolveTerminalCapability(snap as never);
   if (!terminalCapability.available) {
     delete (set as Record<string, unknown>)["run_terminal_command"];
+  }
+  // Computer Use Phase 1：observe_desktop 与桌面观察 Capability 同源。
+  // Web runtime（没有 Desktop Computer Bridge）→ desktopControlAvailable=false → 工具不存在。
+  const desktopObservationCapability = resolveDesktopObservationCapability(snap as never);
+  if (!desktopObservationCapability.available) {
+    delete (set as Record<string, unknown>)["observe_desktop"];
   }
   return set;
 }
@@ -114,6 +126,18 @@ export function resolveKiroTerminalCapability(input: {
   };
 }): TerminalCapabilityState {
   return resolveTerminalCapability(input.computerSnapshot as never);
+}
+
+/** 供 chat route / diagnostics 读取本请求的 Desktop Observation Capability（与 observe_desktop 暴露同源） */
+export function resolveKiroDesktopObservationCapability(input: {
+  computerSnapshot?: {
+    enabled: boolean;
+    agentMode: "plan" | "guided" | "workspace-auto";
+    desktopControlEnabled?: boolean;
+    desktopControlAvailable?: boolean;
+  };
+}): DesktopObservationCapabilityState {
+  return resolveDesktopObservationCapability(input.computerSnapshot as never);
 }
 
 export { COMPUTER_TOOLS };

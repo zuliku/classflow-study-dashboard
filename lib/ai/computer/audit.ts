@@ -37,6 +37,10 @@ export interface ComputerAuditEntry {
   exitCode?: number;
   durationMs?: number;
   timedOut?: boolean;
+  /** Computer Use Phase 1（可选）：只读桌面观察事实。绝不记录 HWND/PID/像素/原始标题栈 */
+  desktopTarget?: "active-window" | "screen";
+  observationId?: string;
+  uiElementCount?: number;
 }
 
 function openAuditDb(): Promise<IDBDatabase | null> {
