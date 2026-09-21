@@ -30,6 +30,7 @@ import {
   executeKiroOpenApplication,
 } from "@/lib/ai/computer/gui/windowTools";
 import { executeKiroFindDesktopElement } from "@/lib/ai/computer/gui/elementSearch";
+import { executeKiroDesktopSession } from "@/lib/ai/computer/gui/sessionTool";
 import { executeKiroTerminalCommand, writeKiroTerminalInput, startKiroTerminalCommand, waitKiroTerminalCommand } from "@/lib/ai/computer/terminal/executor";
 import { createKiroPtySession, runKiroPtySessionCommand, writeKiroPtySessionInput, closeKiroPtySession } from "@/lib/ai/computer/terminal/ptyAgent";
 import { TerminalActivityInit } from "@/lib/ai/computer/terminal/activity";
@@ -229,6 +230,18 @@ export async function executeKiroComputerTool(request: {
       counters: counters as ComputerCounterState,
       taskId: context.taskId ?? "",
       readLimitPerTurn: COMPUTER_READ_LIMIT_PER_TURN,
+      isCancelled: context.isCancelled,
+    });
+  }
+
+  // Computer Use V2.3：desktop_session（目标 / 计划 / 步骤；只存内存，不执行 GUI）
+  if (toolName === "desktop_session") {
+    return executeKiroDesktopSession({
+      toolCallId,
+      toolInput,
+      snapshot: turnSnapshot,
+      liveWorkspaces,
+      taskId: context.taskId ?? "",
       isCancelled: context.isCancelled,
     });
   }

@@ -20,6 +20,11 @@ export interface DesktopSessionUiState {
   actions: number;
   observations: number;
   updatedAt: number;
+  /** V2.3：目标 / 计划 / 当前步骤 / 反思状态（Sidecar 时间线） */
+  goal: string | null;
+  plan: string[];
+  stepIndex: number;
+  reflectionRequired: boolean;
   applyEvent: (event: ClassFlowDesktopComputerSessionEvent) => void;
   clear: () => void;
 }
@@ -33,6 +38,10 @@ export const useDesktopSessionStore = create<DesktopSessionUiState>()((set) => (
   actions: 0,
   observations: 0,
   updatedAt: 0,
+  goal: null,
+  plan: [],
+  stepIndex: 0,
+  reflectionRequired: false,
   applyEvent: (event) =>
     set({
       sessionId: event.sessionId,
@@ -43,6 +52,10 @@ export const useDesktopSessionStore = create<DesktopSessionUiState>()((set) => (
       actions: event.actions,
       observations: event.observations,
       updatedAt: event.updatedAt,
+      goal: event.goal ?? null,
+      plan: Array.isArray(event.plan) ? event.plan : [],
+      stepIndex: typeof event.stepIndex === "number" ? event.stepIndex : 0,
+      reflectionRequired: event.reflectionRequired === true,
     }),
   clear: () =>
     set({
@@ -54,6 +67,10 @@ export const useDesktopSessionStore = create<DesktopSessionUiState>()((set) => (
       actions: 0,
       observations: 0,
       updatedAt: 0,
+      goal: null,
+      plan: [],
+      stepIndex: 0,
+      reflectionRequired: false,
     }),
 }));
 

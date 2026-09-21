@@ -42,6 +42,7 @@ import {
   normalizeOpenApplicationInput,
   normalizeOptionalSessionInput,
   normalizeSessionOnlyInput,
+  normalizeSessionPlanInput,
   normalizeSessionStateInput,
   type DesktopObservationRecord,
   type NormalizedActionInput,
@@ -648,7 +649,17 @@ export class DesktopObservationRuntime {
       } catch (err) {
         throw this.mapSessionGuardError(err);
       }
+      // V2.3：expect 验证结果参与反思判定（连续失败 → reflectionRequired）
+      this.sessions.recordVerification(
+        input.sessionId,
+        verification ? verification.passed : null,
+        this.deps.now()
+      );
     }
+
+    // V2.3：反思提示（模型必须重新观察 / 更新计划，而不是重复同一动作）
+    const reflection = input.sessionId ? this.sessions.reflectionSnapshot(input.sessionId) : null;
+    const reflectionRequired = reflection?.required === true;
 
     return {
       actionResult: {
@@ -663,6 +674,14 @@ export class DesktopObservationRuntime {
         nextObservation.windowId !== record.windowId || nextObservation.appName !== record.appName,
       uiChanged: nextRecord ? nextRecord.uiSignature !== record.uiSignature : null,
       ...(verification ? { verification } : {}),
+      ...(reflectionRequired
+        ? {
+            reflectionRequired: true,
+            reflectionHint:
+              "上一步未达到预期或界面无变化：请重新 observe_desktop（必要时用 find_desktop_element 重新定位），" +
+              "并用 desktop_session 更新计划后再继续；不要重复同一动作。",
+          }
+        : {}),
       ...(input.sessionId
         ? { session: this.sessions.get(input.sessionId, this.deps.now()) ?? undefined }
         : {}),
@@ -1009,6 +1028,10 @@ export class DesktopObservationRuntime {
       windowTitle: null,
       actionLabel: null,
       failureReason: null,
+      goal: null,
+      plan: [],
+      stepIndex: 0,
+      reflectionRequired: false,
     };
   }
 
@@ -1016,6 +1039,23 @@ export class DesktopObservationRuntime {
     const input = normalizeSessionStateInput(rawInput);
     this.sessions.setState(input.sessionId, input.state, this.deps.now());
     return this.sessions.ensure(input.sessionId, this.deps.now());
+  }
+
+  /**
+   * V2.3：设置目标 / 计划 / 当前步骤（只存内存；更新计划视为一次重新规划 → 消费 reflectionRequired）。
+   */
+  updateSessionPlan(rawInput: unknown): ClassFlowDesktopComputerSessionStatus {
+    const input = normalizeSessionPlanInput(rawInput);
+    return this.sessions.updatePlan(
+      input.sessionId,
+      {
+        ...(input.goal !== undefined ? { goal: input.goal } : {}),
+        ...(input.plan !== undefined ? { plan: input.plan } : {}),
+        ...(input.stepIndex !== undefined ? { stepIndex: input.stepIndex } : {}),
+        ...(input.completeStep !== undefined ? { completeStep: input.completeStep } : {}),
+      },
+      this.deps.now()
+    );
   }
 
   /** 校验 observation 强绑定（过期 / session / 窗口一致） */

@@ -286,6 +286,50 @@ export const openApplicationSchema = z
   .strict();
 
 /**
+ * Computer Use V2.3：desktop_session —— 声明目标 / 计划 / 当前步骤（只存 runtime memory）。
+ * 只影响本会话的 planning 元数据，不执行任何 GUI 操作。
+ */
+export const desktopSessionSchema = z
+  .object({
+    action: z.enum(["set_goal", "update_plan", "set_step", "complete_step"]),
+    goal: z.string().trim().min(1).max(120).optional(),
+    plan: z
+      .array(z.string().trim().min(1).max(80))
+      .min(1)
+      .max(8)
+      .optional(),
+    stepIndex: z.number().int().min(0).max(7).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (path: (string | number)[], message: string) =>
+      ctx.addIssue({ code: "custom", path, message });
+    if (value.action === "set_goal") {
+      if (!value.goal) issue(["goal"], "set_goal 必须提供 goal");
+      if (value.plan !== undefined || value.stepIndex !== undefined) {
+        issue([], "set_goal 不允许携带 plan / stepIndex");
+      }
+    }
+    if (value.action === "update_plan") {
+      if (!value.plan) issue(["plan"], "update_plan 必须提供 plan（1–8 步）");
+      if (value.goal !== undefined || value.stepIndex !== undefined) {
+        issue([], "update_plan 不允许携带 goal / stepIndex");
+      }
+    }
+    if (value.action === "set_step") {
+      if (value.stepIndex === undefined) issue(["stepIndex"], "set_step 必须提供 stepIndex");
+      if (value.goal !== undefined || value.plan !== undefined) {
+        issue([], "set_step 不允许携带 goal / plan");
+      }
+    }
+    if (value.action === "complete_step") {
+      if (value.goal !== undefined || value.plan !== undefined || value.stepIndex !== undefined) {
+        issue([], "complete_step 不允许携带 goal / plan / stepIndex");
+      }
+    }
+  });
+
+/**
  * Computer Use V2.1：find_desktop_element —— 在当前 observation 的控件树内做确定性检索。
  * 只读：不触发新的 UIA 扫描；返回 elementId 供 desktop_action 使用。
  */

@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect } from "react";
 import { Pause, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { getClassFlowDesktopComputerSessionBridge } from "@/lib/desktop/bridge";
+import type { ClassFlowDesktopComputerSessionStatus } from "@/lib/desktop/types";
 import { useDesktopSessionStore, isActiveDesktopSessionState } from "@/store/useDesktopSessionStore";
 
 /** Main 侧动作标签 → 人类可读状态文案（Sidecar） */
@@ -58,10 +59,30 @@ function describeState(input: {
   }
 }
 
+/** Main session 状态 → Sidecar 事件（同一字段集；避免两处手写漂移） */
+function applySessionStatus(status: ClassFlowDesktopComputerSessionStatus): void {
+  useDesktopSessionStore.getState().applyEvent({
+    type: "session",
+    sessionId: status.sessionId,
+    state: status.state,
+    appName: status.appName,
+    windowTitle: status.windowTitle,
+    actionLabel: status.actionLabel,
+    actions: status.actions,
+    observations: status.observations,
+    updatedAt: status.updatedAt,
+    goal: status.goal,
+    plan: status.plan,
+    stepIndex: status.stepIndex,
+    reflectionRequired: status.reflectionRequired,
+  });
+}
+
 /**
  * Computer Session 状态卡（Phase 3 Sidecar UX）：
  * - 始终显示 Kiro 当前在操作什么（正在查看 / 正在点击 / 等待确认…）
  * - Pause / Resume / Stop；Stop 最高优先级（派发 classflow:computer:stop → useKiroChat 统一 Stop）
+ * - V2.3：计划时间线（第 N/M 步 + 进度点 + 当前步骤）与反思提示
  */
 export function KiroComputerSessionCard() {
   const sessionId = useDesktopSessionStore((s) => s.sessionId);
@@ -70,6 +91,10 @@ export function KiroComputerSessionCard() {
   const windowTitle = useDesktopSessionStore((s) => s.windowTitle);
   const actionLabel = useDesktopSessionStore((s) => s.actionLabel);
   const actions = useDesktopSessionStore((s) => s.actions);
+  const plan = useDesktopSessionStore((s) => s.plan);
+  const stepIndex = useDesktopSessionStore((s) => s.stepIndex);
+  const goal = useDesktopSessionStore((s) => s.goal);
+  const reflectionRequired = useDesktopSessionStore((s) => s.reflectionRequired);
 
   // 订阅 Main session 事件（仅 Desktop Runtime；Web 版永不出现）
   useEffect(() => {
@@ -90,37 +115,13 @@ export function KiroComputerSessionCard() {
   const handlePause = () => {
     const bridge = getClassFlowDesktopComputerSessionBridge();
     if (!bridge || !sessionId) return;
-    void bridge.pauseSession({ sessionId }).then((status) => {
-      useDesktopSessionStore.getState().applyEvent({
-        type: "session",
-        sessionId: status.sessionId,
-        state: status.state,
-        appName: status.appName,
-        windowTitle: status.windowTitle,
-        actionLabel: status.actionLabel,
-        actions: status.actions,
-        observations: status.observations,
-        updatedAt: status.updatedAt,
-      });
-    }).catch(() => undefined);
+    void bridge.pauseSession({ sessionId }).then(applySessionStatus).catch(() => undefined);
   };
 
   const handleResume = () => {
     const bridge = getClassFlowDesktopComputerSessionBridge();
     if (!bridge || !sessionId) return;
-    void bridge.resumeSession({ sessionId }).then((status) => {
-      useDesktopSessionStore.getState().applyEvent({
-        type: "session",
-        sessionId: status.sessionId,
-        state: status.state,
-        appName: status.appName,
-        windowTitle: status.windowTitle,
-        actionLabel: status.actionLabel,
-        actions: status.actions,
-        observations: status.observations,
-        updatedAt: status.updatedAt,
-      });
-    }).catch(() => undefined);
+    void bridge.resumeSession({ sessionId }).then(applySessionStatus).catch(() => undefined);
   };
 
   const handleStop = () => {
@@ -132,39 +133,74 @@ export function KiroComputerSessionCard() {
     <div
       data-testid="kiro-computer-session-card"
       data-state={state}
-      className="mx-3 mt-2 mb-1 rounded-xl border border-line bg-white/80 px-3 py-2 flex items-center gap-2 shrink-0"
+      className="mx-3 mt-2 mb-1 rounded-xl border border-line bg-white/80 px-3 py-2 flex flex-col gap-1.5 shrink-0"
     >
-      <span
-        aria-hidden="true"
-        className={
-          state === "approval-required" || state === "paused"
-            ? "w-1.5 h-1.5 rounded-full bg-danger shrink-0"
-            : active
-              ? "w-1.5 h-1.5 rounded-full bg-pastel-mint shrink-0 animate-pulse"
-              : "w-1.5 h-1.5 rounded-full bg-sandrift shrink-0"
-        }
-      />
-      <p className="text-[11px] font-semibold text-charcoal truncate flex-1 min-w-0">
-        {describeState({ state, appName, windowTitle, actionLabel })}
-      </p>
-      {active && (
-        <div className="flex items-center gap-1 shrink-0">
-          {paused ? (
-            <Button variant="ghost" size="sm" onClick={handleResume} data-testid="computer-session-resume">
-              <Play className="w-3 h-3" />
-              继续
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className={
+            state === "approval-required" || state === "paused"
+              ? "w-1.5 h-1.5 rounded-full bg-danger shrink-0"
+              : active
+                ? "w-1.5 h-1.5 rounded-full bg-pastel-mint shrink-0 animate-pulse"
+                : "w-1.5 h-1.5 rounded-full bg-sandrift shrink-0"
+          }
+        />
+        <p className="text-[11px] font-semibold text-charcoal truncate flex-1 min-w-0">
+          {describeState({ state, appName, windowTitle, actionLabel })}
+        </p>
+        {active && (
+          <div className="flex items-center gap-1 shrink-0">
+            {paused ? (
+              <Button variant="ghost" size="sm" onClick={handleResume} data-testid="computer-session-resume">
+                <Play className="w-3 h-3" />
+                继续
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={handlePause} data-testid="computer-session-pause">
+                <Pause className="w-3 h-3" />
+                暂停
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleStop} data-testid="computer-session-stop">
+              <Square className="w-3 h-3" />
+              停止
             </Button>
-          ) : (
-            <Button variant="ghost" size="sm" onClick={handlePause} data-testid="computer-session-pause">
-              <Pause className="w-3 h-3" />
-              暂停
-            </Button>
-          )}
-          <Button variant="ghost" size="sm" onClick={handleStop} data-testid="computer-session-stop">
-            <Square className="w-3 h-3" />
-            停止
-          </Button>
+          </div>
+        )}
+      </div>
+
+      {/* V2.3：计划时间线（有计划时才显示；步骤文本 + 进度） */}
+      {plan.length > 0 && (
+        <div className="flex items-center gap-2 pl-3.5 min-w-0" data-testid="computer-session-plan">
+          <span className="text-[10px] font-bold text-sandrift shrink-0">
+            第 {Math.min(stepIndex + 1, plan.length)}/{plan.length} 步
+          </span>
+          <div className="flex items-center gap-0.5 shrink-0" aria-hidden="true">
+            {plan.map((_, index) => (
+              <span
+                key={index}
+                className={
+                  index < stepIndex
+                    ? "w-1.5 h-1.5 rounded-full bg-success/70"
+                    : index === stepIndex
+                      ? "w-1.5 h-1.5 rounded-full bg-charcoal"
+                      : "w-1.5 h-1.5 rounded-full bg-line-strong"
+                }
+              />
+            ))}
+          </div>
+          <span className="text-[10px] text-sandrift truncate min-w-0">
+            {plan[stepIndex] ?? goal ?? ""}
+          </span>
         </div>
+      )}
+
+      {/* V2.3：反思提示（连续验证失败 / 无进展） */}
+      {reflectionRequired && active && (
+        <p className="pl-3.5 text-[10px] font-semibold text-danger" data-testid="computer-session-reflection">
+          需要调整策略：Kiro 正在重新观察并更新计划
+        </p>
       )}
     </div>
   );

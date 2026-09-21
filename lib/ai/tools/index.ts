@@ -119,6 +119,7 @@ export function getKiroToolsForRequest(input: {
     delete (set as Record<string, unknown>)["observe_desktop"];
     delete (set as Record<string, unknown>)["list_desktop_windows"];
     delete (set as Record<string, unknown>)["find_desktop_element"];
+    delete (set as Record<string, unknown>)["desktop_session"];
   }
   // Computer Use Phase 2+3：desktop_action / activate_window / open_application 与 GUI 操作
   // Capability 同源。Plan（只读）/ 未开启「允许 Kiro 操作电脑」/ 无 Action Bridge → 工具整体不存在。

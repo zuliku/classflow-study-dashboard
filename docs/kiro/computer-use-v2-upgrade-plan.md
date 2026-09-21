@@ -13,7 +13,12 @@
   - `resolveUiElement` 依赖：action 目标校验走单元素解析（缓存命中），不再每次全树扫描
   - 实测（本机 Windows）：worker warm windows 437ms / inspect 121ms / resolve 40ms / act 24ms vs 一次性脚本 746 / 525 / 1681ms → 单步路径 ~0.5s vs ~2.7s（**≈80% 下降**，超过 ≥50% 目标）；启动成本 1.97s 一次性
   - App 退出 `disposeUiaWorker()`；gated 真实 Windows smoke：`CLASSFLOW_UIA_WORKER_SMOKE=1 npx vitest run tests/uiaWorkerWindowsSmoke.test.ts`
-- [ ] V2.3 计划 / 反思 / Session 工件
+- [x] **V2.3 计划 / 反思 / Session 工件**
+  - Session 增加 `goal / plan[] / stepIndex / reflectionRequired`（内存态）；新工具 `desktop_session`（set_goal / update_plan / set_step / complete_step，只读元数据、不消耗预算）
+  - 反思触发：连续 2 次 `expect` 验证失败 或 任一 no-progress → `reflectionRequired` + `reflectionHint`（要求重新 observe / 换元素 / 更新计划，禁止重复动作）；`update_plan` 消费反思并重置失败计数
+  - Sidecar 状态卡升级为计划时间线（第 N/M 步 + 进度点 + 当前步骤 + 反思提示）
+  - Audit 增加 `stepIndex / planHash / verificationPassed`；Prompt 增加计划与反思工作流
+  - 测试：Session 计划/反思 12 项 + 执行器 5 项 + 真实模型 live smoke 4/4（含「多步任务先声明目标与计划」）
 - [ ] V2.4 应用画像与敏感应用策略
 - [ ] V2.5 动作覆盖扩展
 - [ ] V2.6 经验记忆（轨迹 → Skill）

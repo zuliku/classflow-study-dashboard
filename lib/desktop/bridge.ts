@@ -134,6 +134,7 @@ export function getClassFlowDesktopComputerSessionBridge(): import("@/lib/deskto
     "resumeSession",
     "completeSession",
     "setSessionState",
+    "updateSessionPlan",
     "subscribeSession",
     "prepareAction",
     "action",

@@ -64,6 +64,9 @@ export interface ComputerAuditEntry {
   elementName?: string;
   /** V2.1（可选）：expect 确定性验证是否通过 */
   verificationPassed?: boolean;
+  /** V2.3（可选）：计划步骤索引 / 计划短哈希（不含步骤原文） */
+  stepIndex?: number;
+  planHash?: string;
 }
 
 function openAuditDb(): Promise<IDBDatabase | null> {

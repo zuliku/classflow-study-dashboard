@@ -30,6 +30,7 @@ const DESKTOP_TOOL_NAMES = new Set([
   "observe_desktop",
   "find_desktop_element",
   "desktop_action",
+  "desktop_session",
   "list_desktop_windows",
   "activate_window",
   "open_application",
@@ -268,6 +269,57 @@ gated(`OpenCode Go Desktop Agent Live Smoke（${smokeModel}）`, () => {
         expect(world.log.some((entry) => entry.tool === "action")).toBe(false);
         // 模型应报告真实 elementId
         expect(result.text).toContain("el-2");
+      } finally {
+        uninstall();
+      }
+    },
+    240_000
+  );
+
+  it(
+    "真实模型在多步任务前声明目标与计划（desktop_session）",
+    async () => {
+      const { resolveLanguageModel } = await import("@/lib/ai/providers/resolver");
+      const resolved = await resolveLanguageModel({
+        provider: "opencode-go",
+        model: smokeModel,
+        apiKey: key!,
+      });
+
+      const world = searchWorld();
+      const uninstall = installFakeDesktopBridge(world).uninstall;
+      const counters = { readCount: 0, mutationCount: 0, terminalCount: 0 };
+      const snap = snapshot();
+      const approvals = { approveNext: true };
+
+      try {
+        const result = await generateText({
+          model: resolved.model,
+          system: buildDesktopRuntimeCapabilityContext(snap),
+          messages: [
+            {
+              role: "user",
+              content:
+                "帮我完成一个多步任务：在浏览器搜索 ClassFlow，并告诉我前两条结果。" +
+                "请先声明目标和计划，再开始操作。",
+            },
+          ],
+          tools: buildExecutableTools(counters, snap, approvals) as never,
+          stopWhen: stepCountIs(18),
+        });
+
+        const toolCalls = result.steps.flatMap((step) => step.toolCalls.map((call) => call.toolName));
+        const sessionCall = result.steps
+          .flatMap((step) => step.toolCalls)
+          .find((call) => call.toolName === "desktop_session");
+        console.log(`[LIVE][desktop-session] tools=${toolCalls.join(",")} text=${result.text.slice(0, 220)}`);
+        console.log(`[LIVE][desktop-session] sessionInput=${JSON.stringify(sessionCall?.input ?? null)}`);
+
+        expect(toolCalls).toContain("desktop_session");
+        const sessionInput = (sessionCall?.input ?? {}) as { action?: string; goal?: string; plan?: unknown };
+        expect(["set_goal", "update_plan"]).toContain(sessionInput.action);
+        // 任务仍然真实完成（计划不是替代执行）
+        expect(world.typedText).toBe("ClassFlow");
       } finally {
         uninstall();
       }

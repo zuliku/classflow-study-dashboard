@@ -32,6 +32,12 @@ export const DESKTOP_SESSION_LIMITS = {
   maxNoProgress: 3,
   /** 终态 session 记录保留时长（内存） */
   terminalTtlMs: 10 * 60_000,
+  /** V2.3：计划约束 */
+  maxPlanSteps: 8,
+  maxPlanStepLength: 80,
+  maxGoalLength: 120,
+  /** V2.3：连续验证失败达到该值 → reflectionRequired */
+  maxVerificationFailStreak: 2,
 } as const;
 
 export interface DesktopControlSessionStatus {
@@ -49,6 +55,14 @@ export interface DesktopControlSessionStatus {
   actionLabel: string | null;
   /** 守卫触发原因（failed 时） */
   failureReason: string | null;
+  /** V2.3：本会话目标（模型声明，≤120 字符） */
+  goal: string | null;
+  /** V2.3：计划步骤（1–8 条，每条 ≤80 字符） */
+  plan: string[];
+  /** V2.3：当前步骤索引（0-based；无计划 → 0） */
+  stepIndex: number;
+  /** V2.3：需要反思（连续验证失败 / 无进展）——模型必须重新观察并更新计划 */
+  reflectionRequired: boolean;
 }
 
 export interface DesktopControlSessionEvent {
@@ -61,6 +75,10 @@ export interface DesktopControlSessionEvent {
   actions: number;
   observations: number;
   updatedAt: number;
+  goal: string | null;
+  plan: string[];
+  stepIndex: number;
+  reflectionRequired: boolean;
 }
 
 export type DesktopSessionGuardCode =
@@ -94,6 +112,12 @@ interface SessionRecord {
   repeatedActionCount: number;
   noProgressCount: number;
   failureReason: string | null;
+  // V2.3：计划 / 反思
+  goal: string | null;
+  plan: string[];
+  stepIndex: number;
+  verificationFailStreak: number;
+  reflectionRequired: boolean;
 }
 
 const TERMINAL_STATES: ReadonlySet<DesktopControlSessionState> = new Set([
@@ -145,6 +169,11 @@ export class DesktopControlSessionStore {
       repeatedActionCount: 0,
       noProgressCount: 0,
       failureReason: null,
+      goal: null,
+      plan: [],
+      stepIndex: 0,
+      verificationFailStreak: 0,
+      reflectionRequired: false,
     };
     this.sessions.set(sessionId, record);
     return this.toStatus(record, now);
@@ -233,6 +262,8 @@ export class DesktopControlSessionStore {
     if (input.ok && input.beforeUiSignature !== null && input.newUiSignature !== null) {
       if (input.beforeUiSignature === input.newUiSignature) {
         record.noProgressCount += 1;
+        // V2.3：任何一次无进展 → 要求模型反思（重新观察 / 换策略），而不是继续重复
+        record.reflectionRequired = true;
       } else {
         record.noProgressCount = 0;
       }
@@ -249,10 +280,73 @@ export class DesktopControlSessionStore {
     }
   }
 
+  /** V2.3：记录一次 action 后的 expect 验证结果（连续失败 → 要求反思） */
+  recordVerification(
+    sessionId: string,
+    passed: boolean | null,
+    now: number = Date.now()
+  ): void {
+    if (passed === null) return; // 未配置 expect：不参与失败计数
+    const record = this.ensureRecord(sessionId, now);
+    if (passed) {
+      record.verificationFailStreak = 0;
+    } else {
+      record.verificationFailStreak += 1;
+      if (record.verificationFailStreak >= DESKTOP_SESSION_LIMITS.maxVerificationFailStreak) {
+        record.reflectionRequired = true;
+      }
+    }
+    this.touch(record, now);
+  }
+
+  /**
+   * V2.3：设置目标 / 计划 / 当前步骤（模型显式声明；只存内存）。
+   * 更新计划视为一次"重新规划" → 消费 reflectionRequired。
+   */
+  updatePlan(
+    sessionId: string,
+    input: { goal?: string; plan?: string[]; stepIndex?: number; completeStep?: boolean },
+    now: number = Date.now()
+  ): DesktopControlSessionStatus {
+    const record = this.ensureRecord(sessionId, now);
+    if (input.goal !== undefined) {
+      record.goal = input.goal.slice(0, DESKTOP_SESSION_LIMITS.maxGoalLength);
+    }
+    if (input.plan !== undefined) {
+      record.plan = input.plan
+        .slice(0, DESKTOP_SESSION_LIMITS.maxPlanSteps)
+        .map((step) => step.slice(0, DESKTOP_SESSION_LIMITS.maxPlanStepLength));
+      record.stepIndex = Math.max(0, Math.min(record.stepIndex, Math.max(0, record.plan.length - 1)));
+      record.reflectionRequired = false; // 重新规划 = 反思完成
+      record.verificationFailStreak = 0; // 重新计数：重规划后重新获得 2 次尝试
+    }
+    if (input.stepIndex !== undefined) {
+      const maxIndex = Math.max(0, record.plan.length - 1);
+      record.stepIndex = Math.max(0, Math.min(Math.trunc(input.stepIndex), maxIndex));
+    }
+    if (input.completeStep) {
+      const maxIndex = Math.max(0, record.plan.length - 1);
+      record.stepIndex = Math.min(record.stepIndex + 1, maxIndex);
+      record.reflectionRequired = false;
+    }
+    this.touch(record, now);
+    return this.toStatus(record, now);
+  }
+
+  /** V2.3：当前反思提示（消费式读取：由 runtime 在输出 reflectionHint 时调用） */
+  reflectionSnapshot(sessionId: string): { required: boolean; failStreak: number; noProgress: number } {
+    const record = this.sessions.get(sessionId);
+    if (!record) return { required: false, failStreak: 0, noProgress: 0 };
+    return {
+      required: record.reflectionRequired,
+      failStreak: record.verificationFailStreak,
+      noProgress: record.noProgressCount,
+    };
+  }
+
   /**
    * approval-required / waiting 等 UI 状态（renderer 显式设置；仅允许非终态）。
-   */
-  setState(
+   */  setState(
     sessionId: string,
     state: Extract<DesktopControlSessionState, "approval-required" | "waiting" | "idle">,
     now: number = Date.now()
@@ -379,6 +473,10 @@ export class DesktopControlSessionStore {
       actions: record.actions,
       observations: record.observations,
       updatedAt: now,
+      goal: record.goal,
+      plan: [...record.plan],
+      stepIndex: record.stepIndex,
+      reflectionRequired: record.reflectionRequired,
     });
   }
 
@@ -396,6 +494,10 @@ export class DesktopControlSessionStore {
       windowTitle: record.windowTitle,
       actionLabel: record.actionLabel,
       failureReason: record.failureReason,
+      goal: record.goal,
+      plan: [...record.plan],
+      stepIndex: record.stepIndex,
+      reflectionRequired: record.reflectionRequired,
     };
   }
 }

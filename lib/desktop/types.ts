@@ -432,6 +432,14 @@ export interface ClassFlowDesktopComputerSessionStatus {
   windowTitle: string | null;
   actionLabel: string | null;
   failureReason: string | null;
+  /** V2.3：本会话目标（模型声明） */
+  goal: string | null;
+  /** V2.3：计划步骤（1–8 条） */
+  plan: string[];
+  /** V2.3：当前步骤索引（0-based） */
+  stepIndex: number;
+  /** V2.3：需要反思（连续验证失败 / 无进展） */
+  reflectionRequired: boolean;
 }
 
 /** 经 preload subscribe 推送的会话状态事件（sanitized；UI-only，不进入模型 context） */
@@ -445,6 +453,10 @@ export interface ClassFlowDesktopComputerSessionEvent {
   actions: number;
   observations: number;
   updatedAt: number;
+  goal: string | null;
+  plan: string[];
+  stepIndex: number;
+  reflectionRequired: boolean;
 }
 
 /** 打开应用结果（logical app identifier；绝不返回 exe 绝对路径） */
@@ -574,6 +586,9 @@ export interface ClassFlowDesktopComputerActionResult {
   session?: ClassFlowDesktopComputerSessionStatus;
   /** V2.1：expect 求值结果（未配置 expect → undefined） */
   verification?: ClassFlowDesktopComputerVerificationResult;
+  /** V2.3：需要反思（连续验证失败 / 无进展）——模型必须重新观察并更新计划 */
+  reflectionRequired?: boolean;
+  reflectionHint?: string;
 }
 
 /** V2.1：find_desktop_element 结果（确定性打分，只在当前 observation 内检索） */
@@ -691,6 +706,14 @@ export interface ClassFlowDesktopComputerBridgeV3 {
   setSessionState(input: {
     sessionId: string;
     state: "approval-required" | "waiting" | "idle";
+  }): Promise<ClassFlowDesktopComputerSessionStatus>;
+  /** V2.3：设置目标 / 计划 / 当前步骤（模型显式声明；只存内存，不持久化） */
+  updateSessionPlan(input: {
+    sessionId: string;
+    goal?: string;
+    plan?: string[];
+    stepIndex?: number;
+    completeStep?: boolean;
   }): Promise<ClassFlowDesktopComputerSessionStatus>;
   /** Session 状态事件流；返回取消订阅函数 */
   subscribeSession(listener: (event: ClassFlowDesktopComputerSessionEvent) => void): () => void;

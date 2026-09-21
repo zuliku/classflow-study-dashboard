@@ -20,6 +20,7 @@ import { desktopActionSchema } from "@/lib/ai/computer/tools/schemas";
 import { resolveGuiControlCapability } from "@/lib/ai/computer/gui/capability";
 import { isHighRiskGuiLevel } from "@/lib/ai/computer/gui/risk";
 import { buildGuiApprovalInfo, describeGuiAction } from "@/lib/ai/computer/gui/observation";
+import { hashPlan } from "@/lib/ai/computer/gui/sessionTool";
 import {
   DESKTOP_ACTION_TOOL_NAME,
   type ExecuteDesktopActionRequest,
@@ -259,6 +260,9 @@ export async function executeKiroDesktopAction(
     ...(result.changedWindow !== null ? { changedWindow: result.changedWindow } : {}),
     ...(result.uiChanged !== null ? { uiChanged: result.uiChanged } : {}),
     ...(result.verification !== undefined ? { verificationPassed: result.verification.passed } : {}),
+    ...(result.session
+      ? { stepIndex: result.session.stepIndex, planHash: hashPlan(result.session.plan) }
+      : {}),
   });
 
   // 11. Observe → Action → Observe：返回 action result + 新 observation
@@ -283,6 +287,9 @@ export async function executeKiroDesktopAction(
         /** 是否通过验证（null = 未配置）；false 时必须重新观察 / 换策略，不得宣称完成 */
         expectationPassed: result.verification ? result.verification.passed : null,
         reobserve: result.newObservationId ? "re-observed" : "none",
+        ...(result.reflectionRequired
+          ? { reflectionRequired: true, reflectionHint: result.reflectionHint }
+          : {}),
         readOnly: false,
       },
     },

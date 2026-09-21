@@ -158,6 +158,7 @@ export function registerComputerIpc(opts?: ComputerIpcOptions): void {
     "resumeSession",
     "completeSession",
     "setSessionState",
+    "updateSessionPlan",
   ] as const;
   for (const method of sessionHandlers) {
     ipcMain.handle(

@@ -517,6 +517,96 @@ export function normalizeFindElementsInput(input: unknown): NormalizedFindElemen
   };
 }
 
+/* ---------------- Computer Use V2.3：Session 计划输入 ---------------- */
+
+export interface NormalizedSessionPlanInput {
+  sessionId: string;
+  goal?: string;
+  plan?: string[];
+  stepIndex?: number;
+  completeStep?: boolean;
+}
+
+export const SESSION_PLAN_MAX_STEPS = 8;
+export const SESSION_PLAN_MAX_STEP_LENGTH = 80;
+export const SESSION_GOAL_MAX_LENGTH = 120;
+
+/**
+ * updateSessionPlan 输入归一化（strict）：
+ * - goal / plan / stepIndex / completeStep 至少提供一个
+ * - plan 1–8 条、每条 1–80 字符（去控制字符）；goal ≤120 字符
+ * - stepIndex 0–7 整数
+ */
+export function normalizeSessionPlanInput(input: unknown): NormalizedSessionPlanInput {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "desktop_session 输入必须是对象");
+  }
+  const raw = input as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!["sessionId", "goal", "plan", "stepIndex", "completeStep"].includes(key)) {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `不支持的字段：${key}`);
+    }
+  }
+  if (!isValidDesktopSessionId(raw.sessionId)) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "sessionId 不合法");
+  }
+  if (
+    raw.goal === undefined &&
+    raw.plan === undefined &&
+    raw.stepIndex === undefined &&
+    raw.completeStep === undefined
+  ) {
+    throw new DesktopComputerIpcError("INVALID_OPERATION", "至少需要 goal / plan / stepIndex / completeStep 之一");
+  }
+
+  const result: NormalizedSessionPlanInput = { sessionId: raw.sessionId };
+
+  if (raw.goal !== undefined) {
+    if (typeof raw.goal !== "string" || raw.goal.trim().length === 0 || raw.goal.length > SESSION_GOAL_MAX_LENGTH) {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `goal 必须是 1–${SESSION_GOAL_MAX_LENGTH} 字符的文本`);
+    }
+    result.goal = raw.goal.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  if (raw.plan !== undefined) {
+    if (!Array.isArray(raw.plan) || raw.plan.length < 1 || raw.plan.length > SESSION_PLAN_MAX_STEPS) {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", `plan 必须是 1–${SESSION_PLAN_MAX_STEPS} 条步骤`);
+    }
+    const plan: string[] = [];
+    for (const step of raw.plan) {
+      if (typeof step !== "string" || step.trim().length === 0 || step.length > SESSION_PLAN_MAX_STEP_LENGTH) {
+        throw new DesktopComputerIpcError(
+          "INVALID_OPERATION",
+          `每条计划步骤必须是 1–${SESSION_PLAN_MAX_STEP_LENGTH} 字符的文本`
+        );
+      }
+      plan.push(step.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim());
+    }
+    result.plan = plan;
+  }
+
+  if (raw.stepIndex !== undefined) {
+    if (
+      typeof raw.stepIndex !== "number" ||
+      !Number.isInteger(raw.stepIndex) ||
+      raw.stepIndex < 0 ||
+      raw.stepIndex > SESSION_PLAN_MAX_STEPS - 1
+    ) {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", "stepIndex 必须是 0–7 的整数");
+    }
+    result.stepIndex = raw.stepIndex;
+  }
+
+  if (raw.completeStep !== undefined) {
+    if (typeof raw.completeStep !== "boolean") {
+      throw new DesktopComputerIpcError("INVALID_OPERATION", "completeStep 必须是 boolean");
+    }
+    result.completeStep = raw.completeStep;
+  }
+
+  return result;
+}
+
 /** setSessionState 输入（UI 状态：approval-required / waiting / idle） */export function normalizeSessionStateInput(input: unknown): {
   sessionId: string;
   state: "approval-required" | "waiting" | "idle";

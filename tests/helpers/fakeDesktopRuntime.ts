@@ -73,6 +73,8 @@ export class FakeDesktopWorld {
   private session: ClassFlowDesktopComputerSessionStatus | null = null;
   private prevSignature: string | null = null;
   private noProgress = 0;
+  /** V2.3：连续 expect 验证失败计数（≥2 → reflectionRequired） */
+  private verificationFailStreak = 0;
   readonly log: Array<{ tool: string; input: unknown }> = [];
 
   constructor(windows: FakeWindow[], activeWindowId?: string) {
@@ -123,6 +125,10 @@ export class FakeDesktopWorld {
       windowTitle: window?.title ?? null,
       actionLabel,
       failureReason: state === "failed" ? "no-progress" : null,
+      goal: this.session?.goal ?? null,
+      plan: this.session?.plan ?? [],
+      stepIndex: this.session?.stepIndex ?? 0,
+      reflectionRequired: this.session?.reflectionRequired ?? false,
     };
     for (const listener of this.listeners) listener({ type: "session", ...this.session });
   }
@@ -142,6 +148,10 @@ export class FakeDesktopWorld {
         windowTitle: null,
         actionLabel: null,
         failureReason: null,
+        goal: null,
+        plan: [],
+        stepIndex: 0,
+        reflectionRequired: false,
       };
     }
   }
@@ -409,7 +419,18 @@ export class FakeDesktopWorld {
             : null,
         newNativeRefs: new Set(nextRecord.elements.keys()),
       });
+      // V2.3：与 Main 一致的反思判定（连续 2 次验证失败）
+      if (verification.passed) {
+        this.verificationFailStreak = 0;
+      } else {
+        this.verificationFailStreak += 1;
+        if (this.verificationFailStreak >= 2 && this.session) {
+          this.session.reflectionRequired = true;
+          this.emitSession(this.session.state, this.session.actionLabel);
+        }
+      }
     }
+    const reflectionRequired = this.session?.reflectionRequired === true;
     return {
       actionResult: {
         action: input.action as never,
@@ -421,6 +442,13 @@ export class FakeDesktopWorld {
       changedWindow: false,
       uiChanged,
       ...(verification ? { verification } : {}),
+      ...(reflectionRequired
+        ? {
+            reflectionRequired: true,
+            reflectionHint:
+              "上一步未达到预期或界面无变化：请重新 observe_desktop（必要时用 find_desktop_element 重新定位），并用 desktop_session 更新计划后再继续；不要重复同一动作。",
+          }
+        : {}),
     };
   });
 
@@ -490,6 +518,36 @@ export class FakeDesktopWorld {
     this.emitSession(input.state, null);
     return this.session!;
   });
+
+  /** V2.3：计划 / 目标 / 步骤（与 Main 语义一致：update_plan 消费 reflectionRequired） */
+  updateSessionPlan = vi.fn(
+    async (input: {
+      sessionId: string;
+      goal?: string;
+      plan?: string[];
+      stepIndex?: number;
+      completeStep?: boolean;
+    }) => {
+      this.ensureSession(input.sessionId);
+      const session = this.session!;
+      if (input.goal !== undefined) session.goal = input.goal.slice(0, 120);
+      if (input.plan !== undefined) {
+        session.plan = input.plan.slice(0, 8).map((step) => step.slice(0, 80));
+        session.stepIndex = Math.max(0, Math.min(session.stepIndex, Math.max(0, session.plan.length - 1)));
+        session.reflectionRequired = false;
+        this.verificationFailStreak = 0;
+      }
+      if (input.stepIndex !== undefined) {
+        session.stepIndex = Math.max(0, Math.min(input.stepIndex, Math.max(0, session.plan.length - 1)));
+      }
+      if (input.completeStep) {
+        session.stepIndex = Math.min(session.stepIndex + 1, Math.max(0, session.plan.length - 1));
+        session.reflectionRequired = false;
+      }
+      this.emitSession(session.state, session.actionLabel);
+      return session;
+    }
+  );
 
   subscribeSession = (listener: (event: ClassFlowDesktopComputerSessionEvent) => void): (() => void) => {
     this.listeners.add(listener);

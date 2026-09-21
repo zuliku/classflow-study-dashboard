@@ -30,6 +30,7 @@ import {
   activateWindowSchema,
   openApplicationSchema,
   findDesktopElementSchema,
+  desktopSessionSchema,
   runTerminalCommandSchema,
   writeTerminalInputSchema,
   startTerminalCommandSchema,
@@ -168,6 +169,20 @@ export const COMPUTER_READ_TOOLS: ComputerToolDefinition[] = [
     inputExamples: [
       { input: { observationId: "obs-…", query: "搜索" } },
       { input: { observationId: "obs-…", query: "发送", maxResults: 3 } },
+    ],
+  },
+  {
+    // Computer Use V2.3：会话计划（goal / plan / 当前步骤）——只存内存，不执行 GUI 操作
+    name: "desktop_session",
+    description:
+      "声明或更新当前电脑任务的目标与计划（只存内存，不执行任何点击/输入）。多步任务开始时先 set_goal，再用 update_plan 给出 2–8 步简短计划；每完成并验证一步用 complete_step 前进；计划需要调整时用 update_plan 重写。工具输出会附带当前 goal/plan/stepIndex，以及 reflectionRequired（需要反思时）。当 reflectionRequired=true 时，必须先重新 observe_desktop、必要时用 find_desktop_element 重新定位，并更新计划后再继续，不要重复同一动作。",
+    schema: desktopSessionSchema,
+    capability: "ui.inspect",
+    mutation: false,
+    inputExamples: [
+      { input: { action: "set_goal", goal: "在浏览器搜索 ClassFlow 并整理前三条结果" } },
+      { input: { action: "update_plan", plan: ["打开浏览器", "搜索 ClassFlow", "读取前三条结果"] } },
+      { input: { action: "complete_step" } },
     ],
   },
 ];

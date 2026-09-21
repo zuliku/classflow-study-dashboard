@@ -139,6 +139,7 @@ describe("getClassFlowDesktopComputerBridge / hasClassFlowDesktopComputer", () =
       "resumeSession",
       "completeSession",
       "setSessionState",
+      "updateSessionPlan",
       "subscribeSession",
       "prepareAction",
       "action",
