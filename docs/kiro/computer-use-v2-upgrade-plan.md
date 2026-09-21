@@ -1,8 +1,18 @@
 # Kiro Computer Use V2 升级执行计划
 
-> 状态：设计稿（Phase 1–3 已上线；本文档为 V2 升级路线）
+> 状态：执行中
 > 参考实现：Agent S / S2 / S3（ACI + 分层规划 + 经验记忆）、Microsoft UFO / UFO² / UFO³（UIA Control Automator + SoM + 双代理）、Claude Computer Use（截图→动作→验证循环）
 > 约束：不重写现有 Computer Agent；Filesystem / Terminal / GUI 继续共用同一 Policy / Approval / Audit / Kiro 主循环
+
+## 进度
+
+- [x] **V2.1 Grounding & 确定性验证**（commit `8d7a9db`）
+  - `find_desktop_element`（确定性检索）、vision 候选 ↔ UIA 元素 IoU 关联、`desktop_action.expect` 验证、自适应 settle、Prompt/描述更新；Live smoke 3/3
+- [ ] V2.2 常驻 UIA Runtime（性能）
+- [ ] V2.3 计划 / 反思 / Session 工件
+- [ ] V2.4 应用画像与敏感应用策略
+- [ ] V2.5 动作覆盖扩展
+- [ ] V2.6 经验记忆（轨迹 → Skill）
 
 ---
 
