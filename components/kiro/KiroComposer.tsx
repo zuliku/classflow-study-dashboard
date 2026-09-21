@@ -30,6 +30,7 @@ import { KiroReasoningMenu } from "@/components/kiro/computer/KiroReasoningMenu"
 import { KiroWorkspacePicker } from "@/components/kiro/computer/KiroWorkspacePicker";
 import { PopoverPanel } from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
+import { filterSlashSkills, moveSlashIndex, parseSlashQuery } from "@/lib/ai/skills/slashMenu";
 
 /**
  * Kiro Composer（Task 4）：真实发送入口 + 附件（上传/拖拽/粘贴/课程资料/保存）。
@@ -138,6 +139,7 @@ export function KiroComposer({
   const [submitting, setSubmitting] = useState(false);
   const [slashSkills, setSlashSkills] = useState<{ name: string; description: string }[]>([]);
   const [slashOpen, setSlashOpen] = useState(false);
+  const [slashActive, setSlashActive] = useState(0);
   const submittingRef = useRef(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const attachRef = useRef<HTMLDivElement | null>(null);
@@ -167,9 +169,10 @@ export function KiroComposer({
     !preparingSend &&
     !submitting &&
     !preparingVision;
-  // Task 07: Slash Skill — 仅显示 enabled skills
+  // Task 07: Slash Skill — 仅显示 enabled skills；仅「输入中的命令」展开（选中后带空格 → 自动折叠）
   useEffect(() => {
-    if (!text.startsWith("/")) {
+    const query = parseSlashQuery(text);
+    if (query === null) {
       setSlashOpen(false);
       return;
     }
@@ -182,18 +185,22 @@ export function KiroComposer({
       .list()
       .then((res) => {
         const enabled = (res.skills ?? []).filter((s) => s.enabled);
-        const prefix = text.slice(1).split(/\s+/)[0].toLowerCase();
-        const filtered = prefix ? enabled.filter((s) => s.name.toLowerCase().startsWith(prefix)) : enabled;
+        const filtered = filterSlashSkills(enabled, query);
         setSlashSkills(filtered);
+        setSlashActive(0);
         setSlashOpen(filtered.length > 0);
       })
       .catch(() => setSlashOpen(false));
   }, [text]);
 
   const handleSlashSelect = (name: string) => {
+    // 尾随空格 = 命令已完成：菜单折叠且不会因 text 变化重新弹出
     setText(`/${name} `);
     setSlashOpen(false);
-    requestAnimationFrame(() => taRef.current?.focus());
+    requestAnimationFrame(() => {
+      taRef.current?.focus();
+      autoGrow();
+    });
   };
 
   // V4.1（Productization）+ V4.6：拆分「当前 Turn scope 锁」与「下一 Turn preference 锁」。
@@ -255,6 +262,31 @@ export function KiroComposer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Slash 菜单键盘导航优先（避免 Enter 直接发送未完成的 /命令）
+    if (slashOpen && slashSkills.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashActive((i) => moveSlashIndex(i, 1, slashSkills.length));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashActive((i) => moveSlashIndex(i, -1, slashSkills.length));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const target = slashSkills[slashActive] ?? slashSkills[0];
+        if (target) handleSlashSelect(target.name);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setSlashOpen(false);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -476,26 +508,45 @@ export function KiroComposer({
             </div>
           )}
 
-          {/* Task 07: Slash Skill Menu — 仅显示 enabled skills（BUG-G8：入场 structure-settle） */}
+          {/* Slash Skill Menu：仅「输入中的命令」展开；无演示文案；选中项高亮 + 键盘导航 */}
           {slashOpen && (
             <div
               data-testid="skill-slash-menu"
-              className="kiro-structure-settle mx-3 mb-2 bg-surface border border-line rounded-xl shadow-card overflow-hidden"
+              className={cn(
+                "kiro-slash-enter mx-2.5 mt-2.5 mb-0.5 bg-surface border border-line rounded-xl shadow-subtle overflow-hidden",
+                compact && "mx-2"
+              )}
             >
-              <p className="px-3 py-2 text-[11px] font-bold text-sandrift border-b border-line-soft">已启用 Skills · 输入 /skill-name 显式调用</p>
-              <div className="max-h-40 overflow-y-auto">
-                {slashSkills.map((s) => (
-                  <button
-                    key={s.name}
-                    type="button"
-                    onClick={() => handleSlashSelect(s.name)}
-                    data-testid={`skill-slash-item-${s.name}`}
-                    className="w-full text-left px-3 py-2 hover:bg-alabaster flex flex-col gap-0.5 transition-colors"
-                  >
-                    <span className="text-xs font-bold text-charcoal">/{s.name}</span>
-                    <span className="text-[11px] text-sandrift line-clamp-1">{s.description}</span>
-                  </button>
-                ))}
+              <div
+                role="listbox"
+                aria-label="Skills"
+                className="max-h-44 overflow-y-auto overscroll-contain py-1"
+              >
+                {slashSkills.map((s, index) => {
+                  const active = index === slashActive;
+                  return (
+                    <button
+                      key={s.name}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onMouseEnter={() => setSlashActive(index)}
+                      onClick={() => handleSlashSelect(s.name)}
+                      data-testid={`skill-slash-item-${s.name}`}
+                      className={cn(
+                        "w-full text-left px-3 py-2 flex flex-col gap-1 transition-colors duration-[var(--motion-fast)]",
+                        active ? "bg-alabaster" : "hover:bg-alabaster/60"
+                      )}
+                    >
+                      <span className="inline-flex w-fit items-center rounded-md border border-line-soft bg-pastel-mint/60 px-1.5 py-0.5 font-mono text-[11px] font-bold text-charcoal">
+                        /{s.name}
+                      </span>
+                      <span className="text-[11px] text-sandrift line-clamp-1 leading-relaxed">
+                        {s.description}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

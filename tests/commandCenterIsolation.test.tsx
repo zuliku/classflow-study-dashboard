@@ -27,6 +27,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { CommandCenter } from "@/components/command/CommandCenter";
+import { WorkspaceSearchButton } from "@/components/layout/WorkspaceSearchButton";
 import { OverlayBoundary } from "@/components/ui/OverlayBoundary";
 import { SETTINGS_REGISTRY, SETTING_IDS } from "@/lib/settingsRegistry";
 
@@ -78,6 +79,22 @@ describe("全局搜索（CommandCenter）隔离：Kiro Provider 缺失也不白�
     fireEvent.click(kiroRow!);
     expect(useToastStore.getState().toasts.some((t) => t.message.includes("Kiro 尚未就绪"))).toBe(true);
   });
+
+  it("点击顶部「搜索」按钮 → 命令面板真实打开（全局搜索入口可用）", async () => {
+    useAppStore.setState({ isSearchModalOpen: false } as never);
+    render(
+      <OverlayBoundary name="command-center">
+        <WorkspaceSearchButton />
+        <CommandCenter />
+      </OverlayBoundary>
+    );
+    expect(screen.queryByTestId("command-center")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "全局搜索" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("command-center")).toBeTruthy();
+  });
 });
 
 describe("OverlayBoundary：单个面板崩溃不影响应用", () => {
@@ -108,6 +125,24 @@ describe("OverlayBoundary：单个面板崩溃不影响应用", () => {
       </OverlayBoundary>
     );
     expect(screen.getByTestId("ok-child")).toBeTruthy();
+  });
+
+  it("崩溃后 children 变化且超过冷却 → 自动恢复（入口不会永久打不开）", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(
+      <OverlayBoundary name="recover">
+        <Boom />
+      </OverlayBoundary>
+    );
+    expect(screen.queryByTestId("recovered")).toBeNull();
+    vi.advanceTimersByTime(1600);
+    rerender(
+      <OverlayBoundary name="recover">
+        <div data-testid="recovered">ok</div>
+      </OverlayBoundary>
+    );
+    expect(screen.getByTestId("recovered")).toBeTruthy();
+    vi.useRealTimers();
   });
 });
 

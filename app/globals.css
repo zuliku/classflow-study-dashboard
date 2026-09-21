@@ -1152,6 +1152,23 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     }
   }
 
+  /* Slash Skill 菜单：从输入框上方轻微展开（不改变 Composer 高度节奏）；
+     只做 opacity + 2px 位移 + .995 scale，避免与输入区发生视觉重叠 */
+  .kiro-slash-enter {
+    animation: kiro-slash-in var(--motion-fast) var(--ease-standard) both;
+    transform-origin: bottom center;
+  }
+  @keyframes kiro-slash-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px) scale(0.995);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   /* Popover surface（kiro profile）：source-aware 位移 + 轻 scale .985→1；
      默认面板关闭时 exit 快于 enter，open 时进入时长生效 */
   .kiro-popover-motion {
@@ -1276,6 +1293,7 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
 
 /* Reduced Motion：Kiro motion 全部瞬时（最终态直达，无 translate/scale/stagger） */
 html[data-motion-effective="reduced"] .kiro-structure-settle,
+html[data-motion-effective="reduced"] .kiro-slash-enter,
 html[data-motion-effective="reduced"] .kiro-empty-logo-intro,
 html[data-motion-effective="reduced"] .kiro-empty-title-intro,
 html[data-motion-effective="reduced"] .kiro-empty-subtitle-intro,
@@ -1297,6 +1315,7 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
    intro 类（kiro-empty-*-intro / kiro-composer-intro）不在此降权：它们是一次性进场动画，
    animation:none 打断后再恢复会从头部重放（拖动放置时标题/输入框又出现入场动画）。 */
 [data-geometry-interacting] .kiro-structure-settle,
+[data-geometry-interacting] .kiro-slash-enter,
 [data-geometry-interacting] .kiro-popover-motion,
 [data-geometry-interacting] .kiro-scroll-control-enter,
 [data-geometry-interacting] .kiro-scroll-control-exit {
