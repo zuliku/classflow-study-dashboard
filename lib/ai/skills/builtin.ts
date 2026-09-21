@@ -231,6 +231,49 @@ const REMINDER_ASSISTANT_INSTRUCTIONS = `\
 const REMINDER_ASSISTANT_DESCRIPTION =
   "提醒管理：三要素确认、创建/修改/删除提醒，避免重复。";
 
+const COMPUTER_CONTROL_INSTRUCTIONS = `\
+# 电脑控制（内置）
+
+当用户要求操作电脑上的应用界面（浏览器、微信、Word、资源管理器等）时，按以下流程处理。
+（需先在设置 → Agent 与权限 中开启「允许 Kiro 查看桌面」与「允许 Kiro 操作电脑」；
+未开启时直接说明如何开启，不要用结构化工具假装完成了界面操作。）
+
+## 1. 先观察，再行动
+
+- 用 observe_desktop 读取当前窗口与元素；target 一律使用返回的 elementId，不要猜坐标。
+- 多窗口：list_desktop_windows → activate_window → observe_desktop → desktop_action。
+- 打开应用用 open_application + 逻辑应用名（chrome / word / wechat / notepad / explorer），
+  不要传 exe 或文件路径。
+- 只有 UI Automation 无法定位（canvas / 自绘界面）时才使用归一化坐标，且动作会请求用户确认。
+
+## 2. 每次动作后必须验证
+
+- desktop_action 执行后会自动重新观察：依据新 observation 判断是否成功，不要假设点击生效。
+- 返回 STALE_OBSERVATION 时重新 observe_desktop，禁止复用旧观察或旧坐标继续。
+- 发送消息要看到消息出现在聊天记录；保存文档要看到保存状态，或改用文件工具核对文件事实。
+
+## 3. 安全边界
+
+- 发送 / 提交 / 发布 / 删除 / 购买 / 支付 / 最终提交 / 权限与账号设置：必须在最终动作前逐次确认，
+  不得提前笼统授权，也不要在被拒绝后重试。
+- 密码、API Key、Token、Secret 绝不可输入；工具会拒绝此类输入，不要尝试绕过。
+- 本阶段不支持拖拽、剪贴板与文件上传协议；用户要求时如实说明。
+
+## 4. 工具优先级（重要）
+
+- 工作区文件读写用结构化文件工具（read_text / create_text_file / create_document 等）。
+- 运行命令用 run_terminal_command，不要用 GUI 终端窗口。
+- 只有确实需要操作应用界面时才使用鼠标键盘工具；不要为了演示电脑控制而放弃更安全的做法。
+
+## 5. 循环与停止
+
+- 用户点击停止后立即停止，不得继续任何界面操作。
+- 重复相同动作或界面长时间无变化会被自动停止；此时报告当前状态并请用户介入，不要反复重试。
+`;
+
+const COMPUTER_CONTROL_DESCRIPTION =
+  "电脑控制：观察应用界面、点击/输入/按键、多窗口与应用启动（高风险动作逐次确认）。";
+
 /** 内置 Skill 名称保留字：用户创建/导入同名 Skill 时拒绝（保证单一事实来源） */
 export const BUILTIN_SKILL_NAMES: readonly string[] = [
   "document-handling",
@@ -239,6 +282,7 @@ export const BUILTIN_SKILL_NAMES: readonly string[] = [
   "study-plan",
   "focus-coach",
   "web-research",
+  "computer-control",
   "terminal-helper",
   "file-organizer",
   "reminder-assistant",
@@ -321,6 +365,37 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     rawContent: WEB_RESEARCH_INSTRUCTIONS.trim(),
     triggers: ["搜索", "查一下", "最新", "新闻", "调研", "对比", "查证", "怎么样", "推荐"],
     metadata: { builtin: true, capabilities: ["web_search", "read_web_source"] },
+    permissionsNote: SKILL_PERMISSIONS_NOTE,
+  },
+  {
+    name: "computer-control",
+    description: COMPUTER_CONTROL_DESCRIPTION,
+    folderName: "__builtin__/computer-control",
+    enabled: true,
+    instructions: COMPUTER_CONTROL_INSTRUCTIONS.trim(),
+    rawContent: COMPUTER_CONTROL_INSTRUCTIONS.trim(),
+    triggers: [
+      "打开浏览器",
+      "操作电脑",
+      "点击",
+      "输入",
+      "桌面",
+      "微信",
+      "浏览器",
+      "窗口",
+      "发送文件",
+      "自动操作",
+    ],
+    metadata: {
+      builtin: true,
+      capabilities: [
+        "observe_desktop",
+        "desktop_action",
+        "list_desktop_windows",
+        "activate_window",
+        "open_application",
+      ],
+    },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {

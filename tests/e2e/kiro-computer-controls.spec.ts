@@ -69,7 +69,7 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
   await expect(workspaceRows).toHaveCount(1);
   await expect(workspaceRows.first()).toContainText("Kiro 内置工作区");
   await expect(workspaceRows.first()).toContainText("当前");
-  await expect(workspaceRows.first()).toContainText("当前浏览器");
+  await expect(workspaceRows.first()).toContainText("应用内存储");
   await expect(workspaceRows.first()).toContainText("读写");
   await expect(workspaceRows.first().getByRole("button", { name: /删除工作区/ })).toBeVisible();
   // canonical Sandbox 已存在 → 不再显示「使用 Kiro 内置工作区」（杜绝重复创建）

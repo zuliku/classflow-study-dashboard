@@ -222,7 +222,7 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved }: Skill
                 data-testid="skill-distill-instructions"
                 className="mt-1 w-full p-3 bg-white border border-line rounded-lg text-sm font-mono"
               />
-              <p className="text-[11px] text-sandrift">参数化示例：{`{course}`} {`{deadline}`} {`{assignmentTitle}`} 已泛化</p>
+              <p className="text-[11px] text-sandrift">已识别的可变参数：{`{course}`} {`{deadline}`} {`{assignmentTitle}`}</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-[#F7F5F5] border border-line rounded-lg p-3">

@@ -217,8 +217,7 @@ export function KiroAgentSettings() {
   };
 
   /**
-   * Computer Use Phase 1：首次开启必须明确说明只读边界。
-   * Kiro 可以读取当前屏幕和应用界面，但本阶段不会执行点击或键盘操作。
+   * 桌面观察：只读能力；操作能力是独立开关（见 handleToggleDesktopAction）。
    */
   const handleToggleDesktopObservation = (enabled: boolean) => {
     if (!enabled) {
@@ -230,7 +229,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 查看桌面？",
       description:
-        "Kiro 可以读取当前屏幕和应用界面（包括窗口标题、界面控件与截图），用于回答「我现在打开了什么」这类问题。本阶段不会执行点击或键盘操作，截图只在本次观察中使用，不会保存到磁盘。",
+        "Kiro 可以读取当前屏幕和应用界面（窗口标题、界面控件与截图），用于回答「我现在打开了什么」这类问题。查看本身只读，不会点击或输入；如需操作界面，可在下方单独开启「允许 Kiro 操作电脑」。截图只在本次查看中使用，不会保存到磁盘。",
       confirmLabel: "允许查看",
       onConfirm: () => setDesktopControlEnabled(true),
     });
@@ -555,7 +554,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-permissions"
             title="安全边界"
-            description="Kiro 不会执行：删除文件、运行命令（终端 / PowerShell）、启动应用、MCP、任意网络访问或 Full Access 模式。"
+            description="所有操作都限定在你授权的范围内：文件只在授权工作区读写，终端命令与电脑操作需单独开启，发送 / 提交 / 删除等高风险动作逐次确认；不支持 Full Access 或任意网络访问。"
           >
             <span className="text-[11px] text-satin-grey shrink-0">
               <ShieldAlert className="w-3.5 h-3.5 inline mr-1 text-sandrift" />

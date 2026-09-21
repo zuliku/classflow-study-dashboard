@@ -25,7 +25,7 @@ function referencedToolTokens(instructions: string): string[] {
 }
 
 describe("内置 Skills 目录", () => {
-  it("9 个内置 skill：命名规范 + 保留名与目录同源（防漂移）", () => {
+  it("10 个内置 skill：命名规范 + 保留名与目录同源（防漂移）", () => {
     const names = BUILTIN_SKILLS.map((s) => s.name);
     expect(names).toEqual([
       "document-handling",
@@ -34,6 +34,7 @@ describe("内置 Skills 目录", () => {
       "study-plan",
       "focus-coach",
       "web-research",
+      "computer-control",
       "terminal-helper",
       "file-organizer",
       "reminder-assistant",

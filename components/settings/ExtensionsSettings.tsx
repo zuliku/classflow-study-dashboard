@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { MessageSquare, Plus, Puzzle, Boxes, Info, Pencil, Trash2, Upload, Download, Beaker } from "lucide-react";
+import { MessageSquare, Plus, Puzzle, Boxes, Info, Pencil, Trash2, Upload, Download, BadgeCheck, Lock } from "lucide-react";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { useExtensionsStore } from "@/store/useExtensionsStore";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Field } from "@/components/ui/Field";
@@ -342,27 +343,17 @@ export function ExtensionsSettings() {
         <div className={cn("space-y-3", activeTab === "skills" && "ux-page")} data-testid="extensions-skills-panel" data-setting-id="extensions-skills" hidden={activeTab !== "skills"}>
           <SettingsGroup
             title="Skills"
-            description="将常用工作流程保存为可复用能力。"
+            description="把重复的操作流程保存成 Skill，之后一句话即可复用。"
             action={
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openCreateSkill}
-                  data-testid="extensions-create-skill"
-                  className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle flex items-center gap-1.5"
-                >
+                <Button variant="primary" size="sm" onClick={openCreateSkill} data-testid="extensions-create-skill">
                   <Plus className="w-3.5 h-3.5" />
                   创建 Skill
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSkillImport}
-                  data-testid="extensions-import-skill"
-                  className="h-8 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1.5"
-                >
+                </Button>
+                <Button variant="secondary" size="sm" onClick={handleSkillImport} data-testid="extensions-import-skill">
                   <Upload className="w-3.5 h-3.5" />
                   导入
-                </button>
+                </Button>
               </div>
             }
             contentClassName="px-4 py-4"
@@ -377,7 +368,7 @@ export function ExtensionsSettings() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-charcoal">当前环境无法读取 Skills</p>
-                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">Skills 管理在桌面环境中可用</p>
+                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">Skills 管理仅在桌面版可用</p>
                 </div>
               </div>
             ) : skillsState === "error" ? (
@@ -398,19 +389,18 @@ export function ExtensionsSettings() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-charcoal">还没有 Skill</p>
-                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">将常用的 Kiro 工作流程保存为可复用能力，随时复用。支持 SKILL.md 兼容格式。</p>
+                  <p className="text-xs text-sandrift mt-1 max-w-[340px]">
+                    把重复的操作流程保存成 Skill，之后一句话即可复用；也支持导入 SKILL.md 格式。
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
-                  <button
-                    type="button"
-                    onClick={openCreateSkill}
-                    className="h-8 px-4 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-lg transition-colors shadow-subtle flex items-center gap-1.5"
-                  >
+                  <Button variant="primary" size="sm" onClick={openCreateSkill}>
                     <Plus className="w-3.5 h-3.5" />
                     创建 Skill
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => {
                       // 尝试提取最近成功 workflow（若无则提示）
                       try {
@@ -427,10 +417,9 @@ export function ExtensionsSettings() {
                       setWorkflowDistillOpen(true);
                     }}
                     data-testid="extensions-create-from-workflow"
-                    className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1.5"
                   >
                     从 Kiro 工作流创建
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
@@ -458,7 +447,8 @@ export function ExtensionsSettings() {
                         <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-sandrift">
                           {skill.triggers && skill.triggers.length > 0 ? (
                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#F7F5F5] border border-line rounded-full">
-                              自动触发 · {skill.triggers.join(" · ")}
+                              自动触发 · {skill.triggers.slice(0, 4).join(" · ")}
+                              {skill.triggers.length > 4 ? ` · +${skill.triggers.length - 4}` : ""}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-surface-soft border border-line rounded-full text-sandrift">
@@ -466,77 +456,78 @@ export function ExtensionsSettings() {
                             </span>
                           )}
                           {skill.compatibility && <span className="px-2 py-1 bg-alabaster border border-line rounded-full">{skill.compatibility}</span>}
-                        </div>
-                        {skill.lastUsedAt && (
-                          <p className="text-[11px] text-sandrift mt-1">最近使用 {new Date(skill.lastUsedAt).toLocaleDateString("zh-CN")}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleSkillToggle(skill.name, !skill.enabled)}
-                          data-testid={`skill-toggle-${skill.name}`}
-                          className={cn(
-                            "h-7 px-3 text-xs font-bold rounded-lg border transition-colors",
-                            skill.enabled ? "bg-white text-charcoal border-line hover:bg-alabaster" : "bg-charcoal text-white border-charcoal hover:bg-black"
+                          {skill.lastUsedAt && (
+                            <span>最近使用 {new Date(skill.lastUsedAt).toLocaleDateString("zh-CN")}</span>
                           )}
-                        >
-                          {skill.enabled ? "停用" : "启用"}
-                        </button>
+                        </div>
                       </div>
+                      <Button
+                        variant={skill.enabled ? "secondary" : "primary"}
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => handleSkillToggle(skill.name, !skill.enabled)}
+                        data-testid={`skill-toggle-${skill.name}`}
+                        aria-label={skill.enabled ? `停用 ${skill.name}` : `启用 ${skill.name}`}
+                      >
+                        {skill.enabled ? "停用" : "启用"}
+                      </Button>
                     </div>
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-line-soft">
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-line-soft">
                       <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleSkillTest(skill.name)}
                           data-testid={`skill-test-${skill.name}`}
-                          className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1"
+                          title="检查 Skill 文件格式与激活条件"
                         >
-                          <Beaker className="w-3 h-3" />
-                          测试
-                        </button>
-                        <button
-                          type="button"
+                          <BadgeCheck className="w-3 h-3" />
+                          检查
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => openEditSkill(skill)}
                           data-testid={`skill-edit-${skill.name}`}
-                          className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1"
                         >
                           <Pencil className="w-3 h-3" />
                           编辑
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleSkillExport(skill.name)}
                           data-testid={`skill-export-${skill.name}`}
-                          className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1"
                         >
                           <Download className="w-3 h-3" />
                           导出
-                        </button>
+                        </Button>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleSkillDelete(skill.name)}
-                          data-testid={`skill-delete-${skill.name}`}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-danger transition-colors"
-                          aria-label="删除 Skill"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSkillDelete(skill.name)}
+                        data-testid={`skill-delete-${skill.name}`}
+                        className="text-sandrift hover:text-danger"
+                        aria-label={`删除 Skill ${skill.name}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </IconButton>
                     </div>
                     {skillTestResult && (
                       <p className={cn("text-[11px] font-bold", skillTestResult.ok ? "text-success" : "text-danger")}>
-                        {skillTestResult.ok ? "测试通过" : `测试失败: ${skillTestResult.errors.join("; ")}`}
+                        {skillTestResult.ok ? "检查通过" : `检查未通过：${skillTestResult.errors.join("；")}`}
                       </p>
                     )}
                   </div>
                 ))}
-                <p className="text-[11px] text-sandrift flex items-center gap-1.5 px-1">
-                  <Info className="w-3.5 h-3.5" />
-                  在 Kiro 输入 <code className="px-1 py-0.5 bg-[#F7F5F5] border border-line rounded text-charcoal font-mono">/skill-name</code> 可显式调用已启用 Skill（仅显示 enabled）
+                <p className="text-[11px] text-sandrift flex items-start gap-1.5 px-1 leading-relaxed">
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    在 Kiro 输入{" "}
+                    <code className="px-1 py-0.5 bg-[#F7F5F5] border border-line rounded text-charcoal font-mono">/skill-name</code>{" "}
+                    可直接调用；也可以直接描述任务，Kiro 会自动选择匹配的 Skill。
+                  </span>
                 </p>
               </div>
             )}
@@ -545,27 +536,33 @@ export function ExtensionsSettings() {
           {/* 内置 Skills：随应用打包、无需配置；锁定展示（不可编辑/停用/删除） */}
           <SettingsGroup
             title="内置 Skills"
-            description="随应用提供的系统能力，始终启用。"
+            description="随应用提供、始终启用；随版本更新，无需配置。"
           >
-            <div className="space-y-3 py-1" data-testid="builtin-skills">
+            <div className="space-y-2 py-1" data-testid="builtin-skills">
               {BUILTIN_SKILLS.map((skill) => (
                 <div
                   key={skill.name}
                   data-testid={`skill-card-${skill.name}`}
-                  className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-2"
+                  className="bg-[#FAF9F8] border border-line rounded-xl px-4 py-3 flex items-start gap-3"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h4 className="text-sm font-bold text-charcoal truncate">{skill.name}</h4>
-                    <span className="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold border bg-pastel-mint text-charcoal border-line">
-                      系统内置
-                    </span>
+                  <span className="w-7 h-7 rounded-lg bg-pastel-mint/60 border border-line flex items-center justify-center shrink-0">
+                    <Lock className="w-3.5 h-3.5 text-charcoal" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h4 className="text-[13px] font-bold text-charcoal truncate">{skill.name}</h4>
+                      <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-white text-satin-grey border-line">
+                        内置
+                      </span>
+                    </div>
+                    <p className="text-xs text-sandrift leading-relaxed mt-0.5">{skill.description}</p>
+                    {skill.triggers && skill.triggers.length > 0 && (
+                      <p className="text-[11px] text-sandrift mt-1 truncate">
+                        触发词：{skill.triggers.slice(0, 6).join(" · ")}
+                        {skill.triggers.length > 6 ? ` · +${skill.triggers.length - 6}` : ""}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-xs text-sandrift leading-relaxed">{skill.description}</p>
-                  {skill.triggers && skill.triggers.length > 0 && (
-                    <p className="text-[11px] text-sandrift">
-                      触发词：{skill.triggers.join(" · ")}
-                    </p>
-                  )}
                 </div>
               ))}
             </div>
@@ -1126,15 +1123,15 @@ function SkillEditorDialog({
               if (!bridge || !name) return;
               try {
                 const res = (await bridge.test({ name })) as { ok: boolean; errors: string[] };
-                setError(res.ok ? "测试通过" : `测试失败: ${res.errors.join("; ")}`);
+                setError(res.ok ? "检查通过" : `检查未通过：${res.errors.join("；")}`);
               } catch (e) {
-                setError(`测试失败: ${(e as { message?: string })?.message ?? String(e)}`);
+                setError(`检查未通过：${(e as { message?: string })?.message ?? String(e)}`);
               }
             }}
             data-testid="skill-editor-test"
           >
-            <Beaker className="w-3.5 h-3.5" />
-            测试
+            <BadgeCheck className="w-3.5 h-3.5" />
+            检查
           </Button>
           <div className="flex items-center gap-2">
             <Button

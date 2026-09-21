@@ -225,7 +225,7 @@ export function FilePreviewModal() {
                 </a>
               ) : (
                 <div className="text-xs text-sandrift p-3 bg-background rounded-xl border border-line">
-                  本地示例资料 ({material.size || "2.4 MB"})，上传后可预览与下载
+                  该资料尚未上传文件内容，上传后可预览与下载
                 </div>
               )}
             </div>

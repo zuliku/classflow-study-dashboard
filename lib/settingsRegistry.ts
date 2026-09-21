@@ -1,4 +1,4 @@
-import { SettingsSection } from "@/types";
+﻿import { SettingsSection } from "@/types";
 
 /**
  * Settings Registry：搜索 metadata 的唯一来源（不做 DOM 文本抓取）。
@@ -475,7 +475,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.kiro.apiKey,
     section: "kiro",
     title: "API Key",
-    description: "各服务的 API Key（仅保存在当前浏览器会话）",
+    description: "各服务的 API Key（仅保存在本次会话）",
     keywords: ["api key", "密钥", "key", "token"],
   },
   {
@@ -551,7 +551,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.kiro.webSearchByokKey,
     section: "kiro",
     title: "Tavily API Key",
-    description: "仅保存在当前浏览器会话中（调用时发送到 ClassFlow 服务端转发）",
+    description: "仅保存在本次会话中（调用时发送到 ClassFlow 服务端转发）",
     keywords: ["tavily", "api key", "搜索", "密钥"],
     conditional: true,
     gate: [
@@ -604,7 +604,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.kiro.webPdfVisionKey,
     section: "kiro",
     title: "OpenCode Go Vision API Key",
-    description: "仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在当前浏览器会话中",
+    description: "仅用于读取联网搜索发现的扫描型 PDF。密钥仅保存在本次会话中",
     keywords: ["vision", "api key", "pdf", "密钥"],
     conditional: true,
     gate: [{ control: SETTING_IDS.kiro.webSearchEnabled, requiresValue: true }],
@@ -645,7 +645,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS["kiro-agent"].permissions,
     section: "kiro-agent",
     title: "权限与安全",
-    description: "V1 安全边界：无 shell / 删除 / 应用启动 / MCP / Full Access",
+    description: "授权范围、终端与电脑操作开关、高风险动作逐次确认；不支持 Full Access",
     keywords: ["安全", "权限", "shell", "删除", "终端", "full access", "sandbox", "沙箱"],
   },
   // ---- 连接与扩展 ----
@@ -731,7 +731,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.data.privacyApiKey,
     section: "data",
     title: "API Key",
-    description: "仅保存在当前浏览器会话（sessionStorage），不写入本地存储、备份或日志",
+    description: "仅保存在本次会话（sessionStorage），不写入本地存储、备份或日志",
     keywords: ["api key", "隐私", "会话", "密钥"],
   },
   {

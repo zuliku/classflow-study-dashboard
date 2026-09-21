@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -48,19 +48,19 @@ export function DataSettings() {
   // 数据诊断：日常不需要常开，默认收起
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
-  // 示例数据手动载入（设置 → 数据 唯一入口；生产构建同样可用）
+  // 演示数据手动载入（设置 → 数据 唯一入口；用于体验与测试）
   const reloadDemoData = () => {
     useConfirmStore.getState().confirm({
-      title: "载入示例数据？",
-      description: "用示例学期数据替换当前业务数据（覆盖课程、课表、任务等）。个人资料与偏好不受影响。",
-      confirmLabel: "载入示例数据",
+      title: "载入演示数据？",
+      description: "用一学期的演示数据替换当前业务数据（覆盖课程、课表、任务等），用于快速体验功能。个人资料与偏好不受影响。",
+      confirmLabel: "载入演示数据",
       onConfirm: () => {
         import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
           const store = useAppStore.getState();
           store.restoreAppData(buildFullDemoData());
-          // 示例学期开学于数周前：按新学期校准当前教学周
+          // 演示学期开学于数周前：按新学期校准当前教学周
           store.resetToCurrentWeek();
-          useToastStore.getState().pushToast({ message: "示例数据已载入", type: "success" });
+          useToastStore.getState().pushToast({ message: "演示数据已载入", type: "success" });
         });
       },
     });
@@ -147,14 +147,14 @@ export function DataSettings() {
           <DangerZone />
         </SettingsGroup>
 
-        {/* 示例数据：设置 → 数据 唯一人工入口（生产构建同样可用） */}
-        <SettingsGroup title="示例数据">
+        {/* 演示数据：设置 → 数据 唯一人工入口（用于体验与测试） */}
+        <SettingsGroup title="演示数据">
           <div data-testid="dev-demo-reload">
             <SettingsActionRow
-              title="完整示例数据"
-              description="示例学期数据，覆盖课程、课表、任务等；载入后替换当前业务数据，个人资料与偏好不受影响。"
+              title="载入完整演示数据"
+              description="一学期的演示数据（课程 / 课表 / 任务 / 资料），用于体验与测试；载入后替换当前业务数据，个人资料与偏好不受影响。"
               icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
-              actionLabel="载入示例数据"
+              actionLabel="载入演示数据"
               onAction={reloadDemoData}
               actionMinWidth="min-w-[140px]"
             />

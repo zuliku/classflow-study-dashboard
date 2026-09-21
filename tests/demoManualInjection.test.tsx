@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -78,7 +78,7 @@ describe("Demo Manual Injection Hardening", () => {
     expect(confirmSpy).toHaveBeenCalled();
     const req = useConfirmStore.getState().request;
     expect(req).toBeTruthy();
-    expect(req?.title).toContain("载入示例数据");
+    expect(req?.title).toContain("载入演示数据");
     useConfirmStore.getState().close();
     expect(useAppStore.getState().courses.length).toBe(0);
     fireEvent.click(btn!);
@@ -86,7 +86,7 @@ describe("Demo Manual Injection Hardening", () => {
     await req2.onConfirm();
     await waitFor(() => expect(useAppStore.getState().courses.length).toBeGreaterThan(0), { timeout: 4000 });
     expect(useAppStore.getState().courses.length).toBe(10);
-    expect(useToastStore.getState().toasts.some(t => t.message.includes("示例数据已载入"))).toBe(true);
+    expect(useToastStore.getState().toasts.some(t => t.message.includes("演示数据已载入"))).toBe(true);
     confirmSpy.mockRestore();
     // @ts-ignore
     process.env.NODE_ENV = originalEnv;
