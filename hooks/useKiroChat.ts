@@ -1792,6 +1792,27 @@ export function useKiroChat({
   }, [chat.status, chat.messages]);
   const turnInFlight = turnExecution !== "settled";
 
+  /**
+   * Kiro Rail Runtime Status V1：Computer 是否真实执行中（低频派生 boolean）。
+   *
+   * 事实来源（不使用「Computer 开关已打开」这种错误近似）：
+   * - 存在 live Computer Task 且 status === "running"（Computer Agent 通用：filesystem / terminal /
+   *   未来 observe_desktop / desktop_action 都进入同一 Task 生命周期）
+   * - 且当前 turn 处于 awaiting-tool-result（client 工具正在执行 / 等待回填）
+   *
+   * 说明：Task 的 status 会保持 "running" 直到 turn 结束才 finalize，因此必须叠加 turn 阶段：
+   * - 工具执行中（awaiting-tool-result）→ computer-active
+   * - 工具完成、模型整理最终回答（executing）→ 回落 thinking
+   * - 审批等待（awaiting_permission + pendingApproval）→ 由 waiting-approval 单独表达
+   */
+  const computerActive = useMemo(() => {
+    if (turnExecution !== "awaiting-tool-result") return false;
+    for (const task of tasksState.values()) {
+      if (task.status === "running") return true;
+    }
+    return false;
+  }, [turnExecution, tasksState]);
+
   // Task 12: Turn Lifecycle — settled/cancelled/error/reset 清空 invocationId, continuation 保留
   useEffect(() => {
     const isSettled = chat.status === "error" || (!turnInFlight && chat.status !== "submitted" && chat.status !== "streaming");
@@ -3397,6 +3418,10 @@ export function useKiroChat({
     turnExecution,
     /** 派生：turn 是否仍在进行（turnExecution !== settled）——操作栏 / Worklog 折叠的依据 */
     turnInFlight,
+    /**
+     * Kiro Rail Runtime Status V1：Computer Agent 是否真实执行中（低频；供 Session Meta 派生状态）
+     */
+    computerActive,
     error: normalizedError,
     activity,
     /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */

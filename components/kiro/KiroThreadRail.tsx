@@ -15,25 +15,36 @@ import { listConversations } from "@/lib/ai/history/db";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KIRO_OUTPUT_TEXT_SIZE_LABELS, KiroOutputTextSize } from "@/lib/ai/ui/typography";
+import {
+  kiroRuntimeStatusAriaLabel,
+  kiroRuntimeStatusText,
+  type KiroRuntimeStatus,
+} from "@/lib/ai/ui/kiroRuntimeStatus";
 import { cn } from "@/lib/utils";
 
-/** Soft Plate：Kiro Logo 的浅色底座 + 1px 品牌 perimeter（方案 A；hover 流光由 CSS 驱动） */
+/** Soft Plate：Kiro Logo 的浅色底座 + 1px 品牌 perimeter（方案 A；品牌动效由 CSS 驱动）。
+ *  Kiro Rail Runtime Status V1：
+ *  - status：Agent Runtime 状态（idle / thinking / computer-active / waiting-approval）→ 唯一 Motion 来源
+ *  - emphasized：expanded / current 的导航视觉权重（与 Runtime 状态解耦） */
 function KiroRailPlate({
   size = "md",
-  active,
+  status,
+  emphasized,
   className,
 }: {
   size?: "sm" | "md";
-  /** expanded / 当前 Thread：静态品牌细边常显 */
-  active?: boolean;
+  /** Agent Runtime Status（由 Session Meta 低频下发；不在此组件内做 boolean 判断） */
+  status: KiroRuntimeStatus;
+  /** Navigation emphasis（expanded / current）：只影响视觉权重，不影响动画语义 */
+  emphasized?: boolean;
   className?: string;
 }) {
   const box = size === "sm" ? "w-8 h-8" : "w-10 h-10";
   const logo = size === "sm" ? "w-[18px] h-[18px]" : "w-6 h-6";
-  const flow: "ambient" | "active" | "working" = active ? "active" : "ambient";
   return (
     <span
-      data-kiro-flow={flow}
+      data-kiro-status={status}
+      data-emphasized={emphasized || undefined}
       className={cn(
         "relative inline-flex items-center justify-center rounded-xl overflow-hidden kiro-rail-plate",
         box,
@@ -41,8 +52,8 @@ function KiroRailPlate({
       )}
       aria-hidden="true"
     >
-      {/* Kiro Brand Motion V2 — ambient always, active when expanded/current */}
-      <span data-kiro-flow={flow} className="absolute inset-0 rounded-xl kiro-ring" />
+      {/* Kiro Brand Motion V2 — status-driven perimeter（CSS：data-kiro-status） */}
+      <span className="absolute inset-0 rounded-xl kiro-ring" />
       <span className="relative w-full h-full rounded-[11px] bg-surface border border-line-soft flex items-center justify-center">
         <KiroLogoIcon className={cn(logo, "relative")} />
       </span>
@@ -60,6 +71,10 @@ function KiroRailPlate({
 export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void }) {
   const meta = useKiroSessionMeta();
   const actions = useKiroSessionActions();
+  // Kiro Rail Runtime Status V1：唯一状态来源（Provider 低频解析；Rail 不再自行推导）
+  const runtimeStatus = meta.kiroRuntimeStatus;
+  const runtimeStatusText = kiroRuntimeStatusText(runtimeStatus);
+  const runtimeStatusAria = kiroRuntimeStatusAriaLabel(runtimeStatus);
   // Task 7C：Kiro 输出字号（低频 preference，仅 Expanded Rail 提供入口）
   const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
   const setOutputTextSize = useKiroPreferencesStore((s) => s.setOutputTextSize);
@@ -249,12 +264,12 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
           >
           <button
             onClick={() => expand()}
-            aria-label="展开对话"
+            aria-label={runtimeStatus === "idle" ? "展开对话" : `${runtimeStatusAria}，展开对话`}
             aria-expanded={false}
-            title="对话"
+            title={runtimeStatusAria}
             className="group/plate rounded-xl transition-colors"
           >
-            <KiroRailPlate />
+            <KiroRailPlate status={runtimeStatus} />
           </button>
           <div className="w-5 h-px bg-line-soft my-0.5" />
           <button
@@ -330,8 +345,18 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
             )}
           >
             <div className="flex items-center gap-2 min-w-0 group/plate">
-              <KiroRailPlate size="sm" active />
-              <span className="text-xs font-semibold text-charcoal">Kiro</span>
+              <KiroRailPlate size="sm" status={runtimeStatus} emphasized />
+              <div className="flex flex-col min-w-0 leading-tight">
+                <span className="text-xs font-semibold text-charcoal">Kiro</span>
+                {runtimeStatusText && (
+                  <span
+                    className="text-[10px] font-medium text-sandrift whitespace-nowrap"
+                    data-testid="kiro-rail-runtime-status-text"
+                  >
+                    {runtimeStatusText}
+                  </span>
+                )}
+              </div>
             </div>
             <button
               onClick={collapse}

@@ -65,11 +65,12 @@ describe("Kiro Brand Motion System V2", () => {
     expect(css).toContain('animation: none');
   });
 
-  it("Thread Rail has ambient flow by default", async () => {
+  it("Thread Rail has status-driven motion by default (Kiro Rail Runtime Status V1)", async () => {
     const railSrc = fs.readFileSync(path.join(process.cwd(), "components/kiro/KiroThreadRail.tsx"), "utf8");
-    expect(railSrc).toContain('data-kiro-flow');
-    expect(railSrc).toContain('kiro-rail-plate');
+    expect(railSrc).toContain("data-kiro-status");
+    expect(railSrc).toContain("kiro-rail-plate");
     const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
-    expect(css).toContain('.kiro-rail-plate[data-kiro-flow="ambient"]');
+    expect(css).toContain('.kiro-rail-plate[data-kiro-status="idle"]');
+    expect(css).toContain('.kiro-rail-plate[data-kiro-status="computer-active"]');
   });
 });

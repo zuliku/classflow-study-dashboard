@@ -93,6 +93,17 @@
   --kiro-flow-ambient: 6.5s;
   --kiro-flow-active: 5.2s;
   --kiro-flow-working: 3.7s;
+  /* Kiro Rail Runtime Status V1：computer-active ring movement（唯一主要流动状态） */
+  --kiro-computer-ring-duration: 4.2s;
+  /* waiting-approval：暖 amber 静态 perimeter（与 --warning / --warning-border 协调） */
+  --kiro-approval-ring: conic-gradient(
+    from 20deg,
+    rgba(223, 210, 194, 0.95),
+    rgba(201, 168, 124, 0.9) 100deg,
+    rgba(147, 110, 76, 0.85) 190deg,
+    rgba(201, 168, 124, 0.9) 280deg,
+    rgba(223, 210, 194, 0.95)
+  );
 
   /* Overview Hero fold gap */
   --overview-fold-gap: 24px;
@@ -864,6 +875,81 @@ html[data-motion-effective="reduced"] .kiro-ring[data-kiro-flow] {
 .group\/plate:focus-visible .kiro-rail-plate[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.70; }
 .group\/plate:hover .kiro-rail-plate[data-kiro-flow="active"] .kiro-ring { opacity: 0.90; }
 html[data-motion-effective="reduced"] .kiro-rail-plate .kiro-ring { animation: none; opacity: 0.6; }
+
+/* ---- Kiro Rail Runtime Status V1（Thread Rail 专用）----
+   状态 Domain：idle / thinking / computer-active / waiting-approval。
+   - Navigation emphasis（data-emphasized）与 Runtime 状态解耦，只影响视觉权重
+   - thinking 只做极弱 opacity pulse（不旋转）；computer-active 是唯一主要流动状态
+   - waiting-approval 暖 amber 静态（不旋转 / 不 pulse；不用危险红）
+   - 旧 data-kiro-flow 规则保留给 Sidebar Featured / Capsule 等其它消费者 */
+.kiro-rail-plate .kiro-ring {
+  opacity: 0.64;
+  animation: none;
+  transition:
+    opacity var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
+}
+
+@keyframes kiro-rail-thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.68;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+.kiro-rail-plate[data-kiro-status="idle"] .kiro-ring {
+  animation: none;
+  opacity: 0.64;
+}
+
+.kiro-rail-plate[data-kiro-status="thinking"] .kiro-ring {
+  animation: kiro-rail-thinking-pulse 2.1s var(--ease-standard) infinite;
+}
+
+.kiro-rail-plate[data-kiro-status="computer-active"] .kiro-ring {
+  animation: flow-angle-spin var(--kiro-computer-ring-duration) linear infinite;
+  opacity: 0.88;
+}
+
+.kiro-rail-plate[data-kiro-status="waiting-approval"] .kiro-ring {
+  animation: none;
+  background: var(--kiro-approval-ring);
+  opacity: 0.9;
+}
+
+/* Hover / Focus：只提升 ring opacity，绝不覆盖真实 Runtime 状态动画 */
+.group\/plate:hover .kiro-rail-plate[data-kiro-status="idle"] .kiro-ring,
+.group\/plate:focus-visible .kiro-rail-plate[data-kiro-status="idle"] .kiro-ring {
+  opacity: 0.74;
+}
+.group\/plate:hover .kiro-rail-plate[data-kiro-status="computer-active"] .kiro-ring,
+.group\/plate:focus-visible .kiro-rail-plate[data-kiro-status="computer-active"] .kiro-ring {
+  opacity: 0.92;
+}
+.group\/plate:hover .kiro-rail-plate[data-kiro-status="waiting-approval"] .kiro-ring,
+.group\/plate:focus-visible .kiro-rail-plate[data-kiro-status="waiting-approval"] .kiro-ring {
+  opacity: 0.94;
+}
+
+/* Expanded / current 的视觉权重（emphasized；不改变动画语义） */
+.kiro-rail-plate[data-emphasized][data-kiro-status="idle"] .kiro-ring { opacity: 0.72; }
+.kiro-rail-plate[data-emphasized][data-kiro-status="computer-active"] .kiro-ring { opacity: 0.92; }
+.kiro-rail-plate[data-emphasized][data-kiro-status="waiting-approval"] .kiro-ring { opacity: 0.94; }
+
+/* Reduced Motion：停止 pulse / ring movement，但状态仍通过 opacity / 颜色区分 */
+html[data-motion-effective="reduced"] .kiro-rail-plate[data-kiro-status] .kiro-ring {
+  animation: none;
+}
+html[data-motion-effective="reduced"] .kiro-rail-plate[data-kiro-status="idle"] .kiro-ring { opacity: 0.64; }
+html[data-motion-effective="reduced"] .kiro-rail-plate[data-kiro-status="thinking"] .kiro-ring { opacity: 0.78; }
+html[data-motion-effective="reduced"] .kiro-rail-plate[data-kiro-status="computer-active"] .kiro-ring { opacity: 0.9; }
+html[data-motion-effective="reduced"] .kiro-rail-plate[data-kiro-status="waiting-approval"] .kiro-ring {
+  opacity: 0.9;
+  background: var(--kiro-approval-ring);
+}
 
 /* Minimized Capsule — ambient vs working */
 .kiro-capsule[data-kiro-flow="ambient"] .kiro-ring { opacity: 0.74; }

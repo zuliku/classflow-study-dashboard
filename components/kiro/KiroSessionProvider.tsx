@@ -63,6 +63,11 @@ import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 import { shouldCompact, DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { buildTranscriptText, buildTranscriptMarkdown, copyTextToClipboard, downloadMarkdownFile } from "@/lib/ai/share";
 import { useToastStore } from "@/store/useToastStore";
+import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
+import {
+  resolveKiroRuntimeStatus,
+  type KiroRuntimeStatus,
+} from "@/lib/ai/ui/kiroRuntimeStatus";
 import { KiroArtifactPreviewDialogHost } from "@/components/kiro/computer/KiroArtifactPreviewDialogHost";
 import { VisualPendingContinuation } from "@/lib/ai/visual/continuation";
 import { buildConversationPersistenceSignature } from "@/lib/ai/visual/receipt";
@@ -197,6 +202,8 @@ export interface KiroSessionMetaValue {
   sidecarOpen: boolean;
   sidecarMode: KiroSidecarMode;
   kiroBusy: boolean;
+  /** Kiro Rail Runtime Status V1：Agent 运行状态（idle / thinking / computer-active / waiting-approval） */
+  kiroRuntimeStatus: KiroRuntimeStatus;
   suggestionsKind: KiroSuggestionsKind | null;
   suggestionsGen: number;
   lastUserTurnGen: number;
@@ -715,6 +722,22 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   // kiroBusy 低频 boolean（idle→busy / busy→idle 才变化，不订阅 token 文本）
   const kiroBusy = chat.turnInFlight || chat.streaming || sendClaimed;
 
+  /**
+   * Kiro Rail Runtime Status V1：单一状态 Domain（Navigation emphasis 与 Runtime Status 解耦）。
+   * 事实全部来自真实 Runtime：busy（turn lifecycle）/ computerActive（live Computer Task）/
+   * waitingApproval（pendingApproval 非空）。低频 scalar → 可安全进入 Meta Context。
+   */
+  const waitingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval !== null);
+  const kiroRuntimeStatus = useMemo(
+    () =>
+      resolveKiroRuntimeStatus({
+        busy: kiroBusy,
+        computerActive: chat.computerActive,
+        waitingApproval,
+      }),
+    [kiroBusy, chat.computerActive, waitingApproval]
+  );
+
   const openSidecar = useCallback(() => {
     setSidecarMode("open");
   }, []);
@@ -1129,6 +1152,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       sidecarOpen,
       sidecarMode,
       kiroBusy,
+      kiroRuntimeStatus,
       suggestionsKind,
       suggestionsGen: suggestionsGenRef.current,
       lastUserTurnGen,
@@ -1148,6 +1172,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       sidecarOpen,
       sidecarMode,
       kiroBusy,
+      kiroRuntimeStatus,
       suggestionsKind,
       lastUserTurnGen,
       hasMessages,
