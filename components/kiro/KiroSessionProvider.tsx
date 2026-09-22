@@ -20,6 +20,7 @@ import {
   suggestionsTypeOf,
 } from "@/lib/ai/context/handoff";
 import { KiroContextRef } from "@/lib/ai/context/types";
+import type { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroSidecar } from "@/components/kiro/KiroSidecar";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
@@ -204,6 +205,13 @@ export interface KiroSessionMetaValue {
   kiroBusy: boolean;
   /** Kiro Rail Runtime Status V1：Agent 运行状态（idle / thinking / computer-active / waiting-approval） */
   kiroRuntimeStatus: KiroRuntimeStatus;
+  /**
+   * Kiro Inspector P2：当前 live Turn 的 Source Registry（低频；每 Turn 至多变化数次）。
+   * 只含 metadata（无正文 / snippet / provider raw response）。
+   */
+  currentTurnSources: KiroSourceMeta[];
+  /** Kiro Inspector P2：Conversation Source 版本（turn settled 绑定 / 会话切换时 +1；低频 scalar） */
+  conversationSourcesVersion: number;
   suggestionsKind: KiroSuggestionsKind | null;
   suggestionsGen: number;
   lastUserTurnGen: number;
@@ -245,6 +253,16 @@ export interface KiroSessionActionsValue {
   copyCurrentTranscript: () => Promise<void>;
   exportCurrentTranscript: () => void;
   getCurrentMessages: () => ReturnType<typeof useKiroChat>["messages"];
+  /**
+   * Kiro Inspector P2：Conversation 级 Source 聚合读取（ref 读取；按 meta.conversationSourcesVersion 缓存）。
+   * 不订阅 messages / token。
+   */
+  getConversationSources: () => KiroSourceMeta[];
+  /**
+   * Kiro Inspector P2：稳定 callback —— 显式添加 Manual Context（@ 文件 / Inspector Ask Kiro）。
+   * 同时保留 KiroRuntimeContext.addManualContext（旧 API 兼容）。
+   */
+  addManualContext: (ref: KiroContextRef) => void;
   /** Kiro Projects V1：低频 metadata 操作（只 bump projectsVersion，不触发 streaming rerender） */
   createProject: (input: { name: string; description?: string; instructions?: string }) => Promise<KiroProjectRecord | null>;
   updateProject: (id: string, patch: { name?: string; description?: string; instructions?: string }) => Promise<KiroProjectRecord | null>;
@@ -728,6 +746,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
    * waitingApproval（pendingApproval 非空）。低频 scalar → 可安全进入 Meta Context。
    */
   const waitingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval !== null);
+  // Kiro Inspector P2：live Turn Source Registry（低频；引用稳定由 useKiroChat 的 sources state 保证）
+  const currentTurnSources = useMemo(() => chat.sources, [chat.sources]);
+  const conversationSourcesVersion = chat.conversationSourcesVersion;
   const kiroRuntimeStatus = useMemo(
     () =>
       resolveKiroRuntimeStatus({
@@ -1153,6 +1174,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       sidecarMode,
       kiroBusy,
       kiroRuntimeStatus,
+      currentTurnSources,
+      conversationSourcesVersion,
       suggestionsKind,
       suggestionsGen: suggestionsGenRef.current,
       lastUserTurnGen,
@@ -1173,6 +1196,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       sidecarMode,
       kiroBusy,
       kiroRuntimeStatus,
+      currentTurnSources,
+      conversationSourcesVersion,
       suggestionsKind,
       lastUserTurnGen,
       hasMessages,
@@ -1207,6 +1232,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       copyCurrentTranscript,
       exportCurrentTranscript,
       getCurrentMessages,
+      getConversationSources: chat.getConversationSources,
+      addManualContext,
       createProject,
       updateProject,
       deleteProject,
@@ -1238,6 +1265,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       copyCurrentTranscript,
       exportCurrentTranscript,
       getCurrentMessages,
+      addManualContext,
       createProject,
       updateProject,
       deleteProject,

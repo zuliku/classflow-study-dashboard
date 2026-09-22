@@ -162,7 +162,7 @@ test("V2 Artifact：创建 draft.md → rename → 审批 → 重命名事实 �
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -353,7 +353,7 @@ test("V2 Part 2：create_document → update_document（自动允许）→ 修�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -532,7 +532,7 @@ test("V2 Part 3：Artifact Preview / Download / Recent / Ask Kiro 使用安全�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -758,7 +758,7 @@ test("V2.1：DOCX 浏览器下载 byte-for-byte 完整性（下载文件 = Sandb
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -912,7 +912,7 @@ test("V2.2 Agent Flow：get_week_schedule → create_document（Draft table，�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1119,7 +1119,7 @@ test("V2.5 场景 A：legacy Kiro DOCX 下载时自动 self-heal（下载 = curr
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1199,7 +1199,7 @@ test("V2.5 场景 B（V2.7 Guided）：Agent delete_file → 确认后删除（A
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1263,7 +1263,7 @@ test("V2.5 场景 C：Recent Files 手动删除（二次确认 → 文件消失 
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1328,7 +1328,7 @@ test("V2.5 场景 D：Task Card 文件行也有删除入口（二次确认 → �
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1445,7 +1445,7 @@ test("V2.6 探针：Kiro-V26-Word-Probe.docx 三段 SHA 一致（render=Sandbox=
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1605,7 +1605,7 @@ test("V2.7 场景 E：Workspace Auto 删除 → 无 Approval（文件消失、ta
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1663,7 +1663,7 @@ test("V2.7 场景 F：Workspace Auto 移动 → 无 Approval（move_file 直接�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1727,7 +1727,7 @@ test("V2.7 场景 G：Guided「此 Workspace 始终允许」→ 同 Workspace �
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1786,7 +1786,7 @@ test("V2.7 场景 H：Approval 队列 → 点 A 后 B 立即显示且按钮可�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1844,7 +1844,7 @@ test("V2.7 场景 I：resume 失败（文件在审批期间消失）→ Dialog �
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1918,7 +1918,7 @@ test("V2.7 场景 J：审批弹窗打开 → 拒绝 → Dialog 立即关闭、�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -1952,7 +1952,7 @@ test("V2.7.1 场景 K：Recent Files 打开期间文件被删除 → row 自动�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -2049,7 +2049,7 @@ test("V2.8 场景 L：真实删除全部（path-only delete_file ×2 → 文件�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -2153,7 +2153,7 @@ test("V2.9：本周课表 Word 全链路（create_document → Recent Files 可�
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);
@@ -2232,7 +2232,7 @@ test("V2.9：同名文件已存在（orphan）→ 不覆盖 + adopt 恢复可见
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/");
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
   await page.waitForTimeout(800);

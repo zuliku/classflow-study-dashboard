@@ -10,6 +10,7 @@ import { KiroArtifact } from "@/lib/ai/computer/artifacts/types";
 import {
   getArtifact,
   getArtifactSource,
+  listArtifactsForWorkspace,
   listRecentArtifactsForWorkspace,
 } from "@/lib/ai/computer/artifacts/service";
 import { KiroWorkspaceMeta } from "@/lib/ai/computer/types";
@@ -151,6 +152,14 @@ export async function listRecentArtifactEntries(input: {
   // V2.9：反向 reconciliation 先跑（bounded：最近 20 条 audit 的创建记录）
   await reconcileRecentOrphanFiles(workspace);
   const artifacts = await listRecentArtifactsForWorkspace(input.workspaceId, input.limit ?? 12);
+  return resolveArtifactEntries(workspace, artifacts);
+}
+
+/** 单条 Artifact → Entry（可用性解析唯一实现：Registry → workspace → root → adapter → stat） */
+async function resolveArtifactEntries(
+  workspace: KiroWorkspaceMeta,
+  artifacts: KiroArtifact[]
+): Promise<KiroRecentArtifactEntry[]> {
   const entries: KiroRecentArtifactEntry[] = [];
   for (const artifact of artifacts) {
     const root = workspace.roots.find((r) => r.id === artifact.rootId);
@@ -171,7 +180,7 @@ export async function listRecentArtifactEntries(input: {
         } else {
           availability = "missing";
           // V2.8：kiro-created 的 stale metadata → best-effort GC（文件已不存在，
-          // 记录不再有效；绝不因此显示可下载/预览）。失败静默（下次轮询重试）。
+          // 记录不再有效；绝不因此显示可下载/预览）。失败静默（下次刷新重试）。
           if (artifact.source === "kiro-created") {
             try {
               const { removeArtifactRecord } = await import("@/lib/ai/computer/artifacts/service");
@@ -196,6 +205,32 @@ export async function listRecentArtifactEntries(input: {
     });
   }
   return entries;
+}
+
+/** Conversation-scoped Artifact（Kiro Inspector P2 Outputs）：
+ *  只返回 sourceConversationId === conversationId 的 Artifact（真实 metadata，绝不按文件名猜测），
+ *  updatedAt DESC，最多 limit 条；复用同一可用性解析（available / missing / unavailable）。
+ *  不做 orphan reconciliation（那是 Workspace 级入口的职责；这里只读当前对话的输出）。 */
+export async function listArtifactEntriesForConversation(input: {
+  workspaceId: string;
+  conversationId: string;
+  workspaces: KiroWorkspaceMeta[];
+  limit?: number;
+}): Promise<KiroRecentArtifactEntry[]> {
+  const workspace = input.workspaces.find((w) => w.id === input.workspaceId);
+  if (!workspace || !input.conversationId) return [];
+  const all = await listArtifactsForWorkspace(input.workspaceId);
+  const clamped = Math.max(1, Math.min(input.limit ?? 8, 20));
+  const artifacts = all
+    .filter((artifact) => artifact.sourceConversationId === input.conversationId)
+    .sort((a, b) => {
+      const aTime = Date.parse(a.updatedAt);
+      const bTime = Date.parse(b.updatedAt);
+      if (aTime !== bTime) return bTime - aTime;
+      return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    })
+    .slice(0, clamped);
+  return resolveArtifactEntries(workspace, artifacts);
 }
 
 /** V2.9：audit 驱动的 bounded orphan 反向 reconciliation（只处理最近 Kiro 创建记录对应的路径）。 */

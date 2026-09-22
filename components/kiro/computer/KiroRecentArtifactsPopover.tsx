@@ -1,9 +1,8 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FileClock, Eye, Download, MessagesSquare, Trash2, Loader2 } from "lucide-react";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
-import { useKiroRuntime } from "@/components/kiro/KiroSessionProvider";
 import { useKiroArtifactActions } from "@/hooks/useKiroArtifactActions";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -30,8 +29,7 @@ export function KiroRecentArtifactsPopover() {
   const workspaces = useKiroComputerStore((s) => s.workspaces);
   const computerEnabled = useKiroComputerStore((s) => s.computerEnabled);
   const setComputerEnabled = useKiroComputerStore((s) => s.setComputerEnabled);
-  const { addManualContext } = useKiroRuntime();
-  const { previewArtifact, downloadArtifact, deleteArtifact } = useKiroArtifactActions();
+  const { previewArtifact, downloadArtifact, deleteArtifact, askKiroArtifact } = useKiroArtifactActions();
   const pushToast = useToastStore((s) => s.pushToast);
   const confirm = useConfirmStore((s) => s.confirm);
 
@@ -81,43 +79,10 @@ export function KiroRecentArtifactsPopover() {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
+  // Inspector P2：Ask Kiro 逻辑与 Inspector Outputs 共用（canonical artifactToContextRef，无第二份实现）
   const askKiro = async (entry: KiroRecentArtifactEntry) => {
-    if (entry.artifact.workspaceId !== activeWorkspaceId) {
-      pushToast({ message: "该文件不属于当前工作区，无法加入上下文。", type: "error" });
-      return;
-    }
-    // 重新读取 Registry：使用最新 root/path/revision
-    const artifact = await getArtifact(entry.artifact.id);
-    if (!artifact) {
-      pushToast({ message: "文件记录不存在。", type: "error" });
-      return;
-    }
-    if (artifact.workspaceId !== activeWorkspaceId) {
-      pushToast({ message: "该文件不属于当前工作区，无法加入上下文。", type: "error" });
-      return;
-    }
-    // 用户显式要求使用此工作区文件：可显式开启 Computer（绝不切 Workspace / 绝不请求 Browser 授权）
-    if (!computerEnabled) {
-      setComputerEnabled(true);
-    }
-    const ref: KiroContextRef = {
-      key: `manual-artifact-${artifact.id}`,
-      kind: "artifact",
-      entityId: artifact.id,
-      label: `文件 · ${artifact.displayName}`,
-      source: "manual",
-      artifact: {
-        artifactId: artifact.id,
-        workspaceId: artifact.workspaceId,
-        rootId: artifact.rootId,
-        relativePath: artifact.relativePath,
-        type: artifact.type,
-        revision: artifact.revision,
-      },
-    };
-    addManualContext(ref);
-    setOpen(false);
-    pushToast({ message: "已添加到 Kiro 上下文" });
+    const ok = await askKiroArtifact(entry.artifact.id);
+    if (ok) setOpen(false);
   };
 
   const removeStale = async (entry: KiroRecentArtifactEntry) => {

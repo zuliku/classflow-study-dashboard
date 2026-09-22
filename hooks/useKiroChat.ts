@@ -130,6 +130,7 @@ import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
+import { aggregateInspectorSources } from "@/lib/ai/ui/kiroInspector";
 import { enrichWebSourcePages } from "@/lib/ai/citations/sourceRegistry";
 import { renderPdfPages, selectScannedPdfPages, allocateVisionPages, extractExplicitPages } from "@/lib/ai/attachments/pdfVision";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN, MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN } from "@/lib/ai/attachments/limits";
@@ -728,6 +729,14 @@ export function useKiroChat({
   // ---- Turn Source Registry（Task 11）：本 Turn 文档来源（Citation 校验/展示；不含正文）----
   const [sources, setSources] = useState<KiroSourceMeta[]>([]);
   const turnSourcesRef = useRef<KiroSourceMeta[]>([]);
+  /**
+   * Kiro Inspector P2 §14：Turn Source Registry → owning Assistant Message 的 stable-boundary 绑定。
+   * - 绑定发生在 turn settled（不再随 token 变化）
+   * - 绑定后：message view 携带 sources（旧 Turn Citation 仍可展示）→ sanitizeConversation 落盘
+   * - 只存 metadata（无正文 / snippet / tool response）
+   */
+  const turnBoundSourcesRef = useRef(new Map<string, KiroSourceMeta[]>());
+  const [conversationSourcesVersion, setConversationSourcesVersion] = useState(0);
 
   // ---- Scanned PDF Vision（Task 12）：发送时渲染的页面图 manifest（只存 metadata，不含 base64）----
   const [preparingVision, setPreparingVision] = useState(false);
@@ -2423,6 +2432,61 @@ export function useKiroChat({
     finalizeActiveTask();
   }, [turnExecution, finalizeActiveTask]);
 
+  /**
+   * Kiro Inspector P2 §14：Turn settled → 把本 Turn Source Registry 绑定到 owning Assistant Message。
+   * 绑定是 stable boundary（每 Turn 至多一次），不随 token 变化；绑定后：
+   * - message view 携带 sources（旧 Turn Citation 可继续展示）
+   * - sanitizeConversation → PersistedKiroMessage.sources（历史恢复后 Inspector 仍可聚合）
+   */
+  useEffect(() => {
+    if (turnExecution !== "settled") return;
+    const turnSources = turnSourcesRef.current;
+    if (turnSources.length === 0) return;
+    const messages = latestChatRef.current.messages;
+    let lastUserIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    let ownerId: string | null = null;
+    for (let i = messages.length - 1; i > lastUserIdx; i--) {
+      if (messages[i].role === "assistant") {
+        ownerId = messages[i].id;
+        break;
+      }
+    }
+    if (!ownerId) return;
+    const existing = turnBoundSourcesRef.current.get(ownerId);
+    const unchanged =
+      existing &&
+      existing.length === turnSources.length &&
+      existing.every((source, index) => source.sourceId === turnSources[index].sourceId);
+    if (unchanged) return;
+    turnBoundSourcesRef.current.set(ownerId, turnSources.map((source) => ({ ...source })));
+    setConversationSourcesVersion((v) => v + 1);
+  }, [turnExecution]);
+
+  /**
+   * Kiro Inspector P2：Conversation 级 Source 聚合读取（ref 读取，不订阅 messages / token）。
+   * 顺序：live Turn → 已绑定历史（新 → 旧）；语义去重由 aggregateInspectorSources 完成。
+   */
+  const getConversationSources = useCallback((): KiroSourceMeta[] => {
+    const messages = latestChatRef.current.messages;
+    const boundGroups: KiroSourceMeta[][] = [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role !== "assistant") continue;
+      const bound = turnBoundSourcesRef.current.get(message.id);
+      if (bound && bound.length > 0) boundGroups.push(bound);
+    }
+    return aggregateInspectorSources({
+      currentTurnSources: turnSourcesRef.current,
+      boundSources: boundGroups,
+    });
+  }, []);
+
   // Unmount：清除 stale approvals（approval 不能在新会话继续执行）
   useEffect(() => {
     return () => {
@@ -3325,8 +3389,10 @@ export function useKiroChat({
           needsAttach = true;
         }
       }
-      // 历史恢复的 Citation 来源（展示 metadata；正文不落库）
-      const restoredSrcs = restoredSourcesRef.current.get(m.id);
+      // Citation 来源（展示 metadata；正文不落库）：
+      // - 历史恢复：restoredSourcesRef（sanitizeConversation 落盘后恢复）
+      // - 本会话 Turn 绑定：turnBoundSourcesRef（Inspector P2 §14 stable boundary 绑定）
+      const restoredSrcs = restoredSourcesRef.current.get(m.id) ?? turnBoundSourcesRef.current.get(m.id);
       if (restoredSrcs && restoredSrcs.length > 0) {
         view = { ...view, sources: restoredSrcs };
         needsAttach = true;
@@ -3426,6 +3492,13 @@ export function useKiroChat({
     activity,
     /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */
     sources,
+    /**
+     * Kiro Inspector P2：Conversation Source 版本（低频；turn settled 绑定 / 会话切换时 +1）
+     * 与 getConversationSources 配套使用，避免 Inspector 订阅 token-level messages。
+     */
+    conversationSourcesVersion,
+    /** Kiro Inspector P2：Conversation 级 Source 聚合（ref 读取；调用方按 version 缓存） */
+    getConversationSources,
     /** 扫描 PDF 页面渲染中（Send 禁用 + 「正在准备扫描 PDF…」） */
     preparingVision,
     /** V4.6：Send 已 claim 且 Turn Intent 已同步冻结（preflight 进行中；下一 Turn preferences 可编辑） */

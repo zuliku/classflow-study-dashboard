@@ -50,8 +50,11 @@ export function KiroHeader({
       </h2>
 
       <div className="flex items-center gap-1.5 shrink-0">
-        {/* V2 Part 3：最近文件（仅 Workspace；Sidecar 不挂载） */}
-        <KiroRecentArtifactsPopover />
+        {/* V2 Part 3：最近文件（仅 Workspace；Sidecar 不挂载）。
+            Kiro Inspector P2：xl+ 由右侧 Inspector Outputs 承担 → Header 入口隐藏；<xl 保留为 fallback。 */}
+        <span className="xl:hidden">
+          <KiroRecentArtifactsPopover />
+        </span>
         <KiroSessionActions variant="workspace" onNewChat={onNewChat} onOpenHistory={onOpenHistory} />
       </div>
     </div>
