@@ -172,7 +172,7 @@ async function renderInspector() {
     root!.render(
       <KiroSessionMetaContext.Provider value={metaValue()}>
         <KiroSessionActionsContext.Provider value={actionsValue}>
-          <KiroInspector />
+          <KiroInspector open />
         </KiroSessionActionsContext.Provider>
       </KiroSessionMetaContext.Provider>
     );
@@ -185,7 +185,7 @@ function rerenderInspector() {
     root!.render(
       <KiroSessionMetaContext.Provider value={metaValue()}>
         <KiroSessionActionsContext.Provider value={actionsValue}>
-          <KiroInspector />
+          <KiroInspector open />
         </KiroSessionActionsContext.Provider>
       </KiroSessionMetaContext.Provider>
     );
@@ -476,49 +476,6 @@ describe("Kiro Inspector — Sources", () => {
   });
 });
 
-/* ---------------- Computer ---------------- */
-
-describe("Kiro Inspector — Computer", () => {
-  it("Computer OFF → 隐藏 section（不误显示 active）", async () => {
-    useKiroComputerStore.setState({ computerEnabled: false });
-    metaState.kiroRuntimeStatus = "computer-active";
-    await renderInspector();
-    expect(container!.querySelector('[data-testid="kiro-inspector-computer"]')).toBeNull();
-  });
-
-  it("thinking 不等于 computer-active", async () => {
-    metaState.kiroRuntimeStatus = "thinking";
-    await renderInspector();
-    const status = container!.querySelector('[data-testid="kiro-inspector-computer-status"]')!;
-    expect(status.textContent).toContain("已开启");
-    expect(status.textContent).not.toContain("正在操作");
-  });
-
-  it("computer-active → 正在操作 + 当前 Workspace", async () => {
-    metaState.kiroRuntimeStatus = "computer-active";
-    await renderInspector();
-    const status = container!.querySelector('[data-testid="kiro-inspector-computer-status"]')!;
-    expect(status.textContent).toContain("正在操作");
-    expect(text()).toContain("课程资料");
-  });
-
-  it("waiting-approval → 等待确认（amber 语义）", async () => {
-    metaState.kiroRuntimeStatus = "waiting-approval";
-    await renderInspector();
-    const status = container!.querySelector('[data-testid="kiro-inspector-computer-status"]')!;
-    expect(status.textContent).toContain("等待确认");
-  });
-
-  it("不伪造 screenshot / 点击细节（当前 Runtime 无 GUI observation 事实）", async () => {
-    metaState.kiroRuntimeStatus = "computer-active";
-    await renderInspector();
-    expect(container!.querySelector("img")).toBeNull();
-    expect(container!.querySelector('[data-testid*="screenshot"]')).toBeNull();
-    expect(text()).not.toContain("正在点击");
-    expect(text()).not.toContain("屏幕");
-  });
-});
-
 /* ---------------- 结构契约（source lock） ---------------- */
 
 describe("Kiro Inspector — Workspace / Header 接线", () => {
@@ -526,14 +483,15 @@ describe("Kiro Inspector — Workspace / Header 接线", () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const workspace = readFileSync(join(process.cwd(), "components/kiro/KiroWorkspace.tsx"), "utf8");
-    expect(workspace).toContain("<KiroInspector />");
-    expect(workspace).toContain("hidden xl:flex");
+    expect(workspace).toContain("<KiroInspector open={inspectorOpen} />");
+    expect(workspace).toContain("KIRO_INSPECTOR_SHORTCUT");
     const inspector = readFileSync(
       join(process.cwd(), "components/kiro/inspector/KiroInspector.tsx"),
       "utf8"
     );
-    expect(inspector).toContain('className="hidden xl:flex');
     expect(inspector).toContain("w-[296px]");
+    expect(inspector).toContain('"hidden xl:block');
+    expect(inspector).not.toContain("KiroInspectorComputer");
   });
 
   it("Inspector 不出现在 Sidecar（Sidecar 不挂载 KiroInspector）", async () => {
@@ -567,7 +525,6 @@ describe("Kiro Inspector — Workspace / Header 接线", () => {
       "components/kiro/inspector/KiroInspector.tsx",
       "components/kiro/inspector/KiroInspectorOutputs.tsx",
       "components/kiro/inspector/KiroInspectorSources.tsx",
-      "components/kiro/inspector/KiroInspectorComputer.tsx",
     ]) {
       const source = readFileSync(join(process.cwd(), file), "utf8");
       expect(source, file).not.toContain("useKiroRuntime()");

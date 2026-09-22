@@ -851,6 +851,14 @@ export const SHORTCUT_GUIDE: { group: string; items: ShortcutGuideItem[] }[] = [
     ],
   },
   {
+    group: "Kiro",
+    items: [
+      { keys: "⌘⇧H", label: "展开 / 收起 Kiro 导航（对话与项目）" },
+      { keys: "⌘I", label: "打开 / 收起 Kiro 输出与来源面板" },
+      { keys: "Esc", label: "收起 Kiro 导航 / 返回项目列表" },
+    ],
+  },
+  {
     group: "任务",
     items: [
       { keys: SINGLE_KEY_SHORTCUTS.quickCreateTask, label: "新建任务（无输入焦点时）", singleKey: true },

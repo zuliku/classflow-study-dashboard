@@ -4,13 +4,11 @@
  * 职责边界：
  * - Outputs：Conversation Artifact 归属判定（真实 metadata，绝不按文件名猜测）
  * - Sources：语义 key 去重 + live Turn 优先排序（Turn-local sourceId 不足以去重）
- * - Computer：Runtime Status + 用户开关 → 展示语义（不伪造 screenshot / GUI 事实）
  *
  * UI 组件只做渲染，不承担复杂归一。
  */
 import type { KiroArtifact } from "@/lib/ai/computer/artifacts/types";
 import type { KiroSourceMeta } from "@/lib/ai/citations/types";
-import type { KiroRuntimeStatus } from "@/lib/ai/ui/kiroRuntimeStatus";
 
 /** Outputs：Artifact 是否属于某 Conversation（唯一判据 = sourceConversationId） */
 export function artifactBelongsToConversation(
@@ -81,34 +79,3 @@ export const INSPECTOR_SOURCES_PREVIEW_LIMIT = 6;
 
 /** Outputs 展示上限（Conversation Artifact） */
 export const INSPECTOR_OUTPUTS_LIMIT = 8;
-
-export type KiroInspectorComputerTone = "on" | "active" | "approval";
-
-export interface KiroInspectorComputerState {
-  /** Computer 关闭 → section 隐藏 */
-  visible: boolean;
-  tone: KiroInspectorComputerTone;
-  label: string;
-}
-
-/**
- * Computer 展示语义（只使用真实事实：用户开关 + Kiro Runtime Status）。
- * - thinking 是「模型忙」，不等于「正在操作电脑」→ 显示「已开启」，绝不误报 active
- * - waiting-approval 优先于 computer-active（与 Runtime Status 优先级一致）
- * - 无 GUI observation runtime 时绝不展示屏幕 / 点击细节
- */
-export function resolveInspectorComputerState(input: {
-  computerEnabled: boolean;
-  runtimeStatus: KiroRuntimeStatus;
-}): KiroInspectorComputerState {
-  if (!input.computerEnabled) {
-    return { visible: false, tone: "on", label: "已关闭" };
-  }
-  if (input.runtimeStatus === "waiting-approval") {
-    return { visible: true, tone: "approval", label: "等待确认" };
-  }
-  if (input.runtimeStatus === "computer-active") {
-    return { visible: true, tone: "active", label: "正在操作" };
-  }
-  return { visible: true, tone: "on", label: "已开启" };
-}

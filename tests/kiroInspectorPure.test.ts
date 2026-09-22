@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 /**
  * Kiro Inspector V1 — 纯函数测试（归属 / 语义去重 / 排序 / Computer 语义）。
  */
@@ -9,7 +9,6 @@ import {
   artifactBelongsToConversation,
   inspectorSourceKey,
   normalizeSourceUrl,
-  resolveInspectorComputerState,
 } from "@/lib/ai/ui/kiroInspector";
 import type { KiroSourceMeta } from "@/lib/ai/citations/types";
 
@@ -85,32 +84,5 @@ describe("aggregateInspectorSources", () => {
 
   it("preview limit 常量固定（≤6）", () => {
     expect(INSPECTOR_SOURCES_PREVIEW_LIMIT).toBeLessThanOrEqual(6);
-  });
-});
-
-describe("resolveInspectorComputerState", () => {
-  it("Computer 关闭 → 隐藏", () => {
-    expect(resolveInspectorComputerState({ computerEnabled: false, runtimeStatus: "idle" }).visible).toBe(false);
-    expect(resolveInspectorComputerState({ computerEnabled: false, runtimeStatus: "computer-active" }).visible).toBe(false);
-  });
-
-  it("thinking 不等于 computer-active（显示已开启，绝不误报正在操作）", () => {
-    const state = resolveInspectorComputerState({ computerEnabled: true, runtimeStatus: "thinking" });
-    expect(state.visible).toBe(true);
-    expect(state.tone).toBe("on");
-    expect(state.label).toBe("已开启");
-  });
-
-  it("idle → 已开启；computer-active → 正在操作", () => {
-    expect(resolveInspectorComputerState({ computerEnabled: true, runtimeStatus: "idle" }).label).toBe("已开启");
-    const active = resolveInspectorComputerState({ computerEnabled: true, runtimeStatus: "computer-active" });
-    expect(active.tone).toBe("active");
-    expect(active.label).toBe("正在操作");
-  });
-
-  it("waiting-approval 优先于 computer-active（amber 语义）", () => {
-    const state = resolveInspectorComputerState({ computerEnabled: true, runtimeStatus: "waiting-approval" });
-    expect(state.tone).toBe("approval");
-    expect(state.label).toBe("等待确认");
   });
 });

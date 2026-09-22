@@ -92,8 +92,9 @@ export function KiroArtifactPreviewDialogHost() {
       }}
       overlayId="kiro-artifact-preview"
       stackZ={85}
-      className="max-w-3xl"
+      className="w-auto min-w-[min(560px,calc(100vw-24px))] max-w-[min(768px,calc(100vw-24px))]"
     >
+      {/* 尺寸契约（V1.1）：高度/宽度都随内容自适应 —— max-h 封顶 + 内部滚动，短内容不撑满 */}
       <div data-testid="kiro-artifact-preview-dialog" className="flex flex-col max-h-[82vh]">
         {/* Header */}
         <div className="flex items-start gap-2.5 p-4 pb-3 border-b border-line">

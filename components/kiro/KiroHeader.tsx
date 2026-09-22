@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { PanelRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
 import { KiroRecentArtifactsPopover } from "@/components/kiro/computer/KiroRecentArtifactsPopover";
@@ -28,14 +29,19 @@ export function KiroMark({ size = "md", className }: { size?: "sm" | "md" | "lg"
  * Kiro Workspace Thread Header（Codex-style）：
  * 不再展示 Kiro Logo / 名称 / AI Workspace（品牌由 Floating Thread Rail 与 Assistant Turn 承担）。
  * 左侧：当前 Thread 标题（复用 session.conversationTitle，无则「新对话」）；
- * 右侧：会话级操作（Share / More）。
+ * 右侧：Inspector 开关（xl+）+ 最近文件 fallback（<xl）+ 会话级操作（Share / More）。
  */
 export function KiroHeader({
   onNewChat,
   onOpenHistory,
+  inspectorOpen = false,
+  onToggleInspector,
 }: {
   onNewChat: () => void;
   onOpenHistory: () => void;
+  /** Kiro Inspector 当前是否打开（xl+ 才渲染开关） */
+  inspectorOpen?: boolean;
+  onToggleInspector?: () => void;
 }) {
   const { conversationTitle } = useKiroSession();
 
@@ -50,6 +56,26 @@ export function KiroHeader({
       </h2>
 
       <div className="flex items-center gap-1.5 shrink-0">
+        {/* Kiro Inspector 开关（xl+；参考 Codex 的右侧面板 toggle） */}
+        {onToggleInspector && (
+          <button
+            type="button"
+            onClick={onToggleInspector}
+            aria-label={inspectorOpen ? "收起输出与来源" : "打开输出与来源"}
+            aria-expanded={inspectorOpen}
+            aria-keyshortcuts="Control+I Meta+I"
+            title="输出与来源 · Ctrl+I"
+            data-testid="kiro-inspector-toggle"
+            className={cn(
+              "hidden xl:flex w-8 h-8 md:w-9 md:h-9 items-center justify-center rounded-xl transition-colors",
+              inspectorOpen
+                ? "bg-alabaster text-charcoal"
+                : "text-sandrift hover:bg-alabaster hover:text-charcoal"
+            )}
+          >
+            <PanelRight className="w-4 h-4" />
+          </button>
+        )}
         {/* V2 Part 3：最近文件（仅 Workspace；Sidecar 不挂载）。
             Kiro Inspector P2：xl+ 由右侧 Inspector Outputs 承担 → Header 入口隐藏；<xl 保留为 fallback。 */}
         <span className="xl:hidden">
