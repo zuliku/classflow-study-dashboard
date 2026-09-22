@@ -62,7 +62,8 @@ export function TimelineActiveFocusChip() {
       aria-label={`当前专注：${targetLabel}${running ? `，剩余 ${remainingText}` : "（已暂停）"}`}
       title={`当前专注 · ${targetLabel}`}
       className={cn(
-        "flex max-w-[220px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-left",
+        // h-8 与 Header 右区其他按钮同高同基线；标题收紧，避免最宽元素挤压
+        "flex h-8 max-w-[220px] items-center gap-1.5 rounded-full border px-2.5 text-left",
         "transition-colors duration-[var(--motion-fast)]",
         running
           ? "border-pastel-mint bg-pastel-mint/25 hover:bg-pastel-mint/40"
@@ -82,7 +83,7 @@ export function TimelineActiveFocusChip() {
       >
         {remainingText} · {running ? "专注中" : "已暂停"}
       </span>
-      <span className="min-w-0 truncate text-[11px] font-semibold text-satin-grey">
+      <span className="min-w-0 max-w-[88px] truncate text-[11px] font-semibold text-satin-grey">
         {targetLabel}
       </span>
     </button>

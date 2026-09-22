@@ -268,3 +268,41 @@ test("N：Desktop / Medium / Mobile 无横向裁剪", async ({ page }) => {
     expect(headerOverflow, `header overflow at ${w}`).toBe(false);
   }
 });
+
+test("N2：390px 有 active focus 会话（最宽态）Header 不溢出", async ({ page }) => {
+  // seed 一个 paused 会话 + 超长标题（最宽态：pill + 5 按钮并存）
+  await page.addInitScript(() => {
+    const raw = localStorage.getItem("classflow-storage-v2");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    parsed.state.focusSessions = [
+      {
+        id: "fs-chrome",
+        plannedMinutes: 30,
+        startedAt: now - 5 * 60 * 1000,
+        accumulatedActiveMs: 5 * 60 * 1000,
+        status: "paused",
+        assignmentTitleSnapshot: "Literature Review of Behavioral Economics Models",
+        source: "manual",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    localStorage.setItem("classflow-storage-v2", JSON.stringify(parsed));
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "时间表" }).first().click();
+  await expect(page.getByTestId("timeline-workspace")).toBeVisible();
+  await expect(page.getByTestId("timeline-active-focus-chip")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+  expect(overflow, "page overflow at 390 with focus chip").toBe(false);
+  const headerOverflow = await page.evaluate(() => {
+    const header = document.querySelector("main header");
+    if (!header) return false;
+    const right = header.lastElementChild as HTMLElement | null;
+    return right ? right.scrollWidth > right.clientWidth + 1 : false;
+  });
+  expect(headerOverflow, "header overflow at 390 with focus chip").toBe(false);
+});

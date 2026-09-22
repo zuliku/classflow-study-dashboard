@@ -69,17 +69,19 @@ export function KiroContextSuggestions({ compact, inset }: { compact?: boolean; 
       data-testid="kiro-context-suggestions"
       className={cn("shrink-0", inset ? (compact ? "px-3 pb-1.5" : "px-1 pb-1.5") : "pb-0")}
     >
-      <div className={cn("flex flex-wrap gap-1.5", !inset && "justify-center")}>
+      {/* compact（Sidecar 窄壳）：2 列网格代替换行居中，避免 3+1 孤儿 chip；
+          非 compact 保持原 flex-wrap 居中 */}
+      <div className={cn(compact ? "grid grid-cols-2 gap-1.5" : "flex flex-wrap gap-1.5", !inset && !compact && "justify-center")}>
         {items.map((s) => {
           const Icon = s.icon;
           return (
             <button
               key={s.label}
               onClick={() => session.chat.send(s.label)}
-              className={cnChip(compact)}
+              className={cn(cnChip(compact), compact && "min-w-0")}
             >
-              <Icon className="w-4 h-4 text-sandrift" />
-              {s.label}
+              <Icon className="w-4 h-4 shrink-0 text-sandrift" />
+              <span className={cn(compact && "truncate")}>{s.label}</span>
             </button>
           );
         })}

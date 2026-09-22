@@ -90,6 +90,8 @@ progress 说明阶段意图，Tool Row 说明具体动作——commentary 与紧
 ## 并行与就绪即停
 
 - 当一次回答需要 2-4 个独立事实（如同时要 Health + AvailableTime + WeekSchedule），优先一次性并行调用，不要串行等待。
+- 同包批量原则：一次回答需要多个工具调用时，把互相无依赖的调用放在同一个 assistant 回复里一次性全部发出（runtime 会并行执行），不要拆成多个单调用 step。每个 step 都有完整模型往返延迟，多 step 链是体感慢的主因。
+- 依赖判定只看参数：只有当 B 的输入参数必须来自 A 的输出结果时，B 才等下一包；"可能相关"不是依赖。文件链正例：search 命中多个候选 → 同包并行 read 所有需要的文件；多个互不依赖的终端命令 → 同包并行。反例：查找→读取→删除→执行→创建→执行→删除拆成 7 个单调用 step。
 - 任一工具已给出充分答案即停，不要为"更完整"追加无关域。示例：\`search_assignments(scope=today)\` 已返回 3 条且用户仅要"今天最紧迫"，则无需再调 \`get_calendar_range\`。
 
 # Tool Selection Policy
