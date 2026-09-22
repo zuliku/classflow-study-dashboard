@@ -1,4 +1,4 @@
-import { test as base, expect, Page } from "@playwright/test";
+﻿import { test as base, expect, Page } from "@playwright/test";
 
 /**
  * Kiro Motion System V1 —— focused choreography E2E。
@@ -87,11 +87,11 @@ base("Empty Intro 生命周期 + Contextual Handoff（Composer DOM 稳定）", a
   ).toBe(true);
 });
 
-base("Thread Rail anchored morph：同一 shell DOM、width 52↔216/232、聊天不动", async ({ page }) => {
+base("Navigator anchored morph：同一 shell DOM、width 52↔288/304、聊天不动", async ({ page }) => {
   await seedAI(page);
   await openKiro(page);
 
-  const shell = page.getByTestId("kiro-thread-rail-shell");
+  const shell = page.getByTestId("kiro-navigator-shell");
   await expect(shell).toBeVisible();
   await shell.evaluate((el) => { (el as HTMLElement & { __motionProbe?: string }).__motionProbe = "same-shell"; });
   const collapsed = await shell.boundingBox();
@@ -110,8 +110,8 @@ base("Thread Rail anchored morph：同一 shell DOM、width 52↔216/232、聊�
   // 等待 width morph 完成（spatial ~220ms）
   await expect(async () => {
     const w = (await shell.boundingBox())!.width;
-    expect(w).toBeGreaterThanOrEqual(214);
-    expect(w).toBeLessThanOrEqual(234);
+    expect(w).toBeGreaterThanOrEqual(286);
+    expect(w).toBeLessThanOrEqual(306);
   }).toPass({ timeout: 3000 });
 
   // 聊天几何不动（X 与宽度）
@@ -130,29 +130,22 @@ base("Thread Rail anchored morph：同一 shell DOM、width 52↔216/232、聊�
   expect(await shell.evaluate((el) => (el as HTMLElement & { __motionProbe?: string }).__motionProbe === "same-shell")).toBe(true);
 });
 
-base("Project Panel anchored morph：right edge 不动、聊天不移动（纯悬浮层）", async ({ page }) => {
+base("Navigator Project Detail：同一 shell 内切换视图、聊天不移动（纯悬浮层）", async ({ page }) => {
   await seedAI(page);
   await openKiro(page);
 
-  // 经 Rail 打开 Project Panel（expanded）
-  const shell = page.getByTestId("kiro-project-panel-shell");
-  await page.getByLabel("打开项目").click();
-  await expect(shell).toBeVisible();
-  await shell.evaluate((el) => { (el as HTMLElement & { __motionProbe?: string }).__motionProbe = "same-shell"; });
+  const shell = page.getByTestId("kiro-navigator-shell");
+  await page.getByLabel("展开对话").click();
   await expect(shell).toHaveAttribute("data-state", "expanded");
-  const rightEdgeBefore = (await (async () => {
-    const b = (await shell.boundingBox())!;
-    return b.x + b.width;
-  })())!;
 
-  // expanded width ≥294；right edge 不动
-  await expect(async () => {
-    const b = (await shell.boundingBox())!;
-    expect(b.width).toBeGreaterThanOrEqual(294);
-    expect(Math.abs(b.x + b.width - rightEdgeBefore)).toBeLessThanOrEqual(2);
-  }).toPass({ timeout: 3000 });
+  // 新建项目 → 自动进入 Project Detail（同一 shell，无第二个 Panel）
+  await page.getByLabel("新建项目").first().click();
+  await page.getByLabel("项目名称").fill("导航测试项目");
+  await page.getByLabel("保存").click();
+  await expect(page.getByTestId("kiro-navigator-project-detail")).toBeVisible();
+  await expect(page.getByTestId("kiro-navigator-shell")).toHaveCount(1);
 
-  // 纯悬浮层：聊天几何不因面板展开而改变
+  // 纯悬浮层：聊天几何不因 Navigator 展开 / 视图切换而改变
   const composer = page.getByTestId("kiro-composer");
   const before = await composer.boundingBox();
   await page.waitForTimeout(400);
@@ -160,8 +153,11 @@ base("Project Panel anchored morph：right edge 不动、聊天不移动（纯�
   expect(Math.abs(after!.x - before!.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(after!.width - before!.width)).toBeLessThanOrEqual(2);
 
-  // 收起 → 同一 shell，52px
-  await page.getByLabel("收起项目").click();
+  // 返回 Home → 收起 → 52px（同一 shell）
+  await shell.evaluate((el) => { (el as HTMLElement & { __motionProbe?: string }).__motionProbe = "same-shell"; });
+  await page.getByLabel("返回项目列表").click();
+  await expect(page.getByTestId("kiro-navigator-home")).toBeVisible();
+  await page.getByLabel("收起对话").click();
   await expect(shell).toHaveAttribute("data-state", "collapsed");
   await expect(async () => {
     const w = (await shell.boundingBox())!.width;
@@ -188,12 +184,12 @@ base("Reduced Motion：Empty 无 intro 动画类、功能可用；Rail 立即最
     .evaluate((el) => getComputedStyle(el).animationName);
   expect(titleAnimation).toBe("none");
 
-  // Rail 立即最终几何（expanded 后马上到位）
-  const shell = page.getByTestId("kiro-thread-rail-shell");
+  // Navigator 立即最终几何（expanded 后马上到位）
+  const shell = page.getByTestId("kiro-navigator-shell");
   await page.getByLabel("展开对话").click();
   await expect(page.getByRole("dialog", { name: "对话" })).toBeVisible();
   const box = await shell.boundingBox();
-  expect(box!.width).toBeGreaterThanOrEqual(214);
+  expect(box!.width).toBeGreaterThanOrEqual(286);
 
   // Send 可用（输入后 ready）
   const composer = page.getByTestId("kiro-composer");

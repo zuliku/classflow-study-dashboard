@@ -1,4 +1,4 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
@@ -25,7 +25,7 @@ test("Thread Rail：collapsed → expanded overlay（聊天宽度不变）→ Es
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
 
   // Collapsed Rail：52px 浮动条（含 Kiro Logo 唯一品牌点）
-  const rail = page.getByTestId("kiro-thread-rail");
+  const rail = page.getByTestId("kiro-navigator");
   await expect(rail).toBeVisible();
   const collapsedBox = await rail.boundingBox();
   expect(collapsedBox!.width).toBeGreaterThanOrEqual(50);

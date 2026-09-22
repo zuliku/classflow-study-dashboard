@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 
 /**
  * Kiro Projects V1.3A.1 人工 Smoke（§21/§25）自动化：
@@ -23,31 +23,33 @@ async function openKiro(page: import("@playwright/test").Page) {
 }
 
 async function openProjectPanel(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "打开项目" }).click();
-  await expect(page.getByTestId("kiro-project-panel")).toBeVisible();
-  const panel = page.getByRole("dialog", { name: "项目" });
-  await expect(panel).toBeVisible();
-  return panel;
+  // P1 Unified Navigator：左侧 Navigator 展开后即为项目 / 对话入口（无右侧 Project Panel）
+  await page.getByLabel("展开对话").click();
+  const navigator = page.getByRole("dialog", { name: "对话" });
+  await expect(navigator).toBeVisible();
+  await expect(page.getByTestId("kiro-navigator-home")).toBeVisible();
+  return navigator;
 }
 
 async function createProject(page: import("@playwright/test").Page, name: string) {
-  const panel = page.getByRole("dialog", { name: "项目" });
-  await panel.getByRole("button", { name: "新建项目" }).click();
-  await panel.getByLabel("项目名称").fill(name);
-  await panel.getByRole("button", { name: "保存" }).click();
+  const navigator = page.getByRole("dialog", { name: "对话" });
+  await navigator.getByLabel("新建项目").first().click();
+  await navigator.getByLabel("项目名称").fill(name);
+  await navigator.getByLabel("保存").click();
   // 创建后自动进入 Detail 视图
-  await expect(panel.getByText(name, { exact: true }).first()).toBeVisible();
+  await expect(page.getByTestId("kiro-navigator-project-detail")).toBeVisible();
+  await expect(navigator.getByText(name, { exact: true }).first()).toBeVisible();
 }
 
 async function uploadFile(page: import("@playwright/test").Page, name: string, content: string) {
-  const panel = page.getByRole("dialog", { name: "项目" });
-  await panel.getByLabel("上传项目资料").setInputFiles({
+  const navigator = page.getByRole("dialog", { name: "对话" });
+  await navigator.getByLabel("上传项目资料").setInputFiles({
     name,
     mimeType: "text/markdown",
     buffer: md(content),
   });
-  await expect(panel.getByText(name, { exact: true })).toBeVisible();
-  await expect(panel.getByText("项目资料 · 1")).toBeVisible();
+  await expect(navigator.getByText(name, { exact: true })).toBeVisible();
+  await expect(navigator.getByText("资料 · 1")).toBeVisible();
 }
 
 async function fileBlobTexts(page: import("@playwright/test").Page): Promise<Record<string, string>> {
@@ -93,12 +95,14 @@ test("跨项目删除：A 删除后 B 的文件 metadata + Blob 完整，刷新�
   await uploadFile(page, "b.md", "BBB project B");
 
   // 3. 两个项目都在列表；各自 Detail 文件独立
-  await page.getByRole("button", { name: "返回项目列表" }).click();
+  await page.getByLabel("返回项目列表").click();
   await expect(page.getByRole("button", { name: "打开项目 项目A" })).toBeVisible();
   await expect(page.getByRole("button", { name: "打开项目 项目B" })).toBeVisible();
 
-  // 4. 删除 A（确认对话框）
-  await page.getByRole("button", { name: "删除项目 项目A" }).click();
+  // 4. 删除 A（确认对话框）—— Detail ⋯ 菜单
+  await page.getByRole("button", { name: "打开项目 项目A" }).click();
+  await page.getByLabel("项目 项目A 更多操作").click();
+  await page.getByRole("menuitem", { name: "删除项目" }).click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText("删除项目？");
