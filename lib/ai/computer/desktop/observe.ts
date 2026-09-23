@@ -34,6 +34,10 @@ import {
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
 import type { ComputerExecutionAttempt } from "@/lib/ai/computer/result";
+import {
+  buildDesktopObservationUiEvidence,
+  type DesktopObservationUiEvidence,
+} from "@/lib/ai/computer/gui/uiEvidence";
 
 export const OBSERVE_DESKTOP_TOOL_NAME = "observe_desktop";
 
@@ -60,6 +64,12 @@ export interface ExecuteObserveDesktopRequest {
   vision?: DesktopVisionConfig;
   /** 测试注入（不真实调用视觉模型） */
   visionDeps?: DesktopVisionDeps;
+  /**
+   * P5：真实观察截图 → UI evidence（「最近画面」）。
+   * 只在 bridge.observe 成功后、sessionId 存在、有截图、非受保护应用时触发；
+   * Tool Output 仍只使用 summarizeObservation（原始 dataUrl 绝不进入模型）。
+   */
+  onObservationEvidence?: (evidence: DesktopObservationUiEvidence) => void;
   now?: () => number;
 }
 
@@ -235,6 +245,24 @@ export async function executeKiroObserveDesktop(
     return bridgeFailureOutput(err);
   }
   request.counters.readCount += 1;
+
+  // 6a. P5：真实截图 → UI evidence（「最近画面」；ephemeral，绝不进入 Tool Output / 模型）
+  if (
+    request.onObservationEvidence &&
+    sessionId &&
+    observation.screenshot &&
+    observation.appProfile?.blocked !== true
+  ) {
+    request.onObservationEvidence(
+      buildDesktopObservationUiEvidence({
+        sessionId,
+        screenshot: observation.screenshot,
+        appName: observation.appName,
+        windowTitle: observation.windowTitle,
+        appProfileBlocked: false,
+      })
+    );
+  }
 
   // 6b. Vision fallback（Phase 3）：UIA 空 或 显式请求 → 截图候选区域（只读事实，不执行动作）
   // V2.1：候选与 UIA 元素做 IoU 关联；命中则携带 elementId（可走语义动作，无需坐标审批）

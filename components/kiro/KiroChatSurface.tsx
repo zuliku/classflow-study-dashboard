@@ -16,6 +16,7 @@ import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
 import { useDesktopSessionStore } from "@/store/useDesktopSessionStore";
 import { ComputerApprovalDialog } from "@/components/kiro/computer/ComputerApprovalDialog";
+import { KiroComputerSessionSurface } from "@/components/kiro/computer/session/KiroComputerSessionSurface";
 import { KiroChangeReviewDialog } from "@/components/kiro/computer/KiroChangeReviewDialog";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
@@ -175,6 +176,10 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
       )}
       style={{ "--kiro-output-font-size": `${outputFontSize}px` } as React.CSSProperties}
     >
+      {/* P5：Desktop Session Control Surface（Workspace / Sidecar 共用；位于 Conversation
+          可滚动区之外、Composer 之上；没有真实 session → 不渲染） */}
+      <KiroComputerSessionSurface variant={variant} />
+
       {/* Motion V1：main content stage —— Empty 为 absolute presence overlay（exit 不占 flex 布局，
           Conversation 第一条消息立即 mount；不给 Conversation 加 key / 不加 entrance animation） */}
       <div className="relative flex-1 min-h-0 flex flex-col">

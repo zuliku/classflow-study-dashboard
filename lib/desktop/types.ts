@@ -470,6 +470,8 @@ export interface ClassFlowDesktopComputerSessionEvent {
   reflectionRequired: boolean;
   /** V2.4：当前应用画像（已脱敏；无匹配 → null） */
   appProfile?: ClassFlowDesktopComputerAppProfileInfo | null;
+  /** P5：守卫触发原因（sanitized 短句；failed 时展示；optional 保持向后兼容） */
+  failureReason?: string | null;
 }
 
 /** 打开应用结果（logical app identifier；绝不返回 exe 绝对路径） */

@@ -24,6 +24,7 @@ import {
 } from "@/lib/ai/computer/approval";
 import { executeKiroObserveDesktop } from "@/lib/ai/computer/desktop/observe";
 import { executeKiroDesktopAction } from "@/lib/ai/computer/gui/executor";
+import type { DesktopObservationUiEvidence } from "@/lib/ai/computer/gui/uiEvidence";
 import {
   executeKiroActivateWindow,
   executeKiroListDesktopWindows,
@@ -112,6 +113,11 @@ export interface ComputerExecutorContext {
   desktopVision?: { enabled: boolean; model: string; apiKey?: string };
   /** 测试注入：vision extractor deps（不真实调用视觉模型） */
   desktopVisionDeps?: import("@/lib/ai/computer/gui/vision").DesktopVisionDeps;
+  /**
+   * P5：真实 Desktop 观察证据（UI-only「最近画面」；绝不进入 Tool Output / 模型）。
+   * 由 useKiroChat 注入 → Desktop Session Preview Store；executor 不依赖任何 UI store。
+   */
+  onDesktopObservationEvidence?: (evidence: DesktopObservationUiEvidence) => void;
 }
 
 export interface ComputerCounterState {
@@ -200,6 +206,9 @@ export async function executeKiroComputerTool(request: {
       isCancelled: context.isCancelled,
       ...(context.desktopVision ? { vision: context.desktopVision } : {}),
       ...(context.desktopVisionDeps ? { visionDeps: context.desktopVisionDeps } : {}),
+      ...(context.onDesktopObservationEvidence
+        ? { onObservationEvidence: context.onDesktopObservationEvidence }
+        : {}),
     });
   }
 
@@ -217,6 +226,9 @@ export async function executeKiroComputerTool(request: {
       taskId: context.taskId ?? "",
       mutationLimitPerTurn: COMPUTER_MUTATION_LIMIT_PER_TURN,
       isCancelled: context.isCancelled,
+      ...(context.onDesktopObservationEvidence
+        ? { onObservationEvidence: context.onDesktopObservationEvidence }
+        : {}),
     });
   }
 

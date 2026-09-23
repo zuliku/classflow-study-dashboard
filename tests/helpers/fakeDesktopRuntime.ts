@@ -131,7 +131,11 @@ export class FakeDesktopWorld {
     return `${window.windowId}:${window.elements.map((e) => `${e.elementId}:${e.name}:${e.bounds.x},${e.bounds.y}`).join("|")}`;
   }
 
-  private emitSession(state: DesktopControlSessionState, actionLabel: string | null): void {
+  private emitSession(
+    state: DesktopControlSessionState,
+    actionLabel: string | null,
+    overrides: Partial<ClassFlowDesktopComputerSessionEvent> = {}
+  ): void {
     const window = this.getActiveWindow();
     this.session = {
       sessionId: this.session?.sessionId ?? "cs-fake-0000-0000-0000-0000",
@@ -155,8 +159,18 @@ export class FakeDesktopWorld {
         desktopAppProfileInfo(
           resolveDesktopAppProfile({ appName: window?.appName ?? "", windowTitle: window?.title ?? "" })
         ),
+      ...overrides,
     };
     for (const listener of this.listeners) listener({ type: "session", ...this.session });
+  }
+
+  /** P5 测试：直接广播一条 session 事件（可覆盖 sessionId / appProfile 等展示字段） */
+  emitSessionForTest(
+    state: DesktopControlSessionState,
+    actionLabel: string | null,
+    overrides: Partial<ClassFlowDesktopComputerSessionEvent> = {}
+  ): void {
+    this.emitSession(state, actionLabel, overrides);
   }
 
   private ensureSession(sessionId: string): void {
@@ -716,9 +730,20 @@ export class FakeDesktopWorld {
   });
 
   subscribeSession = (listener: (event: ClassFlowDesktopComputerSessionEvent) => void): (() => void) => {
+    this.subscribeCalls += 1;
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.unsubscribeCalls += 1;
+      this.listeners.delete(listener);
+    };
   };
+
+  /** P5：subscription ownership 观测（唯一订阅 / 不重复 unsubscribe） */
+  subscribeCalls = 0;
+  unsubscribeCalls = 0;
+  listenerCount(): number {
+    return this.listeners.size;
+  }
 }
 
 /** 安装 fake bridge 到 window.classflowDesktop（renderer executor tests 用） */export function installFakeDesktopBridge(world: FakeDesktopWorld): { uninstall: () => void } {

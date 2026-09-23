@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 /**
- * V2.6 组件测试：KiroComputerSessionCard 的「保存为 Skill」按钮
+ * V2.6 → P5 组件测试：KiroComputerSessionSurface 的「保存为 Skill」按钮
  * （session completed → buildSkillDraft → SkillDistillDialog 预生成草稿模式）。
+ *
+ * P5 变更：Desktop Session subscription ownership 已迁移到 KiroComputerSessionHost
+ * （Provider 持久根部）；Surface 只消费 store。
  */
 import React from "react";
 import { describe, it, expect, afterEach } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { KiroComputerSessionCard } from "@/components/kiro/computer/KiroComputerSessionCard";
+import { KiroComputerSessionSurface } from "@/components/kiro/computer/session/KiroComputerSessionSurface";
 import { useDesktopSessionStore } from "@/store/useDesktopSessionStore";
+import { useDesktopSessionPreviewStore } from "@/store/useDesktopSessionPreviewStore";
 import {
   FakeDesktopWorld,
   installFakeDesktopBridge,
@@ -32,12 +36,12 @@ if (!window.matchMedia) {
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
-async function renderCard() {
+async function renderSurface() {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(<KiroComputerSessionCard />);
+    root!.render(<KiroComputerSessionSurface variant="workspace" />);
   });
 }
 
@@ -48,9 +52,10 @@ afterEach(async () => {
   container = null;
   delete (window as unknown as { classflowDesktop?: unknown }).classflowDesktop;
   useDesktopSessionStore.getState().clear();
+  useDesktopSessionPreviewStore.getState().clearPreview();
 });
 
-describe("V2.6 Sidecar — 保存为 Skill", () => {
+describe("P5 Surface — 保存为 Skill", () => {
   it("completed session 显示按钮，点击后打开预生成草稿对话框", async () => {
     const world = new FakeDesktopWorld([
       {
@@ -86,7 +91,7 @@ describe("V2.6 Sidecar — 保存为 Skill", () => {
       appProfile: { id: "im", label: "即时通讯", blocked: false },
     });
 
-    await renderCard();
+    await renderSurface();
     // 等待 buildSkillDraft 异步返回
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -133,7 +138,7 @@ describe("V2.6 Sidecar — 保存为 Skill", () => {
       appProfile: null,
     });
 
-    await renderCard();
+    await renderSurface();
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });

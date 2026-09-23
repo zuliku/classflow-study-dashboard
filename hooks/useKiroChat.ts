@@ -48,6 +48,7 @@ import {
 } from "@/lib/ai/computer/knowledge/instructions";
 import { markWorkspaceKnowledgeDirty } from "@/lib/ai/computer/knowledge/service";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
+import { useDesktopSessionPreviewStore } from "@/store/useDesktopSessionPreviewStore";
 import { useTerminalActivityStore } from "@/store/useTerminalActivityStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -2066,6 +2067,10 @@ export function useKiroChat({
           taskId,
           // Computer Use Phase 2：Stop 后 GUI action / observe 一律拒绝执行（Emergency Stop）
           isCancelled: () => stoppedTurnMessageIdRef.current !== null,
+          // P5：真实观察截图 → 「最近画面」（UI-only；绝不进入 Tool Output / 模型）
+          onDesktopObservationEvidence: (evidence) => {
+            useDesktopSessionPreviewStore.getState().setPreview(evidence);
+          },
           // Computer Use Phase 3：Vision fallback（复用扫描 PDF Vision 配置；缺 key → 优雅降级）
           desktopVision: {
             enabled: webPdfVisionEnabled,
@@ -2244,6 +2249,10 @@ export function useKiroChat({
             liveWorkspaces: useKiroComputerStore.getState().workspaces,
             livePermissionRules: useKiroComputerStore.getState().permissionRules,
             taskId,
+            // P5：approval resume 路径的真实观察证据同样进入「最近画面」
+            onDesktopObservationEvidence: (evidence) => {
+              useDesktopSessionPreviewStore.getState().setPreview(evidence);
+            },
           },
           counters: computerCountersRef.current,
           oneShotApprovals: oneShotApprovalsRef.current,

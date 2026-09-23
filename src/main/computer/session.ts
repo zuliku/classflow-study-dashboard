@@ -91,6 +91,8 @@ export interface DesktopControlSessionEvent {
   stepIndex: number;
   reflectionRequired: boolean;
   appProfile: DesktopAppProfileInfo | null;
+  /** P5：守卫触发原因（sanitized 短句；failed 时 UI 可展示，绝不透传 raw exception） */
+  failureReason: string | null;
 }
 
 export type DesktopSessionGuardCode =
@@ -550,6 +552,7 @@ export class DesktopControlSessionStore {
       stepIndex: record.stepIndex,
       reflectionRequired: record.reflectionRequired,
       appProfile: record.appProfile,
+      failureReason: record.failureReason,
     });
   }
 

@@ -15,6 +15,7 @@
  */
 import { KiroComputerTurnSnapshot } from "@/lib/ai/contextBudget/types";
 import { ComputerPermissionRule, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
+import type { ClassFlowDesktopComputerObservation } from "@/lib/desktop/types";
 import { evaluateComputerPolicy } from "@/lib/ai/computer/policy";
 import { desktopActionSchema } from "@/lib/ai/computer/tools/schemas";
 import { resolveGuiControlCapability } from "@/lib/ai/computer/gui/capability";
@@ -27,6 +28,7 @@ import {
 } from "@/lib/ai/computer/gui/types";
 import { getClassFlowDesktopComputerActionBridge, nativeGrantIdFromAdapterRef } from "@/lib/desktop/bridge";
 import { summarizeObservation } from "@/lib/ai/computer/desktop/summary";
+import { buildDesktopObservationUiEvidence } from "@/lib/ai/computer/gui/uiEvidence";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import {
   ComputerApprovalDecision,
@@ -58,6 +60,34 @@ function bridgeFailureOutput(err: unknown): ComputerExecutionAttempt {
         ? failure.message
         : "电脑操作失败。";
   return { kind: "completed", output: { ok: false, code, message } };
+}
+
+/**
+ * P5：真实 re-observation 截图 → UI evidence（仅 UI 展示；模型 / 历史 / Audit 均不携带像素）。
+ * 条件：调用方提供 callback + sessionId 合法 + 新 observation 有截图 + 非受保护应用。
+ */
+function publishDesktopObservationEvidence(
+  request: ExecuteDesktopActionRequest,
+  observation: ClassFlowDesktopComputerObservation | null | undefined
+): void {
+  const publish = request.onObservationEvidence;
+  if (!publish || !observation?.screenshot) return;
+  if (observation.appProfile?.blocked === true) return;
+  const sessionId =
+    typeof request.snapshot.desktopSessionId === "string" &&
+    /^cs-[A-Za-z0-9-]{8,64}$/.test(request.snapshot.desktopSessionId)
+      ? request.snapshot.desktopSessionId
+      : undefined;
+  if (!sessionId) return;
+  publish(
+    buildDesktopObservationUiEvidence({
+      sessionId,
+      screenshot: observation.screenshot,
+      appName: observation.appName,
+      windowTitle: observation.windowTitle,
+      appProfileBlocked: false,
+    })
+  );
 }
 
 function capabilityDeniedMessage(reason: string): string {
@@ -331,6 +361,9 @@ export async function executeKiroDesktopAction(
       ? { stepIndex: result.session.stepIndex, planHash: hashPlan(result.session.plan) }
       : {}),
   });
+
+  // 10b. P5：真实 re-observation 截图 → UI evidence（「最近画面」；绝不进入 Tool Output / 模型）
+  publishDesktopObservationEvidence(request, result.observation);
 
   // 11. Observe → Action → Observe：返回 action result + 新 observation
   return {

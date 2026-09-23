@@ -23,6 +23,7 @@ import { KiroContextRef } from "@/lib/ai/context/types";
 import type { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroSidecar } from "@/components/kiro/KiroSidecar";
+import { KiroComputerSessionHost } from "@/components/kiro/computer/KiroComputerSessionHost";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import {
   sanitizeConversation,
@@ -1333,6 +1334,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
                 Provider 不自行使用 viewport height，内部 Workspace/Conversation 负责各自滚动。 */}
             <div className="flex h-full min-h-0 w-full overflow-hidden bg-[#F7F5F5] font-sans antialiased text-charcoal">
               {children}
+              {/* P5：Desktop Session 唯一 subscription ownership（Provider 持久根部；不渲染 UI） */}
+              <KiroComputerSessionHost />
               {/* Sidecar 与 Workspace 互斥；保留组件到 exit presence 完成。 */}
               <KiroSidecar mode={effectiveSidecarMode} />
               {/* V2 Part 3：全局唯一 Artifact Preview Host（Workspace/Sidecar 共用） */}
