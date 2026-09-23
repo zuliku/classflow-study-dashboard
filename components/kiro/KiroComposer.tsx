@@ -1,42 +1,39 @@
 ﻿"use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Plus,
-  AtSign,
-  ChevronDown,
-  Settings,
-  Check,
-  Sparkles,
-  Loader2,
-  Globe2,
-  Cpu,
-  MoreHorizontal,
-} from "lucide-react";
+import { Plus, Settings, Loader2 } from "lucide-react";
 import { KiroSendControl } from "@/components/kiro/KiroSendControl";
 import { KiroContextBar } from "@/components/kiro/KiroContextBar";
-import { KiroContextPicker } from "@/components/kiro/KiroContextPicker";
-import { KiroAttachmentPicker } from "@/components/kiro/KiroAttachmentPicker";
-import { KiroMaterialPicker } from "@/components/kiro/KiroMaterialPicker";
 import { KiroAttachmentChip } from "@/components/kiro/KiroAttachmentChip";
-import { ProviderLogo } from "@/components/kiro/ProviderLogo";
+import { KiroComposerAddMenu } from "@/components/kiro/composer/KiroComposerAddMenu";
+import {
+  KiroComposerAccessControl,
+  type KiroComposerPermissionSummary,
+} from "@/components/kiro/composer/KiroComposerAccessControl";
+import { KiroComposerModelControl } from "@/components/kiro/composer/KiroComposerModelControl";
+import { KiroComposerReasoningControl } from "@/components/kiro/composer/KiroComposerReasoningControl";
+import {
+  composerAccessAgentMode,
+  composerAccessRequiresComputer,
+  type KiroComposerAccessMode,
+} from "@/components/kiro/composer/KiroComposerAccess";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { AIModelVendor } from "@/lib/ai/providers/types";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
-import { KiroAgentModeMenu } from "@/components/kiro/computer/KiroAgentModeMenu";
-import { KiroReasoningMenu } from "@/components/kiro/computer/KiroReasoningMenu";
-import { KiroWorkspacePicker } from "@/components/kiro/computer/KiroWorkspacePicker";
 import { PopoverPanel } from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
 import { filterSlashSkills, moveSlashIndex, parseSlashQuery } from "@/lib/ai/skills/slashMenu";
 
+/** P3：Composer 只允许一个菜单同时打开（add / access / model） */
+type ComposerMenu = "add" | "access" | "reasoning" | "model" | null;
+
 /**
- * Kiro Composer（Task 4）：真实发送入口 + 附件（上传/拖拽/粘贴/课程资料/保存）。
- * - 文档：选择后本地解析 → ready 才能发送
- * - 图片：vision 模型以原生 image part 发送；非 vision 模型在发送前阻止
+ * Kiro Composer（Task 4 / P3 Productization）：真实发送入口 + 附件（上传/拖拽/粘贴/课程资料/保存）。
+ * - 一级工具栏收敛为四入口：＋（Add / 来源）· 访问（Access）· 模型（Model · Reasoning）· 发送
+ * - 文档：选择后本地解析 → ready 才能发送；图片：vision 模型以原生 image part 发送
  */
 export function KiroComposer({
   contexts,
@@ -78,6 +75,8 @@ export function KiroComposer({
   workspace,
   workspaceIsSandbox,
   grantWarning,
+  permissionSummary,
+  onOpenAgentSettings,
   introActive = false,
 }: {
   contexts: KiroContextRef[];
@@ -128,16 +127,15 @@ export function KiroComposer({
   workspace?: KiroWorkspaceMeta | null;
   workspaceIsSandbox?: boolean;
   grantWarning?: string | null;
+  /** P3：Access Menu 的权限摘要（只含 boolean preference，不含 runtime 事实） */
+  permissionSummary?: KiroComposerPermissionSummary;
+  /** P3：管理 Agent 权限…（设置 → Agent 与权限） */
+  onOpenAgentSettings?: () => void;
   /** Motion V1：本轮 Empty Intro claim 成功后 Composer 轻进入（workspace/sidecar 各自 timing scope） */
   introActive?: boolean;
 }) {
   const [text, setText] = useState("");
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [modelOpen, setModelOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
-  // compact（Sidecar）：Agent/Reasoning/Model 收进“更多设置”溢出菜单，一级栏只留发送
-  const [moreToolsOpen, setMoreToolsOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<ComposerMenu>(null);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [slashSkills, setSlashSkills] = useState<{ name: string; description: string }[]>([]);
@@ -145,10 +143,10 @@ export function KiroComposer({
   const [slashActive, setSlashActive] = useState(0);
   const submittingRef = useRef(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
-  const attachRef = useRef<HTMLDivElement | null>(null);
+  const addRef = useRef<HTMLDivElement | null>(null);
+  const accessRef = useRef<HTMLDivElement | null>(null);
+  const reasoningRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<HTMLDivElement | null>(null);
-  const pickerWrapRef = useRef<HTMLDivElement | null>(null);
-  const moreToolsRef = useRef<HTMLDivElement | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
 
   const hasImages = attachments.some((a) => a.kind === "image");
@@ -216,15 +214,11 @@ export function KiroComposer({
   const currentTurnScopeLocked = turnInFlight || submitting || !!preparingSend;
   const nextTurnPreferencesLocked = !!preparingSend && !turnIntentFrozen;
 
-  // Turn scope 锁定期间关闭 scope 类菜单（Attachment/Context/Material）；
-  // Model 菜单是「下一条 preference」，不在此关闭——回复期间仍可打开。
+  // Turn scope 锁定期间：scope 类条目在 Add Menu 内部禁用（不整单锁定——联网搜索是下一 Turn preference）；
+  // slash 菜单属于当前输入，同样关闭。Access / Model 菜单是 preference 或状态摘要，保持可用。
   useEffect(() => {
     if (!currentTurnScopeLocked) return;
-    setAttachOpen(false);
-    setPickerOpen(false);
-    setMaterialPickerOpen(false);
     setSlashOpen(false);
-    setMoreToolsOpen(false);
   }, [currentTurnScopeLocked]);
 
   const autoGrow = () => {
@@ -298,32 +292,30 @@ export function KiroComposer({
     }
   };
 
-  // Esc / 点击外部关闭菜单
+  // Esc / 点击外部关闭菜单（P3：单一 openMenu ownership）。
+  // Esc 用 capture 阶段：菜单打开时先关闭菜单并阻止继续传播（不误触发 Navigator / Inspector 的 Esc 行为）。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setAttachOpen(false);
-        setModelOpen(false);
-        setPickerOpen(false);
-        setMaterialPickerOpen(false);
-        setSlashOpen(false);
-        setMoreToolsOpen(false);
-      }
+      if (e.key !== "Escape") return;
+      setOpenMenu((current) => {
+        if (current === null) return current;
+        e.stopPropagation();
+        return null;
+      });
+      setSlashOpen(false);
     };
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (attachRef.current && !attachRef.current.contains(t)) setAttachOpen(false);
-      if (modelRef.current && !modelRef.current.contains(t)) setModelOpen(false);
-      if (moreToolsRef.current && !moreToolsRef.current.contains(t)) setMoreToolsOpen(false);
-      if (pickerWrapRef.current && !pickerWrapRef.current.contains(t)) {
-        setPickerOpen(false);
-        setMaterialPickerOpen(false);
-      }
+      const inside =
+        (addRef.current?.contains(t) ?? false) ||
+        (accessRef.current?.contains(t) ?? false) ||
+        (modelRef.current?.contains(t) ?? false);
+      if (!inside) setOpenMenu(null);
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", onPointerDown);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       document.removeEventListener("pointerdown", onPointerDown);
     };
   }, []);
@@ -351,44 +343,23 @@ export function KiroComposer({
     }
   };
 
-  const modelMenu = (
-    // 唯一真实滚动容器：支持滚轮/触控板，但视觉隐藏 scrollbar（避免与外层 popup 双滚动条）
-    <div
-      role="menu"
-      aria-label="选择模型"
-      className="py-1 max-h-[min(320px,55vh)] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
-      {modelUnavailable && (
-        <p className="px-3 py-2 text-[11px] font-semibold text-danger border-b border-line-soft mb-1">
-          当前模型已不可用，请重新选择。
-        </p>
-      )}
-      {modelOptions.length === 0 ? (
-        <p className="px-3 py-2 text-xs text-sandrift">请先在设置中填写模型 ID。</p>
-      ) : (
-        modelOptions.map((m) => (
-          <button
-            key={m.value}
-            role="menuitem"
-            onClick={() => {
-              onSelectModel(m.value);
-              setModelOpen(false);
-            }}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs font-semibold transition-colors",
-              m.value === selectedModelId ? "text-charcoal bg-pastel-mint" : "text-satin-grey hover:bg-alabaster"
-            )}
-          >
-            <ProviderLogo vendor={m.vendor} size="md" />
-            <span className="min-w-0 flex-1 truncate">{m.label}</span>
-            {m.value === selectedModelId && (
-              <Check className="w-4 h-4 text-charcoal shrink-0 kiro-check-settle" />
-            )}
-          </button>
-        ))
-      )}
-    </div>
-  );
+  // P3：Access 模式选择（chat = 关闭 Computer；其余 = 开启 Computer + 写入 Agent Mode）
+  const selectAccessMode = (mode: KiroComposerAccessMode) => {
+    if (!composerAccessRequiresComputer(mode)) {
+      onToggleComputer?.(false);
+      return;
+    }
+    if (!computerEnabled) onToggleComputer?.(true);
+    const nextAgentMode = composerAccessAgentMode(mode);
+    if (nextAgentMode) onSetAgentMode?.(nextAgentMode);
+  };
+
+  const resolvedPermissions: KiroComposerPermissionSummary = permissionSummary ?? {
+    terminal: false,
+    desktopObserve: false,
+    desktopAction: false,
+    clipboard: false,
+  };
 
   return (
     <div
@@ -413,27 +384,13 @@ export function KiroComposer({
       )}
 
       <div className="max-w-[820px] mx-auto">
-        {/* Context Bar：Composer 外上方，明确 Kiro 正在使用的数据范围（Workspace/Sandbox 经 leading slot 同层） */}
+        {/* Context Bar：Composer 外上方，只表达「Kiro 本 Turn 明确使用的 ClassFlow Context」。
+            P3：Workspace / 授权状态已迁入 Access Menu，不再常驻 chip。 */}
         <KiroContextBar
           contexts={contexts}
           onRemove={onRemoveContext}
           compact={compact}
           locked={currentTurnScopeLocked}
-          leading={
-            computerEnabled ? (
-              <>
-                <KiroWorkspacePicker
-                  workspace={workspace ?? null}
-                  isSandbox={workspaceIsSandbox ?? false}
-                  grantWarning={grantWarning ?? null}
-                  disabled={currentTurnScopeLocked}
-                />
-                {grantWarning && (
-                  <span className="text-[9px] font-semibold text-danger truncate">需要重新授权</span>
-                )}
-              </>
-            ) : undefined
-          }
         />
 
         {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层）。
@@ -473,7 +430,7 @@ export function KiroComposer({
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-1.5 whitespace-nowrap">
                     {scannedBlocked ? "扫描型 PDF 需要支持图片理解的模型" : "当前模型不支持图片理解"}
                     <button
-                      onClick={() => setModelOpen(true)}
+                      onClick={() => setOpenMenu("model")}
                       className="underline underline-offset-2 decoration-line-strong hover:text-charcoal"
                     >
                       切换模型
@@ -580,228 +537,90 @@ export function KiroComposer({
             />
 
             <div className="flex items-center justify-between gap-2 pt-1.5">
-              {/* 左组：内容动作（附件/上下文常显） */}
-              <div className="flex items-center gap-1">
-                <div ref={attachRef} className="relative">
+              {/* 左组：＋（内容与来源）· 访问（Computer 范围 / Agent Mode） */}
+              <div className="flex items-center gap-1 min-w-0">
+                <div ref={addRef} className="relative shrink-0">
                   <button
-                    onClick={() => {
-                      if (currentTurnScopeLocked) return;
-                      setAttachOpen((v) => !v);
-                      setModelOpen(false);
-                      setPickerOpen(false);
-                      setMaterialPickerOpen(false);
-                      setMoreToolsOpen(false);
-                    }}
-                    aria-label="添加附件"
-                    aria-expanded={attachOpen}
+                    type="button"
+                    onClick={() => setOpenMenu((v) => (v === "add" ? null : "add"))}
+                    aria-label="添加"
+                    aria-expanded={openMenu === "add"}
                     aria-haspopup="menu"
-                    disabled={currentTurnScopeLocked}
-                    title="添加附件"
-                    className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+                    title="添加文件、资料与上下文"
+                    data-testid="kiro-composer-add"
+                    className={cn(
+                      "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
+                      openMenu === "add"
+                        ? "bg-alabaster text-charcoal"
+                        : "text-sandrift hover:bg-alabaster hover:text-charcoal"
+                    )}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
-                  {attachOpen && (
+                  {openMenu === "add" && (
                     <PopoverPanel open placement="top-start" motionProfile="kiro" className="w-60">
-                      <KiroAttachmentPicker
-                        onClose={() => setAttachOpen(false)}
+                      <KiroComposerAddMenu
+                        scopeLocked={currentTurnScopeLocked}
+                        preferencesLocked={nextTurnPreferencesLocked}
+                        webSearchEnabled={webSearchEnabled}
+                        onToggleWebSearch={() => setWebSearchEnabled(!webSearchEnabled)}
                         onFiles={onAddFiles}
-                        onMaterials={() => setMaterialPickerOpen(true)}
-                      />
-                    </PopoverPanel>
-                  )}
-                  {materialPickerOpen && (
-                    <PopoverPanel open placement="top-start" motionProfile="kiro" className="w-72">
-                      <KiroMaterialPicker
-                        onClose={() => setMaterialPickerOpen(false)}
-                        onPick={(ref) => {
-                          onAddMaterial(ref);
-                          setMaterialPickerOpen(false);
-                          setAttachOpen(false);
-                        }}
+                        onAddMaterial={onAddMaterial}
+                        onAddContext={onAddContext}
+                        onClose={() => setOpenMenu(null)}
                       />
                     </PopoverPanel>
                   )}
                 </div>
 
-                <div ref={pickerWrapRef} className="relative">
-                  <button
-                    onClick={() => {
-                      if (currentTurnScopeLocked) return;
-                      setPickerOpen((v) => !v);
-                      setAttachOpen(false);
-                      setModelOpen(false);
-                      setMoreToolsOpen(false);
-                    }}
-                    aria-label="选择上下文"
-                    aria-expanded={pickerOpen}
-                    title="添加 ClassFlow 上下文"
-                    disabled={currentTurnScopeLocked}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <AtSign className="w-4 h-4" />
-                  </button>
-                  <KiroContextPicker
-                    open={pickerOpen}
-                    onClose={() => setPickerOpen(false)}
-                    onPick={(ref) => {
-                      onAddContext(ref);
-                      setPickerOpen(false);
-                    }}
+                <div ref={accessRef} className="relative shrink-0">
+                  <KiroComposerAccessControl
+                    computerEnabled={!!computerEnabled}
+                    agentMode={agentMode ?? "guided"}
+                    workspaceName={workspace?.name ?? null}
+                    workspaceConfigured={!!workspace}
+                    grantWarning={grantWarning ?? null}
+                    permissions={resolvedPermissions}
+                    scopeLocked={currentTurnScopeLocked}
+                    preferencesLocked={nextTurnPreferencesLocked}
+                    compact={compact}
+                    onSelectMode={selectAccessMode}
+                    onOpenAgentSettings={onOpenAgentSettings ?? onOpenSettings}
+                    open={openMenu === "access"}
+                    onOpenChange={(next) => setOpenMenu(next ? "access" : null)}
                   />
                 </div>
-
-                {/* Task 14：Kiro Search（联网搜索）轻量开关——下一 Turn preference：回复期间可切换 */}
-                <button
-                  onClick={() => {
-                    if (!nextTurnPreferencesLocked) setWebSearchEnabled(!webSearchEnabled);
-                  }}
-                  aria-label="联网搜索"
-                  aria-pressed={webSearchEnabled}
-                  title={webSearchEnabled ? "联网搜索：自动（下一条消息生效）" : "联网搜索：关闭（下一条消息生效）"}
-                  disabled={nextTurnPreferencesLocked}
-                  className={cn(
-                    "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
-                    webSearchEnabled
-                      ? "text-charcoal bg-pastel-mint/60 hover:bg-pastel-mint"
-                      : "text-sandrift hover:bg-alabaster hover:text-charcoal"
-                  )}
-                >
-                  <Globe2 className="w-4 h-4" />
-                </button>
-
-                {/* Kiro Computer Agent V1：Computer toggle（ON = active；无 workspace 时引导授权） */}
-                <button
-                  onClick={() => {
-                    if (currentTurnScopeLocked) return;
-                    onToggleComputer?.(!computerEnabled);
-                  }}
-                  aria-label="Computer"
-                  aria-pressed={computerEnabled}
-                  title={computerEnabled ? "Computer Agent：已开启" : "Computer Agent：关闭"}
-                  disabled={currentTurnScopeLocked}
-                  className={cn(
-                    "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
-                    computerEnabled
-                      ? "text-charcoal bg-pastel-mint/60 hover:bg-pastel-mint"
-                      : "text-sandrift hover:bg-alabaster hover:text-charcoal"
-                  )}
-                >
-                  <Cpu className="w-4 h-4" />
-                </button>
               </div>
 
-              {/* 右组：配置 + 发送。compact 下配置项收进溢出菜单，一级栏只留发送 */}
+              {/* 右组：思考程度（Codex-style 滑块）+ 模型 + 发送（Sidecar compact 仅图标化） */}
               <div className="flex items-center gap-1 shrink-0">
-                {compact ? (
-                  <div ref={moreToolsRef} className="relative">
-                    <button
-                      onClick={() => {
-                        setMoreToolsOpen((v) => !v);
-                        setAttachOpen(false);
-                        setPickerOpen(false);
-                        setModelOpen(false);
-                      }}
-                      aria-label="更多设置"
-                      aria-expanded={moreToolsOpen}
-                      title="模型与 Computer 设置"
-                      className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                    {moreToolsOpen && (
-                      <PopoverPanel open placement="top-end" motionProfile="kiro" className="w-64">
-                        <div
-                          className="flex flex-col gap-1 p-2"
-                          onClickCapture={() => setMoreToolsOpen(false)}
-                        >
-                          {computerEnabled && agentMode && (
-                            <KiroAgentModeMenu
-                              mode={agentMode}
-                              onChange={(m) => onSetAgentMode?.(m)}
-                              disabled={nextTurnPreferencesLocked}
-                            />
-                          )}
-                          {computerEnabled && reasoningCapability && reasoningEffort && (
-                            <KiroReasoningMenu
-                              capability={reasoningCapability}
-                              effort={reasoningEffort}
-                              onChange={(e) => onSetReasoningEffort?.(e)}
-                              disabled={nextTurnPreferencesLocked}
-                            />
-                          )}
-                          <div className="border-t border-line-soft pt-1">{modelMenu}</div>
-                        </div>
-                      </PopoverPanel>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {computerEnabled && agentMode && (
-                      <KiroAgentModeMenu
-                        mode={agentMode}
-                        onChange={(m) => onSetAgentMode?.(m)}
-                        disabled={nextTurnPreferencesLocked}
-                        iconOnly={compact}
-                      />
-                    )}
-                    {computerEnabled && reasoningCapability && reasoningEffort && (
-                      <KiroReasoningMenu
-                        capability={reasoningCapability}
-                        effort={reasoningEffort}
-                        onChange={(e) => onSetReasoningEffort?.(e)}
-                        disabled={nextTurnPreferencesLocked}
-                        iconOnly={compact}
-                      />
-                    )}
-                    <div ref={modelRef} className="relative">
-                      <button
-                        onClick={() => {
-                          if (nextTurnPreferencesLocked) return;
-                          setModelOpen((v) => !v);
-                          setAttachOpen(false);
-                          setPickerOpen(false);
-                          setMoreToolsOpen(false);
-                        }}
-                        aria-label="选择模型"
-                        aria-expanded={modelOpen}
-                        aria-haspopup="menu"
-                        title={turnInFlight ? "选择下一条消息使用的模型" : "选择模型"}
-                        disabled={nextTurnPreferencesLocked}
-                        data-model-open={modelOpen}
-                        className={cn(
-                          "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-                          compact
-                            ? cn("w-9 justify-center", modelOpen ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal")
-                            : cn(
-                                "gap-1.5 px-2.5 text-[11px] font-semibold",
-                                modelOpen
-                                  ? "bg-alabaster text-charcoal border border-line-strong"
-                                  : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal"
-                              )
-                        )}
-                      >
-                        <ProviderLogo vendor={activeModelVendor} size="sm" />
-                        {!compact && (
-                          <>
-                            <span className="truncate max-w-[140px]">{activeModelName}</span>
-                            <ChevronDown
-                            className={cn(
-                              "w-3 h-3 shrink-0 transition-transform duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
-                              modelOpen && "rotate-180"
-                            )}
-                            />
-                          </>
-                        )}
-                      </button>
-                      {modelOpen && (
-                        <PopoverPanel open placement="top-end" motionProfile="kiro" className="w-60">
-                          {modelMenu}
-                        </PopoverPanel>
-                      )}
-                    </div>
-                  </>
-                )}
+                <div ref={reasoningRef} className="relative">
+                  <KiroComposerReasoningControl
+                    capability={reasoningCapability}
+                    effort={reasoningEffort ?? "default"}
+                    modelName={activeModelName}
+                    disabled={nextTurnPreferencesLocked}
+                    compact={compact}
+                    onChange={(effort) => onSetReasoningEffort?.(effort)}
+                    open={openMenu === "reasoning"}
+                    onOpenChange={(next) => setOpenMenu(next ? "reasoning" : null)}
+                  />
+                </div>
+                <div ref={modelRef} className="relative">
+                  <KiroComposerModelControl
+                    modelOptions={modelOptions}
+                    selectedModelId={selectedModelId}
+                    activeModelName={activeModelName}
+                    activeModelVendor={activeModelVendor}
+                    modelUnavailable={modelUnavailable}
+                    disabled={nextTurnPreferencesLocked}
+                    compact={compact}
+                    onSelectModel={onSelectModel}
+                    onOpenSettings={onOpenSettings}
+                    open={openMenu === "model"}
+                    onOpenChange={(next) => setOpenMenu(next ? "model" : null)}
+                  />
+                </div>
 
                 <KiroSendControl
                   canSend={canSend}
