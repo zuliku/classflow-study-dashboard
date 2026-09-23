@@ -1,21 +1,25 @@
-﻿"use client";
+"use client";
 
-import React, { useEffect, useState } from "react";
-import { CheckCircle2, Eye, RotateCcw, Clock3, XCircle, AlertTriangle, Download, Trash2 } from "lucide-react";
+import React from "react";
+import { Eye, Download, Trash2, RotateCcw, AlertTriangle } from "lucide-react";
 import { KiroAgentTask, KiroComputerChange } from "@/lib/ai/computer/task";
 import { PersistedComputerTaskView } from "@/lib/ai/history/types";
+import { formatComputerTaskResultSummary, isKiroAgentRunTerminal } from "@/lib/ai/ui/kiroAgentRun";
 import { useKiroArtifactActions } from "@/hooks/useKiroArtifactActions";
 import { useConfirmStore } from "@/store/useConfirmStore";
-import { cn } from "@/lib/utils";
 
 /**
- * Kiro Agent Task Card（Part 3）：渲染在 owning assistant message 内。
- * - 只展示真实 runtime 事实（steps / changes），绝不展示 chain-of-thought。
- * - completed 且 checkpoint 存在且未使用 → [查看更改] [撤销本次更改]。
- * - 历史恢复 → display-only（无 checkpoint，无按钮）。
- * - V2 Part 3：每个带 artifactId 的 change row 提供低权重 [预览]/[下载]（历史卡同样可用）。
+ * Kiro Agent Run Result（P4）：Run 结束后的低权重结果区（flat layout，无大卡片）。
+ *
+ * - 只在终态显示（completed / failed / cancelled / undone / undo_failed）；运行中由
+ *   Header + Timeline + Inline Approval 表达，绝不再复制 task.steps；
+ * - Summary 泛化（formatComputerTaskResultSummary）：Terminal 绝不称作「文件更改」；
+ * - 失败 / 取消也展示真实已完成的 changes（不隐藏已验证事实）；
+ * - 复用既有 Undo / Review Runtime：canUndo → [查看更改] [撤销]；undoUsed → 撤销消失；
+ *   历史恢复（PersistedComputerTaskView）→ display-only（不重建 Undo 能力）；
+ * - Artifact hover actions（预览 / 下载 / 删除）继续可用。
  */
-export function KiroAgentTaskCard({
+export function KiroAgentRunResult({
   task,
   historyTask,
   onReview,
@@ -28,13 +32,6 @@ export function KiroAgentTaskCard({
 }) {
   const { previewArtifact, downloadArtifact, deleteArtifact } = useKiroArtifactActions();
   const confirm = useConfirmStore((s) => s.confirm);
-  // BUG-G5（spec item 14）：live 任务卡入场 structure-settle（挂载播一次）；
-  // 历史恢复分支已提前返回，不会重播
-  const [settled, setSettled] = useState(false);
-  useEffect(() => {
-    const t = window.setTimeout(() => setSettled(true), 400);
-    return () => window.clearTimeout(t);
-  }, []);
 
   const requestDelete = (artifactId: string, displayName: string) => {
     confirm({
@@ -50,12 +47,13 @@ export function KiroAgentTaskCard({
 
   if (historyTask) {
     return (
-      <div
-        data-testid="kiro-agent-task-card"
-        className="rounded-2xl border border-line bg-[#F7F5F5] p-3 space-y-2"
-      >
-        <TaskHeader status={historyTask.status} changeCount={historyTask.changes.length} />
-        <p className="text-xs font-bold text-charcoal truncate">{historyTask.title}</p>
+      <div data-testid="kiro-agent-run-result" data-state="history" className="space-y-1.5 pt-1">
+        <p className="text-[11px] font-semibold text-satin-grey">
+          {formatComputerTaskResultSummary({
+            status: historyTask.status,
+            changes: historyTask.changes,
+          })}
+        </p>
         {historyTask.changes.length > 0 && (
           <ChangeList
             changes={historyTask.changes}
@@ -68,57 +66,18 @@ export function KiroAgentTaskCard({
       </div>
     );
   }
+
   if (!task) return null;
+  // 运行中 / 等待审批：由 Agent Run 表达，绝不显示 Result 区（无重复步骤 Card）
+  if (!isKiroAgentRunTerminal(taskStatusToRunStatus(task.status))) return null;
 
   const canUndo = task.canUndo && !task.undoUsed && task.status === "completed";
 
   return (
-    <div
-      data-testid="kiro-agent-task-card"
-      className={cn(
-        "rounded-2xl border p-3 space-y-2",
-        task && !settled && "kiro-structure-settle",
-        task.status === "undo_failed"
-          ? "border-danger-border bg-danger-bg"
-          : "border-line bg-[#F7F5F5]"
-      )}
-    >
-      <TaskHeader status={task.status} changeCount={task.changes.length} />
-      <p className="text-xs font-bold text-charcoal truncate">{task.title}</p>
-
-      {task.status === "awaiting_permission" && (
-        <p className="text-[11px] text-satin-grey leading-relaxed">
-          等待你的许可
-          <span className="text-charcoal font-semibold">
-            {" "}
-            {task.steps.find((s) => s.status === "awaiting_permission")?.label ?? "执行操作"}
-          </span>
-        </p>
-      )}
-
-      {task.status === "running" && task.steps.length > 0 && (
-        <ul className="space-y-1">
-          {task.steps.map((s) => (
-            <li key={s.id} className="flex items-center gap-1.5 text-[11px] text-satin-grey">
-              <Clock3 className="w-3 h-3" aria-hidden="true" />
-              {s.label}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {task.status === "failed" && (
-        <p className="text-[11px] text-satin-grey">部分操作未完成</p>
-      )}
-
-      {task.changes.length > 0 && (
-        <ChangeList
-          changes={task.changes}
-          onPreview={previewArtifact}
-          onDownload={downloadArtifact}
-          onDelete={requestDelete}
-        />
-      )}
+    <div data-testid="kiro-agent-run-result" data-state={task.status} className="space-y-1.5 pt-1">
+      <p className="text-[11px] font-semibold text-charcoal">
+        {formatComputerTaskResultSummary({ status: task.status, changes: task.changes })}
+      </p>
 
       {task.status === "undone" && (
         <p className="text-[11px] font-semibold text-success flex items-center gap-1.5">
@@ -133,69 +92,49 @@ export function KiroAgentTaskCard({
         </p>
       )}
 
-      {canUndo && (
-        <div className="flex flex-col gap-1.5 pt-0.5">
-          <button
-            data-testid="kiro-task-undo"
-            onClick={() => onUndo?.(task.id)}
-            className="w-full flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-bold text-white bg-charcoal hover:bg-black transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-            撤销本次更改
-          </button>
+      {task.changes.length > 0 && (
+        <ChangeList
+          changes={task.changes}
+          onPreview={previewArtifact}
+          onDownload={downloadArtifact}
+          onDelete={requestDelete}
+        />
+      )}
+
+      {task.changes.length > 0 && (
+        <div className="flex items-center gap-2 pt-0.5">
           <button
             data-testid="kiro-task-review"
             onClick={() => onReview?.(task.id)}
-            className="self-start flex items-center gap-1 px-1 min-h-[32px] rounded-md text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
+            className="flex items-center gap-1 px-1.5 h-7 rounded-md text-[11px] font-semibold text-satin-grey hover:text-charcoal hover:bg-alabaster transition-colors"
           >
             <Eye className="w-3 h-3" aria-hidden="true" />
             查看更改
           </button>
+          {canUndo && (
+            <button
+              data-testid="kiro-task-undo"
+              onClick={() => onUndo?.(task.id)}
+              className="flex items-center gap-1 px-2.5 h-7 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" aria-hidden="true" />
+              撤销
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function TaskHeader({ status, changeCount }: { status: string; changeCount: number }) {
-  if (status === "undone" || status === "undo_failed") {
-    return (
-      <p className="flex items-center gap-1.5 text-[11px] font-bold text-charcoal">
-        <RotateCcw className="w-3.5 h-3.5 text-success shrink-0" aria-hidden="true" />
-        已执行撤销
-      </p>
-    );
-  }
-  if (status === "awaiting_permission") {
-    return (
-      <p className="flex items-center gap-1.5 text-[11px] font-bold text-charcoal">
-        <Clock3 className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
-        等待许可
-      </p>
-    );
-  }
-  if (status === "failed" || status === "cancelled") {
-    return (
-      <p className="flex items-center gap-1.5 text-[11px] font-bold text-satin-grey">
-        <XCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-        {status === "failed" ? "操作未完成" : "已取消"}
-      </p>
-    );
-  }
-  if (status === "running") {
-    return (
-      <p className="flex items-center gap-1.5 text-[11px] font-bold text-charcoal">
-        <Clock3 className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
-        正在执行
-      </p>
-    );
-  }
-  return (
-    <p className="flex items-center gap-1.5 text-[11px] font-bold text-charcoal">
-      <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" aria-hidden="true" />
-      已完成 {changeCount} 项文件更改
-    </p>
-  );
+/** live task status → Run status（仅用于终态判定；不改变 Runtime） */
+function taskStatusToRunStatus(
+  status: KiroAgentTask["status"]
+): "running" | "completed" | "failed" | "cancelled" {
+  if (status === "running" || status === "awaiting_permission") return "running";
+  if (status === "failed") return "failed";
+  if (status === "cancelled") return "cancelled";
+  return "completed";
 }
 
 function ChangeList({

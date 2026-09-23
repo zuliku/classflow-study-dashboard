@@ -16,7 +16,8 @@ import { KiroActionCard, actionToCardProps, KiroActionCardVariant } from "@/comp
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { extractWorkflowTraceForTurn, isWorkflowTraceReusable } from "@/lib/ai/skills/workflowTrace";
 import type { WorkflowTrace } from "@/lib/ai/skills/types";
-import { KiroAgentTaskCard } from "@/components/kiro/computer/KiroAgentTaskCard";
+import { KiroAgentRunApprovalBinding } from "@/components/kiro/run/KiroAgentRun";
+import { ComputerApprovalDecision, ComputerApprovalRequest } from "@/lib/ai/computer/approval";
 import { StudyPlanProposalCard } from "@/components/kiro/StudyPlanProposalCard";
 import { StudyRebalanceProposalCard } from "@/components/kiro/StudyRebalanceProposalCard";
 import { TaskBreakdownProposalCard } from "@/components/kiro/TaskBreakdownProposalCard";
@@ -44,6 +45,12 @@ export function KiroConversation({
   compact,
   turnInFlight,
   sources,
+  pendingApproval,
+  approvalOwnerMessageId,
+  pendingQueueLength,
+  onApprovalDecision,
+  desktopPaused,
+  onStop,
   onReviewComputerTask,
   onUndoComputerTask,
 }: {
@@ -60,6 +67,16 @@ export function KiroConversation({
   turnInFlight: boolean;
   /** 当前 Turn 的文档来源（Citation 渲染；live 消息用；不含正文） */
   sources?: KiroSourceMeta[];
+  /** P4：待决策审批（只注入 owning task 行；orphan 由 ChatSurface fallback Dialog 承接） */
+  pendingApproval?: ComputerApprovalRequest | null;
+  /** P4：approval.taskId 精确匹配到的 owning message id（null = orphan → fallback Dialog） */
+  approvalOwnerMessageId?: string | null;
+  pendingQueueLength?: number;
+  onApprovalDecision?: (approvalId: string, decision: ComputerApprovalDecision) => void;
+  /** P4：Desktop GUI Session 暂停（只影响 live run） */
+  desktopPaused?: boolean;
+  /** P4：Run Header 停止入口（canonical Stop） */
+  onStop?: () => void;
   /** Computer Agent Part 3：Task 更改审查 / 撤销（仅 live task 提供） */
   onReviewComputerTask?: (taskId: string) => void;
   onUndoComputerTask?: (taskId: string) => void;
@@ -92,6 +109,24 @@ export function KiroConversation({
       break;
     }
   }
+
+  /**
+   * P4 Inline Approval 绑定（§9/§10）：只按真实 ComputerApprovalRequest.taskId 精确匹配
+   * owning task → owning assistant row；未匹配（row 尚未建立 / 恢复竞态）由 ChatSurface
+   * 的 fallback Dialog 承接。binding 引用稳定（approval / queue 不变则不新建），
+   * 历史 row 不因 approval 更新而重渲染。
+   */
+  const approvalBinding: KiroAgentRunApprovalBinding | null = React.useMemo(
+    () =>
+      pendingApproval && onApprovalDecision
+        ? {
+            request: pendingApproval,
+            queueLength: pendingQueueLength ?? 1,
+            onDecision: onApprovalDecision,
+          }
+        : null,
+    [pendingApproval, pendingQueueLength, onApprovalDecision]
+  );
 
   /** 统一滚动状态同步（scroll 事件 / 内容高度变化共用） */
   const syncScrollState = React.useCallback(() => {
@@ -221,6 +256,11 @@ export function KiroConversation({
                 onUndo={onUndo}
                 onRetry={onRetry}
                 onEditUserMessage={onEditUserMessage}
+                // P4：live run 只标记最后一条 assistant 行（其他行保持稳定 props → memo 命中）
+                runLive={idx === lastAssistantIndex && turnInFlight}
+                approval={approvalBinding && m.id === approvalOwnerMessageId ? approvalBinding : undefined}
+                desktopPaused={idx === lastAssistantIndex ? desktopPaused : false}
+                onStop={onStop}
                 onReviewComputerTask={onReviewComputerTask}
                 onUndoComputerTask={onUndoComputerTask}
               />
@@ -296,6 +336,10 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onUndo,
   onRetry,
   onEditUserMessage,
+  runLive,
+  approval,
+  desktopPaused,
+  onStop,
   onReviewComputerTask,
   onUndoComputerTask,
 }: {
@@ -306,6 +350,12 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onUndo: (toolCallId: string) => void;
   onRetry: () => void;
   onEditUserMessage: (messageId: string, text: string) => Promise<boolean>;
+  /** P4：本行是 live run（最后一条 assistant 且 turn 进行中） */
+  runLive: boolean;
+  /** P4：属于本行的 Inline Approval（taskId 精确匹配） */
+  approval?: KiroAgentRunApprovalBinding;
+  desktopPaused?: boolean;
+  onStop?: () => void;
   onReviewComputerTask?: (taskId: string) => void;
   onUndoComputerTask?: (taskId: string) => void;
 }) {
@@ -374,6 +424,14 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         sources={view.sources ?? sources}
         actionSummaries={actionSummaries}
         assistantTurn={view.assistantTurn}
+        computerTask={view.computerTask}
+        historyComputerTask={view.historyComputerTask}
+        approval={approval}
+        turnInFlight={runLive}
+        desktopPaused={desktopPaused}
+        onStop={onStop}
+        onReviewComputerTask={onReviewComputerTask}
+        onUndoComputerTask={onUndoComputerTask}
         onRetry={onRetry}
       >
         {/* Action Result Cards：真实 ToolResult 事实 UI */}
@@ -467,17 +525,6 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
             {view.historyVisualActionProposals.map((p) => (
               <VisualActionProposalHistoryCard key={p.id} proposal={p} />
             ))}
-          </div>
-        )}
-        {/* Computer Agent Task Card（Part 3）：绑定 owning assistant message；历史 → display-only */}
-        {hasComputerTask && (
-          <div className="pt-1">
-            <KiroAgentTaskCard
-              task={view.computerTask}
-              historyTask={view.historyComputerTask}
-              onReview={onReviewComputerTask}
-              onUndo={onUndoComputerTask}
-            />
           </div>
         )}
       </KiroMessage>

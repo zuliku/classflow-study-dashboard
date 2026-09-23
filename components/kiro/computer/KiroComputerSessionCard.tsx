@@ -88,9 +88,12 @@ function applySessionStatus(status: ClassFlowDesktopComputerSessionStatus): void
 }
 
 /**
- * Computer Session 状态卡（Phase 3 Sidecar UX）：
+ * Computer Session 状态卡（Phase 3 Sidecar UX + P4 定位收敛）：
+ * - Sidecar 的 Desktop Session **Control Surface**（Pause / Resume / Stop / 计划进度 /
+ *   反思提示 / 保存为 Skill）；**不是第二份 Worklog**——不复制 Agent Timeline
+ *   （canonical execution presentation 属于 Conversation 内的 KiroAgentRun）；
  * - 始终显示 Kiro 当前在操作什么（正在查看 / 正在点击 / 等待确认…）
- * - Pause / Resume / Stop；Stop 最高优先级（派发 classflow:computer:stop → useKiroChat 统一 Stop）
+ * - Stop 最高优先级（派发 classflow:computer:stop → useKiroChat 统一 Stop）
  * - V2.3：计划时间线（第 N/M 步 + 进度点 + 当前步骤）与反思提示
  */
 export function KiroComputerSessionCard() {

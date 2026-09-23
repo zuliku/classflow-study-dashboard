@@ -7,12 +7,14 @@ import { useKiroRuntime, useKiroSessionMeta, useKiroSessionActions } from "@/com
 import { KiroEmptyExperience } from "@/components/kiro/motion/KiroEmptyExperience";
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
 import { getActiveModelName, getActiveModelVendor, getModelsForProvider } from "@/lib/ai/providers/registry";
+import { findApprovalOwnerMessageId } from "@/lib/ai/ui/kiroAgentRun";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
+import { useDesktopSessionStore } from "@/store/useDesktopSessionStore";
 import { ComputerApprovalDialog } from "@/components/kiro/computer/ComputerApprovalDialog";
 import { KiroChangeReviewDialog } from "@/components/kiro/computer/KiroChangeReviewDialog";
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
@@ -50,6 +52,18 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
   const reviewTaskId = useKiroComputerRuntimeStore((s) => s.reviewTaskId);
   const setReviewTaskId = useKiroComputerRuntimeStore((s) => s.setReviewTaskId);
+  // P4：Desktop GUI Session 暂停（只在 Surface 订阅一次；绝不下沉到历史 Message row）
+  const desktopSessionPaused = useDesktopSessionStore((s) => s.state === "paused");
+
+  /**
+   * P4 §11：orphan fallback 判定——pendingApproval 必须能通过 taskId 找到 owning Computer Task
+   * （→ owning assistant row 的 Inline Approval）。找不到（row 尚未建立 / 恢复竞态 /
+   * unexpected runtime state）时继续用 ComputerApprovalDialog，绝不出现「审批无处可操作」。
+   */
+  const approvalOwnerMessageId = useMemo(
+    () => findApprovalOwnerMessageId(chat.messages, pendingApproval?.taskId),
+    [pendingApproval?.taskId, chat.messages]
+  );
 
   // Task 7C：Kiro 输出字号（顶层一次订阅；CSS variable 让所有历史 Message 同步缩放，不逐条订阅）
   const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
@@ -183,6 +197,13 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
             // Streaming UX V3：真实 turn lifecycle（awaiting-tool-result / awaiting-continuation 也视为 in-flight）
             turnInFlight={chat.turnInFlight}
             sources={chat.sources}
+            // P4：Inline Approval（taskId 精确匹配 owning row）；未匹配 → fallback Dialog
+            pendingApproval={pendingApproval}
+            approvalOwnerMessageId={approvalOwnerMessageId}
+            pendingQueueLength={pendingQueueLength}
+            onApprovalDecision={(id, decision) => void chat.resolveApproval(id, decision)}
+            desktopPaused={desktopSessionPaused}
+            onStop={chat.stop}
             onReviewComputerTask={setReviewTaskId}
             onUndoComputerTask={(taskId) => void chat.undoTask(taskId)}
           />
@@ -233,9 +254,10 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         workspaceIsSandbox={workspaceIsSandbox}
       />
 
-      {/* Computer Agent Part 3：Approval（ask 暂停；决策后 resume 同一条 exact call）+ Change Review + Bulk */}
+      {/* P4：Inline Approval 为主；仅 orphan（无 owning task row）时用 fallback Dialog。
+          Bulk 决策仍由 Runtime API（resolveBulkApproval）承担，此处不做批量 UI 产品化。 */}
       <ComputerApprovalDialog
-        request={pendingApproval}
+        request={approvalOwnerMessageId ? null : pendingApproval}
         queueLength={pendingQueueLength}
         onDecision={(id, decision) => void chat.resolveApproval(id, decision)}
         onBulkDecision={(decision) => void (chat as unknown as { resolveBulkApproval: (d: string) => void }).resolveBulkApproval(decision)}

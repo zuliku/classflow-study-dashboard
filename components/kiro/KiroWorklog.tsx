@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useRef, useState } from "react";
-import { Check, Loader2, AlertCircle, ChevronDown, ListTree } from "lucide-react";
+import React, { useState } from "react";
+import { Check, Loader2, AlertCircle, ChevronDown } from "lucide-react";
 import { KiroTurnPhase, KiroWorklogBlock } from "@/lib/ai/presentation/turnPresentation";
 import { bumpStreamPerf, bumpStreamPerfKeyed } from "@/lib/ai/perf/streamPerf";
 import { hasMeaningfulKiroToolDetails } from "@/lib/ai/presentation/toolActivityDetails";
@@ -135,35 +135,31 @@ function rowClasses(block: ToolBlock): string {
 }
 
 /**
- * Kiro Worklog（Density Polish + Streaming UX V3 + V4 + V4.1 Stable + V4.2 Hot Path）：
- * - 整体 disclosure：Summary（ListTree + 步骤统计）→ 点击折叠/展开
- * - V4.1：当前 Turn 生命周期（working → composing → answering → done）保持当前 expanded 状态，
- *   完成瞬间不强制折叠（无大高度跳动）；历史恢复（初始 done）默认折叠；用户手动操作始终优先
- * - Body 只包含真实 Agent trace：commentary + tool rows（无 milestone / 无 loading pseudo-row /
- *   无入场动画——真实事件到达即出现）
- * - V4.2：memo + 明确 comparator——props 缩窄为 worklog + phase（不需要 answer / hasTools 等）。
- *   phase 只影响 Summary 文案与分割线（低频 transition）；worklog 数组逐 block 比较——
- *   Final Answer token 期间 worklog 内容不变 → 整个 Worklog 不重渲染，completed Tool 不重渲染。
- * - Final Answer 分割线无论折叠与否都保留
+ * Kiro Worklog Timeline（Streaming UX V3 + V4 + V4.1 Stable + V4.2 Hot Path + P4 抽离）：
+ * - 只负责 canonical Agent trace 的 body：commentary + Tool rows + Terminal activity + Final Answer 分割线；
+ * - Header / disclosure ownership / Inline Approval 由 Agent Run 层负责（KiroAgentRun）；
+ * - V4.2：memo + 明确 comparator——props 缩窄为 worklog + phase + reasoningSummary + expanded。
+ *   Final Answer token 期间 worklog 内容不变 → Timeline 不重渲染，completed Tool 不重渲染；
+ * - Final Answer 分割线无论折叠与否都保留（answering/done 才可能有 answer）；
+ * - raw reasoning 永不显示：只有压缩 reasoningSummary 占位。
  */
-export const KiroWorklog = React.memo(function KiroWorklog({
+export const KiroWorklogTimeline = React.memo(function KiroWorklogTimeline({
   worklog,
   phase,
   reasoningSummary,
+  expanded,
 }: {
   worklog: KiroWorklogBlock[];
   phase: KiroTurnPhase;
   reasoningSummary?: string;
+  expanded: boolean;
 }) {
   bumpStreamPerf("worklogRenders");
   bumpStreamPerfKeyed("worklogRendersByPhase", phase);
+
   const toolBlocks = worklog.filter(
     (block): block is Extract<KiroWorklogBlock, { kind: "tool" }> => block.kind === "tool"
   );
-  const toolCount = toolBlocks.length;
-  const completedToolCount = toolBlocks.filter(
-    (block) => block.status === "done" || block.status === "error"
-  ).length;
 
   // Terminal V2：runtime activity（UI-only；sanitized；按 toolCallId 精确关联本 turn 的
   // run_terminal_command；历史恢复 turn 无对应 activity → 自动过滤）
@@ -173,67 +169,9 @@ export const KiroWorklog = React.memo(function KiroWorklog({
   );
   const terminalBlocks = terminalActivities.filter((a) => toolCallIds.has(a.toolCallId));
 
-  // 当前 Turn：working/composing/answering 保持 expanded；历史恢复（初始 done）默认折叠；
-  // 不因 done 瞬时 collapse（避免完成瞬间 layout 跳动）；用户手动操作始终优先。
-  const [expanded, setExpanded] = useState(
-    phase === "working" || phase === "composing" || phase === "answering"
-  );
-  const userToggledRef = useRef(false);
-
-  const toggleExpanded = () => {
-    userToggledRef.current = true;
-    setExpanded((value) => !value);
-  };
-
-  // V4：稳定的 Summary——详细进度由 Timeline 展示，Summary 不做高速实时计数
-  const summaryLabel =
-    phase === "composing"
-      ? "正在整理回答"
-      : phase === "working"
-        ? "正在执行"
-        : `已完成 · ${toolCount} 个步骤`;
-
-  // V4.7：Header 活跃信号（只切 icon，不新增文案 / body row，不触发额外 render）。
-  // - composing：真正「boundary 已到、Final Answer 首 token 未到」→ spinner + 正在整理回答
-  // - working 但没有任何 active trace（Tool done → awaiting continuation 的 200~800ms gap）：
-  //   最后 Tool = ✓、无 commentary streaming、无 tool working → spinner + 正在执行
-  // - 下一 commentary / Tool working 到达 → 恢复 ListTree（label 恒「正在执行」，不打扰读屏）
-  const hasActiveTrace = worklog.some((block) =>
-    block.kind === "commentary"
-      ? (block as CommentaryBlock).streaming
-      : (block as ToolBlock).status === "working"
-  );
-  const showHeaderSpinner =
-    phase === "composing" || (phase === "working" && worklog.length > 0 && !hasActiveTrace);
-
   return (
-    <div data-testid="kiro-worklog" className="space-y-1 min-w-0 w-full">
-      {/* Group Summary：整体 disclosure（工作流图标 + 统计 + Chevron） */}
-      <button
-        type="button"
-        onClick={toggleExpanded}
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11px] font-semibold text-sandrift hover:bg-alabaster/60 transition-colors"
-      >
-        {showHeaderSpinner ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
-        ) : (
-          <ListTree className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
-        )}
-        <span className="truncate" role="status" aria-live="polite" aria-atomic="true">
-          {summaryLabel}
-        </span>
-        <ChevronDown
-          className={cn(
-            "w-3 h-3 text-sandrift shrink-0 ml-auto transition-transform duration-[var(--motion-fast)]",
-            expanded && "rotate-180"
-          )}
-          aria-hidden="true"
-        />
-      </button>
-
-      {/* Expanded：commentary / Tool rows 真实时序（无 synthetic row）；collapsed 时结构收起 */}
-      <DisclosureRegion open={expanded} innerClassName="pt-1 space-y-1">
+    <div data-testid="kiro-worklog" className="min-w-0 w-full">
+      <DisclosureRegion open={expanded} innerClassName="space-y-1">
         {worklog.length === 0 && reasoningSummary && (
           <p
             data-testid="kiro-reasoning-summary"
@@ -267,14 +205,29 @@ export const KiroWorklog = React.memo(function KiroWorklog({
       )}
     </div>
   );
-}, worklogPropsEqual);
+}, worklogTimelinePropsEqual);
 
-/** KiroWorklog comparator：只有 phase 或 worklog 内容真正变化才重渲染 */
-function worklogPropsEqual(
-  a: { worklog: KiroWorklogBlock[]; phase: KiroTurnPhase; reasoningSummary?: string },
-  b: { worklog: KiroWorklogBlock[]; phase: KiroTurnPhase; reasoningSummary?: string }
+/** KiroWorklogTimeline comparator：只有 expanded / phase / reasoningSummary 或 worklog 内容真正变化才重渲染 */
+function worklogTimelinePropsEqual(
+  a: {
+    worklog: KiroWorklogBlock[];
+    phase: KiroTurnPhase;
+    reasoningSummary?: string;
+    expanded: boolean;
+  },
+  b: {
+    worklog: KiroWorklogBlock[];
+    phase: KiroTurnPhase;
+    reasoningSummary?: string;
+    expanded: boolean;
+  }
 ): boolean {
-  return a.phase === b.phase && a.reasoningSummary === b.reasoningSummary && worklogEquals(a.worklog, b.worklog);
+  return (
+    a.expanded === b.expanded &&
+    a.phase === b.phase &&
+    a.reasoningSummary === b.reasoningSummary &&
+    worklogEquals(a.worklog, b.worklog)
+  );
 }
 
 /**

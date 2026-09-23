@@ -5,14 +5,10 @@ import { ShieldAlert } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { ComputerApprovalRequest, ComputerApprovalDecision } from "@/lib/ai/computer/approval";
-import { guiActionLabel } from "@/lib/ai/computer/gui/observation";
-
-const DECISION_LABELS: Record<ComputerApprovalDecision, string> = {
-  deny: "拒绝",
-  "allow-once": "允许这一次",
-  "allow-session": "本次会话允许",
-  "allow-workspace": "此 Workspace 始终允许",
-};
+import {
+  COMPUTER_APPROVAL_DECISION_LABELS,
+  getComputerApprovalPresentation,
+} from "@/lib/ai/ui/computerApprovalPresentation";
 
 const DECISION_VARIANTS: Record<ComputerApprovalDecision, "danger" | "primary" | "secondary" | "accent"> = {
   deny: "danger",
@@ -22,9 +18,17 @@ const DECISION_VARIANTS: Record<ComputerApprovalDecision, "danger" | "primary" |
 };
 
 /**
- * Computer Approval Dialog（Part 3）：专门审批 UI（不复用 ConfirmDialog）。
- * - 只显示 request.allowedDecisions 允许的选项（ask → allow 的合法路径）。
- * - 只展示安全逻辑资源（workspace/root/relativePath），绝无 native path / adapterRef / handle。
+ * Fallback Approval Dialog（P4 §11/§41）：
+ *
+ * 正常情况下 pendingApproval 通过真实 taskId 精确匹配到 owning Computer Task → owning
+ * assistant row 内的 Inline Approval（KiroInlineApproval），不出现任何 Modal。
+ *
+ * 本 Dialog 只在 orphan / transition edge case 使用：assistant row 尚未建立、
+ * conversation 切换 / 恢复竞态、unexpected runtime state——审批必须始终有地方可操作。
+ *
+ * - 与 Inline Approval 共用 computerApprovalPresentation（文案不漂移）；
+ * - 只显示 request.allowedDecisions 允许的选项；绝不扩大 Approval 范围；
+ * - 只展示安全逻辑资源（workspace/root/relativePath），绝无 native path / adapterRef / handle；
  * - 没有 Tool Output；决策后由 useKiroChat resume 同一条 exact call。
  */
 export function ComputerApprovalDialog({
@@ -59,6 +63,8 @@ export function ComputerApprovalDialog({
     if (!next) return;
   };
 
+  const presentation = request ? getComputerApprovalPresentation(request) : null;
+
   return (
     <Dialog
       open={open}
@@ -74,13 +80,7 @@ export function ComputerApprovalDialog({
             <ShieldAlert className="w-4 h-4 text-charcoal" aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-charcoal">
-              {request?.capability === "shell.execute"
-                ? "Kiro 想运行终端命令"
-                : request?.gui
-                  ? "Kiro 想操作电脑"
-                  : "Kiro 请求文件权限"}
-            </h2>
+            <h2 className="text-sm font-bold text-charcoal">{presentation?.title ?? "Kiro 操作确认"}</h2>
             {request && (
               <p className="text-xs font-semibold text-satin-grey mt-1 leading-relaxed">
                 {request.description}
@@ -89,87 +89,29 @@ export function ComputerApprovalDialog({
           </div>
         </div>
 
-        {request && (
+        {presentation && (
           <div className="rounded-xl border border-line bg-[#F7F5F5] p-3 space-y-1.5">
-            {request.gui ? (
-              <>
-                {/* Computer Use Phase 2：应用 / 窗口 / 动作 / 目标元素 / 文本预览 / 风险原因 */}
-                <p className="text-[11px] text-charcoal font-bold">
-                  {request.gui.action === "key"
-                    ? "按键操作"
-                    : request.gui.action === "type"
-                      ? "输入文本"
-                      : request.gui.action === "scroll"
-                        ? "滚动页面"
-                        : request.gui.action === "wait"
-                          ? "等待"
-                          : guiActionLabel(request.gui.action)}
-                  {" · "}
-                  {request.gui.appName || "未知应用"}
-                </p>
-                <p className="text-[10px] text-sandrift truncate">
-                  {request.gui.windowTitle || "（无标题窗口）"}
-                </p>
-                <p className="text-[10px] text-charcoal">
-                  目标：{request.gui.targetLabel}
-                </p>
-                {request.gui.textPreview && (
-                  <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-charcoal bg-white border border-line rounded-lg px-2 py-1.5 max-h-24 overflow-y-auto">
-                    {request.gui.textPreview}
-                  </pre>
-                )}
-                <p
-                  className={
-                    request.gui.riskLevel === "normal"
-                      ? "text-[10px] text-sandrift"
-                      : "text-[10px] font-semibold text-danger"
-                  }
-                >
-                  风险：{request.gui.riskLevel} · {request.gui.riskReason}
-                </p>
-                {request.gui.coordinateFallback && (
-                  <p className="text-[10px] font-semibold text-danger">
-                    未使用 UI 元素定位，请确认目标位置正确。
-                  </p>
-                )}
-              </>
-            ) : request.capability === "shell.execute" ? (
-              <>
-                {/* Desktop Terminal V1：shell / cwd / 命令默认可见（绝不藏在「查看详情」） */}
-                <p className="text-[11px] text-charcoal font-bold">
-                  {request.shell === "cmd" ? "命令提示符" : "PowerShell"}
-                  {request.relativePath ? ` · 工作目录 /${request.relativePath}` : " · 工作目录 /"}
-                </p>
-                <p className="text-[10px] text-sandrift">{request.workspaceLabel}</p>
-                <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-charcoal bg-white border border-line rounded-lg px-2 py-1.5 max-h-40 overflow-y-auto">
-                  {request.commandPreview ?? request.resourceLabel}
-                </pre>
-                {request.terminalRisk === "destructive" && (
-                  <p className="text-[10px] font-semibold text-danger">
-                    此命令可能删除或不可逆修改文件。
-                  </p>
-                )}
-              </>
-            ) : (
-              <>
-                <p className="text-[11px] text-charcoal font-bold">
-                  {request.resourceLabel}
-                </p>
-                <p className="text-[10px] text-sandrift">
-                  {request.workspaceLabel}
-                  {request.rootLabel ? ` / ${request.rootLabel}` : ""}
-                </p>
-                <p className="text-[10px] text-sandrift">
-                  {request.capability === "fs.modify" || request.capability === "document.modify"
-                    ? "修改操作"
-                    : request.capability === "fs.create" || request.capability === "document.create"
-                      ? "创建操作"
-                      : request.capability === "fs.delete"
-                        ? "删除操作"
-                        : "文件操作"}
-                </p>
-              </>
+            <p className="text-[11px] text-charcoal font-bold break-words">{presentation.primary}</p>
+            {presentation.meta.map((line) => (
+              <p key={line} className="text-[10px] text-sandrift truncate">
+                {line}
+              </p>
+            ))}
+            {presentation.command && (
+              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-charcoal bg-white border border-line rounded-lg px-2 py-1.5 max-h-40 overflow-y-auto">
+                {presentation.command}
+              </pre>
             )}
+            {presentation.textPreview && (
+              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-charcoal bg-white border border-line rounded-lg px-2 py-1.5 max-h-24 overflow-y-auto">
+                {presentation.textPreview}
+              </pre>
+            )}
+            {presentation.warnings.map((warning) => (
+              <p key={warning} className="text-[10px] font-semibold text-danger">
+                {warning}
+              </p>
+            ))}
           </div>
         )}
 
@@ -184,7 +126,7 @@ export function ComputerApprovalDialog({
               onClick={() => decide(d)}
               data-testid={`approval-${d}`}
             >
-              {DECISION_LABELS[d]}
+              {COMPUTER_APPROVAL_DECISION_LABELS[d]}
             </Button>
           ))}
           {queueLength !== undefined && queueLength > 1 && onBulkDecision && (

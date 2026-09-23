@@ -2,10 +2,12 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { FileText, Image as ImageIcon, Copy, Pencil, RefreshCw, MoreHorizontal, Send, Globe2 } from "lucide-react";
-import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
 import { KiroStreamingMarkdown } from "@/components/kiro/KiroStreamingMarkdown";
-import { KiroWorklog } from "@/components/kiro/KiroWorklog";
+import { KiroAgentRun, KiroAgentRunApprovalBinding } from "@/components/kiro/run/KiroAgentRun";
+import { KiroAgentRunResult } from "@/components/kiro/run/KiroAgentRunResult";
+import { KiroAgentTask } from "@/lib/ai/computer/task";
+import { PersistedComputerTaskView } from "@/lib/ai/history/types";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
 import { KiroSourcesMenuView } from "@/components/kiro/KiroSourcesMenuView";
 import { useToastStore } from "@/store/useToastStore";
@@ -42,6 +44,14 @@ export function KiroMessage({
   actionsReady,
   sources,
   assistantTurn,
+  computerTask,
+  historyComputerTask,
+  approval,
+  turnInFlight,
+  desktopPaused,
+  onStop,
+  onReviewComputerTask,
+  onUndoComputerTask,
   onRetry,
 }: {
   content?: string;
@@ -61,6 +71,20 @@ export function KiroMessage({
   sources?: KiroSourceMeta[];
   /** Worklog V2：有序 Assistant Turn（commentary → tool → … → final answer） */
   assistantTurn?: KiroAssistantTurnPresentation;
+  /** P4：owning Computer Task（Agent Run 状态 + Result 区事实来源） */
+  computerTask?: KiroAgentTask;
+  /** P4：历史恢复的 Computer Task（display-only） */
+  historyComputerTask?: PersistedComputerTaskView;
+  /** P4：属于本 Run 的 Inline Approval（taskId 已精确匹配） */
+  approval?: KiroAgentRunApprovalBinding | null;
+  /** P4：本消息是否为 live run（turn 进行中且为最后一条 assistant） */
+  turnInFlight?: boolean;
+  /** P4：Desktop GUI Session 暂停（仅 live run 生效） */
+  desktopPaused?: boolean;
+  /** P4：Run Header 的停止入口（canonical Stop） */
+  onStop?: () => void;
+  onReviewComputerTask?: (taskId: string) => void;
+  onUndoComputerTask?: (taskId: string) => void;
   /** 重新生成（由 Conversation 注入稳定 callback，避免每行订阅 Session Context） */
   onRetry?: () => void;
 }) {
@@ -124,12 +148,16 @@ export function KiroMessage({
   return (
     // V4.6：统一 KiroAssistantShell（Pending 共用同一 outer——Logo/左侧 column 不 remount）
     <KiroAssistantShell testid={testid ?? "kiro-message"} messageId={messageId}>
-      {/* Worklog V2：真实 part 时序（commentary → tool → … → final answer）；V4.2 props 缩窄 + 推理摘要 */}
-      {assistantTurn && (assistantTurn.worklog.length > 0 || assistantTurn.reasoningSummary) && (
-        <KiroWorklog
-          worklog={assistantTurn.worklog}
-          phase={assistantTurn.phase}
-          reasoningSummary={assistantTurn.reasoningSummary}
+      {/* P4 Agent Run：execution lane（Header + Timeline + Inline Approval）；
+          Final Answer 与 execution 是不同 lane——本组件不包裹 Final Answer */}
+      {assistantTurn && (
+        <KiroAgentRun
+          assistantTurn={assistantTurn}
+          computerTask={computerTask}
+          approval={approval}
+          turnInFlight={!!turnInFlight}
+          desktopPaused={desktopPaused}
+          onStop={onStop}
         />
       )}
         {(content || showComposingSkeleton) ? (
@@ -251,6 +279,15 @@ export function KiroMessage({
             )}
           </div>
         ) : null}
+      {/* P4 Agent Run Result：Final Answer 之后的低权重结果区（只终态；运行中绝不重复 Task 步骤） */}
+      {(computerTask || historyComputerTask) && (
+        <KiroAgentRunResult
+          task={computerTask}
+          historyTask={historyComputerTask}
+          onReview={onReviewComputerTask}
+          onUndo={onUndoComputerTask}
+        />
+      )}
       {children}
     </KiroAssistantShell>
   );
