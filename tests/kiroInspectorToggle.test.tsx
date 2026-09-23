@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 /**
  * Kiro Inspector V1.1 — 开关 / 动画 / 尺寸契约测试。
  *
@@ -24,6 +24,7 @@ import type {
   KiroSessionValue,
 } from "@/components/kiro/KiroSessionProvider";
 import { SHORTCUT_GUIDE } from "@/lib/commands";
+import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 
 const artifactSpies = vi.hoisted(() => ({
   listArtifactEntriesForConversation: vi.fn(async () => []),
@@ -59,9 +60,12 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   } as unknown as typeof ResizeObserver;
 }
 
-const metaValue: KiroSessionMetaValue = {
-  currentConversationId: null,
-  conversationTitle: null,
+const metaState = { currentConversationId: null as string | null };
+
+function metaValue(): KiroSessionMetaValue {
+  return {
+    currentConversationId: metaState.currentConversationId,
+    conversationTitle: null,
   conversationCreatedAt: null,
   conversationSummary: null,
   historyVersion: 0,
@@ -81,10 +85,11 @@ const metaValue: KiroSessionMetaValue = {
     phase: "idle",
     pending: false,
   } as unknown as KiroSessionMetaValue["conversationTransition"],
-  conversationProjectId: null,
-  projectsVersion: 0,
-  emptyIntroGeneration: 0,
-};
+    conversationProjectId: null,
+    projectsVersion: 0,
+    emptyIntroGeneration: 0,
+  };
+}
 
 const actionsValue = {
   newChat: () => {},
@@ -101,7 +106,7 @@ const sessionValue = { conversationTitle: "测试对话" } as unknown as KiroSes
 function Providers({ children }: { children: React.ReactNode }) {
   return (
     <KiroSessionContext.Provider value={sessionValue}>
-      <KiroSessionMetaContext.Provider value={metaValue}>
+      <KiroSessionMetaContext.Provider value={metaValue()}>
         <KiroSessionActionsContext.Provider value={actionsValue}>
           {children}
         </KiroSessionActionsContext.Provider>
@@ -252,5 +257,69 @@ describe("Kiro Inspector — 无 Computer section / 弹窗尺寸自适应", () =
     expect(host).toContain("max-w-[min(768px");
     // 不引入固定高度（只允许 max-h 封顶）
     expect(host).not.toMatch(/(?:^|\s)h-\[\d+vh\]/);
+  });
+});
+
+describe("Kiro Inspector — 高度自适应 / 排版层级", () => {
+  it("面板高度随内容自适应（self-start + max-h 封顶 + 内部滚动；不拉伸整列）", async () => {
+    await render(<KiroInspector open />);
+    const shell = container!.querySelector('[data-testid="kiro-inspector-shell"]')!;
+    expect(shell.className).toContain("self-start");
+    const wrapper = shell.firstElementChild as HTMLElement;
+    expect(wrapper.className).toContain("max-h-[calc(100dvh-120px)]");
+    const aside = container!.querySelector('[data-testid="kiro-inspector"]') as HTMLElement;
+    expect(aside.className).toContain("max-h-full");
+    expect(aside.className.split(" ")).not.toContain("h-full");
+    expect(aside.className).toContain("overflow-hidden");
+    // 内容超出时才在内部滚动
+    expect(aside.firstElementChild?.className).toContain("overflow-y-auto");
+  });
+
+  it("Section 层级：header hairline 结构 + 计数 pill（0 不显示）", async () => {
+    metaState.currentConversationId = "c1";
+    useKiroComputerStore.setState({
+      activeWorkspaceId: "ws-1",
+      workspaces: [
+        {
+          id: "ws-1",
+          name: "课程资料",
+          roots: [{ id: "root-1", label: "资料", access: "read-write", adapterRef: "sandbox-default" }],
+          createdAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-01T00:00:00.000Z",
+        },
+      ],
+    });
+    artifactSpies.listArtifactEntriesForConversation.mockResolvedValue([
+      {
+        artifact: {
+          id: "a1",
+          workspaceId: "ws-1",
+          rootId: "root-1",
+          relativePath: "docs/report.docx",
+          type: "docx",
+          title: "report.docx",
+          displayName: "report.docx",
+          source: "kiro-created",
+          sourceConversationId: "c1",
+          revision: 2,
+          createdAt: "2026-08-01T10:00:00.000Z",
+          updatedAt: "2026-08-09T12:00:00.000Z",
+        },
+        workspaceLabel: "课程资料",
+        rootLabel: "资料",
+        availability: "available",
+      },
+    ]);
+    await render(<KiroInspector open />);
+    const headers = container!.querySelectorAll('[data-testid="kiro-inspector-section-header"]');
+    expect(headers.length).toBe(2);
+    // Outputs 有 1 条 → 计数 pill；Sources 为 0 → 不显示
+    const counts = container!.querySelectorAll('[data-testid="kiro-inspector-section-count"]');
+    expect(counts.length).toBe(1);
+    expect(counts[0].textContent).toBe("1");
+    // 行排版：标题 + 低权重 meta（类型 · revision · 时间）
+    const row = container!.querySelector('[data-testid="kiro-inspector-output-row"]')!;
+    expect(row.textContent).toContain("report.docx");
+    expect(row.textContent).toContain("Word · v2");
   });
 });

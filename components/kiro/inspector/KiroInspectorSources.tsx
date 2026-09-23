@@ -9,21 +9,26 @@ import {
   INSPECTOR_SOURCES_PREVIEW_LIMIT,
   aggregateInspectorSources,
 } from "@/lib/ai/ui/kiroInspector";
-import { KiroInspectorEmptyState, KiroInspectorSection } from "@/components/kiro/inspector/KiroInspectorSection";
+import {
+  KiroInspectorEmptyState,
+  KiroInspectorRow,
+  KiroInspectorSection,
+} from "@/components/kiro/inspector/KiroInspectorSection";
 
 function sourceIcon(source: KiroSourceMeta) {
   switch (source.source) {
     case "web":
-      return <Globe2 className="w-3.5 h-3.5 shrink-0 text-sandrift" aria-hidden="true" />;
+      return <Globe2 className="w-3.5 h-3.5" aria-hidden="true" />;
     case "course-material":
-      return <FileText className="w-3.5 h-3.5 shrink-0 text-sandrift" aria-hidden="true" />;
+      return <FileText className="w-3.5 h-3.5" aria-hidden="true" />;
     case "project-file":
-      return <FolderOpen className="w-3.5 h-3.5 shrink-0 text-sandrift" aria-hidden="true" />;
+      return <FolderOpen className="w-3.5 h-3.5" aria-hidden="true" />;
     default:
-      return <MessagesSquare className="w-3.5 h-3.5 shrink-0 text-sandrift" aria-hidden="true" />;
+      return <MessagesSquare className="w-3.5 h-3.5" aria-hidden="true" />;
   }
 }
 
+/** Source row 第二行：来源类别 + 归属（低权重；绝不显示 snippet / query / score） */
 function sourceMetaLine(source: KiroSourceMeta): string {
   if (source.source === "web") return source.domain ?? "网页来源";
   if (source.source === "course-material") {
@@ -34,7 +39,7 @@ function sourceMetaLine(source: KiroSourceMeta): string {
 }
 
 /**
- * Kiro Inspector — Sources（V1）。
+ * Kiro Inspector — Sources（V1.2，Codex-style 层级）。
  *
  * 数据：Conversation 已登记 Source metadata（live Turn 优先 → 已绑定历史；语义去重）。
  * 只读展示：不重新抓网页 / 不重新读文件；Web 只允许 safe URL 点击；
@@ -58,13 +63,10 @@ export function KiroInspectorSources() {
   const visible = showAll ? sources : sources.slice(0, INSPECTOR_SOURCES_PREVIEW_LIMIT);
 
   return (
-    <KiroInspectorSection
-      title="来源"
-      testId="kiro-inspector-sources"
-      action={sources.length > 0 ? <span className="text-[10px] text-sandrift">{sources.length}</span> : undefined}
-    >
+    <KiroInspectorSection title="来源" count={sources.length} testId="kiro-inspector-sources">
       {sources.length === 0 ? (
         <KiroInspectorEmptyState
+          icon={<Globe2 className="w-3.5 h-3.5" />}
           text="暂无来源"
           hint="Kiro 使用资料或网页后会显示在这里。"
         />
@@ -75,32 +77,32 @@ export function KiroInspectorSources() {
               const url = isSafeWebUrl(source.url) ? source.url : null;
               const rowKey = `${source.source}:${source.sourceId}:${source.name}`;
               return (
-                <li
-                  key={rowKey}
-                  data-testid="kiro-inspector-source-row"
-                  className="flex items-start gap-2 px-1.5 py-1.5 rounded-lg hover:bg-alabaster/60 transition-colors"
-                >
-                  <span className="mt-0.5">{sourceIcon(source)}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="block text-[11px] font-semibold text-charcoal truncate" title={source.name}>
+                <li key={rowKey}>
+                  <KiroInspectorRow
+                    testId="kiro-inspector-source-row"
+                    icon={sourceIcon(source)}
+                    actions={
+                      url ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`打开来源：${source.name}`}
+                          className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                        </a>
+                      ) : null
+                    }
+                  >
+                    <span className="block text-xs font-semibold text-charcoal truncate" title={source.name}>
                       {source.name}
                     </span>
                     <span className="block text-[10px] text-sandrift truncate">
                       {sourceMetaLine(source)}
                       {source.publishedAt ? ` · ${source.publishedAt}` : ""}
                     </span>
-                  </div>
-                  {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`打开来源：${source.name}`}
-                      className="shrink-0 mt-0.5 p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-                    </a>
-                  ) : null}
+                  </KiroInspectorRow>
                 </li>
               );
             })}
@@ -110,7 +112,7 @@ export function KiroInspectorSources() {
               type="button"
               onClick={() => setShowAll(true)}
               aria-expanded={false}
-              className="mt-1 w-full text-left px-1.5 py-1 rounded-lg text-[10px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+              className="mt-0.5 w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
             >
               查看全部（{sources.length}）
             </button>

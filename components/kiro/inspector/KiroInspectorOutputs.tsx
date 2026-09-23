@@ -1,12 +1,11 @@
 ﻿"use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Download, Eye, FileClock, FileText, Loader2, MessagesSquare, Trash2 } from "lucide-react";
+import { Download, FileClock, FileCode, FileText, Loader2, MessagesSquare, Trash2 } from "lucide-react";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useKiroArtifactUiStore } from "@/store/useKiroArtifactUiStore";
 import { useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
 import { useKiroArtifactActions } from "@/hooks/useKiroArtifactActions";
-import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import {
   listArtifactEntriesForConversation,
@@ -16,7 +15,11 @@ import {
 import { removeArtifactRecord } from "@/lib/ai/computer/artifacts/service";
 import { INSPECTOR_OUTPUTS_LIMIT } from "@/lib/ai/ui/kiroInspector";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
-import { KiroInspectorEmptyState, KiroInspectorSection } from "@/components/kiro/inspector/KiroInspectorSection";
+import {
+  KiroInspectorEmptyState,
+  KiroInspectorRow,
+  KiroInspectorSection,
+} from "@/components/kiro/inspector/KiroInspectorSection";
 
 const TYPE_LABELS: Record<string, string> = { markdown: "Markdown", docx: "Word", text: "文本" };
 
@@ -24,110 +27,46 @@ function typeLabel(entry: KiroRecentArtifactEntry): string {
   return TYPE_LABELS[entry.artifact.type] ?? entry.artifact.type;
 }
 
-function RevisionMeta({ entry }: { entry: KiroRecentArtifactEntry }) {
-  return (
-    <p className="text-[10px] text-sandrift truncate mt-0.5">
-      {typeLabel(entry)}
-      {entry.artifact.revision > 1 ? ` · v${entry.artifact.revision}` : ""} ·{" "}
-      {formatHistoryTime(entry.artifact.updatedAt)}
-    </p>
-  );
+/** Output row 第二行：类型 · revision · 时间（低权重） */
+function outputMeta(entry: KiroRecentArtifactEntry): string {
+  return [
+    typeLabel(entry),
+    entry.artifact.revision > 1 ? `v${entry.artifact.revision}` : null,
+    formatHistoryTime(entry.artifact.updatedAt),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
-function OutputRow({
-  entry,
-  onPreview,
-  onDownload,
-  onAsk,
-  onDelete,
-  onRemoveRecord,
+function RowAction({
+  label,
+  onClick,
+  danger,
+  children,
 }: {
-  entry: KiroRecentArtifactEntry;
-  onPreview: () => void;
-  onDownload: () => void;
-  onAsk: () => void;
-  onDelete: () => void;
-  onRemoveRecord?: () => void;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  children: React.ReactNode;
 }) {
-  const available = entry.availability === "available";
   return (
-    <div
-      data-testid="kiro-inspector-output-row"
-      data-availability={entry.availability}
-      className="group/output flex items-start gap-2 px-1.5 py-1.5 rounded-lg hover:bg-alabaster/60 transition-colors"
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className={
+        danger
+          ? "p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-danger transition-colors"
+          : "p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
+      }
     >
-      <FileText className="w-3.5 h-3.5 shrink-0 mt-0.5 text-sandrift" aria-hidden="true" />
-      <div className="min-w-0 flex-1">
-        {available ? (
-          <button
-            type="button"
-            onClick={onPreview}
-            aria-label={`预览 ${entry.artifact.displayName}`}
-            className="block w-full text-left"
-          >
-            <span className="block text-[11px] font-semibold text-charcoal truncate">
-              {entry.artifact.displayName}
-            </span>
-            <RevisionMeta entry={entry} />
-          </button>
-        ) : (
-          <div>
-            <span className="block text-[11px] font-semibold text-charcoal truncate">
-              {entry.artifact.displayName}
-            </span>
-            <p className="text-[10px] text-sandrift truncate mt-0.5">
-              {entry.availability === "missing" ? "文件不存在" : entry.unavailableReason ?? "暂时无法访问"}
-            </p>
-          </div>
-        )}
-      </div>
-      <span className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/output:opacity-100 group-focus-within/output:opacity-100 transition-opacity">
-        {available ? (
-          <>
-            <button
-              type="button"
-              onClick={onDownload}
-              aria-label={`下载 ${entry.artifact.displayName}`}
-              className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onAsk}
-              aria-label={`Ask Kiro ${entry.artifact.displayName}`}
-              className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
-            >
-              <MessagesSquare className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              aria-label={`删除 ${entry.artifact.displayName}`}
-              className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-danger transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </>
-        ) : entry.availability === "missing" && onRemoveRecord ? (
-          <button
-            type="button"
-            onClick={onRemoveRecord}
-            aria-label={`移除记录 ${entry.artifact.displayName}`}
-            className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-danger transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <Eye className="w-3.5 h-3.5 text-sandrift/40" aria-hidden="true" />
-        )}
-      </span>
-    </div>
+      {children}
+    </button>
   );
 }
 
 /**
- * Kiro Inspector — Outputs（V1）。
+ * Kiro Inspector — Outputs（V1.2，Codex-style 层级）。
  *
  * 数据：Conversation-scoped Artifact（sourceConversationId === currentConversationId；真实 metadata）。
  * 刷新：conversation / workspace 变化、turn settle（conversationSourcesVersion / historyVersion）、
@@ -199,13 +138,10 @@ export function KiroInspectorOutputs() {
     };
   }, [showRecent, activeWorkspaceId, workspaces, meta.conversationSourcesVersion, artifactUiVersion]);
 
-  const removeStale = useCallback(
-    async (entry: KiroRecentArtifactEntry) => {
-      await removeArtifactRecord(entry.artifact.id);
-      useKiroArtifactUiStore.getState().bumpArtifactUiVersion();
-    },
-    []
-  );
+  const removeStale = useCallback(async (entry: KiroRecentArtifactEntry) => {
+    await removeArtifactRecord(entry.artifact.id);
+    useKiroArtifactUiStore.getState().bumpArtifactUiVersion();
+  }, []);
 
   const requestDelete = (entry: KiroRecentArtifactEntry) => {
     confirm({
@@ -219,40 +155,69 @@ export function KiroInspectorOutputs() {
     });
   };
 
-  const ask = async (entry: KiroRecentArtifactEntry) => {
-    await askKiroArtifact(entry.artifact.id);
+  const renderRow = (entry: KiroRecentArtifactEntry) => {
+    const available = entry.availability === "available";
+    const icon =
+      entry.artifact.type === "markdown" ? (
+        <FileCode className="w-3.5 h-3.5" aria-hidden="true" />
+      ) : (
+        <FileText className="w-3.5 h-3.5" aria-hidden="true" />
+      );
+    return (
+      <KiroInspectorRow
+        key={entry.artifact.id}
+        testId="kiro-inspector-output-row"
+        icon={icon}
+        className="data-[availability=missing]:opacity-80"
+        {...(available
+          ? {
+              onClick: () => previewArtifact(entry.artifact.id),
+              ariaLabel: `预览 ${entry.artifact.displayName}`,
+            }
+          : {})}
+        actions={
+          available ? (
+            <>
+              <RowAction label={`下载 ${entry.artifact.displayName}`} onClick={() => void downloadArtifact(entry.artifact.id)}>
+                <Download className="w-3.5 h-3.5" />
+              </RowAction>
+              <RowAction label={`Ask Kiro ${entry.artifact.displayName}`} onClick={() => void askKiroArtifact(entry.artifact.id)}>
+                <MessagesSquare className="w-3.5 h-3.5" />
+              </RowAction>
+              <RowAction label={`删除 ${entry.artifact.displayName}`} onClick={() => requestDelete(entry)} danger>
+                <Trash2 className="w-3.5 h-3.5" />
+              </RowAction>
+            </>
+          ) : entry.availability === "missing" ? (
+            <RowAction label={`移除记录 ${entry.artifact.displayName}`} onClick={() => void removeStale(entry)} danger>
+              <Trash2 className="w-3.5 h-3.5" />
+            </RowAction>
+          ) : null
+        }
+      >
+        <span className="block text-xs font-semibold text-charcoal truncate">{entry.artifact.displayName}</span>
+        <span className="block text-[10px] text-sandrift truncate">
+          {available ? outputMeta(entry) : entry.availability === "missing" ? "文件不存在" : entry.unavailableReason ?? "暂时无法访问"}
+        </span>
+      </KiroInspectorRow>
+    );
   };
-
-  const renderRow = (entry: KiroRecentArtifactEntry) => (
-    <OutputRow
-      key={entry.artifact.id}
-      entry={entry}
-      onPreview={() => previewArtifact(entry.artifact.id)}
-      onDownload={() => void downloadArtifact(entry.artifact.id)}
-      onAsk={() => void ask(entry)}
-      onDelete={() => requestDelete(entry)}
-      onRemoveRecord={() => void removeStale(entry)}
-    />
-  );
 
   return (
     <KiroInspectorSection
       title="输出内容"
+      count={entries.length}
       testId="kiro-inspector-outputs"
-      action={
-        entries.length > 0 ? (
-          <span className="text-[10px] text-sandrift">{entries.length}</span>
-        ) : undefined
-      }
     >
       {loading && entries.length === 0 ? (
-        <div className="flex items-center gap-1.5 px-0.5 py-1.5 text-sandrift">
+        <div className="flex items-center gap-1.5 px-1.5 py-2 text-sandrift">
           <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
           <span className="text-[10px]">加载中…</span>
         </div>
       ) : entries.length === 0 ? (
         <>
           <KiroInspectorEmptyState
+            icon={<FileClock className="w-3.5 h-3.5" />}
             text="暂无本次对话输出"
             hint="Kiro 在本对话创建的文件会显示在这里。"
           />
@@ -260,13 +225,13 @@ export function KiroInspectorOutputs() {
             type="button"
             onClick={() => setShowRecent((v) => !v)}
             aria-expanded={showRecent}
-            className="mt-1 flex items-center gap-1 px-1.5 h-6 rounded-md text-[10px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+            className="mt-0.5 flex w-full items-center gap-1.5 px-1.5 h-7 rounded-lg text-[11px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
           >
-            <FileClock className="w-3 h-3" />
+            <FileClock className="w-3.5 h-3.5" />
             最近文件
           </button>
           {showRecent ? (
-            <div className="mt-1">
+            <div className="mt-0.5">
               {recentEntries.length === 0 ? (
                 <KiroInspectorEmptyState text="暂无最近文件" />
               ) : (

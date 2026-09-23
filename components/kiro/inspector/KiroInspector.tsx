@@ -2,7 +2,7 @@
 
 import React from "react";
 import { usePresence } from "@/lib/usePresence";
-import { MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { KiroInspectorOutputs } from "@/components/kiro/inspector/KiroInspectorOutputs";
 import { KiroInspectorSources } from "@/components/kiro/inspector/KiroInspectorSources";
 import { KiroInspectorDivider } from "@/components/kiro/inspector/KiroInspectorSection";
@@ -12,13 +12,15 @@ import { cn } from "@/lib/utils";
 export const KIRO_INSPECTOR_WIDTH = 296;
 
 /**
- * Kiro Inspector（V1.1）：Workspace 右侧面板（xl+；快捷键 / Header 按钮开关，非常驻）。
+ * Kiro Inspector（V1.2）：Workspace 右侧面板（xl+；快捷键 / Header 按钮开关，非常驻）。
  *
  * - 开关：Cmd/Ctrl+I（Workspace 作用域）或 Header 按钮；默认关闭
+ * - 尺寸：宽度固定 296px；**高度随内容自适应**（self-start + max-h 封顶，超出时内部滚动）——
+ *   空/少内容时面板贴顶收拢，不出现整列空白
  * - 动画：同一 shell 做 width morph（0 ↔ 296px，--kiro-motion-spatial）+ 内容 opacity；
  *   关闭后 presence 延迟卸载（退出动画可播放）；Reduced Motion 立即切换
  * - 结构：Outputs（当前 Conversation Artifact）→ Sources（Conversation 已登记来源）
- * - 单一一级 Surface + flat rows + section divider（无 Card 嵌套）
+ * - 单一一级 Surface + flat rows + section hairline（无 Card 嵌套）
  * - 只消费低频 scalar（meta 状态 / version signal）；不订阅 token / stdout / messages
  * - 非 xl breakpoint 由 Header 的「最近文件」Popover 兜底；Mobile 不渲染
  */
@@ -31,7 +33,7 @@ export function KiroInspector({ open }: { open: boolean }) {
       data-state={open ? "open" : "closed"}
       aria-hidden={!open}
       className={cn(
-        "hidden xl:block shrink-0 min-h-0 overflow-hidden",
+        "hidden xl:block shrink-0 self-start min-h-0 overflow-hidden",
         "transition-[width] duration-[var(--kiro-motion-spatial,220ms)] ease-[var(--ease-standard)]",
         open ? "w-[296px]" : "w-0"
       )}
@@ -39,7 +41,7 @@ export function KiroInspector({ open }: { open: boolean }) {
       {mounted && (
         <div
           className={cn(
-            "h-full pt-6 pb-6 pr-6",
+            "flex max-h-[calc(100dvh-120px)] min-h-0 pt-6 pb-6 pr-6",
             "transition-opacity ease-[var(--ease-standard)]",
             visible
               ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)]"
@@ -49,9 +51,9 @@ export function KiroInspector({ open }: { open: boolean }) {
           <aside
             data-testid="kiro-inspector"
             aria-label="Kiro Inspector"
-            className="h-full w-[296px] min-h-0 flex flex-col overflow-hidden"
+            className="flex w-[296px] max-h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-subtle"
           >
-            <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-line bg-surface shadow-subtle">
+            <div className="min-h-0 overflow-y-auto">
               <KiroInspectorOutputs />
               <KiroInspectorDivider />
               <KiroInspectorSources />
@@ -62,6 +64,3 @@ export function KiroInspector({ open }: { open: boolean }) {
     </div>
   );
 }
-
-/** Inspector 开关的 Motion 常量（供测试 / 调用方复用；与 usePresence 同源） */
-export const KIRO_INSPECTOR_MOTION = { exitMs: MOTION_EXIT_MS.panel, enterMs: MOTION_MS.data } as const;
