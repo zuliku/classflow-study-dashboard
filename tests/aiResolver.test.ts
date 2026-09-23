@@ -261,16 +261,16 @@ describe("resolveLanguageModel（统一入口）", () => {
 });
 
 describe("OpenCode 注册表完整性", () => {
-  it("OPENCODE_MODELS：每个模型 transport 均为已支持值；2026-09-16 去旧留新 19 款（omen-alpha 无协议证据跳过）", () => {
+  it("OPENCODE_MODELS：每个模型 transport 均为已支持值；2026-09 新增 grok-4.7 / mimo-v2.6-pro 后 21 款", () => {
     const ids = new Set(OPENCODE_MODELS.map((m) => m.id));
-    expect(OPENCODE_MODELS).toHaveLength(19);
+    expect(OPENCODE_MODELS).toHaveLength(21);
     for (const id of [
       "glm-5.3-flash", "glm-5.3", "kimi-k3",
       "kimi-k2.7-code",
       "deepseek-v4.1-flash",
-      "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro",
+      "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro", "mimo-v2.6-pro",
       "hy3", "hy4-preview", "longcat-2.0",
-      "grok-4.6", "gpt-5.6-luna",
+      "grok-4.6", "grok-4.7", "gpt-5.6-luna",
       "muse-spark-1.3-contributor",
       "minimax-m3", "minimax-m2.7",
       "qwen3.7-plus", "qwen3.8-flash", "qwen3.8-max",

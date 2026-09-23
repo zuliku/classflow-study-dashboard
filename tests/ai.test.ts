@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getModelsForProvider, getDefaultModel, getActiveModelName, getVendorForModelId, getActiveModelVendor, sortModelsByVendorAndCapability } from "@/lib/ai/providers/registry";
 import { AI_PROVIDER_META, getVendorMeta } from "@/lib/ai/providers/vendors";
 import { normalizeBaseURL, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
@@ -19,19 +19,19 @@ describe("Provider Registry", () => {
     expect(DEEPSEEK_MODELS[0].name).toBe("V4 Flash");
   });
 
-  it("OpenCode Go：官方三 transport 注册表（chat + responses + messages，2026-09-16 去旧留新 19 款）", () => {
+  it("OpenCode Go：官方三 transport 注册表（chat + responses + messages；2026-09 新增 grok-4.7 / mimo-v2.6-pro 后 21 款）", () => {
     const models = getModelsForProvider("opencode-go");
     const ids = models.map((m) => m.id);
-    expect(ids).toHaveLength(19);
+    expect(ids).toHaveLength(21);
     for (const id of [
       "glm-5.3-flash", "glm-5.3",
       "kimi-k3", "kimi-k2.7-code",
       "deepseek-v4.1-flash",
-      "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro",
+      "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro", "mimo-v2.6-pro",
       "hy3", "hy4-preview",
       "longcat-2.0",
       // openai-responses 模型（Phase 3.1 正式接入）
-      "gpt-5.6-luna", "grok-4.6",
+      "gpt-5.6-luna", "grok-4.6", "grok-4.7",
       "muse-spark-1.3-contributor",
       // anthropic-messages 模型
       "minimax-m3", "minimax-m2.7",

@@ -1,5 +1,10 @@
-﻿import { getModelsForProvider, getDefaultModel, getVendorForModelId, sortModelsByVendorAndCapability } from "@/lib/ai/providers/registry";
-import { fetchOpenCodeGoModels, OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
+﻿import { getDefaultModel, getVendorForModelId, getSelectorModelsForProvider } from "@/lib/ai/providers/registry";
+import {
+  fetchOpenCodeGoModels,
+  OPENCODE_MODELS,
+  OPENCODE_SELECTOR_MODEL_IDS,
+  isOpenCodeSelectorModelId,
+} from "@/lib/ai/providers/openCodeGo";
 import { AIProviderId, AIModelDefinition } from "@/lib/ai/providers/types";
 
 export const runtime = "nodejs";
@@ -15,16 +20,18 @@ export async function handleModels(req: Request) {
     return Response.json({ models: [], defaultModel: "" });
   }
 
-  let models: AIModelDefinition[] = getModelsForProvider(provider);
+  let models: AIModelDefinition[] = getSelectorModelsForProvider(provider);
   let source: "remote" | "registry" = "registry";
 
   if (provider === "opencode-go") {
     const remote = await fetchOpenCodeGoModels();
     if (remote && remote.length > 0) {
-      // 远端为最新来源：transport 原样保留（本地注册表已校验合法）；name 优先取已登记名称
+      // 远端为 availability source；只展示精选列表，并按精选顺序（新 / 强优先）
       const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
-      models = sortModelsByVendorAndCapability(
-        remote.map((r) => {
+      const order = new Map(OPENCODE_SELECTOR_MODEL_IDS.map((id, index) => [id, index]));
+      models = remote
+        .filter((r) => isOpenCodeSelectorModelId(r.id))
+        .map((r) => {
           const known = byId.get(r.id);
           return {
             id: r.id,
@@ -35,7 +42,9 @@ export async function handleModels(req: Request) {
             capabilities: known?.capabilities ?? { streaming: true, tools: true, vision: false, fileParts: false },
           };
         })
-      );
+        .sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999));
+      // 远端可选集合与精选列表无交集 → 回落精选注册表（不展示空列表）
+      if (models.length === 0) models = getSelectorModelsForProvider(provider);
       source = "remote";
     }
   }

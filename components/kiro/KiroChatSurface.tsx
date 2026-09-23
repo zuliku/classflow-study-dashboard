@@ -6,7 +6,7 @@ import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroRuntime, useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { KiroEmptyExperience } from "@/components/kiro/motion/KiroEmptyExperience";
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
-import { getActiveModelVendor } from "@/lib/ai/providers/registry";
+import { getActiveModelName, getActiveModelVendor, getModelsForProvider } from "@/lib/ai/providers/registry";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";

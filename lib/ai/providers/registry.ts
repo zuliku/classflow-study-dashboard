@@ -10,6 +10,7 @@ import {
   OPENCODE_MODELS,
   OPENCODE_DEFAULT_MODEL,
   getOpenCodeGoConfig,
+  getOpenCodeSelectorModels,
 } from "@/lib/ai/providers/openCodeGo";
 import {
   assertCustomBaseURLValid,
@@ -53,6 +54,21 @@ export function getModelsForProvider(provider: AIProviderId): AIModelDefinition[
       return sortModelsByVendorAndCapability(OPENCODE_MODELS);
     case "custom-openai":
       return [];
+  }
+}
+
+/**
+ * 选择器（Settings / Composer 模型列表）用模型集合：
+ * - opencode-go：精选列表（少而精，新的 / 能力强的优先；顺序即展示顺序）
+ * - 其它 provider：与 registry 一致
+ * Transport / 历史选择解析仍走 getModelsForProvider（完整注册表）。
+ */
+export function getSelectorModelsForProvider(provider: AIProviderId): AIModelDefinition[] {
+  switch (provider) {
+    case "opencode-go":
+      return getOpenCodeSelectorModels();
+    default:
+      return getModelsForProvider(provider);
   }
 }
 

@@ -66,6 +66,7 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
+  { id: "mimo-v2.6-pro", name: "MiMo V2.6 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "high"], mechanism: "effort" } } },
   { id: "mimo-v2-omni", name: "MiMo V2 Omni", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
@@ -76,6 +77,27 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
   // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
   // grok-4.5 等旧版已按去旧留新移出（同 xai responses 协议族；如回归远端列表再收录）
+  {
+    id: "grok-4.7",
+    name: "Grok 4.7",
+    provider: "opencode-go",
+    vendor: "xai",
+    transport: "openai-responses",
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: true,
+      fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      // 2026-09 live probe：text / tool call / PNG-JPEG-WEBP 颜色识别 / reasoning high 全部通过
+      // （reasoning effort 经 openai Responses reasoning.effort 直通；沿用 4.6 家族档位）
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "low", "medium", "high"],
+        mechanism: "openai-responses-effort",
+      },
+    },
+  },
   {
     id: "grok-4.6",
     name: "Grok 4.6",
@@ -152,6 +174,40 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
 ];
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4.1-flash";
+
+/**
+ * 选择器精选列表（Kiro 模型选择器展示的唯一来源；顺序 = 展示顺序）。
+ *
+ * 产品策略（2026-09）：**少而精** —— 每个厂商仅保留最新 / 最强的一款，新的与能力强的优先：
+ * - 旗舰推理：GPT 5.6 Luna（OpenAI）/ Grok 4.7（xAI）/ Muse Spark 1.3（Meta，默认高推理）
+ * - 多模态旗舰：Kimi K3 / MiMo V2.6 Pro / GLM 5.3 Flash / MiniMax M3（均支持图片理解）
+ * - 默认快模型：DeepSeek V4.1 Flash；Qwen 旗舰：Qwen3.8 Max
+ * 未入选的已验证模型仍保留在 OPENCODE_MODELS（transport / 历史选择可继续解析），只是不在选择器中展示。
+ */
+export const OPENCODE_SELECTOR_MODEL_IDS: readonly string[] = [
+  "gpt-5.6-luna",
+  "grok-4.7",
+  "muse-spark-1.3-contributor",
+  "kimi-k3",
+  "deepseek-v4.1-flash",
+  "mimo-v2.6-pro",
+  "glm-5.3-flash",
+  "qwen3.8-max",
+  "minimax-m3",
+];
+
+/** 精选模型（按精选顺序；过滤掉注册表缺失项，fail closed） */
+export function getOpenCodeSelectorModels(): AIModelDefinition[] {
+  const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
+  return OPENCODE_SELECTOR_MODEL_IDS.map((id) => byId.get(id)).filter(
+    (m): m is AIModelDefinition => !!m
+  );
+}
+
+/** 远端模型是否属于精选列表 */
+export function isOpenCodeSelectorModelId(id: string): boolean {
+  return OPENCODE_SELECTOR_MODEL_IDS.includes(id);
+}
 
 /**
  * OpenCode Go chat/completions 对 tool 参数 schema 校验严格（与 DeepSeek 官方一致）：

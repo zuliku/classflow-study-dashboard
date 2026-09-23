@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
-import { getModelsForProvider } from "@/lib/ai/providers/registry";
+import { getSelectorModelsForProvider } from "@/lib/ai/providers/registry";
 import { AIProviderId, AIModelVendor, AITransport } from "@/lib/ai/providers/types";
 import { apiUrl } from "@/lib/desktop/apiBase";
 
@@ -21,7 +21,7 @@ export interface AIModelCatalogEntry {
  */
 export function useAIModelCatalog(provider: AIProviderId) {
   const toEntries = (p: AIProviderId): AIModelCatalogEntry[] =>
-    getModelsForProvider(p).map((m) => ({
+    getSelectorModelsForProvider(p).map((m) => ({
       id: m.id,
       name: m.name,
       transport: m.transport,
