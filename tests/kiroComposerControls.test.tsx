@@ -400,6 +400,24 @@ describe("Kiro Composer P3 — Reasoning 滑块（Model 左侧）", () => {
     expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("medium");
   });
 
+  it("弹窗锚点在思考程度图标中心（inline style containing block，不漂移到模型控件）", async () => {
+    await renderComposer();
+    await click('[data-testid="kiro-composer-reasoning"]');
+    const anchor = q('[data-testid="kiro-composer-reasoning-anchor"]')!;
+    // inline style 保证 containing block（不依赖 Tailwind 生成）
+    expect(anchor.style.position).toBe("absolute");
+    expect(anchor.style.left).toBe("18px");
+    expect(anchor.style.top).toBe("0px");
+    expect(anchor.style.width).toBe("0px");
+    expect(anchor.style.height).toBe("0px");
+    // 面板以 inline style 精确居中到锚点（固定宽度 + marginLeft -width/2；不依赖 transform，保留 motion）
+    const panel = q('[data-testid="kiro-composer-reasoning-menu"]')!.parentElement!;
+    expect(panel.style.left).toBe("50%");
+    expect(panel.style.bottom).toBe("100%");
+    expect(panel.style.marginLeft).toBe("-128px");
+    expect(panel.style.marginBottom).toBe("6px");
+  });
+
   it("使用共享 KiroReasoningIcon（非闪电图标）", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");

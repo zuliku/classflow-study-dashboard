@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef } from "react";
 import { usePresence } from "@/lib/usePresence";
@@ -11,7 +11,15 @@ import { cn } from "@/lib/utils";
  * 业务拥有 open state / toggle / mutual exclusion / handlers。
  * 不维护内部 open state、无 Context、无 Portal、无 collision/focus trap。
  */
-export type PopoverPlacement = "bottom-end" | "bottom-start" | "top-end" | "top-start" | "right-end";
+export type PopoverPlacement =
+  | "bottom-end"
+  | "bottom-start"
+  | "top-end"
+  | "top-start"
+  | "top-center"
+  /** 由调用方通过 style 精确锚定（无内置位置 class；仍复用 enter/exit motion） */
+  | "anchor"
+  | "right-end";
 
 export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
   open: boolean;
@@ -51,6 +59,8 @@ const PLACEMENT_CLASSES: Record<PopoverPlacement, string> = {
   "bottom-start": "left-0 top-full mt-1.5",
   "top-end": "right-0 bottom-full mb-1.5",
   "top-start": "left-0 bottom-full mb-1.5",
+  "top-center": "left-1/2 -translate-x-1/2 bottom-full mb-1.5",
+  anchor: "",
   "right-end": "left-full right-auto bottom-0 ml-2",
 };
 
@@ -60,6 +70,8 @@ const PLACEMENT_ENTER_OFFSET: Record<PopoverPlacement, string> = {
   "bottom-start": "-translate-y-[3px]",
   "top-end": "translate-y-[3px]",
   "top-start": "translate-y-[3px]",
+  "top-center": "translate-y-[3px]",
+  anchor: "translate-y-[3px]",
   "right-end": "-translate-x-[3px]",
 };
 
@@ -69,6 +81,8 @@ const KIRO_PLACEMENT_ORIGIN: Record<PopoverPlacement, string> = {
   "bottom-start": "origin-top-left",
   "top-end": "origin-bottom-right",
   "top-start": "origin-bottom-left",
+  "top-center": "origin-bottom",
+  anchor: "origin-bottom",
   "right-end": "origin-left",
 };
 

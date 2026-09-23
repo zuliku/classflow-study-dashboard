@@ -306,9 +306,14 @@ export function KiroComposer({
     };
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node;
+      // 菜单内部（含任意菜单容器）一律视为 inside：菜单内容自己 stopPropagation 之外的兜底
+      const target = t as HTMLElement | null;
+      const insideMenu = !!target?.closest?.("[data-kiro-composer-menu]");
       const inside =
+        insideMenu ||
         (addRef.current?.contains(t) ?? false) ||
         (accessRef.current?.contains(t) ?? false) ||
+        (reasoningRef.current?.contains(t) ?? false) ||
         (modelRef.current?.contains(t) ?? false);
       if (!inside) setOpenMenu(null);
     };

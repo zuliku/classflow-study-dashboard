@@ -1,4 +1,4 @@
-// vitest 环境为 Node：为 zustand persist（createJSONStorage(() => localStorage)）
+﻿// vitest 环境为 Node：为 zustand persist（createJSONStorage(() => localStorage)）
 // 提供最小内存版 localStorage polyfill，保证 store 模块可被安全导入。
 if (typeof globalThis.localStorage === "undefined") {
   const store = new Map<string, string>();
@@ -43,3 +43,4 @@ if (typeof globalThis.sessionStorage === "undefined") {
 
 // Kiro 附件提取缓存 / 资料 Blob（IndexedDB）测试需要内存实现
 import "fake-indexeddb/auto";
+

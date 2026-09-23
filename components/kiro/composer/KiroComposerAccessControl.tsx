@@ -135,6 +135,9 @@ export function KiroComposerAccessControl({
           aria-label="访问"
           className="py-1 max-h-[min(460px,68vh)] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-testid="kiro-composer-access-menu"
+          data-kiro-composer-menu="access"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
         >
           <p className="px-3 pt-1 pb-1 text-[10px] font-bold tracking-[0.02em] text-sandrift">访问</p>
           {COMPOSER_ACCESS_MODES.map((mode) => {

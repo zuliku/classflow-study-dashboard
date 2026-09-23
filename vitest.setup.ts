@@ -1,4 +1,4 @@
-import "fake-indexeddb/auto";
+﻿import "fake-indexeddb/auto";
 
 /**
  * Node 环境下的最小 Web Storage polyfill。
@@ -57,4 +57,11 @@ if (typeof globalThis.sessionStorage === "undefined") {
     }
   }
   (globalThis as Record<string, unknown>).sessionStorage = new MemoryStorage();
+}
+
+// jsdom 无 PointerEvent：React 18 的指针事件（onPointerDown）委托基于 `PointerEvent` 特性检测，
+// 缺省会导致组件里的 pointerdown handler 在测试中永不触发（真实浏览器不受影响）。
+// 统一以 MouseEvent 兜底，保证测试覆盖真实指针交互路径。
+if (typeof window !== "undefined" && !("PointerEvent" in window)) {
+  (window as unknown as { PointerEvent: unknown }).PointerEvent = MouseEvent;
 }

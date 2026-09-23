@@ -102,6 +102,9 @@ export function KiroComposerModelControl({
           aria-label="选择模型"
           className="py-1 max-h-[min(380px,60vh)] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           data-testid="kiro-composer-model-menu"
+          data-kiro-composer-menu="model"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
         >
           <p className="px-3 pt-1 pb-1 text-[10px] font-bold text-sandrift">模型</p>
           {modelUnavailable && (

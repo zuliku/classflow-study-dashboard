@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useRef, useState } from "react";
 import {
@@ -69,7 +69,15 @@ export function KiroComposerAddMenu({
 
   if (view === "materials") {
     return (
-      <div role="menu" aria-label="添加" className="py-1" data-testid="kiro-composer-add-menu">
+      <div
+      role="menu"
+      aria-label="添加"
+      className="py-1"
+      data-testid="kiro-composer-add-menu"
+      data-kiro-composer-menu="add"
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
+    >
         <button
           type="button"
           onClick={() => setView("root")}
@@ -119,7 +127,15 @@ export function KiroComposerAddMenu({
   }
 
   return (
-    <div role="menu" aria-label="添加" className="py-1" data-testid="kiro-composer-add-menu">
+    <div
+      role="menu"
+      aria-label="添加"
+      className="py-1"
+      data-testid="kiro-composer-add-menu"
+      data-kiro-composer-menu="add"
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerUp={(e) => e.stopPropagation()}
+    >
       <button
         type="button"
         role="menuitem"
