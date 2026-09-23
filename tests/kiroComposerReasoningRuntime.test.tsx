@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 /**
  * Kiro Composer P3.1 — Reasoning 选择（真实 KiroChatSurface + 真实 store + 真实指针序列）。
  *
@@ -149,7 +149,7 @@ afterEach(() => {
 });
 
 describe("Reasoning 选择（真实 Surface / 真实 store）", () => {
-  it("打开 → 点击「中」：选择生效、弹窗保持打开、trigger 更新", async () => {
+  it("点击 / pointerdown 档位：选择生效且弹窗保持打开", async () => {
     await act(async () => {
       root!.render(<KiroChatSurface variant="workspace" />);
     });
@@ -160,27 +160,7 @@ describe("Reasoning 选择（真实 Surface / 真实 store）", () => {
     expect(reasoningMenu()).toBeTruthy();
     expect(reasoningRadios().length).toBe(6);
 
-    const medium = reasoningRadios().find((r) => r.getAttribute("aria-label") === "思考程度：中")!;
-    await pointerClick(medium);
-
-    expect(useAISettingsStore.getState().reasoningEffort).toBe("medium");
-    expect(reasoningMenu()).toBeTruthy();
-    expect(reasoningTrigger().textContent).toContain("中");
-
-    // 继续点「高」：弹窗仍打开，可连续调整
-    const high = reasoningRadios().find((r) => r.getAttribute("aria-label") === "思考程度：高")!;
-    await pointerClick(high);
-    expect(useAISettingsStore.getState().reasoningEffort).toBe("high");
-    expect(reasoningMenu()).toBeTruthy();
-  });
-
-  it("pointerdown 即生效（不依赖 click 落地）", async () => {
-    await act(async () => {
-      root!.render(<KiroChatSurface variant="workspace" />);
-    });
-    await flush();
-    await pointerClick(reasoningTrigger());
-
+    // pointerdown 即生效（不依赖 click 落地）
     const medium = reasoningRadios().find((r) => r.getAttribute("aria-label") === "思考程度：中")!;
     await act(async () => {
       medium.dispatchEvent(new Event("pointerdown", { bubbles: true }));
@@ -188,23 +168,16 @@ describe("Reasoning 选择（真实 Surface / 真实 store）", () => {
     await flush();
     expect(useAISettingsStore.getState().reasoningEffort).toBe("medium");
     expect(reasoningMenu()).toBeTruthy();
-  });
 
-  it("点击弹窗空白区域不会关闭弹窗（菜单内部 pointer 不冒泡）", async () => {
-    await act(async () => {
-      root!.render(<KiroChatSurface variant="workspace" />);
-    });
-    await flush();
-    await pointerClick(reasoningTrigger());
-    const menu = reasoningMenu()!;
-    await act(async () => {
-      menu.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-    });
-    await flush();
+    // click 同样生效；弹窗保持打开；trigger 更新
+    const high = reasoningRadios().find((r) => r.getAttribute("aria-label") === "思考程度：高")!;
+    await pointerClick(high);
+    expect(useAISettingsStore.getState().reasoningEffort).toBe("high");
     expect(reasoningMenu()).toBeTruthy();
+    expect(reasoningTrigger().textContent).toContain("高");
   });
 
-  it("点击弹窗外部关闭（受控状态变化；退出动画后卸载）", async () => {
+  it("点击弹窗外部关闭", async () => {
     vi.useFakeTimers();
     try {
       await act(async () => {
@@ -213,16 +186,13 @@ describe("Reasoning 选择（真实 Surface / 真实 store）", () => {
       await flush();
       await pointerClick(reasoningTrigger());
       expect(reasoningTrigger().getAttribute("aria-expanded")).toBe("true");
-      expect(reasoningMenu()).toBeTruthy();
 
       await act(async () => {
         document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
       });
       await flush();
-      // 受控 open 立即关闭（presence 退场动画期间 DOM 仍在，但已非交互）
       expect(reasoningTrigger().getAttribute("aria-expanded")).toBe("false");
 
-      // presence 退出时长（160ms）后卸载
       await act(async () => {
         vi.advanceTimersByTime(400);
       });

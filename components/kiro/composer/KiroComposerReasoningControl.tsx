@@ -78,13 +78,14 @@ export function KiroComposerReasoningControl({
         data-testid="kiro-composer-reasoning"
         className={cn(
           "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+          // 宽度固定（compact w-9 / 完整 w-16）：档位 label 变化不改变几何 → 按钮与弹窗不横移
           compact
             ? cn(
                 "w-9 justify-center",
                 open ? "bg-alabaster text-charcoal" : "text-sandrift hover:bg-alabaster hover:text-charcoal"
               )
             : cn(
-                "gap-1.5 px-2.5 text-[11px] font-semibold",
+                "w-16 justify-center gap-1.5 text-[11px] font-semibold",
                 open
                   ? "bg-alabaster text-charcoal border border-line-strong"
                   : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal"
@@ -92,7 +93,12 @@ export function KiroComposerReasoningControl({
         )}
       >
         <KiroReasoningIcon className="w-3.5 h-3.5 shrink-0" />
-        {!compact && <span className="truncate max-w-[64px]">{reasoningEffortLabel(effort)}</span>}
+        {/* 固定 label 槽位（最长「超高 / 极低」= 2 字）：切换档位时宽度不变 */}
+        {!compact && (
+          <span className="w-6 text-center truncate" data-testid="kiro-composer-reasoning-label">
+            {reasoningEffortLabel(effort)}
+          </span>
+        )}
       </button>
 
       {/* 弹窗锚点：位于「思考程度图标」中心（inline style 保证 containing block，不随 label 宽度漂移） */}

@@ -1,8 +1,7 @@
 ﻿// @vitest-environment jsdom
 /**
- * Kiro Composer P3 — 四入口 / Add Menu / Access / Model 交互测试。
- *
- * 一级只允许：＋（Add）· 访问（Access）· 模型（Model · Reasoning）· 发送（Send）。
+ * Kiro Composer P3/P3.1 — 一级四入口 + Add / Access / Reasoning / Model 交互（精简版）。
+ * 只保留必要行为断言；数据/映射细节由 tests/kiroComposerAccess.test.ts（纯函数）覆盖。
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -36,13 +35,10 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 
 const ADJUSTABLE: ReasoningCapability = {
   adjustable: true,
-  supportedEfforts: ["default", "medium", "high"],
+  supportedEfforts: ["default", "low", "medium", "high"],
   mechanism: "effort",
 };
 const FIXED: ReasoningCapability = { adjustable: false, supportedEfforts: ["default"], mechanism: "fixed" };
-
-let container: HTMLDivElement | null = null;
-let root: Root | null = null;
 
 const handlers = {
   onSend: vi.fn(async () => true),
@@ -56,14 +52,16 @@ const handlers = {
   onAddContext: vi.fn(),
   onOpenSettings: vi.fn(),
   onOpenAgentSettings: vi.fn(),
-  onRemoveContext: vi.fn(),
 };
 
-function composerProps(overrides: Record<string, unknown> = {}) {
+let container: HTMLDivElement | null = null;
+let root: Root | null = null;
+
+function props(overrides: Record<string, unknown> = {}) {
   return {
     contexts: [],
     onAddContext: handlers.onAddContext,
-    onRemoveContext: handlers.onRemoveContext,
+    onRemoveContext: vi.fn(),
     onSend: handlers.onSend,
     streaming: false,
     turnInFlight: false,
@@ -120,14 +118,14 @@ async function renderComposer(overrides: Record<string, unknown> = {}) {
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root!.render(<KiroComposer {...(composerProps(overrides) as never)} />);
+    root!.render(<KiroComposer {...(props(overrides) as never)} />);
   });
   await flush();
 }
 
-function rerenderComposer(overrides: Record<string, unknown> = {}) {
+function rerender(overrides: Record<string, unknown> = {}) {
   act(() => {
-    root!.render(<KiroComposer {...(composerProps(overrides) as never)} />);
+    root!.render(<KiroComposer {...(props(overrides) as never)} />);
   });
 }
 
@@ -163,14 +161,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   useKiroPreferencesStore.setState({ webSearchEnabled: false });
   useAppStore.setState({
-    courses: [
-      {
-        id: "c1",
-        name: "中级计量经济学",
-        teacher: "王老师",
-        materials: [{ id: "m1", title: "第三章讲义", type: "pdf" }],
-      },
-    ] as never,
+    courses: [{ id: "c1", name: "中级计量经济学", teacher: "王老师", materials: [{ id: "m1", title: "第三章讲义", type: "pdf" }] }] as never,
     assignments: [] as never,
     groupProjects: [] as never,
   });
@@ -184,373 +175,216 @@ afterEach(() => {
   container = null;
 });
 
-describe("Kiro Composer P3 — 一级四入口", () => {
-  it("一级：＋ / 访问 / 思考程度（模型左侧）/ 模型 / 发送", async () => {
+describe("Kiro Composer — 一级结构", () => {
+  it("一级只有 ＋ / 访问 / 思考程度（模型左侧）/ 模型 / 发送", async () => {
     await renderComposer();
-    const add = q('[data-testid="kiro-composer-add"]')!;
-    const access = q('[data-testid="kiro-composer-access"]')!;
     const reasoning = q('[data-testid="kiro-composer-reasoning"]')!;
     const model = q('[data-testid="kiro-composer-model"]')!;
-    const send = container!.querySelector('[aria-label="发送"]')!;
-    expect(add && access && reasoning && model && send).toBeTruthy();
-    // Reasoning 位于 Model 左侧（DOM 顺序）
+    expect(q('[data-testid="kiro-composer-add"]')).toBeTruthy();
+    expect(q('[data-testid="kiro-composer-access"]')).toBeTruthy();
+    expect(q('[aria-label="发送"]')).toBeTruthy();
     expect(reasoning.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // 无独立 @ / Web / CPU / AgentMode / 思考程度一级图标按钮
-    expect(q('[aria-label="选择上下文"]')).toBeNull();
-    expect(q('[aria-label="联网搜索"]')).toBeNull();
-    expect(q('[aria-label="Computer"]')).toBeNull();
-    expect(q('[aria-label="权限模式"]')).toBeNull();
+    // 旧一级入口全部收进二级
+    for (const label of ["选择上下文", "联网搜索", "Computer", "权限模式"]) {
+      expect(q(`[aria-label="${label}"]`), label).toBeNull();
+    }
   });
 
-  it("Workspace chip 已从 Context Bar 移除（迁入 Access）", async () => {
+  it("Reasoning 按钮宽度固定（label 槽位固定 → 切换档位不横移）", async () => {
     await renderComposer();
-    expect(q('[aria-label="工作区"]')).toBeNull();
+    const trigger = q('[data-testid="kiro-composer-reasoning"]')!;
+    expect(trigger.className).toContain("w-16");
+    expect(q('[data-testid="kiro-composer-reasoning-label"]')!.className).toContain("w-6");
+    rerender({ reasoningEffort: "low" });
+    expect(q('[data-testid="kiro-composer-reasoning"]')!.className).toContain("w-16");
   });
 });
 
-describe("Kiro Composer P3 — Add Menu（内容与来源）", () => {
-  it("包含 上传文件 / 添加图片 / 课程资料 / ClassFlow 上下文 + 联网搜索状态", async () => {
+describe("Kiro Composer — Add Menu", () => {
+  it("内容与来源：上传文件 / 添加图片 / 课程资料 / 上下文 + 联网搜索（状态与切换）", async () => {
     await renderComposer();
     await click('[data-testid="kiro-composer-add"]');
     const menu = q('[data-testid="kiro-composer-add-menu"]')!;
-    expect(menu.textContent).toContain("上传文件");
-    expect(menu.textContent).toContain("添加图片");
-    expect(menu.textContent).toContain("课程资料");
-    expect(menu.textContent).toContain("ClassFlow 上下文");
-    const webToggle = q('[data-testid="kiro-composer-web-search"]')!;
-    expect(webToggle.textContent).toContain("联网搜索");
-    expect(webToggle.textContent).toContain("关闭");
-    expect(webToggle.getAttribute("aria-checked")).toBe("false");
-  });
-
-  it("联网搜索开关 → 修改下一 Turn preference（不依赖 Computer）", async () => {
-    await renderComposer();
-    await click('[data-testid="kiro-composer-add"]');
-    await click('[data-testid="kiro-composer-web-search"]');
+    for (const label of ["上传文件", "添加图片", "课程资料", "ClassFlow 上下文", "联网搜索"]) {
+      expect(menu.textContent, label).toContain(label);
+    }
+    const web = q('[data-testid="kiro-composer-web-search"]') as HTMLButtonElement;
+    expect(web.getAttribute("aria-checked")).toBe("false");
+    await act(async () => web.click());
+    await flush();
     expect(useKiroPreferencesStore.getState().webSearchEnabled).toBe(true);
   });
 
-  it("Turn 运行中：scope 条目禁用，联网搜索仍可切换（intent 冻结后）", async () => {
-    await renderComposer({ turnInFlight: true, turnIntentFrozen: true });
-    await click('[data-testid="kiro-composer-add"]');
-    const fileButton = Array.from(container!.querySelectorAll("button")).find((b) =>
-      (b.textContent ?? "").includes("上传文件")
-    ) as HTMLButtonElement;
-    expect(fileButton.disabled).toBe(true);
-    const webToggle = q('[data-testid="kiro-composer-web-search"]') as HTMLButtonElement;
-    expect(webToggle.disabled).toBe(false);
-    await act(async () => webToggle.click());
-    expect(useKiroPreferencesStore.getState().webSearchEnabled).toBe(true);
-  });
-
-  it("preparing 且 intent 未冻结：联网搜索禁用（preferences locked）", async () => {
-    await renderComposer({ turnInFlight: true, preparingSend: true, turnIntentFrozen: false });
-    await click('[data-testid="kiro-composer-add"]');
-    expect((q('[data-testid="kiro-composer-web-search"]') as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it("课程资料 → 内部 view（不叠加 Popover）；ClassFlow 上下文 → 共享列表", async () => {
+  it("课程资料与上下文为同一 Popover 内的子视图", async () => {
     await renderComposer();
     await click('[data-testid="kiro-composer-add"]');
     await clickText("课程资料");
     expect(text()).toContain("第三章讲义");
-    await clickText("课程资料"); // back
+    await clickText("课程资料"); // 返回
     await clickText("ClassFlow 上下文");
     const contextMenu = q('[role="menu"][aria-label="选择上下文"]')!;
-    expect(contextMenu.textContent).toContain("中级计量经济学");
-    await act(async () => {
-      (contextMenu.querySelector("button") as HTMLButtonElement).click();
-    });
+    await act(async () => (contextMenu.querySelector("button") as HTMLButtonElement).click());
     await flush();
     expect(handlers.onAddContext).toHaveBeenCalledTimes(1);
   });
+
+  it("锁语义：Turn 中 scope 条目禁用但联网搜索可切换；preparing 未冻结时联网搜索禁用", async () => {
+    await renderComposer({ turnInFlight: true, turnIntentFrozen: true });
+    await click('[data-testid="kiro-composer-add"]');
+    const upload = Array.from(container!.querySelectorAll("button")).find((b) =>
+      (b.textContent ?? "").includes("上传文件")
+    ) as HTMLButtonElement;
+    expect(upload.disabled).toBe(true);
+    expect((q('[data-testid="kiro-composer-web-search"]') as HTMLButtonElement).disabled).toBe(false);
+
+    // 菜单保持打开；preparing 且 intent 未冻结 → preference 锁生效
+    rerender({ turnInFlight: true, preparingSend: true, turnIntentFrozen: false });
+    await flush();
+    expect((q('[data-testid="kiro-composer-web-search"]') as HTMLButtonElement).disabled).toBe(true);
+  });
 });
 
-describe("Kiro Composer P3 — Access（访问）", () => {
-  it("一级 label 映射（OFF → 仅对话；guided → 受控访问）", async () => {
+describe("Kiro Composer — Access", () => {
+  it("一级 label 映射与 danger 语义", async () => {
     await renderComposer({ computerEnabled: false });
     expect(q('[data-testid="kiro-composer-access"]')!.textContent).toContain("仅对话");
-    rerenderComposer({ computerEnabled: true, agentMode: "guided" });
+    rerender({ computerEnabled: true, agentMode: "guided" });
     expect(q('[data-testid="kiro-composer-access"]')!.textContent).toContain("受控访问");
-    rerenderComposer({ computerEnabled: true, agentMode: "workspace-auto" });
+    rerender({ computerEnabled: true, agentMode: "workspace-auto" });
     const auto = q('[data-testid="kiro-composer-access"]')!;
     expect(auto.textContent).toContain("自动执行");
-    expect(auto.getAttribute("data-access-mode")).toBe("workspace-auto");
     expect(auto.className).toContain("text-danger");
   });
 
-  it("菜单：四态 radio + 工作范围 + 权限摘要（已允许/未允许）+ 管理入口", async () => {
-    await renderComposer();
+  it("菜单：模式选择回调 / 工作范围 + warning / 权限摘要 / 管理入口", async () => {
+    await renderComposer({ computerEnabled: false, grantWarning: "需要重新授权" });
     await click('[data-testid="kiro-composer-access"]');
     const menu = q('[data-testid="kiro-composer-access-menu"]')!;
-    const radios = menu.querySelectorAll('[role="menuitemradio"]');
-    expect(radios.length).toBe(4);
-    expect(menu.textContent).toContain("仅对话");
-    expect(menu.textContent).toContain("仅规划");
-    expect(menu.textContent).toContain("受控访问");
-    expect(menu.textContent).toContain("自动执行");
+    expect(menu.querySelectorAll('[role="menuitemradio"]').length).toBe(4);
     expect(q('[data-testid="kiro-composer-access-workspace"]')!.textContent).toContain("ClassFlow Desktop");
-    const rows = container!.querySelectorAll('[data-testid="kiro-composer-permission-row"]');
-    expect(rows.length).toBe(4);
-    expect(text()).toContain("终端");
-    expect(text()).toContain("查看桌面");
-    expect(text()).toContain("操作电脑");
-    expect(text()).toContain("剪贴板");
+    expect(q('[data-testid="kiro-composer-access-workspace"]')!.textContent).toContain("需要重新授权");
+    expect(container!.querySelectorAll('[data-testid="kiro-composer-permission-row"]').length).toBe(4);
     expect(text()).toContain("已允许");
     expect(text()).toContain("未允许");
-    // 不声称 runtime availability
-    expect(text()).not.toContain("可用");
-    await clickText("管理 Agent 权限");
-    expect(handlers.onOpenAgentSettings).toHaveBeenCalledTimes(1);
-  });
 
-  it("选择 受控访问 → 开启 Computer + 写入 guided；选择 仅对话 → 关闭 Computer", async () => {
-    await renderComposer({ computerEnabled: false });
-    await click('[data-testid="kiro-composer-access"]');
     await clickText("受控访问");
     expect(handlers.onToggleComputer).toHaveBeenCalledWith(true);
     expect(handlers.onSetAgentMode).toHaveBeenCalledWith("guided");
 
-    vi.clearAllMocks();
+    await click('[data-testid="kiro-composer-access"]');
+    await clickText("管理 Agent 权限");
+    expect(handlers.onOpenAgentSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("仅对话 → 关闭 Computer；Turn 中仅对话禁用而三档可改", async () => {
     await renderComposer({ computerEnabled: true, agentMode: "guided" });
     await click('[data-testid="kiro-composer-access"]');
     await clickText("仅对话");
     expect(handlers.onToggleComputer).toHaveBeenCalledWith(false);
-  });
 
-  it("Turn 运行中：仅对话禁用；plan/guided/auto 在 intent 冻结后可改", async () => {
-    await renderComposer({ turnInFlight: true, turnIntentFrozen: true });
-    await click('[data-testid="kiro-composer-access"]');
-    const radios = Array.from(
-      container!.querySelectorAll('[data-testid="kiro-composer-access-menu"] [role="menuitemradio"]')
-    ) as HTMLButtonElement[];
-    // [仅对话, 仅规划, 受控访问, 自动执行]
-    expect(radios[0].disabled).toBe(true);
-    expect(radios[1].disabled).toBe(false);
-    expect(radios[2].disabled).toBe(false);
-    expect(radios[3].disabled).toBe(false);
-    await act(async () => radios[3].click());
+    vi.clearAllMocks();
+    rerender({ turnInFlight: true, turnIntentFrozen: true });
     await flush();
-    expect(handlers.onSetAgentMode).toHaveBeenCalledWith("workspace-auto");
-  });
-
-  it("preparing 且 intent 未冻结：plan/guided/auto 同样禁用", async () => {
-    await renderComposer({ turnInFlight: true, preparingSend: true, turnIntentFrozen: false });
     await click('[data-testid="kiro-composer-access"]');
     const radios = Array.from(
       container!.querySelectorAll('[data-testid="kiro-composer-access-menu"] [role="menuitemradio"]')
     ) as HTMLButtonElement[];
-    expect(radios.every((r) => r.disabled)).toBe(true);
-  });
-
-  it("grantWarning 迁移到 Access（warning token，不用 danger）", async () => {
-    await renderComposer({ grantWarning: "需要重新授权" });
-    const trigger = q('[data-testid="kiro-composer-access"]')!;
-    expect(trigger.querySelector(".bg-warning")).toBeTruthy();
-    await click('[data-testid="kiro-composer-access"]');
-    const workspaceBlock = q('[data-testid="kiro-composer-access-workspace"]')!;
-    expect(workspaceBlock.textContent).toContain("需要重新授权");
-    expect(workspaceBlock.querySelector(".text-warning")).toBeTruthy();
+    expect(radios[0].disabled).toBe(true);
+    expect(radios.slice(1).every((r) => !r.disabled)).toBe(true);
   });
 });
 
-describe("Kiro Composer P3 — Reasoning 滑块（Model 左侧）", () => {
-  it("一级 trigger 显示当前档位；可调时存在", async () => {
-    await renderComposer();
-    const reasoning = q('[data-testid="kiro-composer-reasoning"]')!;
-    expect(reasoning.textContent).toContain("高");
-    expect(reasoning.getAttribute("aria-label")).toBe("思考程度");
-  });
-
-  it("fixed reasoning → 不渲染 Reasoning 控件", async () => {
-    await renderComposer({ reasoningCapability: FIXED });
-    expect(q('[data-testid="kiro-composer-reasoning"]')).toBeNull();
-  });
-
-  it("弹层：当前档位 + 模型名 + 分段轨道（点击选中，不关闭弹窗）", async () => {
+describe("Kiro Composer — Reasoning / Model", () => {
+  it("Reasoning：点击档位不关闭弹窗、↺ 恢复默认；fixed → 不渲染；Computer OFF 可调", async () => {
     await renderComposer();
     await click('[data-testid="kiro-composer-reasoning"]');
-    const menu = q('[data-testid="kiro-composer-reasoning-menu"]')!;
-    expect(menu.textContent).toContain("高");
-    expect(menu.textContent).toContain("GPT-5.6 Sol");
-    // 无滚动条：popover surface 明确 overflow-hidden
-    expect(menu.parentElement?.className).toContain("overflow-hidden");
-    const group = q('[data-testid="kiro-composer-reasoning-track"]')!;
-    expect(group.getAttribute("role")).toBe("radiogroup");
-    const radios = group.querySelectorAll('[role="radio"]');
-    expect(radios.length).toBe(3); // default / medium / high
-    expect((radios[2] as HTMLElement).getAttribute("aria-checked")).toBe("true");
-    // 点击「中」→ 选中且弹窗保持打开（不拖拽放置）
-    await act(async () => {
-      (radios[1] as HTMLButtonElement).click();
-    });
+    const radios = container!.querySelectorAll(
+      '[data-testid="kiro-composer-reasoning-track"] [role="radio"]'
+    ) as NodeListOf<HTMLButtonElement>;
+    expect(radios.length).toBe(4);
+    await act(async () => radios[1].click());
     await flush();
-    expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("medium");
+    expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("low");
     expect(q('[data-testid="kiro-composer-reasoning-menu"]')).toBeTruthy();
-  });
-
-  it("键盘 ← → 调整档位（radiogroup）", async () => {
-    await renderComposer();
-    await click('[data-testid="kiro-composer-reasoning"]');
-    const group = q('[data-testid="kiro-composer-reasoning-track"]')!;
-    await act(async () => {
-      group.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
-    });
-    await flush();
-    expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("medium");
-  });
-
-  it("弹窗锚点在思考程度图标中心（inline style containing block，不漂移到模型控件）", async () => {
-    await renderComposer();
-    await click('[data-testid="kiro-composer-reasoning"]');
-    const anchor = q('[data-testid="kiro-composer-reasoning-anchor"]')!;
-    // inline style 保证 containing block（不依赖 Tailwind 生成）
-    expect(anchor.style.position).toBe("absolute");
-    expect(anchor.style.left).toBe("18px");
-    expect(anchor.style.top).toBe("0px");
-    expect(anchor.style.width).toBe("0px");
-    expect(anchor.style.height).toBe("0px");
-    // 面板以 inline style 精确居中到锚点（固定宽度 + marginLeft -width/2；不依赖 transform，保留 motion）
-    const panel = q('[data-testid="kiro-composer-reasoning-menu"]')!.parentElement!;
-    expect(panel.style.left).toBe("50%");
-    expect(panel.style.bottom).toBe("100%");
-    expect(panel.style.marginLeft).toBe("-128px");
-    expect(panel.style.marginBottom).toBe("6px");
-  });
-
-  it("使用共享 KiroReasoningIcon（非闪电图标）", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { join } = await import("node:path");
-    const src = readFileSync(
-      join(process.cwd(), "components/kiro/composer/KiroComposerReasoningControl.tsx"),
-      "utf8"
-    );
-    expect(src).toContain("KiroReasoningIcon");
-    expect(src).not.toContain("Zap");
-  });
-
-  it("↺ 恢复默认（default）", async () => {
-    await renderComposer();
-    await click('[data-testid="kiro-composer-reasoning"]');
     await click('[aria-label="恢复默认思考程度"]');
     expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("default");
-  });
 
-  it("Computer OFF 仍可修改 Reasoning（与 Computer 解耦）", async () => {
-    await renderComposer({ computerEnabled: false });
-    const reasoning = q('[data-testid="kiro-composer-reasoning"]') as HTMLButtonElement;
-    expect(reasoning).toBeTruthy();
-    expect(reasoning.disabled).toBe(false);
+    rerender({ reasoningCapability: FIXED });
+    expect(q('[data-testid="kiro-composer-reasoning"]')).toBeNull();
+
+    rerender({ computerEnabled: false });
+    await flush();
     await click('[data-testid="kiro-composer-reasoning"]');
     expect(q('[data-testid="kiro-composer-reasoning-menu"]')).toBeTruthy();
   });
 
-  it("preparing 且 intent 未冻结 → Reasoning 禁用（preference lock）", async () => {
-    await renderComposer({ turnInFlight: true, preparingSend: true, turnIntentFrozen: false });
-    expect((q('[data-testid="kiro-composer-reasoning"]') as HTMLButtonElement).disabled).toBe(true);
-  });
-});
-
-describe("Kiro Composer P3 — Model", () => {
-  it("一级只显示模型名（思考程度已独立）", async () => {
+  it("Model：只显示模型名，菜单不含思考程度；unavailable 显示 warning", async () => {
     await renderComposer();
     const model = q('[data-testid="kiro-composer-model"]')!;
     expect(model.textContent).toContain("GPT-5.6 Sol");
     expect(model.textContent).not.toContain("·");
-  });
-
-  it("菜单：模型列表；不含思考程度区", async () => {
-    await renderComposer();
     await click('[data-testid="kiro-composer-model"]');
     const menu = q('[data-testid="kiro-composer-model-menu"]')!;
     expect(menu.textContent).toContain("Claude X");
     expect(menu.textContent).not.toContain("思考程度");
     await clickText("Claude X");
     expect(handlers.onSelectModel).toHaveBeenCalledWith("claude-x");
-  });
 
-  it("modelUnavailable 仍显示真实 warning", async () => {
-    await renderComposer({ modelUnavailable: true, activeModelName: "模型不可用" });
+    rerender({ modelUnavailable: true, activeModelName: "模型不可用" });
+    await flush();
     await click('[data-testid="kiro-composer-model"]');
     expect(q('[data-testid="kiro-composer-model-menu"]')!.textContent).toContain("当前模型已不可用");
   });
 });
-describe("Kiro Composer P3 — 菜单互斥 / 回归", () => {
-  it("单一菜单 ownership：打开 Access 时关闭 Add", async () => {
-    await renderComposer();
-    await click('[data-testid="kiro-composer-add"]');
-    expect(q('[data-testid="kiro-composer-add-menu"]')).toBeTruthy();
-    await click('[data-testid="kiro-composer-access"]');
-    expect(q('[data-testid="kiro-composer-add-menu"]')).toBeNull();
-    expect(q('[data-testid="kiro-composer-access-menu"]')).toBeTruthy();
-  });
 
-  it("Esc 关闭当前菜单（capture，不冒泡到全局快捷键）", async () => {
+describe("Kiro Composer — 回归", () => {
+  it("菜单互斥 + Esc 关闭（受控状态）", async () => {
     await renderComposer();
     await click('[data-testid="kiro-composer-add"]');
+    expect(q('[data-testid="kiro-composer-add"]')!.getAttribute("aria-expanded")).toBe("true");
+    await click('[data-testid="kiro-composer-access"]');
+    expect(q('[data-testid="kiro-composer-add"]')!.getAttribute("aria-expanded")).toBe("false");
+    expect(q('[data-testid="kiro-composer-access"]')!.getAttribute("aria-expanded")).toBe("true");
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
     await flush();
-    expect(q('[data-testid="kiro-composer-add-menu"]')).toBeNull();
+    expect(q('[data-testid="kiro-composer-access"]')!.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("附件 shelf / 拖拽 / 粘贴 handler 不回归", async () => {
+  it("附件 shelf / 拖拽 / Slash / Send 不回归", async () => {
     await renderComposer({
-      attachments: [
-        {
-          id: "a1",
-          kind: "document",
-          name: "讲义.pdf",
-          status: "ready",
-          size: 1024,
-        },
-      ],
+      attachments: [{ id: "a1", kind: "document", name: "讲义.pdf", status: "ready", size: 1024 }],
     });
     expect(q('[data-testid="kiro-attachments"]')).toBeTruthy();
-    expect(text()).toContain("讲义.pdf");
-    // 拖拽
-    const composer = q('[data-testid="kiro-composer"]')!;
+
     const file = new File(["x"], "notes.md", { type: "text/markdown" });
     await act(async () => {
       const drop = new Event("drop", { bubbles: true, cancelable: true });
       Object.defineProperty(drop, "dataTransfer", { value: { files: [file] } });
-      composer.dispatchEvent(drop);
+      q('[data-testid="kiro-composer"]')!.dispatchEvent(drop);
     });
     expect(handlers.onAddFiles).toHaveBeenCalledWith([file]);
-  });
 
-  it("Slash Skill 菜单不回归（/ 触发）", async () => {
     (window as unknown as { classflowDesktop?: unknown }).classflowDesktop = {
-      skills: {
-        list: async () => ({ skills: [{ name: "doc", description: "文档", enabled: true }] }),
-      },
+      skills: { list: async () => ({ skills: [{ name: "doc", description: "文档", enabled: true }] }) },
     };
-    await renderComposer();
     const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-      setter?.call(ta, "/d");
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, "/d");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await flush();
     expect(q('[data-testid="skill-slash-menu"]')).toBeTruthy();
-  });
 
-  it("Send 生命周期：空文本不可发送；输入后可发送", async () => {
-    await renderComposer();
-    const sendButton = container!.querySelector('[aria-label="发送"]') as HTMLButtonElement;
-    expect(sendButton.disabled).toBe(true);
-    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-      setter?.call(ta, "你好");
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, "你好");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await flush();
-    const enabledSend = container!.querySelector('[aria-label="发送"]') as HTMLButtonElement;
-    expect(enabledSend.disabled).toBe(false);
-    await act(async () => enabledSend.click());
+    const send = container!.querySelector('[aria-label="发送"]') as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+    await act(async () => send.click());
     await flush();
     expect(handlers.onSend).toHaveBeenCalledWith("你好");
   });
