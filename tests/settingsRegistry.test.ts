@@ -54,6 +54,7 @@ describe("settingsRegistry 搜索", () => {
       "ai-custom-url",
       "ai-custom-model",
       "ai-custom-capabilities",
+      "kiro-show-all-models",
       "missed-reminder-window",
       "kiro-web-search-credential",
       "kiro-web-search-byok-key",
@@ -84,6 +85,9 @@ describe("settingsRegistry 搜索", () => {
     // 偏好依赖：provider / missed policy / web search / workspace
     expect(byId.get("ai-custom-url")?.gate).toEqual([
       { control: "ai-provider", requiresValue: "custom-openai" },
+    ]);
+    expect(byId.get("kiro-show-all-models")?.gate).toEqual([
+      { control: "ai-provider", requiresValue: "opencode-go" },
     ]);
     expect(byId.get("missed-reminder-window")?.gate).toEqual([
       { control: "missed-reminder-policy", requiresValue: "recent-only" },

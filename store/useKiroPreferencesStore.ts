@@ -52,6 +52,8 @@ export interface KiroSettingsPreferences {
   /** Task 19C1：扫描 Web PDF Vision（设置；Key 绝不进入 Store） */
   webPdfVisionEnabled: boolean;
   webPdfVisionModel: string;
+  /** 2026-09：模型选择器显示全部已验证模型（OpenCode Go；默认关闭 = 精选列表） */
+  showAllModels: boolean;
 }
 
 export type KiroSettingsPreferenceKey = keyof KiroSettingsPreferences;
@@ -68,6 +70,7 @@ export const DEFAULT_KIRO_SETTINGS_PREFERENCES: KiroSettingsPreferences = {
   webSearchCredentialMode: "server",
   webPdfVisionEnabled: true,
   webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
+  showAllModels: false,
 };
 
 /** 当前与 canonical defaults 不同的 Kiro Settings preference keys。 */
@@ -102,6 +105,7 @@ interface KiroPreferencesState extends KiroSettingsPreferences {
   setWebSearchCredentialMode: (mode: KiroWebSearchCredentialMode) => void;
   setWebPdfVisionEnabled: (enabled: boolean) => void;
   setWebPdfVisionModel: (model: string) => void;
+  setShowAllModels: (enabled: boolean) => void;
   /** V5A9：只允许 reset Settings-facing Kiro preferences。 */
   resetKiroSettingsPreference: (key: KiroSettingsPreferenceKey) => void;
   setSidecarSize: (size: SidecarSize) => void;
@@ -128,6 +132,7 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       setWebPdfVisionEnabled: (enabled) => set({ webPdfVisionEnabled: enabled }),
       // Store 内永远不保存任意 model id（非法 → 默认 mimo-v2.5）
       setWebPdfVisionModel: (model) => set({ webPdfVisionModel: normalizeWebPdfVisionModel(model) }),
+      setShowAllModels: (enabled) => set({ showAllModels: enabled }),
       resetKiroSettingsPreference: (key) => set(resetKiroSettingsPreferencePatch(key)),
       // 结构归一后保存；viewport clamp 由 Shell 在浏览器内执行
       setSidecarSize: (size) => set({ sidecarSize: normalizeSidecarSize(size) }),
@@ -150,6 +155,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         // Task 19C1：持久化设置（API Key 绝不进入 partialize）
         webPdfVisionEnabled: state.webPdfVisionEnabled,
         webPdfVisionModel: state.webPdfVisionModel,
+        // 2026-09：模型选择器范围（精选 / 全部）
+        showAllModels: state.showAllModels,
         // Sidecar UX V2：尺寸持久化（刷新后保留；不进 URL / IndexedDB）
         sidecarSize: state.sidecarSize,
         // Sidecar Move V1：浮动位置持久化（top/right；key 不变，不建 v2）
@@ -188,6 +195,11 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
               ? p.webPdfVisionEnabled
               : DEFAULT_KIRO_SETTINGS_PREFERENCES.webPdfVisionEnabled,
           webPdfVisionModel: normalizeWebPdfVisionModel(p?.webPdfVisionModel),
+          // 2026-09：旧持久化无字段 → 默认 false（精选列表）
+          showAllModels:
+            typeof p?.showAllModels === "boolean"
+              ? p.showAllModels
+              : DEFAULT_KIRO_SETTINGS_PREFERENCES.showAllModels,
           // Sidecar UX V2：旧持久化无字段 → 默认尺寸；非法值 → 结构归一
           sidecarSize: normalizeSidecarSize(p?.sidecarSize),
           // Sidecar Move V1：旧持久化无字段 → 默认右上 24px；非法值 → 归一

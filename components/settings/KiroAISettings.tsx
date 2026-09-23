@@ -90,6 +90,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   const setWebPdfVisionEnabled = useKiroPreferencesStore((s) => s.setWebPdfVisionEnabled);
   const webPdfVisionModel = useKiroPreferencesStore((s) => s.webPdfVisionModel);
   const setWebPdfVisionModel = useKiroPreferencesStore((s) => s.setWebPdfVisionModel);
+  // 2026-09：模型选择器范围（默认精选；打开显示全部已验证模型）
+  const showAllModels = useKiroPreferencesStore((s) => s.showAllModels);
+  const setShowAllModels = useKiroPreferencesStore((s) => s.setShowAllModels);
   const resetKiroSettingsPreference = useKiroPreferencesStore((s) => s.resetKiroSettingsPreference);
 
   // V5A9：仅 Settings-facing Kiro preferences 参与 modified/reset；session key / Sidecar / permissions 排除。
@@ -101,6 +104,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
     webSearchCredentialMode,
     webPdfVisionEnabled,
     webPdfVisionModel,
+    showAllModels,
   };
   const kiroSettingsModified = new Set(
     getModifiedKiroSettingsPreferenceKeys(kiroSettingsPreferences)
@@ -291,23 +295,43 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           </SettingsRow>
 
           {!isCustom ? (
-            <SettingsRow
-              settingId="ai-model"
-              title="模型"
-              description="当前对话模型。"
-            >
-              <div className="flex flex-col items-end gap-1">
-                <SettingsSelect
-                  value={model}
-                  onChange={setModel}
-                  ariaLabel="模型"
-                  options={models.map((m) => ({ value: m.id, label: m.name }))}
-                />
-                {modelUnavailable && (
-                  <span className="text-[10px] font-semibold text-danger">当前模型已不可用，请重新选择。</span>
-                )}
-              </div>
-            </SettingsRow>
+            <>
+              <SettingsRow
+                settingId="ai-model"
+                title="模型"
+                description="当前对话模型。"
+              >
+                <div className="flex flex-col items-end gap-1">
+                  <SettingsSelect
+                    value={model}
+                    onChange={setModel}
+                    ariaLabel="模型"
+                    options={models.map((m) => ({ value: m.id, label: m.name }))}
+                  />
+                  {modelUnavailable && (
+                    <span className="text-[10px] font-semibold text-danger">当前模型已不可用，请重新选择。</span>
+                  )}
+                </div>
+              </SettingsRow>
+
+              {/* 2026-09：更多模型（仅 OpenCode Go；打开后模型选择器显示全部已验证模型） */}
+              {provider === "opencode-go" && (
+                <SettingsRow
+                  settingId="kiro-show-all-models"
+                  title="显示更多模型"
+                  description="模型选择器显示全部已验证模型（默认只显示精选）。"
+                  modified={kiroSettingsModified.has("showAllModels")}
+                  onReset={() => resetKiroSettingsPreference("showAllModels")}
+                  resetAriaLabel="将模型范围恢复默认"
+                >
+                  <SettingsToggle
+                    checked={showAllModels}
+                    onChange={setShowAllModels}
+                    label="显示更多模型"
+                  />
+                </SettingsRow>
+              )}
+            </>
           ) : (
             <>
               <SettingsRow

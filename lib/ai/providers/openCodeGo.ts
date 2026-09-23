@@ -36,6 +36,19 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  *   live 通过（max 无输出，不声明；high 以上 hungry， trivial prompt 约 450+ reasoning tokens）；
  *   vision PNG/JPEG/WEBP 均无识别 → vision 不开
  * - deepseek-v4-flash：旧版已移出；deepseek 系仅保留 v4.1-flash（vision 不开）
+ *
+ * 2026-09-23 第二批按厂商官方文档放开（用户选择「只用官方文档」，不做 live probe）：
+ * - gpt-5.6-luna（openai, responses）：vision=true + JPEG/PNG/WEBP（OpenAI images-vision）；
+ *   reasoning 档位扩至 [default,low,medium,high,xhigh,max]（OpenAI reasoning：none/low/medium/high/xhigh/max）
+ * - deepseek-v4.1-flash（deepseek, chat）：vision=true + JPEG/PNG/WEBP（DeepSeek Models & Pricing）；
+ *   reasoning [default,low,high,max]（Thinking Mode：reasoning_effort low/high/max，默认开启、无 medium）
+ * - glm-5.3（zai, chat）：vision 保持 false（官方明确 text-only）；
+ *   reasoning [default,low,high,max]（官方：thinking 常开不可关，reasoning_effort low/high/max）
+ * - qwen3.8-max（qwen, messages）：vision=true + JPEG/PNG/WEBP（阿里云百炼：图像/视频理解列表）
+ * - kimi-k2.7-code（kimi, chat）：vision=true + JPEG/PNG/WEBP（Kimi 官方：text/image/video 输入）；
+ *   thinking 常开且无 effort 参数 → 不声明 reasoning
+ * - mimo-v2-omni（mimo, chat）：vision=true + JPEG/PNG/WEBP（小米官方：全模态基座）
+ * 未取得官方能力证据的模型（hy3 / hy4-preview / longcat-2.0 / mimo-v2.5-pro / minimax-m2.7 等）保持保守。
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
@@ -63,16 +76,21 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       },
     },
   },
-  { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
+  // DeepSeek 官方 Models & Pricing + Thinking Mode：DeepSeek-V4.1-Flash 支持 Vision（PNG/JPEG/WEBP）；
+  // thinking 默认开启，reasoning_effort 支持 low/high/max（无 medium）→ 走 "effort" 直通
+  { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" } } },
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "mimo-v2.6-pro", name: "MiMo V2.6 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "high"], mechanism: "effort" } } },
-  { id: "mimo-v2-omni", name: "MiMo V2 Omni", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  // 小米官方：MiMo-V2-Omni 为全模态基座（图像/视频/音频输入）→ vision 开
+  { id: "mimo-v2-omni", name: "MiMo V2 Omni", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy4-preview", name: "Hy4 preview", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
-  { id: "glm-5.3", name: "GLM 5.3", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  // 智谱官方 GLM-5.3 文档：text-only（vision 不开）；thinking 常开不可关，
+  // reasoning_effort 支持 low/high/max（默认 max，无 medium）
+  { id: "glm-5.3", name: "GLM 5.3", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false, reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" } } },
   { id: "longcat-2.0", name: "LongCat 2.0", provider: "opencode-go", vendor: "longcat", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
   // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
@@ -128,16 +146,17 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     capabilities: {
       streaming: true,
       tools: true,
-      vision: false,
+      // OpenAI 官方 images-vision 文档：GPT-5.6 Luna 属 vision 模型（PNG/JPEG/WEBP/GIF 输入）
+      vision: true,
       fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
       // Phase 3.2A：GPT 5.6 Luna 是首个启用 reasoning 的 OpenCode Go 模型。
       // mechanism=openai-responses-effort（providerOptions.openai.reasoningEffort → reasoning.effort）。
-      // SDK/request-shape verified（request-body capture 测试）；OpenCode Go live smoke
-      // 由 gated 测试（OPENCODE_GO_TEST_API_KEY）验证。
-      // max 未经 live 验证 → 不暴露；只保留已验证档位。
+      // OpenAI 官方 reasoning 文档：reasoning.effort 支持 none/low/medium/high/xhigh/max
+      // （none = 关闭推理，不进入档位；默认 medium）。
       reasoning: {
         adjustable: true,
-        supportedEfforts: ["default", "low", "medium", "high"],
+        supportedEfforts: ["default", "low", "medium", "high", "xhigh", "max"],
         mechanism: "openai-responses-effort",
       },
     },
@@ -170,7 +189,8 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "minimax-m2.7", name: "MiniMax M2.7", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "qwen3.8-flash", name: "Qwen3.8 Flash", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
-  { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  // 阿里云百炼官方：qwen3.8-max 同时列于「文本生成」与「图像/视频理解」→ vision 开
+  { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
 ];
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4.1-flash";

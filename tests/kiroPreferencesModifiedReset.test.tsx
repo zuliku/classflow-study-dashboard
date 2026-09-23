@@ -52,6 +52,7 @@ const CANONICAL: KiroSettingsPreferences = {
   webSearchCredentialMode: "server",
   webPdfVisionEnabled: true,
   webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
+  showAllModels: false,
 };
 
 function alternateVisionModel(): string {
@@ -62,13 +63,14 @@ function alternateVisionModel(): string {
 }
 
 describe("V5A9 A：canonical Kiro Settings preference truth", () => {
-  it("canonical defaults 只包含 7 个 Settings-facing preference", () => {
+  it("canonical defaults 只包含 8 个 Settings-facing preference", () => {
     expect(DEFAULT_KIRO_SETTINGS_PREFERENCES).toEqual(CANONICAL);
     expect(Object.keys(DEFAULT_KIRO_SETTINGS_PREFERENCES).sort()).toEqual(
       [
         "autoContextEnabled",
         "outputTextSize",
         "responsePreference",
+        "showAllModels",
         "webPdfVisionEnabled",
         "webPdfVisionModel",
         "webSearchCredentialMode",
@@ -91,6 +93,7 @@ describe("V5A9 B：逐字段 modified/reset semantics", () => {
     ["webSearchCredentialMode", { ...CANONICAL, webSearchCredentialMode: "byok" }],
     ["webPdfVisionEnabled", { ...CANONICAL, webPdfVisionEnabled: false }],
     ["webPdfVisionModel", { ...CANONICAL, webPdfVisionModel: "non-default-model" }],
+    ["showAllModels", { ...CANONICAL, showAllModels: true }],
   ] as const)("%s 偏离 → 仅该字段 modified", (key, preferences) => {
     expect(getModifiedKiroSettingsPreferenceKeys(preferences)).toEqual([key]);
   });
@@ -103,6 +106,7 @@ describe("V5A9 B：逐字段 modified/reset semantics", () => {
     ["webSearchCredentialMode", "server"],
     ["webPdfVisionEnabled", true],
     ["webPdfVisionModel", DEFAULT_WEB_PDF_VISION_MODEL],
+    ["showAllModels", false],
   ] as const)("resetKiroSettingsPreferencePatch(%s) → canonical", (key, value) => {
     expect(resetKiroSettingsPreferencePatch(key)).toEqual({ [key]: value });
   });
@@ -166,6 +170,7 @@ describe("V5A9 C：store reset boundary / hydrate compatibility", () => {
     expect(state.webSearchCredentialMode).toBe(CANONICAL.webSearchCredentialMode);
     expect(state.webPdfVisionEnabled).toBe(CANONICAL.webPdfVisionEnabled);
     expect(state.webPdfVisionModel).toBe(CANONICAL.webPdfVisionModel);
+    expect(state.showAllModels).toBe(CANONICAL.showAllModels);
     expect(state.visualAttachmentPrivacyNoticeSeen).toBe(true);
   });
 });
@@ -179,6 +184,7 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
     "kiro-web-search-credential": "将搜索凭据恢复默认",
     "kiro-web-pdf-vision-enabled": "将扫描 PDF 识别恢复默认",
     "kiro-web-pdf-vision-model": "将 Vision 模型恢复默认",
+    "kiro-show-all-models": "将模型范围恢复默认",
   };
 
   function resetButton(container: HTMLElement, settingId: string): HTMLButtonElement | null {
@@ -288,6 +294,24 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
         expect(getSessionWebPdfVisionApiKey()).toBe("vision-v5a9-secret");
         expect(resetButton(container, "kiro-web-pdf-vision-model")).toBeNull();
       }
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("模型范围：OpenCode Go 下打开「显示更多模型」出现 reset，点击恢复精选", async () => {
+    useAISettingsStore.setState({ provider: "opencode-go", model: "deepseek-v4.1-flash" });
+    const { container, root } = await mountKiroSettings();
+    const store = useKiroPreferencesStore;
+    try {
+      expect(container.querySelector('[data-setting-id="kiro-show-all-models"]')).toBeTruthy();
+      expect(resetButton(container, "kiro-show-all-models")).toBeNull();
+      act(() => store.getState().setShowAllModels(true));
+      expect(resetButton(container, "kiro-show-all-models")).toBeTruthy();
+      await act(async () => resetButton(container, "kiro-show-all-models")!.click());
+      expect(store.getState().showAllModels).toBe(false);
+      expect(resetButton(container, "kiro-show-all-models")).toBeNull();
     } finally {
       act(() => root.unmount());
       container.remove();

@@ -320,10 +320,10 @@ describe("GPT 5.6 Luna / Grok 4.6（openai-responses-effort）", () => {
     expect(cap.mechanism).toBe("openai-responses-effort");
   });
 
-  it("2. supportedEfforts 只含 verified 档位（default/low/medium/high；max 未 live 验证不暴露）", () => {
-    const cap = getReasoningCapability(lunaDef);
-    expect(cap.supportedEfforts).toEqual(["default", "low", "medium", "high"]);
-  });
+    it("2. supportedEfforts 含官方档位（2026-09-23 官方文档：default/low/medium/high/xhigh/max）", () => {
+      const cap = getReasoningCapability(lunaDef);
+      expect(cap.supportedEfforts).toEqual(["default", "low", "medium", "high", "xhigh", "max"]);
+    });
 
   it("3. default → provider options undefined", () => {
     expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "default" })).toBeUndefined();
@@ -334,10 +334,11 @@ describe("GPT 5.6 Luna / Grok 4.6（openai-responses-effort）", () => {
     expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "low" })).toEqual({ reasoningEffort: "low", forceReasoning: true });
   });
 
-  it("5. high → { reasoningEffort: high, forceReasoning: true }（max 未验证，不写成功测试）", () => {
-    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "high" })).toEqual({ reasoningEffort: "high", forceReasoning: true });
-    expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "max" })).toBeUndefined();
-  });
+    it("5. high/xhigh/max → { reasoningEffort, forceReasoning: true }（官方文档档位）", () => {
+      expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "high" })).toEqual({ reasoningEffort: "high", forceReasoning: true });
+      expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "xhigh" })).toEqual({ reasoningEffort: "xhigh", forceReasoning: true });
+      expect(resolveReasoningProviderOptions({ definition: lunaDef, effort: "max" })).toEqual({ reasoningEffort: "max", forceReasoning: true });
+    });
 
   it("envelope：Responses → { openai: ... }（4.0.42 固定读取 openai key）；base 与 reasoning 合并", () => {
     expect(resolveProviderOptionsEnvelope({ definition: lunaDef, effort: "high" })).toEqual({

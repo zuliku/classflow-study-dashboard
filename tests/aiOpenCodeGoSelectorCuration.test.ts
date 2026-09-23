@@ -56,6 +56,49 @@ describe("选择器精选列表", () => {
     expect(mimo.capabilities.reasoning?.mechanism).toBe("effort");
   });
 
+  it("2026-09-23 官方文档放开：vision / reasoning 扩展（luna / deepseek-v4.1-flash / glm-5.3 / qwen3.8-max / kimi-k2.7-code / mimo-v2-omni）", () => {
+    const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
+
+    const luna = byId.get("gpt-5.6-luna")!;
+    expect(luna.capabilities.vision).toBe(true);
+    expect(luna.capabilities.visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(luna.capabilities.reasoning?.supportedEfforts).toEqual([
+      "default",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+
+    const deepseek = byId.get("deepseek-v4.1-flash")!;
+    expect(deepseek.capabilities.vision).toBe(true);
+    expect(deepseek.capabilities.reasoning).toEqual({
+      adjustable: true,
+      supportedEfforts: ["default", "low", "high", "max"],
+      mechanism: "effort",
+    });
+
+    const glm = byId.get("glm-5.3")!;
+    expect(glm.capabilities.vision).toBe(false);
+    expect(glm.capabilities.reasoning?.supportedEfforts).toEqual(["default", "low", "high", "max"]);
+
+    const qwenMax = byId.get("qwen3.8-max")!;
+    expect(qwenMax.capabilities.vision).toBe(true);
+
+    const kimiCode = byId.get("kimi-k2.7-code")!;
+    expect(kimiCode.capabilities.vision).toBe(true);
+    expect(kimiCode.capabilities.reasoning).toBeUndefined();
+
+    const mimoOmni = byId.get("mimo-v2-omni")!;
+    expect(mimoOmni.capabilities.vision).toBe(true);
+
+    // 无官方能力证据的模型保持保守
+    expect(byId.get("mimo-v2.5-pro")!.capabilities.vision).toBe(false);
+    expect(byId.get("minimax-m2.7")!.capabilities.vision).toBe(false);
+    expect(byId.get("hy3")!.capabilities.reasoning).toBeUndefined();
+  });
+
   it("getSelectorModelsForProvider：opencode-go 精选；deepseek 与注册表一致", () => {
     expect(getSelectorModelsForProvider("opencode-go").map((m) => m.id)).toEqual([
       ...OPENCODE_SELECTOR_MODEL_IDS,
@@ -64,33 +107,28 @@ describe("选择器精选列表", () => {
   });
 });
 
-describe("模型目录 route：只返回精选列表", () => {
+describe("模型目录 route：精选列表 / all=1 全部模型", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it("远端可用：过滤为精选模型 + 精选顺序", async () => {
-    const { resetOpenCodeGoModelsCache } = await import("@/lib/ai/providers/openCodeGo");
-    resetOpenCodeGoModelsCache();
+  function stubRemote(ids: string[]) {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            object: "list",
-            data: [
-              { id: "hy3" },
-              { id: "mimo-v2.6-pro" },
-              { id: "omen-alpha" },
-              { id: "grok-4.7" },
-              { id: "deepseek-v4.1-flash" },
-            ],
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        )
+        new Response(JSON.stringify({ object: "list", data: ids.map((id) => ({ id })) }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
       )
     );
+  }
+
+  it("远端可用：过滤为精选模型 + 精选顺序", async () => {
+    const { resetOpenCodeGoModelsCache } = await import("@/lib/ai/providers/openCodeGo");
+    resetOpenCodeGoModelsCache();
+    stubRemote(["hy3", "mimo-v2.6-pro", "omen-alpha", "grok-4.7", "deepseek-v4.1-flash"]);
     const res = await handleModels(new Request("http://local/api/ai/models?provider=opencode-go"));
     const body = (await res.json()) as { models: { id: string }[]; source: string };
     expect(body.source).toBe("remote");
@@ -114,5 +152,40 @@ describe("模型目录 route：只返回精选列表", () => {
     const body = (await res.json()) as { models: { id: string }[]; source: string };
     expect(body.source).toBe("registry");
     expect(body.models.map((m) => m.id)).toEqual([...OPENCODE_SELECTOR_MODEL_IDS]);
+  });
+
+  it("all=1（显示更多模型）：返回全部已验证模型（远端 ∩ 注册表，厂商/能力排序），未入选模型回归", async () => {
+    const { resetOpenCodeGoModelsCache } = await import("@/lib/ai/providers/openCodeGo");
+    resetOpenCodeGoModelsCache();
+    stubRemote(["hy3", "mimo-v2.6-pro", "omen-alpha", "grok-4.7", "deepseek-v4.1-flash"]);
+    const res = await handleModels(
+      new Request("http://local/api/ai/models?provider=opencode-go&all=1")
+    );
+    const body = (await res.json()) as { models: { id: string }[]; source: string };
+    expect(body.source).toBe("remote");
+    const ids = body.models.map((m) => m.id);
+    // 全部已验证模型（含未入选精选的 hy3 / grok-4.7）；未知厂商 omen-alpha 仍被过滤
+    expect(new Set(ids)).toEqual(new Set(["hy3", "mimo-v2.6-pro", "grok-4.7", "deepseek-v4.1-flash"]));
+    expect(ids).not.toContain("omen-alpha");
+    // 厂商（字母序）/ 能力排序：deepseek < mimo < tencent(hy3) < xai(grok)
+    expect(ids).toEqual(["deepseek-v4.1-flash", "mimo-v2.6-pro", "hy3", "grok-4.7"]);
+  });
+
+  it("all=1 且远端失败：回落完整注册表（21 款，非精选）", async () => {
+    const { resetOpenCodeGoModelsCache } = await import("@/lib/ai/providers/openCodeGo");
+    resetOpenCodeGoModelsCache();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network down");
+      })
+    );
+    const res = await handleModels(
+      new Request("http://local/api/ai/models?provider=opencode-go&all=1")
+    );
+    const body = (await res.json()) as { models: { id: string }[]; source: string };
+    expect(body.source).toBe("registry");
+    expect(body.models).toHaveLength(OPENCODE_MODELS.length);
+    expect(body.models.map((m) => m.id)).toEqual(getModelsForProvider("opencode-go").map((m) => m.id));
   });
 });

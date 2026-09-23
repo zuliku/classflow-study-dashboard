@@ -90,6 +90,7 @@ export const SETTING_IDS = {
     enabled: "ai-enabled",
     provider: "ai-provider",
     model: "ai-model",
+    showAllModels: "kiro-show-all-models",
     customName: "ai-custom-name",
     customUrl: "ai-custom-url",
     customModel: "ai-custom-model",
@@ -430,6 +431,15 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "模型",
     description: "选择当前使用的对话模型",
     keywords: ["模型", "model", "v4", "grok", "kimi", "glm"],
+  },
+  {
+    id: SETTING_IDS.kiro.showAllModels,
+    section: "kiro",
+    title: "显示更多模型",
+    description: "模型选择器显示全部已验证模型（默认只显示精选）",
+    keywords: ["模型", "更多", "全部", "选择器", "model", "opencode"],
+    conditional: true,
+    gate: [{ control: SETTING_IDS.kiro.provider, requiresValue: "opencode-go" }],
   },
   {
     id: SETTING_IDS.kiro.customName,
