@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef } from "react";
 import { BookOpen, ClipboardCheck, CalendarRange, Users2, FileText } from "lucide-react";
@@ -160,7 +160,6 @@ export function KiroContextPicker({
           </div>
         </div>
       ))}
-      <p className="px-3 text-[10px] text-sandrift">所选上下文会随消息发送，Kiro 将据此优先查询。</p>
     </div>
   );
 

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import { ClipboardCopy, FileCode2, Share2 } from "lucide-react";
@@ -56,9 +56,6 @@ export function KiroShareSheet({ onClose }: { onClose: () => void }) {
     <div className="space-y-2">
       <div>
         <h3 className="text-xs font-bold text-charcoal">分享对话</h3>
-        <p className="text-[10px] text-sandrift mt-1 leading-relaxed">
-          仅分享当前对话中可见的内容（消息、回答与操作结果），不包含内部数据。
-        </p>
       </div>
       <div className="space-y-0.5">
         <button
@@ -69,7 +66,7 @@ export function KiroShareSheet({ onClose }: { onClose: () => void }) {
           <ClipboardCopy className="w-4 h-4 text-sandrift shrink-0" />
           <span>
             复制对话
-            <span className="block text-[10px] font-normal text-sandrift mt-0.5">纯文本 transcript</span>
+            <span className="block text-[10px] font-normal text-sandrift mt-0.5">纯文本</span>
           </span>
         </button>
         <button
@@ -80,7 +77,7 @@ export function KiroShareSheet({ onClose }: { onClose: () => void }) {
           <FileCode2 className="w-4 h-4 text-sandrift shrink-0" />
           <span>
             复制 Markdown
-            <span className="block text-[10px] font-normal text-sandrift mt-0.5">保留格式与公式源码</span>
+            <span className="block text-[10px] font-normal text-sandrift mt-0.5">保留格式与公式</span>
           </span>
         </button>
         <button
@@ -91,9 +88,6 @@ export function KiroShareSheet({ onClose }: { onClose: () => void }) {
           <Share2 className="w-4 h-4 text-sandrift shrink-0" />
           <span>
             系统分享
-            <span className="block text-[10px] font-normal text-sandrift mt-0.5">
-              不支持 Web Share 时自动复制
-            </span>
           </span>
         </button>
       </div>

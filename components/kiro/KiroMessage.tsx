@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import { FileText, Image as ImageIcon, Copy, Pencil, RefreshCw, MoreHorizontal, Send, Globe2 } from "lucide-react";
@@ -325,7 +325,7 @@ export function KiroUserMessage({
   const editDisabledTitle = editDisabledReason
     ? {
         "write-suffix": "该消息之后包含已执行操作，无法直接编辑；请发送新的修改指令。",
-        attachments: "该消息包含附件，暂不支持直接编辑；请重新发送。",
+        attachments: "含附件的消息不能编辑，请重新发送。",
         "turn-in-flight": "Kiro 正在处理当前消息，请稍后再编辑。",
         "message-not-found": "该消息已不可编辑。",
       }[editDisabledReason]
@@ -373,7 +373,7 @@ export function KiroUserMessage({
                   <span className={cn("truncate max-w-[140px]")}>{a.name}</span>
                   {a.tempNotRetained && (
                     <span
-                      title="原始图片未保存在对话历史中"
+                      title="图片未保留在历史中"
                       className="text-[9px] font-bold text-sandrift bg-alabaster border border-line-soft rounded px-1 py-px shrink-0"
                     >
                       临时附件未保留

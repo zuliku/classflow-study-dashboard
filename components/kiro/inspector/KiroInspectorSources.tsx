@@ -68,7 +68,6 @@ export function KiroInspectorSources() {
         <KiroInspectorEmptyState
           icon={<Globe2 className="w-3.5 h-3.5" />}
           text="暂无来源"
-          hint="Kiro 使用资料或网页后会显示在这里。"
         />
       ) : (
         <>

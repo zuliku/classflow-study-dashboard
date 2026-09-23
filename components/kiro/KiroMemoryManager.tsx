@@ -144,7 +144,6 @@ export function KiroMemoryManager({
             <div className="py-10 text-center">
               <Brain className="w-6 h-6 text-sandrift mx-auto" />
               <p className="text-sm font-semibold text-charcoal mt-2">暂无记忆</p>
-              <p className="text-xs text-sandrift mt-1 leading-relaxed">对 Kiro 说「记住我一般晚上学习」之类的偏好，就会保存在这里。</p>
             </div>
           ) : (
             memory.memories.map((m) => {
@@ -257,14 +256,14 @@ export function KiroMemoryManager({
             })
           )}
           {staleMemo.length > 0 && (
-            <p className="text-[10px] text-sandrift pt-1">有 {staleMemo.length} 条记忆关联的课程/学期已不存在，仍保留在管理中，但不会进入 Kiro 的当前上下文。</p>
+            <p className="text-[10px] text-sandrift pt-1">有 {staleMemo.length} 条记忆的关联课程/学期已不存在，不进入当前上下文。</p>
           )}
         </div>
 
         {/* Footer */}
         <div className="shrink-0 px-4 py-2.5 border-t border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <p className="text-[10px] text-sandrift leading-relaxed max-w-[420px]">
-            记忆保存在当前设备中。只有完成当前请求需要时，相关记忆内容才会发送给你选择的 AI 服务。
+            记忆仅保存在本机，按需发送给当前 AI 服务。
           </p>
           {memory.memories.length > 0 && (
             <Button

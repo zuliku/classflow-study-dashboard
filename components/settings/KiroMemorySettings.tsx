@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useState } from "react";
 import { Brain } from "lucide-react";
@@ -40,7 +40,7 @@ export function KiroMemorySettings() {
 
   return (
     <>
-      <SettingsRow settingId="kiro-memory-enabled" title="Kiro 记忆" description="记住学习偏好并持续运用；记忆保存在当前设备。">
+      <SettingsRow settingId="kiro-memory-enabled" title="Kiro 记忆" description="记住学习偏好并在后续对话中运用。">
         <SettingsToggle checked={memoryEnabled} onChange={setMemoryEnabled} label="启用 Kiro 记忆" />
       </SettingsRow>
 

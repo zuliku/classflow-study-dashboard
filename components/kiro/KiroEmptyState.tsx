@@ -31,15 +31,15 @@ export function KiroEmptyState({
 
   const suggestions = hasData
     ? [
-        { icon: CalendarCheck, label: "帮我规划今天", desc: "结合课表与 DDL 给出今日建议" },
-        { icon: ListChecks, label: "查看最近 DDL", desc: "梳理未来几天的截止任务" },
-        { icon: BookOpen, label: "看看我明天有什么课", desc: "基于当前周次查询课表" },
-        { icon: TrendingUp, label: "分析本周学习负担", desc: "按课程与任务估算本周压力" },
+        { icon: CalendarCheck, label: "帮我规划今天" },
+        { icon: ListChecks, label: "查看最近 DDL" },
+        { icon: BookOpen, label: "看看我明天有什么课" },
+        { icon: TrendingUp, label: "分析本周学习负担" },
       ]
     : [
-        { icon: BookOpen, label: "了解 Kiro 能做什么", desc: "Kiro 会按需读取你的 ClassFlow 数据" },
-        { icon: ListChecks, label: "制定一个学习计划", desc: "帮我把大目标拆成可执行步骤" },
-        { icon: CalendarCheck, label: "解释一个知识点", desc: "用通俗方式讲清楚概念" },
+        { icon: BookOpen, label: "了解 Kiro 能做什么" },
+        { icon: ListChecks, label: "制定一个学习计划" },
+        { icon: CalendarCheck, label: "解释一个知识点" },
       ];
 
   return (
@@ -63,14 +63,6 @@ export function KiroEmptyState({
       >
         今天想先处理什么？
       </h2>
-      {!compact && (
-        <p
-          data-kiro-empty-subtitle
-          className={cn("text-xs text-sandrift mt-1.5 max-w-xs", playIntro && "kiro-empty-subtitle-intro")}
-        >
-          基于你的课表、任务与课程资料
-        </p>
-      )}
 
       <div data-kiro-empty-suggestions>
         {contextSuggestions ? (
@@ -88,15 +80,12 @@ export function KiroEmptyState({
                   style={{ "--kiro-stagger-index": index } as React.CSSProperties}
                   onClick={() => onSuggestion(s.label)}
                   className={cn(
-                    "ux-press flex items-start gap-2.5 p-3 bg-surface border border-line rounded-xl text-left hover:bg-alabaster hover:border-line-strong transition-colors duration-[var(--motion-fast)] group",
+                    "ux-press flex items-center gap-2.5 p-3 bg-surface border border-line rounded-xl text-left hover:bg-alabaster hover:border-line-strong transition-colors duration-[var(--motion-fast)] group",
                     playIntro && "kiro-empty-suggestion-intro"
                   )}
                 >
-                  <Icon className="w-4 h-4 text-sandrift group-hover:text-charcoal shrink-0 mt-0.5" />
-                  <span className="min-w-0">
-                    <span className="block text-xs font-bold text-charcoal">{s.label}</span>
-                    <span className="block text-[10px] text-sandrift mt-0.5 leading-relaxed">{s.desc}</span>
-                  </span>
+                  <Icon className="w-4 h-4 text-sandrift group-hover:text-charcoal shrink-0" />
+                  <span className="block text-xs font-bold text-charcoal truncate">{s.label}</span>
                 </button>
               );
             })}

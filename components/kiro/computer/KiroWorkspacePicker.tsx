@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import { Popover } from "@/components/ui/Popover";
@@ -78,8 +78,8 @@ export function KiroWorkspacePicker({
         </div>
         <p className="px-2 pb-2 text-[9px] text-sandrift leading-relaxed">
           {isSandbox
-            ? "数据仅保存在当前设备（Kiro 内置工作区），不会写入本地文件夹。"
-            : "工作区文件只在你授权的目录内访问。"}
+            ? "数据仅保存在当前设备。"
+            : "仅访问已授权的目录。"}
         </p>
         {grantWarning && (
           <p className="mx-1.5 mb-1 px-2 py-1 rounded-lg bg-danger-bg text-[10px] font-semibold text-danger">

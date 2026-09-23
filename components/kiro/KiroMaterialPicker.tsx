@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect } from "react";
 import { FileText, Image as ImageIcon, FolderOpen } from "lucide-react";
@@ -27,7 +27,7 @@ export function KiroMaterialPicker({
   return (
     <div role="menu" aria-label="选择课程资料" className="py-1 max-h-[320px] overflow-y-auto">
       {coursesWithMaterials.length === 0 && (
-        <p className="px-3 py-2 text-xs text-sandrift">暂无课程资料，请先在课程中上传。</p>
+        <p className="px-3 py-2 text-xs text-sandrift">暂无课程资料</p>
       )}
       {coursesWithMaterials.map((c) => (
         <div key={c.id} className="mb-1">
@@ -58,7 +58,6 @@ export function KiroMaterialPicker({
           })}
         </div>
       ))}
-      <p className="px-3 pt-1 text-[10px] text-sandrift">正文由 Kiro 按需读取，不会自动发送全部资料。</p>
     </div>
   );
 }

@@ -817,8 +817,7 @@ export function KiroComposer({
 
         {/* Composer 下方只保留真正需要用户注意的状态 */}
         {!configured ? (
-          <div className={cn("flex items-center justify-between gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
-            <p className="text-[11px] text-sandrift">先连接一个 AI 服务即可开始使用 Kiro。</p>
+          <div className={cn("flex items-center justify-end gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
             <button
               onClick={onOpenSettings}
               className="flex items-center gap-1 px-2.5 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
@@ -829,9 +828,6 @@ export function KiroComposer({
           </div>
         ) : attachments.length > 0 ? (
           <div className={cn("mt-1.5 space-y-1", compact ? "px-0" : "px-0.5")}>
-            <p className="text-[10px] text-sandrift">
-              文件内容会发送给当前选择的 AI 服务以完成你的请求。
-            </p>
             {/* Task B V1.1：首次添加图片轻提示，显式「知道了」后才不再显示（非 Dialog） */}
             {hasImages && !visualPrivacyNoticeSeen && (
               <p

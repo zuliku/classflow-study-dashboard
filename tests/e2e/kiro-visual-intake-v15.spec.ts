@@ -1,4 +1,4 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 import zlib from "node:zlib";
 
@@ -101,8 +101,8 @@ test("Attachment Picker：截图用途入口文案（添加聊天截图或图片
   await composer.getByRole("button", { name: "添加附件" }).click();
   const item = page.getByRole("menuitem", { name: /添加聊天截图或图片/ });
   await expect(item).toBeVisible();
-  await expect(item).toContainText(/班群通知、作业或调课截图/);
-  await expect(item).toContainText(/JPG \/ PNG \/ WEBP/);
+  await expect(item).toContainText(/通知、作业或调课截图/);
+  await expect(item).toContainText(/截图/);
 });
 
 test("ready image suggestions：点击只填 Prompt，不直接发送", async ({ page }) => {

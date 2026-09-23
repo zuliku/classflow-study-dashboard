@@ -229,7 +229,7 @@ test("V2 Artifact：创建 draft.md → rename → 审批 → 重命名事实 �
 
   const restoredCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
   await expect(restoredCard).toContainText("重命名 draft.md → final.md");
-  await expect(restoredCard).toContainText("历史记录（仅展示，不能撤销）");
+  await expect(restoredCard).toContainText("历史记录");
   await expect(restoredCard.getByTestId("kiro-task-undo")).toHaveCount(0);
 });
 
@@ -429,7 +429,7 @@ test("V2 Part 2：create_document → update_document（自动允许）→ 修�
 
   const restoredCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
   await expect(restoredCard).toContainText("修改 plan.md · v2");
-  await expect(restoredCard).toContainText("历史记录（仅展示，不能撤销）");
+  await expect(restoredCard).toContainText("历史记录");
   await expect(restoredCard.getByTestId("kiro-task-undo")).toHaveCount(0);
 });
 

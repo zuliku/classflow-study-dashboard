@@ -143,9 +143,6 @@ export function KiroRecentArtifactsPopover() {
               <div className="h-[104px] flex flex-col items-center justify-center gap-1.5 px-4">
                 <FileClock className="w-4 h-4 text-sandrift shrink-0" aria-hidden="true" />
                 <p className="text-[11px] font-semibold text-charcoal">暂无最近文件</p>
-                <p className="text-[10px] text-sandrift text-center leading-relaxed">
-                  Kiro 创建或采用的文件会显示在这里
-                </p>
               </div>
             )}
             {entries.map((entry) => {

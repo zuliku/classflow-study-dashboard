@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -195,7 +195,7 @@ export function KiroAttachmentChip({
                 style={menuPos ? { left: menuPos.x, top: menuPos.y } : { left: anchorRect.right, top: anchorRect.top }}
               >
                 <p className="px-2.5 pt-1.5 pb-1 text-[10px] font-bold text-sandrift">保存到课程资料</p>
-                {courses.length === 0 && <p className="px-2.5 py-2 text-[10px] text-sandrift">暂无课程，请先创建课程。</p>}
+                {courses.length === 0 && <p className="px-2.5 py-2 text-[10px] text-sandrift">暂无课程</p>}
                 {courses.map((c) => (
                   <button
                     key={c.id}

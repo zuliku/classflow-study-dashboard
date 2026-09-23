@@ -76,7 +76,7 @@ export function KiroNavigatorSearch({
                 <span className="min-w-0 flex-1">
                   <span className="block text-xs font-semibold text-charcoal truncate">{project.name}</span>
                   <span className="block text-[10px] text-sandrift truncate">
-                    {project.description ?? `${project.name} 项目`}
+                    {project.description ?? formatHistoryTime(project.updatedAt)}
                   </span>
                 </span>
               </button>

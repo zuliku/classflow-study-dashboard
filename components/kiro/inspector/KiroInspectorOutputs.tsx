@@ -219,7 +219,6 @@ export function KiroInspectorOutputs() {
           <KiroInspectorEmptyState
             icon={<FileClock className="w-3.5 h-3.5" />}
             text="暂无本次对话输出"
-            hint="Kiro 在本对话创建的文件会显示在这里。"
           />
           <button
             type="button"

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState } from "react";
 import { CheckCircle2, Eye, RotateCcw, Clock3, XCircle, AlertTriangle, Download, Trash2 } from "lucide-react";
@@ -64,7 +64,7 @@ export function KiroAgentTaskCard({
             onDelete={requestDelete}
           />
         )}
-        <p className="text-[10px] text-sandrift">历史记录（仅展示，不能撤销）</p>
+        <p className="text-[10px] text-sandrift">历史记录</p>
       </div>
     );
   }

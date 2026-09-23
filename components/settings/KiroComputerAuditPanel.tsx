@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
@@ -53,7 +53,7 @@ export function KiroComputerAuditPanel() {
         <div className="min-w-0">
           <h4 className="text-xs font-bold text-charcoal">最近活动</h4>
           <p className="text-[10px] text-sandrift mt-0.5">
-            Kiro 在工作区中的文件操作与权限决策（仅元数据，不包含文件内容）。
+            文件操作与权限决策记录（仅元数据）。
           </p>
         </div>
         {loaded && entries.length > 0 && (

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, ChevronDown, Plus, X } from "lucide-react";
@@ -171,7 +171,7 @@ export function KiroNavigatorProjectDetail({
             aria-label="当前项目新对话提示"
             className="px-1.5 py-1.5 text-[10px] font-semibold text-charcoal bg-pastel-mint/50 rounded-lg"
           >
-            当前 · 新对话（发送第一条消息后才会保存）
+            当前 · 新对话
           </div>
         ) : null}
         {conversations.length === 0 && !isTransientNewChat ? (

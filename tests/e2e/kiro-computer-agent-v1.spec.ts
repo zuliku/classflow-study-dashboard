@@ -1,4 +1,4 @@
-import { expect } from "@playwright/test";
+﻿import { expect } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
@@ -212,7 +212,7 @@ test("Computer Agent V1：创建 → 审批修改 → 审查 → 撤销 → 历�
   await page.waitForTimeout(800);
 
   const restoredCard = page.locator('[data-testid="kiro-message"]').last().getByTestId("kiro-agent-task-card");
-  await expect(restoredCard).toContainText("历史记录（仅展示，不能撤销）");
+  await expect(restoredCard).toContainText("历史记录");
   await expect(restoredCard.getByTestId("kiro-task-undo")).toHaveCount(0);
   await expect(restoredCard.getByTestId("kiro-task-review")).toHaveCount(0);
 });

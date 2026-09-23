@@ -1,4 +1,4 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
@@ -163,9 +163,9 @@ test("Recent Files 0 文件：紧凑 Empty State（无 180px+ 固定空白）", 
   await page.getByRole("button", { name: "最近文件" }).click();
   const panel = page.getByRole("dialog", { name: "最近文件" });
   await expect(panel).toBeVisible();
-  // Empty State：icon + 标题 + 描述，居中
+  // Empty State：icon + 标题（单行，无冗余描述）
   await expect(panel.getByText("暂无最近文件", { exact: true })).toBeVisible();
-  await expect(panel.getByText("Kiro 创建或采用的文件会显示在这里")).toBeVisible();
+  await expect(panel.getByText("会显示在这里")).toHaveCount(0);
   // 内容高度紧凑（< 160px，不存在 180px+ 空白）
   const listHeight = await panel.evaluate((el) => (el as HTMLElement).offsetHeight);
   expect(listHeight).toBeLessThan(230);

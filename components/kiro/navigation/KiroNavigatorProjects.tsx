@@ -62,7 +62,7 @@ export function KiroNavigatorProjectRow({
             )}
           </span>
           <span className="block text-[10px] text-sandrift truncate">
-            {project.description ?? `${project.name} 项目`} · {formatHistoryTime(project.updatedAt)}
+            {[project.description, formatHistoryTime(project.updatedAt)].filter(Boolean).join(" · ")}
           </span>
         </span>
       </button>

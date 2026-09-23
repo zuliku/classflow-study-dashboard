@@ -1,4 +1,4 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
@@ -35,7 +35,7 @@ test("Desktop 1440：Sidebar 进入 Kiro，Empty State 与 Composer 可见，未
   await expect(composer.getByLabel("Ask Kiro")).toBeVisible();
   await expect(composer.getByLabel("发送")).toBeDisabled();
   // 未配置 AI：提示 + 配置入口
-  await expect(composer.getByText("先连接一个 AI 服务即可开始使用 Kiro。")).toBeVisible();
+  await expect(composer.getByRole("button", { name: "配置 AI 服务" })).toBeVisible();
   // 点击建议不产生消息（未配置，禁止请求）
   await page.getByRole("button", { name: "帮我规划今天" }).first().click();
   await expect(page.getByTestId("kiro-user-message")).toHaveCount(0);

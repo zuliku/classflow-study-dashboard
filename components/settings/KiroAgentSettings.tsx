@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState } from "react";
 import { FolderOpen, HardDrive, ShieldAlert, Trash2, RefreshCw } from "lucide-react";
@@ -212,7 +212,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 使用终端？",
       description:
-        "终端命令可能修改文件、安装依赖、运行程序，或访问工作区之外的系统资源。在「授权范围内自动」模式下，普通命令可能无需再次确认；识别到的删除、高风险或任意内联代码命令仍会请求许可。自动执行的脚本本身可能修改文件或访问工作区外资源。",
+        "终端命令可能修改文件、安装依赖或访问工作区外资源。普通命令在「授权范围内自动」模式下可能直接执行；删除与高风险命令仍需确认。",
       confirmLabel: "允许",
       onConfirm: () => setTerminalEnabled(true),
     });
@@ -232,7 +232,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 查看桌面？",
       description:
-        "Kiro 可以读取当前屏幕和应用界面（窗口标题、界面控件与截图），用于回答「我现在打开了什么」这类问题。查看本身只读，不会点击或输入；如需操作界面，可在下方单独开启「允许 Kiro 操作电脑」。截图只在本次查看中使用，不会保存到磁盘。",
+        "Kiro 可只读查看当前屏幕与界面控件，不会点击或输入；截图仅本次使用，不保存到磁盘。如需操作界面，可单独开启「允许 Kiro 操作电脑」。",
       confirmLabel: "允许查看",
       onConfirm: () => setDesktopControlEnabled(true),
     });
@@ -250,7 +250,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 操作电脑？",
       description:
-        "开启后 Kiro 可以在你当前的窗口中点击、输入文本和按键，并会自动重新观察确认结果。发送消息、提交表单、下载、删除、修改系统设置等高风险动作会再次请求确认；密码、API Key、Token 等敏感信息永远不会由 Kiro 输入。你可以随时点击停止按钮立即中止。",
+        "Kiro 可在当前窗口点击、输入与按键，并自动重新观察确认结果。发送、提交、删除等高风险动作逐次确认；敏感信息不会由 Kiro 输入，可随时停止。",
       confirmLabel: "允许操作",
       onConfirm: () => {
         // 操作的前提是观察能力；一并开启（两者仍各自独立持久化）
@@ -272,7 +272,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 读写剪贴板？",
       description:
-        "开启后 Kiro 可以在你的确认下读取剪贴板内容（可能包含敏感信息），或把文本写入剪贴板（会覆盖当前剪贴板内容）。每次读写仍会单独请求确认；未开启时剪贴板操作会被直接拒绝。",
+        "Kiro 可在你确认后读取剪贴板（可能含敏感信息）或写入文本（覆盖当前内容）；每次读写都需确认。",
       confirmLabel: "允许剪贴板",
       onConfirm: () => setDesktopClipboardEnabled(true),
     });
@@ -348,7 +348,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-computer-enabled"
             title="允许 Kiro 操作文件"
-            description="开启后可在授权工作区内读取、创建与受控修改文件；危险能力保持禁用。"
+            description="在授权工作区内读写文件。"
           >
             <SettingsToggle
               checked={computerEnabled}
@@ -362,7 +362,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-mode"
             title="自动执行级别"
-            description="决定操作等级；「授权范围内自动」可执行创建、修改、移动与普通终端命令，删除与高风险命令仍需确认。终端命令可能访问工作区外资源。"
+            description="创建 / 修改 / 移动自动执行；删除与高风险命令仍需确认。"
           >
             <SettingsSegmentedControl<KiroAgentMode>
               value={agentMode}
@@ -386,7 +386,7 @@ export function KiroAgentSettings() {
         {/* 终端与电脑控制：与文件操作分开，逐项授权（互不绑定） */}
         <SettingsGroup
           title="终端与电脑控制"
-          description="在授权工作区内运行命令、查看或操作电脑界面；每项都需单独开启，高风险动作仍会逐次确认。"
+          description="各项独立开启；高风险动作逐次确认。"
         >
           {/* Desktop Terminal V1：仅 Desktop runtime + terminal bridge 可用时显示（网页版完全不出现） */}
           {desktopTerminalAvailable ? (
@@ -395,10 +395,10 @@ export function KiroAgentSettings() {
               title="允许 Kiro 使用终端"
               description={
                 terminalEnabled && terminalHasNativeRoot
-                  ? "PowerShell / CMD · 当前本地工作区"
+                  ? "PowerShell / CMD · 本地工作区"
                   : terminalEnabled
-                  ? "需要先选择一个本地文件夹工作区"
-                  : "开启后 Kiro 才能执行 PowerShell / CMD 命令。"
+                  ? "请先选择本地文件夹工作区"
+                  : "执行 PowerShell / CMD 命令。"
               }
             >
               <SettingsToggle
@@ -429,8 +429,8 @@ export function KiroAgentSettings() {
               title="允许 Kiro 查看桌面"
               description={
                 desktopControlEnabled
-                  ? "只读观察 · 可读取当前屏幕与窗口控件树；不会点击或输入"
-                  : "开启后 Kiro 才能查看当前屏幕和应用界面（只读）。"
+                  ? "只读 · 不会点击或输入"
+                  : "只读查看当前屏幕与界面控件。"
               }
             >
               <SettingsToggle
@@ -448,8 +448,8 @@ export function KiroAgentSettings() {
               title="允许 Kiro 操作电脑"
               description={
                 desktopActionEnabled
-                  ? "可点击 / 输入 / 按键 / 滚动 · 高风险动作仍会请求确认"
-                  : "开启后 Kiro 才能在你当前窗口中执行点击与输入（高风险动作需确认）。"
+                  ? "点击 / 输入 / 按键 / 滚动；高风险逐次确认"
+                  : "在当前窗口中点击与输入。"
               }
             >
               <SettingsToggle
@@ -467,8 +467,8 @@ export function KiroAgentSettings() {
               title="允许 Kiro 读写剪贴板"
               description={
                 desktopClipboardEnabled
-                  ? "读取 / 写入剪贴板 · 每次操作仍会单独请求确认（写入会覆盖当前剪贴板）"
-                  : "默认关闭；开启后 Kiro 才能在你确认的情况下读取或写入剪贴板。"
+                  ? "读取 / 写入剪贴板；写入会覆盖当前内容"
+                  : "读取 / 写入剪贴板需逐次确认。"
               }
             >
               <SettingsToggle
@@ -601,7 +601,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-permissions"
             title="安全边界"
-            description="所有操作都限定在你授权的范围内：文件只在授权工作区读写，终端命令与电脑操作需单独开启，发送 / 提交 / 删除等高风险动作逐次确认；不支持 Full Access 或任意网络访问。"
+            description="文件仅限授权工作区；终端与电脑操作单独开启；高风险动作逐次确认。"
           >
             <span className="text-[11px] text-satin-grey shrink-0">
               <ShieldAlert className="w-3.5 h-3.5 inline mr-1 text-sandrift" />

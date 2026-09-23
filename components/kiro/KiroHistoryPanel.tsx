@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, MessageSquare } from "lucide-react";
@@ -148,9 +148,9 @@ export function KiroHistoryPanel({
                 <p className="text-sm font-semibold text-charcoal">
                   {records.length === 0 ? "暂无历史对话" : "未找到匹配对话"}
                 </p>
-                <p className="text-xs text-sandrift leading-relaxed max-w-[220px]">
-                  {records.length === 0 ? "发送第一条消息后，对话会自动保存在本机。" : "换个关键词试试。"}
-                </p>
+                {records.length > 0 && (
+                  <p className="text-xs text-sandrift leading-relaxed max-w-[220px]">换个关键词试试。</p>
+                )}
               </div>
             ) : (
               <div className="divide-y divide-line-soft">

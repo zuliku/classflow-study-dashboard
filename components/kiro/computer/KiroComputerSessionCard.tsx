@@ -243,7 +243,7 @@ export function KiroComputerSessionCard() {
       {/* V2.3：反思提示（连续验证失败 / 无进展） */}
       {reflectionRequired && active && (
         <p className="pl-3.5 text-[10px] font-semibold text-danger" data-testid="computer-session-reflection">
-          需要调整策略：Kiro 正在重新观察并更新计划
+          正在调整策略
         </p>
       )}
 
@@ -251,7 +251,7 @@ export function KiroComputerSessionCard() {
       {state === "completed" && skillDraftResult && (
         <div className="flex items-center justify-between gap-2 pl-3.5">
           <span className="text-[10px] text-sandrift truncate min-w-0">
-            本任务共 {skillDraftResult.steps} 步，可保存为 Skill 复用
+            {skillDraftResult.steps} 步 · 可复用
           </span>
           <Button
             variant="ghost"

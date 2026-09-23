@@ -1,4 +1,4 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
@@ -109,7 +109,7 @@ test("Share：无消息时 disabled；发消息后可打开并复制对话", asy
 
   // 打开 Share Sheet → 复制对话 → 剪贴板含可见内容 + Toast
   await shareBtn.click();
-  await expect(page.getByText("仅分享当前对话中可见的内容")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "分享对话" })).toBeVisible();
   await page.getByRole("button", { name: /复制对话/ }).click();
   await expect(page.getByText("已复制").first()).toBeVisible();
   const clip = await page.evaluate(() => navigator.clipboard.readText());

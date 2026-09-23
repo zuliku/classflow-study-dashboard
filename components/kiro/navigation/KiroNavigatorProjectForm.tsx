@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -56,7 +56,7 @@ export function KiroNavigatorProjectForm({
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        placeholder="描述（可选）"
+        placeholder="描述"
         aria-label="项目描述"
         maxLength={KIRO_PROJECT_DESCRIPTION_MAX}
         rows={2}
@@ -67,13 +67,13 @@ export function KiroNavigatorProjectForm({
         <textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
-          placeholder="例如：回答优先使用中文；引用资料时注明来源；学习计划按周拆分。"
+          placeholder="例如：回答使用中文，引用注明来源。"
           aria-label="项目指令"
           maxLength={KIRO_PROJECT_INSTRUCTIONS_MAX}
           rows={4}
           className="w-full px-2 py-1.5 rounded-lg text-[11px] text-charcoal placeholder-sandrift bg-[#F7F5F5] border border-line focus:outline-none resize-none leading-relaxed"
         />
-        <p className="text-[9px] text-sandrift mt-0.5">Kiro 在此项目中的工作偏好。不会授予额外权限。</p>
+        <p className="text-[9px] text-sandrift mt-0.5">项目内生效；不授予额外权限。</p>
       </div>
       <div className="flex items-center justify-end gap-1.5 pt-0.5">
         <button

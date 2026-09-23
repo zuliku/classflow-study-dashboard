@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
 import { Check, Loader2, Eye, EyeOff, PlugZap, Globe2, ChevronDown } from "lucide-react";
@@ -269,7 +269,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-enabled"
             title="启用 Kiro"
-            description="关闭后将停用 Kiro 的 AI 功能。"
+            description="关闭后 Kiro 不可用。"
           >
             <SettingsToggle checked={enabled} onChange={setEnabled} label="启用 Kiro" />
           </SettingsRow>
@@ -280,7 +280,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-provider"
             title="AI 服务"
-            description="选择模型服务；配置保存在本地，不含 API Key。"
+            description="配置保存在本地，不含 API Key。"
           >
             <SettingsSelect
               value={provider}
@@ -294,7 +294,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             <SettingsRow
               settingId="ai-model"
               title="模型"
-              description="选择当前使用的对话模型。"
+              description="当前对话模型。"
             >
               <div className="flex flex-col items-end gap-1">
                 <SettingsSelect
@@ -313,7 +313,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
               <SettingsRow
                 settingId="ai-custom-name"
                 title="服务名称"
-                description="仅用于识别，如「本地网关」。"
+                description="仅用于识别。"
               >
                 <SettingsInput
                   value={custom.providerName}
@@ -324,7 +324,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
               <SettingsRow
                 settingId="ai-custom-url"
                 title="服务地址"
-                description="OpenAI 兼容接口的 Base URL（https，拒绝私网地址）。"
+                description="OpenAI 兼容 Base URL（https）。"
               >
                 <SettingsInput
                   value={custom.baseURL}
@@ -351,7 +351,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-api-key"
             title="API Key"
-            description="仅保存在本次应用会话；调用时经 ClassFlow 服务端转发。"
+            description="仅本次会话有效。"
           >
             <div className="relative w-full">
               <SettingsInput
@@ -428,7 +428,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-response-preference"
             title="回答偏好"
-            description="只调整最终回答的表达深度；不影响数据读取、工具调用与安全规则。"
+            description="只影响回答的表达深度。"
             modified={kiroSettingsModified.has("responsePreference")}
             onReset={() => resetKiroSettingsPreference("responsePreference")}
             resetAriaLabel="将回答偏好恢复默认"
@@ -453,7 +453,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-output-text-size"
             title="输出字号"
-            description="调整回复正文、公式、代码与表格的显示大小。"
+            description="回复正文与代码的显示大小。"
             modified={kiroSettingsModified.has("outputTextSize")}
             onReset={() => resetKiroSettingsPreference("outputTextSize")}
             resetAriaLabel="将输出字号恢复默认"
@@ -476,7 +476,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-auto-context"
             title="自动环境上下文"
-            description="按当前页面、时间与选中对象自动带入上下文；关闭后可用 @ 手动添加。"
+            description="按当前页面与选中对象自动带入；关闭后可用 @ 手动添加。"
             modified={kiroSettingsModified.has("autoContextEnabled")}
             onReset={() => resetKiroSettingsPreference("autoContextEnabled")}
             resetAriaLabel="将自动环境上下文恢复默认"
@@ -536,7 +536,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-search-credential"
                     title="凭据"
-                     description="选择凭据来源；自备 Key 仅保存在本次会话。"
+                     description="自备 Key 仅本次会话有效。"
                     modified={kiroSettingsModified.has("webSearchCredentialMode")}
                     onReset={() => resetKiroSettingsPreference("webSearchCredentialMode")}
                     resetAriaLabel="将搜索凭据恢复默认"
@@ -576,7 +576,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     <SettingsRow
                       settingId="kiro-web-search-byok-key"
                       title="Tavily API Key"
-                      description="仅保存在本次会话；调用时经服务端转发。"
+                      description="仅本次会话有效。"
                     >
                       <div className="relative w-full">
                         <SettingsInput
@@ -627,7 +627,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     </div>
                   </SettingsRow>
 
-                  <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="开启后，搜索查询可能发送给搜索服务；自备 Key 仅保存在本次会话。">
+                  <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="搜索查询可能发送给搜索服务。">
                     <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
                       按需发送
                     </span>
@@ -739,7 +739,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-pdf-vision-key"
                     title="OpenCode Go Vision API Key"
-                     description="密钥仅保存在本次会话；仅用于读取扫描型 PDF。"
+                     description="仅本次会话有效。"
                   >
                     <div className="relative w-full">
                       <SettingsInput

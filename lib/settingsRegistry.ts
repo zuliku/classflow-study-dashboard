@@ -514,7 +514,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     id: SETTING_IDS.kiro.memoryEnabled,
     section: "kiro",
     title: "启用 Kiro 记忆",
-    description: "记住学习偏好并持续运用；记忆保存在当前设备",
+    description: "记住学习偏好并在后续对话中运用",
     keywords: ["记忆", "记住", "偏好", "memory", "preference", "学习习惯"],
   },
   {

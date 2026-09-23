@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef } from "react";
 import { Paperclip, FileText, Image as ImageIcon, FolderOpen } from "lucide-react";
@@ -51,14 +51,14 @@ export function KiroAttachmentPicker({
       id: "image",
       icon: ImageIcon,
       label: "添加聊天截图或图片",
-      desc: "班群通知、作业或调课截图 · JPG / PNG / WEBP",
+      desc: "通知、作业或调课截图",
       action: () => pickFiles("image/png,image/jpeg,image/webp,.jpg,.jpeg,.png,.webp", onFiles, imageRef),
     },
     {
       id: "material",
       icon: FolderOpen,
       label: "选择课程资料",
-      desc: courses.length > 0 ? "从已有课程资料中引用" : "暂无课程资料",
+      desc: courses.length > 0 ? "课程资料" : "暂无课程资料",
       action: () => {
         if (courses.length > 0) onMaterials();
         onClose();

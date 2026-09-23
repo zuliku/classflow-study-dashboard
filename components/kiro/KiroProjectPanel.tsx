@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, X, Plus, Pencil, Trash2, ChevronsLeft, ArrowLeft, Image as ImageIcon } from "lucide-react";
@@ -510,7 +510,7 @@ export function KiroProjectPanel({
                 <textarea
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="描述（可选）"
+                  placeholder="描述"
                   aria-label="项目描述"
                   maxLength={KIRO_PROJECT_DESCRIPTION_MAX}
                   rows={2}
@@ -521,13 +521,13 @@ export function KiroProjectPanel({
                   <textarea
                     value={formInstructions}
                     onChange={(e) => setFormInstructions(e.target.value)}
-                    placeholder="例如：回答优先使用中文；引用资料时注明来源；学习计划按周拆分。"
+                    placeholder="例如：回答使用中文，引用注明来源。"
                     aria-label="项目指令"
                     maxLength={KIRO_PROJECT_INSTRUCTIONS_MAX}
                     rows={4}
                     className="w-full px-2 py-1.5 rounded-lg text-[11px] text-charcoal placeholder-sandrift bg-[#F7F5F5] border border-line focus:outline-none resize-none leading-relaxed"
                   />
-                  <p className="text-[9px] text-sandrift mt-0.5">Kiro 在此项目中的工作偏好。不会授予额外权限。</p>
+                  <p className="text-[9px] text-sandrift mt-0.5">项目内生效；不授予额外权限。</p>
                 </div>
                 <div className="flex items-center justify-end gap-1.5">
                   <button
@@ -569,7 +569,6 @@ export function KiroProjectPanel({
                   <div className="flex flex-col items-center gap-1 py-8 text-center">
                     <KIRO_PROJECT_ICON className="w-5 h-5 text-sandrift" />
                     <p className="text-xs font-semibold text-satin-grey mt-1">还没有项目</p>
-                    <p className="text-[11px] text-sandrift">用项目整理相关的 Kiro 对话。</p>
                     <button
                       onClick={startCreate}
                       className="mt-2 px-2.5 h-7 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
@@ -702,7 +701,7 @@ export function KiroProjectPanel({
                     aria-label="当前项目新对话提示"
                     className="px-1.5 py-1.5 mb-0.5 text-[10px] font-semibold text-charcoal bg-pastel-mint/50 rounded-lg"
                   >
-                    当前 · 新对话（发送第一条消息后才会保存）
+                    当前 · 新对话
                   </div>
                 ) : null}
                 {detailConversations.length === 0 && !(meta.conversationProjectId === selectedProjectId && meta.currentConversationId === null) ? (

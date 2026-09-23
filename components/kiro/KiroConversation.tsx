@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import { usePresence } from "@/lib/usePresence";
@@ -204,7 +204,7 @@ export function KiroConversation({
             {conversationSummary && (
               <div className="flex justify-center">
                 <span
-                  title="Kiro 保留最近消息，并压缩较早内容以保持对话稳定。"
+                  title="较早内容已压缩"
                   className="text-[10px] text-sandrift bg-[#F7F5F5] border border-line px-2 py-0.5 rounded-full"
                 >
                   较早对话已压缩

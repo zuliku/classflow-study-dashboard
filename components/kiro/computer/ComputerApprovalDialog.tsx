@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import { ShieldAlert } from "lucide-react";
@@ -129,7 +129,7 @@ export function ComputerApprovalDialog({
                 </p>
                 {request.gui.coordinateFallback && (
                   <p className="text-[10px] font-semibold text-danger">
-                    未使用 UI 元素定位（坐标回退），请确认目标位置正确。
+                    未使用 UI 元素定位，请确认目标位置正确。
                   </p>
                 )}
               </>
@@ -207,8 +207,8 @@ export function ComputerApprovalDialog({
 
         <p className="text-[10px] text-sandrift leading-relaxed">
           {request?.gui
-            ? "电脑操作只会执行你批准的动作；密码、API Key、Token 等敏感信息永远不会由 Kiro 输入。高风险操作仅支持「允许这一次」。"
-            : "权限审批只能放行本应确认的操作，不会突破工作区沙箱与只读边界。"}
+            ? "只执行你批准的动作；敏感信息不会由 Kiro 输入。"
+            : "只放行本应确认的操作，不改变工作区权限边界。"}
         </p>
       </div>
     </Dialog>
