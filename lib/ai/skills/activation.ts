@@ -1,11 +1,17 @@
 /**
  * Skill Activation — Server Control Tool: activate_skill
- * 输入 { skillName }，返回完整 Skill instructions + required capability metadata
- * Skill 只能提供 workflow guidance，不能提权
+ *
+ * 只允许激活 Workflow Skill：
+ * - kind === "recipe" → NOT_ACTIVATABLE（learned recipe 不是可 activate 的 workflow）；
+ * - 返回值只含 name / description / instructions / requiredCapabilities / requiredTools；
+ *   绝不把 metadata / kiroManifest / parameters / sourceTurnId / origin / 路径泄给模型；
+ * - Skill 只能提供 workflow guidance，不能提权（requiredPermissions 只是「想使用的权限类别」，
+ *   不代表授予；activation 绝不修改 permission rules / agent mode / grants）。
  */
 
 import type { SkillPackage, SkillActivationResult } from "@/lib/ai/skills/types";
 import { SKILL_PERMISSIONS_NOTE } from "@/lib/ai/skills/types";
+import { classifySkillPackage } from "@/lib/ai/skills/registry";
 
 export interface ActivateSkillInput {
   skillName: string;
@@ -20,6 +26,13 @@ export function activateSkill(packages: SkillPackage[], input: ActivateSkillInpu
   if (!pkg) {
     return { ok: false, code: "NOT_FOUND", error: `Skill not found: ${skillName}` };
   }
+  if (classifySkillPackage(pkg) === "recipe") {
+    return {
+      ok: false,
+      code: "NOT_ACTIVATABLE",
+      error: `Learned recipe cannot be activated as a workflow skill: ${skillName}`,
+    };
+  }
   if (!pkg.enabled) {
     return { ok: false, code: "DISABLED", error: `Skill disabled: ${skillName}` };
   }
@@ -28,26 +41,21 @@ export function activateSkill(packages: SkillPackage[], input: ActivateSkillInpu
     name: pkg.name,
     description: pkg.description,
     instructions: pkg.instructions,
-    requiredCapabilities: pkg.requiredCapabilities ?? pkg.metadata?.capabilities as string[] | undefined,
-    metadata: {
-      license: pkg.license,
-      compatibility: pkg.compatibility,
-      triggers: pkg.triggers,
-      ...pkg.metadata,
-      permissionsNote: SKILL_PERMISSIONS_NOTE,
-    },
+    // canonical manifest 字段（无 metadata.capabilities fallback）
+    requiredCapabilities: pkg.requiredCapabilities,
+    requiredTools: pkg.requiredTools,
   };
 }
 
 export const ACTIVATE_SKILL_TOOL_DEFINITION = {
   name: "activate_skill",
   description:
-    "Load full skill workflow after seeing Available Skills catalog. Input { skillName }. Returns complete Skill instructions (workflow guidance only, cannot elevate permissions).",
+    "Load a workflow skill's full guidance after seeing the Available Skills catalog. Input { skillName }. Only workflow skills can be activated; skills provide workflow guidance only and cannot elevate permissions.",
   inputSchema: {
     type: "object",
     required: ["skillName"],
     properties: {
-      skillName: { type: "string", description: "Skill folder name (e.g. course-notification)" },
+      skillName: { type: "string", description: "Workflow skill folder name (e.g. study-plan)" },
     },
   },
 } as const;
@@ -62,3 +70,15 @@ export function assertSkillCannotElevate(instructions: string): { ok: boolean; r
   }
   return { ok: true };
 }
+
+/** 语义声明（测试引用）：activation 绝不修改这些 Runtime 状态 */
+export const SKILL_ACTIVATION_NEVER_MUTATES = [
+  "permissionRules",
+  "agentMode",
+  "desktopPermissions",
+  "terminalPermissions",
+  "filesystemGrants",
+  "mcpPermissions",
+] as const;
+
+export { SKILL_PERMISSIONS_NOTE };

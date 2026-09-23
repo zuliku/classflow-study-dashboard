@@ -4,8 +4,11 @@ import { SKILL_PERMISSIONS_NOTE } from "@/lib/ai/skills/types";
 /**
  * 内置 Skills（随应用打包，免配置、默认启用）：
  * - 与用户 Skills 同一协议（catalog progressive disclosure + activate_skill）；
- * - 与用户 Skill 重名时用户版本优先（见 withBuiltinSkills 去重顺序）；
+ * - 全部 kind = "workflow"、origin = "builtin"（canonical 分类字段，消费者不得靠 metadata.builtin 猜测）；
+ * - 同名冲突：builtin 名称是 authoritative（validator 拒绝用户创建同名；磁盘遗留 collision 不覆盖 builtin）；
+ * - requiredTools 只做诊断（真实 Tool 引用），不是权限、不是可执行能力；
  * - instructions 只描述真实存在的工具与格式能力，不承诺未实现行为。
+ * - S2 才决定哪些 builtin 删除 / 合并 / 迁移到 Core Protocol；S1 保留全部 10 个。
  */
 
 const DOCUMENT_HANDLING_INSTRUCTIONS = `\
@@ -274,20 +277,6 @@ const COMPUTER_CONTROL_INSTRUCTIONS = `\
 const COMPUTER_CONTROL_DESCRIPTION =
   "电脑控制：观察应用界面、点击/输入/按键、多窗口与应用启动（高风险动作逐次确认）。";
 
-/** 内置 Skill 名称保留字：用户创建/导入同名 Skill 时拒绝（保证单一事实来源） */
-export const BUILTIN_SKILL_NAMES: readonly string[] = [
-  "document-handling",
-  "timetable-analysis",
-  "task-triage",
-  "study-plan",
-  "focus-coach",
-  "web-research",
-  "computer-control",
-  "terminal-helper",
-  "file-organizer",
-  "reminder-assistant",
-] as const;
-
 export const BUILTIN_SKILLS: SkillPackage[] = [
   {
     name: "document-handling",
@@ -296,8 +285,10 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: DOCUMENT_HANDLING_INSTRUCTIONS.trim(),
     rawContent: DOCUMENT_HANDLING_INSTRUCTIONS.trim(),
-    triggers: ["课件", "讲义", "表格", "幻灯片", "ppt", "excel", "word", "csv", "pdf", "讲义整理", "数据表"],
-    metadata: { builtin: true, capabilities: ["read_material", "read_project_file", "search_project_file"] },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["read_material", "read_project_file", "search_project_file"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -307,11 +298,10 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: TIMETABLE_ANALYSIS_INSTRUCTIONS.trim(),
     rawContent: TIMETABLE_ANALYSIS_INSTRUCTIONS.trim(),
-    triggers: ["课表", "空闲", "有空", "第几周", "时间冲突", "哪天有空", "节次", "几点上课"],
-    metadata: {
-      builtin: true,
-      capabilities: ["get_week_schedule", "get_semester_config", "get_bell_schedules", "get_calendar_range", "get_calendar_density", "get_available_time"],
-    },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["get_week_schedule", "get_semester_config", "get_bell_schedules", "get_calendar_range", "get_calendar_density", "get_available_time"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -321,11 +311,10 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: TASK_TRIAGE_INSTRUCTIONS.trim(),
     rawContent: TASK_TRIAGE_INSTRUCTIONS.trim(),
-    triggers: ["DDL", "ddl", "任务", "优先级", "来不及", "梳理", "逾期", "拆解"],
-    metadata: {
-      builtin: true,
-      capabilities: ["get_upcoming_assignments", "search_assignments", "get_assignment", "get_assignment_health", "propose_task_breakdown", "set_assignment_priority", "create_reminder"],
-    },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["get_upcoming_assignments", "search_assignments", "get_assignment", "get_assignment_health", "propose_task_breakdown", "set_assignment_priority", "create_reminder"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -335,11 +324,10 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: STUDY_PLAN_INSTRUCTIONS.trim(),
     rawContent: STUDY_PLAN_INSTRUCTIONS.trim(),
-    triggers: ["学习计划", "备考", "复习计划", "怎么学", "复习", "计划表"],
-    metadata: {
-      builtin: true,
-      capabilities: ["propose_study_plan", "query_study_blocks", "get_available_time", "propose_study_rebalance"],
-    },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["propose_study_plan", "query_study_blocks", "get_available_time", "propose_study_rebalance"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -349,11 +337,10 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: FOCUS_COACH_INSTRUCTIONS.trim(),
     rawContent: FOCUS_COACH_INSTRUCTIONS.trim(),
-    triggers: ["专注", "番茄", "计时", "学习打卡", "休息一下", "集中注意力"],
-    metadata: {
-      builtin: true,
-      capabilities: ["get_focus_status", "start_focus_session", "pause_focus_session", "resume_focus_session", "finish_focus_session", "get_focus_analytics", "list_focus_sessions"],
-    },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["get_focus_status", "start_focus_session", "pause_focus_session", "resume_focus_session", "finish_focus_session", "get_focus_analytics", "list_focus_sessions"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -363,8 +350,10 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: WEB_RESEARCH_INSTRUCTIONS.trim(),
     rawContent: WEB_RESEARCH_INSTRUCTIONS.trim(),
-    triggers: ["搜索", "查一下", "最新", "新闻", "调研", "对比", "查证", "怎么样", "推荐"],
-    metadata: { builtin: true, capabilities: ["web_search", "read_web_source"] },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["web_search", "read_web_source"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -374,28 +363,16 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: COMPUTER_CONTROL_INSTRUCTIONS.trim(),
     rawContent: COMPUTER_CONTROL_INSTRUCTIONS.trim(),
-    triggers: [
-      "打开浏览器",
-      "操作电脑",
-      "点击",
-      "输入",
-      "桌面",
-      "微信",
-      "浏览器",
-      "窗口",
-      "发送文件",
-      "自动操作",
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: [
+      "observe_desktop",
+      "desktop_action",
+      "list_desktop_windows",
+      "activate_window",
+      "open_application",
     ],
-    metadata: {
-      builtin: true,
-      capabilities: [
-        "observe_desktop",
-        "desktop_action",
-        "list_desktop_windows",
-        "activate_window",
-        "open_application",
-      ],
-    },
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -405,11 +382,10 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: TERMINAL_HELPER_INSTRUCTIONS.trim(),
     rawContent: TERMINAL_HELPER_INSTRUCTIONS.trim(),
-    triggers: ["终端", "命令行", "运行", "脚本", "Stata", "Python", "数据处理", "命令"],
-    metadata: {
-      builtin: true,
-      capabilities: ["run_terminal_command", "create_terminal_session", "run_terminal_session_command", "close_terminal_session"],
-    },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["run_terminal_command", "create_terminal_session", "run_terminal_session_command", "close_terminal_session"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -419,11 +395,10 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: FILE_ORGANIZER_INSTRUCTIONS.trim(),
     rawContent: FILE_ORGANIZER_INSTRUCTIONS.trim(),
-    triggers: ["整理", "找文件", "重命名", "清理", "移动文件", "新建文件夹", "删除文件"],
-    metadata: {
-      builtin: true,
-      capabilities: ["list_workspace_roots", "list_directory", "search_files", "grep_files", "read_text", "get_file_metadata", "create_directory", "move_file", "rename_file", "patch_text_file", "delete_file"],
-    },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["list_workspace_roots", "list_directory", "search_files", "grep_files", "read_text", "get_file_metadata", "create_directory", "move_file", "rename_file", "patch_text_file", "delete_file"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
   {
@@ -433,23 +408,28 @@ export const BUILTIN_SKILLS: SkillPackage[] = [
     enabled: true,
     instructions: REMINDER_ASSISTANT_INSTRUCTIONS.trim(),
     rawContent: REMINDER_ASSISTANT_INSTRUCTIONS.trim(),
-    triggers: ["提醒", "记得", "到时叫我", "别忘了", "叫我", "定时提醒"],
-    metadata: {
-      builtin: true,
-      capabilities: ["list_reminders", "create_reminder", "update_reminder", "delete_reminder"],
-    },
+    kind: "workflow",
+    origin: "builtin",
+    requiredTools: ["list_reminders", "create_reminder", "update_reminder", "delete_reminder"],
+    metadata: { builtin: "true" },
     permissionsNote: SKILL_PERMISSIONS_NOTE,
   },
 ];
 
+/** 内置 Skill 名称保留字：用户创建/导入同名 Skill 时拒绝（单一事实来源：BUILTIN_SKILLS） */
+export const BUILTIN_SKILL_NAMES: readonly string[] = BUILTIN_SKILLS.map((s) => s.name);
+
+/** 内置 Skill 名称集合（collision / merge 判定用） */
+export const BUILTIN_SKILL_NAME_SET: ReadonlySet<string> = new Set(BUILTIN_SKILL_NAMES);
+
 /**
  * 用户 Skills + 内置 Skills 合并（catalog / activation 统一入口）：
  * - 内置始终启用（产品基础能力，非用户偏好；UI 以锁定态展示，不提供开关）；
- * - 同名时用户版本优先（validator 同时拒绝新建同名，避免歧义）。
+ * - Builtin reserved name authoritative：磁盘上遗留的同名 user Skill 不覆盖 builtin
+ *   （不删除用户目录数据；由 validator 阻止新建同名，历史 collision 在此让位）。
  */
 export function withBuiltinSkills(userPackages: SkillPackage[]): SkillPackage[] {
-  const userNames = new Set(userPackages.map((p) => p.name));
-  return [...userPackages, ...BUILTIN_SKILLS.filter((b) => !userNames.has(b.name))];
+  return [...BUILTIN_SKILLS, ...userPackages.filter((p) => !BUILTIN_SKILL_NAME_SET.has(p.name))];
 }
 
 /** 用户新建/导入时：命中内置保留名则拒绝（错误文案供 UI 直接展示） */

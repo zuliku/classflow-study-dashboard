@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Distill Core — 共享的 Prompt/Parse/Normalize/Validate/Render
  * Route 负责 request validation / credential / AI call / error boundary
  * Renderer 不 import Provider Client
@@ -6,6 +6,7 @@
 
 import type { WorkflowTrace, SkillDraft, SanitizedTrace } from "@/lib/ai/skills/types";
 import { renderSkillDraftToMd, validateSkillDraft } from "@/lib/ai/skills/draft";
+import { normalizeKiroSkillPermissions } from "@/lib/ai/skills/kiroManifest";
 import { z } from "zod/v3";
 
 const SkillParameterSchema = z.object({
@@ -52,9 +53,12 @@ export const SkillDraftSchema = DraftSchemaRaw.transform((raw) => {
     name: raw.name,
     description: raw.description,
     instructions: raw.instructions,
+    // AI distillation 产物固定为 workflow（desktop 轨迹 draft 才标记 recipe）
+    kind: "workflow" as const,
     parameters,
     requiredTools: raw.requiredTools,
-    requiredPermissions: raw.requiredPermissions ?? ["read", "propose"],
+    // 非法权限被丢弃（allowlist：read / propose / write）
+    requiredPermissions: normalizeKiroSkillPermissions(raw.requiredPermissions ?? ["read", "propose"]),
     examples,
     sourceTurnId: raw.sourceTurnId ?? "",
   };

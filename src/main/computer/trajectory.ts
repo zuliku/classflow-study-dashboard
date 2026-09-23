@@ -154,16 +154,17 @@ export function buildDesktopSkillDraft(
     "- 密码、API Key、Token、Secret 绝不可作为 text 输入；受保护应用（密码管理器 / 银行支付）会被直接拒绝。",
   ].join("\n");
 
-  return {
-    name: buildDesktopSkillName(trajectory),
-    description: `在 ${appLabel} 上完成「${goal}」的桌面操作流程（${steps.length} 步，含验证与安全门控）`,
-    instructions,
-    parameters: [],
-    requiredTools: ["observe_desktop", "find_desktop_element", "desktop_action", "desktop_session"],
-    requiredPermissions: [],
-    requiredCapabilities: ["ui.interact"],
-    examples: [],
-    sourceTurnId,
-    triggers: [appLabel, ...(trajectory.appName ? [trajectory.appName] : [])].slice(0, 4),
-  };
+    return {
+      name: buildDesktopSkillName(trajectory),
+      description: `在 ${appLabel} 上完成「${goal}」的桌面操作流程（${steps.length} 步，含验证与安全门控）`,
+      instructions,
+      // S1：桌面成功轨迹 → Learned Recipe（绝不进入普通 Skill Catalog / Slash / activate_skill）
+      kind: "recipe" as const,
+      parameters: [],
+      requiredTools: ["observe_desktop", "find_desktop_element", "desktop_action", "desktop_session"],
+      requiredPermissions: [],
+      requiredCapabilities: ["ui.interact"],
+      examples: [],
+      sourceTurnId,
+    };
 }

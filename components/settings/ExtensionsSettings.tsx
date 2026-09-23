@@ -27,18 +27,22 @@ type SkillListItem = {
   description: string;
   folderName: string;
   enabled: boolean;
+  /** S1：canonical 分类 / 来源 */
+  kind?: "workflow" | "recipe";
+  origin?: "builtin" | "user";
   license?: string;
   compatibility?: string;
   metadata?: Record<string, unknown>;
-  triggers?: string[];
+  legacyTriggers?: string[];
+  requiredTools?: string[];
   lastUsedAt?: number;
 };
 
 function getSkillBridge(): {
   list: () => Promise<{ skills: SkillListItem[] }>;
-  get: (input: { name: string }) => Promise<{ skill: SkillListItem & { instructions: string; rawContent: string } }>;
-  create: (input: { name: string; description: string; instructions: string; license?: string; compatibility?: string; metadata?: Record<string, unknown> }) => Promise<unknown>;
-  update: (input: { name: string; description?: string; instructions?: string; license?: string; compatibility?: string; metadata?: Record<string, unknown> }) => Promise<unknown>;
+  get: (input: { name: string }) => Promise<{ skill: SkillListItem & { instructions: string; rawContent: string; kiroManifest?: Record<string, unknown> } }>;
+  create: (input: { name: string; description: string; instructions: string; license?: string; compatibility?: string; kiroManifest?: Record<string, unknown> }) => Promise<unknown>;
+  update: (input: { name: string; description?: string; instructions?: string; license?: string; compatibility?: string; kiroManifest?: Record<string, unknown> }) => Promise<unknown>;
   delete: (input: { name: string }) => Promise<unknown>;
   setEnabled: (input: { name: string; enabled: boolean }) => Promise<unknown>;
   import: () => Promise<{ cancelled?: boolean; skill?: SkillListItem }>;
@@ -445,14 +449,13 @@ export function ExtensionsSettings() {
                         </div>
                         <p className="text-xs text-sandrift mt-1 leading-relaxed line-clamp-2">{skill.description}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-sandrift">
-                          {skill.triggers && skill.triggers.length > 0 ? (
+                          {skill.kind === "recipe" ? (
                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#F7F5F5] border border-line rounded-full">
-                              自动触发 · {skill.triggers.slice(0, 4).join(" · ")}
-                              {skill.triggers.length > 4 ? ` · +${skill.triggers.length - 4}` : ""}
+                              本机配方
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-surface-soft border border-line rounded-full text-sandrift">
-                              未设置自动触发
+                              工作流 Skill
                             </span>
                           )}
                           {skill.compatibility && <span className="px-2 py-1 bg-alabaster border border-line rounded-full">{skill.compatibility}</span>}
@@ -557,12 +560,6 @@ export function ExtensionsSettings() {
                       </span>
                     </div>
                     <p className="text-xs text-sandrift leading-relaxed mt-0.5">{skill.description}</p>
-                    {skill.triggers && skill.triggers.length > 0 && (
-                      <p className="text-[11px] text-sandrift mt-1 truncate">
-                        触发词：{skill.triggers.slice(0, 6).join(" · ")}
-                        {skill.triggers.length > 6 ? ` · +${skill.triggers.length - 6}` : ""}
-                      </p>
-                    )}
                   </div>
                 </div>
               ))}
@@ -925,12 +922,13 @@ function SkillEditorDialog({
   const isEdit = !!editingSkill;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [triggers, setTriggers] = useState("");
   const [workflow, setWorkflow] = useState("");
   const [capabilities, setCapabilities] = useState("");
   const [license, setLicense] = useState("");
   const [compatibility, setCompatibility] = useState("");
   const [permissionsNote, setPermissionsNote] = useState("Skill cannot elevate permissions. Skill instructions provide workflow guidance only.");
+  /** S1：编辑时保留既有 structured Kiro metadata（只更新 requiredTools） */
+  const [existingManifest, setExistingManifest] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -939,9 +937,8 @@ function SkillEditorDialog({
       if (editingSkill) {
         setName(editingSkill.name);
         setDescription(editingSkill.description);
-        setTriggers((editingSkill.triggers ?? []).join(", "));
         setWorkflow("");
-        setCapabilities((editingSkill.metadata as unknown as { capabilities?: string[] })?.capabilities?.join(", ") ?? "");
+        setCapabilities((editingSkill.requiredTools ?? []).join(", "));
         setLicense(editingSkill.license ?? "");
         setCompatibility(editingSkill.compatibility ?? "");
         setPermissionsNote("Skill cannot elevate permissions.");
@@ -950,19 +947,20 @@ function SkillEditorDialog({
           bridge
             .get({ name: editingSkill.name })
             .then((res) => {
-              const skill = (res as { skill: { instructions?: string } }).skill;
+              const skill = (res as { skill: { instructions?: string; kiroManifest?: Record<string, unknown> } }).skill;
               if (skill?.instructions) setWorkflow(skill.instructions);
+              setExistingManifest(skill?.kiroManifest ?? null);
             })
             .catch(() => {});
         }
       } else {
         setName("");
         setDescription("");
-        setTriggers("");
         setWorkflow(`# Workflow\n\n1. 识别课程\n2. 提取通知内容\n3. 查询已有任务\n4. 生成 Proposal\n5. 用户确认后执行`);
         setCapabilities("");
         setLicense("");
         setCompatibility("");
+        setExistingManifest(null);
         setPermissionsNote("Skill cannot elevate permissions. Skill instructions provide workflow guidance only and do not grant system authority.");
       }
       setError(null);
@@ -990,23 +988,27 @@ function SkillEditorDialog({
     }
     setSaving(true);
     try {
+      const requiredTools = capabilities
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      // S1：structured Kiro metadata 走 agents/kiro.json（绝不写入 SKILL.md metadata）
+      const kiroManifest = {
+        version: 1,
+        kind: (existingManifest?.kind as string) === "recipe" ? "recipe" : "workflow",
+        requiredTools,
+        requiredPermissions: (existingManifest?.requiredPermissions as string[]) ?? [],
+        requiredCapabilities: (existingManifest?.requiredCapabilities as string[]) ?? [],
+        parameters: (existingManifest?.parameters as unknown[]) ?? [],
+        sourceTurnId: (existingManifest?.sourceTurnId as string) ?? "",
+      };
       const payload = {
         name: name.trim(),
         description: description.trim(),
         instructions: workflow.trim(),
         license: license.trim() || undefined,
         compatibility: compatibility.trim() || undefined,
-        metadata: {
-          triggers: triggers
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-          capabilities: capabilities
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-          permissionsNote,
-        },
+        kiroManifest,
       };
       if (isEdit) {
         await bridge.update(payload);
@@ -1050,20 +1052,12 @@ function SkillEditorDialog({
             data-testid="skill-editor-name"
           />
         </Field>
-        <Field label="描述" required description="必填，简要说明 Skill 用途">
+        <Field label="描述" required description="必填，同时用于帮助 Kiro 判断何时使用此 Skill（说明它能做什么以及适用场景）">
           <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="将课程通知中的作业、DDL、调课信息整理为 ClassFlow 操作建议。"
             data-testid="skill-editor-description"
-          />
-        </Field>
-        <Field label="什么时候使用" description="触发关键词，逗号分隔（如：课程、作业）">
-          <Input
-            value={triggers}
-            onChange={(e) => setTriggers(e.target.value)}
-            placeholder="课程, 作业"
-            data-testid="skill-editor-triggers"
           />
         </Field>
         <Field label="工作流程" required description="Markdown 格式，描述 Skill 的执行步骤">
@@ -1077,11 +1071,11 @@ function SkillEditorDialog({
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="需要的能力">
+          <Field label="需要的工具" description="逗号分隔的真实 Tool 名（仅诊断用途，不授予权限）">
             <Input
               value={capabilities}
               onChange={(e) => setCapabilities(e.target.value)}
-              placeholder="filesystem, terminal"
+              placeholder="get_week_schedule, propose_study_plan"
               data-testid="skill-editor-capabilities"
             />
           </Field>
@@ -1103,11 +1097,9 @@ function SkillEditorDialog({
           />
         </Field>
         <Field label="权限说明" description="Skill 不能提权，仅提供工作流指引">
-          <Input
-            value={permissionsNote}
-            onChange={(e) => setPermissionsNote(e.target.value)}
-            data-testid="skill-editor-permissions"
-          />
+          <p className="text-[11px] text-sandrift leading-relaxed" data-testid="skill-editor-permissions">
+            {permissionsNote}
+          </p>
         </Field>
         {error && (
           <p data-testid="skill-editor-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">

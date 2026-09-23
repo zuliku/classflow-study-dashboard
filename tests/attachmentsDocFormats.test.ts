@@ -200,19 +200,20 @@ describe("内置 document-handling Skill", () => {
     }
   });
 
-  it("withBuiltinSkills：追加内置 + 同名用户版优先 + 用户 enabled 保留", () => {
+  it("withBuiltinSkills：内置 authoritative（legacy 同名 collision 不覆盖 builtin）+ 用户 enabled 保留", () => {
     const user = [
       { name: "a", description: "d", instructions: "i", rawContent: "r", folderName: "a", enabled: false },
     ];
     const merged = withBuiltinSkills(user as never);
     expect(merged.map((m) => m.name)).toContain("document-handling");
     expect(merged.find((m) => m.name === "a")!.enabled).toBe(false);
-    // 同名用户版优先
+    // S1：Builtin reserved name authoritative（不删除用户数据，但 canonical 版本是 builtin）
     const clash = withBuiltinSkills([
       { name: "document-handling", description: "mine", instructions: "i", rawContent: "r", folderName: "document-handling", enabled: true },
     ] as never);
     expect(clash.filter((m) => m.name === "document-handling")).toHaveLength(1);
-    expect(clash[0].description).toBe("mine");
+    expect(clash[0].description).not.toBe("mine");
+    expect(clash[0].origin).toBe("builtin");
   });
 
   it("activateSkill 可激活内置 skill", () => {

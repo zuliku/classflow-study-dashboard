@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+﻿import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promises as fs, existsSync } from "node:fs";
@@ -7,7 +7,7 @@ import { validateSkillPackage } from "@/lib/ai/skills/validator";
 import { buildSkillCatalog, assertCatalogOnlyMetadata } from "@/lib/ai/skills/catalog";
 import { activateSkill, assertSkillCannotElevate } from "@/lib/ai/skills/activation";
 import { parseSlashSkillCommand, getEnabledSkillNamesForSlash } from "@/lib/ai/skills/slash";
-import { SKILL_NAME_PATTERN, SKILL_PERMISSIONS_NOTE } from "@/lib/ai/skills/types";
+import { SKILL_NAME_PATTERN } from "@/lib/ai/skills/types";
 import type { SkillPackage } from "@/lib/ai/skills/types";
 
 describe("Task 07 — Skill Core V1 13 cases", () => {
@@ -71,8 +71,8 @@ body`;
 
   it("disabled skill 不进入 catalog", () => {
     const pkgs: SkillPackage[] = [
-      { name: "a", description: "A", instructions: "x", rawContent: "", folderName: "a", enabled: true },
-      { name: "b", description: "B", instructions: "x", rawContent: "", folderName: "b", enabled: false },
+      { name: "a", description: "A", instructions: "x", rawContent: "", folderName: "a", enabled: true, kind: "workflow", origin: "user" },
+      { name: "b", description: "B", instructions: "x", rawContent: "", folderName: "b", enabled: false, kind: "workflow", origin: "user" },
     ];
     const catalog = buildSkillCatalog(pkgs);
     expect(catalog.length).toBe(1);
@@ -81,7 +81,7 @@ body`;
 
   it("only metadata initially loaded", () => {
     const pkgs: SkillPackage[] = [
-      { name: "course-notification", description: "desc", instructions: "full workflow", rawContent: "raw", folderName: "course-notification", enabled: true },
+      { name: "course-notification", description: "desc", instructions: "full workflow", rawContent: "raw", folderName: "course-notification", enabled: true, kind: "workflow", origin: "user" },
     ];
     const catalog = buildSkillCatalog(pkgs);
     expect(assertCatalogOnlyMetadata(catalog)).toBe(true);
@@ -90,7 +90,7 @@ body`;
 
   it("activate_skill loads full body", () => {
     const pkgs: SkillPackage[] = [
-      { name: "course-notification", description: "desc", instructions: "full workflow body", rawContent: "raw", folderName: "course-notification", enabled: true },
+      { name: "course-notification", description: "desc", instructions: "full workflow body", rawContent: "raw", folderName: "course-notification", enabled: true, kind: "workflow", origin: "user" },
     ];
     const result = activateSkill(pkgs, { skillName: "course-notification" });
     expect(result.ok).toBe(true);
@@ -104,10 +104,24 @@ body`;
     expect(res.ok).toBe(false);
     const good = "1. 识别课程\n2. 生成 Proposal";
     expect(assertSkillCannotElevate(good).ok).toBe(true);
-    // activation result should contain permissions note
-    const pkgs: SkillPackage[] = [{ name: "test", description: "desc", instructions: good, rawContent: "", folderName: "test", enabled: true }];
+    // S1：activation 只返回 workflow guidance + 诊断元数据（绝不返回可被误解为授权的 metadata blob）
+    const pkgs: SkillPackage[] = [
+      {
+        name: "test",
+        description: "desc",
+        instructions: good,
+        rawContent: "",
+        folderName: "test",
+        enabled: true,
+        kind: "workflow",
+        origin: "user",
+      },
+    ];
     const act = activateSkill(pkgs, { skillName: "test" });
-    expect(act.metadata?.permissionsNote).toBe(SKILL_PERMISSIONS_NOTE);
+    expect(act.ok).toBe(true);
+    expect(act.metadata).toBeUndefined();
+    expect(act.requiredCapabilities).toBeUndefined();
+    expect(act.requiredTools).toBeUndefined();
   });
 
   it("scripts never auto execute", async () => {

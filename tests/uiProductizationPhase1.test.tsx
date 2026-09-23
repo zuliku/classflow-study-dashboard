@@ -157,7 +157,9 @@ describe("Phase1 - Demo leakage cleanup RED tests", () => {
   it("8. MCP copy should be user-friendly, no Remote MCP (Streamable HTTP) in main description", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "components/settings/ExtensionsSettings.tsx"), "utf8");
     expect(src).not.toContain("Remote MCP (Streamable HTTP)");
-    expect(src).not.toContain("Tools");
+    // S1：只约束 MCP 文案本身（requiredTools 等 canonical 标识符不算技术文案回潮）
+    expect(src).not.toContain("MCP Tools");
+    expect(src).not.toContain("Streamable HTTP");
     // Check that at least main description uses simplified wording
     expect(src).toContain("支持远程 MCP 服务");
   });

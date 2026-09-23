@@ -25,7 +25,7 @@ import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
 import { PopoverPanel } from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
-import { filterSlashSkills, moveSlashIndex, parseSlashQuery } from "@/lib/ai/skills/slashMenu";
+import { filterSlashSkills, moveSlashIndex, parseSlashQuery, toSlashSkillOptions } from "@/lib/ai/skills/slashMenu";
 
 /** P3：Composer 只允许一个菜单同时打开（add / access / model） */
 type ComposerMenu = "add" | "access" | "reasoning" | "model" | null;
@@ -178,7 +178,7 @@ export function KiroComposer({
       setSlashOpen(false);
       return;
     }
-    const bridge = (window as unknown as { classflowDesktop?: { skills?: { list: () => Promise<{ skills: { name: string; description: string; enabled: boolean }[] }> } } }).classflowDesktop?.skills;
+    const bridge = (window as unknown as { classflowDesktop?: { skills?: { list: () => Promise<{ skills: { name: string; description: string; enabled: boolean; kind?: string }[] }> } } }).classflowDesktop?.skills;
     if (!bridge) {
       setSlashOpen(false);
       return;
@@ -186,8 +186,9 @@ export function KiroComposer({
     bridge
       .list()
       .then((res) => {
-        const enabled = (res.skills ?? []).filter((s) => s.enabled);
-        const filtered = filterSlashSkills(enabled, query);
+        // S1：只展示 Workflow Skill（kind 为 canonical 字段；Recipe 不进入 Slash 菜单）
+        const workflows = toSlashSkillOptions(res.skills ?? []);
+        const filtered = filterSlashSkills(workflows, query);
         setSlashSkills(filtered);
         setSlashActive(0);
         setSlashOpen(filtered.length > 0);

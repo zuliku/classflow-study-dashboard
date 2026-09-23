@@ -11,9 +11,9 @@ import {
 import {
   MAX_DESKTOP_RECIPES,
   buildDesktopRecipePromptSection,
-  isDesktopRecipeSkill,
   sanitizeRecipeSummary,
 } from "@/lib/ai/skills/recipes";
+import { buildKiroSkillRegistry } from "@/lib/ai/skills/registry";
 import { validateSkillDraft } from "@/lib/ai/skills/draft";
 import { SKILL_NAME_PATTERN } from "@/lib/ai/skills/types";
 
@@ -77,9 +77,10 @@ describe("V2.6 轨迹 — Skill 草稿", () => {
     expect(name.startsWith("desktop-")).toBe(true);
   });
 
-  it("草稿通过 validateSkillDraft，且含步骤 / 验证 / 安全说明", () => {
+  it("草稿通过 validateSkillDraft，且含步骤 / 验证 / 安全说明（S1：kind = recipe）", () => {
     const draft = buildDesktopSkillDraft(trajectory(), "cs-11111111-2222-3333-4444-555555555555");
     expect(draft.name.startsWith("desktop-")).toBe(true);
+    expect(draft.kind).toBe("recipe");
     expect(draft.requiredTools).toContain("desktop_action");
     expect(draft.instructions).toContain("发送");
     expect(draft.instructions).toContain("重新 observe_desktop");
@@ -114,7 +115,7 @@ describe("V2.6 轨迹 — Skill 草稿", () => {
   });
 });
 
-describe("V2.6 本机成功配方注入", () => {
+describe("V2.6 本机成功配方注入（S1：只消费 Recipe Registry）", () => {
   const recipe = (name: string, overrides: Record<string, unknown> = {}) => ({
     name,
     description: "在微信发送文件",
@@ -123,18 +124,13 @@ describe("V2.6 本机成功配方注入", () => {
     ...overrides,
   });
 
-  it("只收 desktop- 前缀的已启用 Skill，最多 3 条", () => {
-    expect(isDesktopRecipeSkill({ name: "desktop-wechat-send" })).toBe(true);
-    expect(isDesktopRecipeSkill({ name: "computer-control" })).toBe(false);
-    expect(isDesktopRecipeSkill({ name: "desktop-" })).toBe(false);
-
+  it("最多 3 条；disabled 不注入；workflow 由 Registry 分类排除（不进入 recipe section）", () => {
     const section = buildDesktopRecipePromptSection([
       recipe("desktop-a"),
       recipe("desktop-b"),
       recipe("desktop-c"),
       recipe("desktop-d"),
       recipe("desktop-disabled", { enabled: false }),
-      recipe("computer-control"),
     ]);
     expect(section).toContain("本机成功配方");
     expect(section).toContain("desktop-a");
@@ -142,6 +138,14 @@ describe("V2.6 本机成功配方注入", () => {
     expect(section).not.toContain("desktop-d");
     expect(section).not.toContain("desktop-disabled");
     expect(section.split("\n").filter((line) => line.startsWith("- desktop-")).length).toBe(MAX_DESKTOP_RECIPES);
+
+    // 分类边界：buildDesktopRecipePromptSection 只接受 recipe；workflow 由 Registry 排除
+    const registry = buildKiroSkillRegistry([
+      { name: "computer-control", kind: "workflow" } as never,
+      { name: "desktop-wechat-send-file", kind: "recipe" } as never,
+    ]);
+    expect(registry.recipes.map((r) => r.name)).toEqual(["desktop-wechat-send-file"]);
+    expect(registry.workflows.map((w) => w.name)).toEqual(["computer-control"]);
   });
 
   it("摘要清洗绝对路径 / 控制字符 / 限长", () => {
@@ -152,14 +156,15 @@ describe("V2.6 本机成功配方注入", () => {
 
   it("无配方 → 空字符串", () => {
     expect(buildDesktopRecipePromptSection([])).toBe("");
-    expect(buildDesktopRecipePromptSection([recipe("computer-control")])).toBe("");
   });
 
-  it("Chat Route 在电脑能力开启时注入配方 section（source lock）", async () => {
+  it("Chat Route 在电脑能力开启时注入配方 section（Registry 分类，route 不做 prefix 判断）", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const source = readFileSync(join(process.cwd(), "app", "api", "ai", "chat", "route.ts"), "utf8");
     expect(source).toContain("buildDesktopRecipePromptSection");
     expect(source).toContain("desktopRecipeSection");
+    expect(source).toContain("buildKiroSkillRegistry");
+    expect(source).not.toContain('startsWith("desktop-")');
   });
 });

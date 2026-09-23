@@ -1,6 +1,8 @@
 /**
- * Slash Command — 显式 Skill invocation
- * 输入以 / 开头，后跟 skill name
+ * Slash Command — 显式 Workflow Skill invocation（/skill-name）。
+ *
+ * Recipe 不能通过 Slash 绕过 Registry 边界：本模块只消费 workflow catalog；
+ * 未命中（含 recipe 名称）→ 不是可用 Skill command，绝不 fallback 到 activate_skill。
  */
 
 import type { SkillCatalogEntry } from "@/lib/ai/skills/types";

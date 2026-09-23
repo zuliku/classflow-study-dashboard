@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Skill IPC — Main Process
  * 通道：bridge:skill:*
  * 仅 Main 管理文件，Renderer 只通过 IPC 操作
@@ -8,6 +8,7 @@ import { ipcMain, dialog, BrowserWindow } from "electron";
 import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, setSkillEnabled, importSkill, exportSkill, testSkill } from "@/src/main/skills/skillStore";
 import { activateSkill } from "@/lib/ai/skills/activation";
 import { withBuiltinSkills } from "@/lib/ai/skills/builtin";
+import { listWorkflowSkills } from "@/lib/ai/skills/registry";
 
 function toIpcError(err: unknown): never {
   const e = err as { code?: string; message?: string };
@@ -38,10 +39,14 @@ export function registerSkillIpc(opts?: {
           description: s.description,
           folderName: s.folderName,
           enabled: s.enabled,
+          // S1：canonical 分类 / 来源（UI 与 Slash 只读这些字段，不再靠 prefix / metadata.builtin 猜测）
+          kind: s.kind,
+          origin: s.origin,
           license: s.license,
           compatibility: s.compatibility,
           metadata: s.metadata,
-          triggers: s.triggers,
+          legacyTriggers: s.legacyTriggers,
+          requiredTools: s.requiredTools,
           lastUsedAt: s.lastUsedAt,
         })),
       };
@@ -66,7 +71,7 @@ export function registerSkillIpc(opts?: {
   ipcMain.handle("bridge:skill:create", (event, input: unknown) => {
     if (!guard("bridge:skill:create", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
     try {
-      const data = input as { name?: string; description?: string; instructions?: string; license?: string; compatibility?: string; metadata?: Record<string, unknown> };
+      const data = input as { name?: string; description?: string; instructions?: string; license?: string; compatibility?: string; metadata?: Record<string, unknown>; kiroManifest?: unknown };
       const result = createSkill({
         name: data.name ?? "",
         description: data.description ?? "",
@@ -74,6 +79,7 @@ export function registerSkillIpc(opts?: {
         license: data.license,
         compatibility: data.compatibility,
         metadata: data.metadata,
+        kiroManifest: data.kiroManifest,
       });
       return { skill: { name: result.name, description: result.description, enabled: result.enabled } };
     } catch (err) {
@@ -84,7 +90,7 @@ export function registerSkillIpc(opts?: {
   ipcMain.handle("bridge:skill:update", (event, input: unknown) => {
     if (!guard("bridge:skill:update", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
     try {
-      const data = input as { name?: string; description?: string; instructions?: string; license?: string; compatibility?: string; metadata?: Record<string, unknown> };
+      const data = input as { name?: string; description?: string; instructions?: string; license?: string; compatibility?: string; metadata?: Record<string, unknown>; kiroManifest?: unknown };
       if (!data.name) throw new Error(JSON.stringify({ code: "INVALID_INPUT", message: "name required" }));
       const result = updateSkill(data.name, {
         description: data.description,
@@ -92,6 +98,7 @@ export function registerSkillIpc(opts?: {
         license: data.license,
         compatibility: data.compatibility,
         metadata: data.metadata,
+        kiroManifest: data.kiroManifest,
       });
       return { skill: { name: result.name, description: result.description, enabled: result.enabled } };
     } catch (err) {
@@ -170,8 +177,9 @@ export function registerSkillIpc(opts?: {
     if (!guard("bridge:skill:activate", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
     try {
       const { skillName } = input as { skillName?: string };
-      const skills = withBuiltinSkills(listSkills());
-      const result = activateSkill(skills, { skillName: skillName ?? "" });
+      // 只允许激活 Workflow Skill（Recipe 不在候选中，绝不 fallback）
+      const workflows = listWorkflowSkills(withBuiltinSkills(listSkills()));
+      const result = activateSkill(workflows, { skillName: skillName ?? "" });
       if (!result.ok) throw new Error(JSON.stringify({ code: result.code ?? "NOT_FOUND", message: result.error }));
       return result;
     } catch (err) {

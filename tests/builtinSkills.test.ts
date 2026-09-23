@@ -25,7 +25,7 @@ function referencedToolTokens(instructions: string): string[] {
 }
 
 describe("内置 Skills 目录", () => {
-  it("10 个内置 skill：命名规范 + 保留名与目录同源（防漂移）", () => {
+  it("10 个内置 skill：命名规范 + 保留名与目录同源（单一事实来源）", () => {
     const names = BUILTIN_SKILLS.map((s) => s.name);
     expect(names).toEqual([
       "document-handling",
@@ -46,8 +46,11 @@ describe("内置 Skills 目录", () => {
       expect(s.folderName).toBe(`__builtin__/${s.name}`);
       expect(s.description.length).toBeGreaterThan(10);
       expect(s.instructions.length).toBeGreaterThan(100);
-      expect(s.triggers?.length ?? 0).toBeGreaterThan(0);
-      expect(s.metadata).toMatchObject({ builtin: true });
+      // S1：canonical 分类 / 来源（不再靠 metadata.builtin 猜测）
+      expect(s.kind, s.name).toBe("workflow");
+      expect(s.origin, s.name).toBe("builtin");
+      expect(s.legacyTriggers, s.name).toBeUndefined();
+      expect(s.requiredTools?.length ?? 0, s.name).toBeGreaterThan(0);
     }
   });
 
@@ -67,11 +70,12 @@ describe("内置 Skills 目录", () => {
       for (const t of referencedToolTokens(s.instructions)) {
         expect(KNOWN_TOOLS.has(t), `${s.name}: ${t}`).toBe(true);
       }
-      const caps = (s.metadata as { capabilities?: string[] } | undefined)?.capabilities ?? [];
-      expect(caps.length, s.name).toBeGreaterThan(0);
-      for (const c of caps) {
+      // requiredTools 是诊断用 Tool 引用（真实存在），不是权限 Capability
+      expect(s.requiredTools?.length ?? 0, s.name).toBeGreaterThan(0);
+      for (const c of s.requiredTools ?? []) {
         expect(KNOWN_TOOLS.has(c), `${s.name}: ${c}`).toBe(true);
       }
+      expect(s.requiredCapabilities, s.name).toBeUndefined();
     }
   });
 

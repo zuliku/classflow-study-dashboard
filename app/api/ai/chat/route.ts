@@ -365,21 +365,25 @@ export async function handleChat(req: Request) {
   );
   const visualPendingContinuationSection = buildVisualPendingContinuationSection(visualPendingContinuation);
 
-  // Task 07: Skill Catalog — progressive disclosure (only name/description for enabled skills)
+  // Skill V2 S1：Registry 统一分类（route 不做任何 kind / prefix 判断）
   let skillCatalogSection = "";
   let slashSkillSection = "";
   let desktopRecipeSection = "";
   try {
     const { listSkills } = await import("@/src/main/skills/skillStore");
     const { withBuiltinSkills } = await import("@/lib/ai/skills/builtin");
-    const pkgs = withBuiltinSkills(listSkills());
-    const catalog = pkgs.filter((p) => p.enabled).map((p) => ({ name: p.name, description: p.description, enabled: true }));
+    const { buildKiroSkillRegistry } = await import("@/lib/ai/skills/registry");
+    const registry = buildKiroSkillRegistry(withBuiltinSkills(listSkills()));
     const { buildSkillCatalogPromptSection, buildSkillActivationPrompt } = await import("@/lib/ai/skills/prompt");
-    skillCatalogSection = buildSkillCatalogPromptSection(catalog);
-    // V2.6：桌面能力开启时注入「本机成功配方」（来自用户成功轨迹生成的 desktop-* Skill；≤3 条）
+    skillCatalogSection = buildSkillCatalogPromptSection(
+      registry.workflows
+        .filter((p) => p.enabled)
+        .map((p) => ({ name: p.name, description: p.description, enabled: true }))
+    );
+    // V2.6：桌面能力开启时注入「本机成功配方」（Learned Recipe Registry；≤3 条）
     if (computerSnapshot?.enabled === true) {
       const { buildDesktopRecipePromptSection } = await import("@/lib/ai/skills/recipes");
-      desktopRecipeSection = buildDesktopRecipePromptSection(pkgs);
+      desktopRecipeSection = buildDesktopRecipePromptSection(registry.recipes);
     }
     const lastUser = [...parsed.messages].reverse().find((m: { role: string }) => m.role === "user");
     const lastText: string =
@@ -391,7 +395,8 @@ export async function handleChat(req: Request) {
       const skillName = parseSlashSkillCommand(lastText);
       if (skillName) {
         const { activateSkill } = await import("@/lib/ai/skills/activation");
-        const result = activateSkill(pkgs, { skillName });
+        // 只在 workflow 中查找：/desktop-*（recipe）不是可用 Skill command，绝不 fallback
+        const result = activateSkill(registry.workflows, { skillName });
         if (result.ok && result.instructions) {
           slashSkillSection = buildSkillActivationPrompt(skillName, result.instructions);
         }

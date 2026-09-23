@@ -5,6 +5,8 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Sparkles, Loader2, Beaker, Save } from "lucide-react";
 import type { WorkflowTrace } from "@/lib/ai/skills/types";
 import type { SkillDraft } from "@/lib/ai/skills/types";
+import { isKnownKiroSkillTool } from "@/lib/ai/skills/knownTools";
+import { KIRO_SKILL_PERMISSIONS, kiroSkillManifestFromDraft } from "@/lib/ai/skills/kiroManifest";
 
 interface SkillDistillDialogProps {
   open: boolean;
@@ -66,7 +68,7 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
   const handleTest = async () => {
     if (!draft) return;
     const errors: string[] = [];
-    // 1. SKILL.md schema valid (通过 draft 已校验，此处再检查)
+    // 1. SKILL.md schema valid（portable frontmatter：name / description）
     try {
       const { parseSkillMd } = await import("@/lib/ai/skills/parser");
       const md = `---\nname: ${draft.name}\ndescription: ${draft.description}\n---\n\n${draft.instructions}`;
@@ -76,30 +78,26 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
     }
     // 2. name valid
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(draft.name)) errors.push("INVALID_NAME_PATTERN");
-    // 3. description valid
+    // 3. description valid（routing contract：1–500 字符）
     if (!draft.description || draft.description.trim().length === 0) errors.push("MISSING_DESCRIPTION");
+    if (draft.description && draft.description.length > 500) errors.push("DESCRIPTION_TOO_LONG");
     // 4. parameters valid
     for (const p of draft.parameters) {
       if (!p.name || !p.type || !p.description) errors.push(`invalid parameter ${p.name}`);
     }
-    // 5. requiredTools 全部是真实存在的 ClassFlow Tool / MCP capability
-    const knownTools = [
-      "search_courses","get_course","get_week_schedule","search_assignments","get_assignment","get_assignment_schedule","get_assignment_health","get_available_time","propose_study_plan","get_upcoming_assignments","search_group_projects","get_group_project","get_group_tasks","get_calendar_range","get_material_metadata","read_material","read_project_file","search_project_file","read_project_visual","propose_task_breakdown","list_reminders","get_focus_status","query_learning_history","summarize_learning_history","get_learning_analytics","get_learning_outlook","propose_study_rebalance","propose_visual_actions","propose_timetable_import","activate_skill","mcp_search_tools","mcp_call_tool","create_assignment","update_assignment","set_assignment_ddl","create_study_blocks",
-      // V2.6：桌面 GUI 工具（desktop-* 配方使用）
-      "observe_desktop","find_desktop_element","desktop_action","desktop_session","list_desktop_windows","activate_window","open_application",
-    ];
+    // 5. requiredTools：共享 Tool Registry 判定（unknown 才是错误；external MCP 标记为未验证）
     for (const t of draft.requiredTools) {
-      if (!knownTools.includes(t)) {
-        // 检查是否为 MCP tool (需已连接的 MCP 的 tool)
-        // 此处若为未知 tool，视为 fail（disabled/unknown tools fail）
-        errors.push(`unknown tool: ${t}`);
+      if (!isKnownKiroSkillTool(t)) errors.push(`unknown tool: ${t}`);
+    }
+    // 6. requiredPermissions 只允许 allowlist（read / propose / write；Skill 不能请求更高权限）
+    for (const perm of draft.requiredPermissions) {
+      if (!(KIRO_SKILL_PERMISSIONS as readonly string[]).includes(perm)) {
+        errors.push(`permission not allowed: ${perm}`);
       }
     }
-    // 6. disabled/unknown tools 已在上一步检查
-    // 7. requiredPermissions 不超过 Skill 可请求权限 (skill 只能 read/propose/write, 不能 terminal/filesystem)
-    const allowedPermissions = ["read", "propose", "write"];
-    for (const perm of draft.requiredPermissions) {
-      if (!allowedPermissions.includes(perm)) errors.push(`permission not allowed: ${perm}`);
+    // 7. kind 合法（workflow / recipe）
+    if (draft.kind !== undefined && draft.kind !== "workflow" && draft.kind !== "recipe") {
+      errors.push("INVALID_KIND");
     }
     // 8. instructions 不包含权限提升语义
     if (/grant permission|system authority|sudo|admin/i.test(draft.instructions)) errors.push("permission elevation");
@@ -108,7 +106,6 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
       errors.push("contains sensitive identifiers");
     }
     // 10. example-specific values 未被写死（检查 instructions 是否仍含原始固定值如日期特定）
-    // 此处检查 name 是否参数化（已在上一步），以及 examples 是否泛化
     for (const ex of draft.examples) {
       const inputStr = JSON.stringify(ex.input);
       if (/2026-08-19/.test(inputStr) && !inputStr.includes("{")) {
@@ -116,8 +113,7 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
       }
     }
     if (draft.name.includes("2026") || draft.name.includes("高数")) errors.push("name not parameterized");
-
-    // 额外：构造 2-3 个 simulated inputs 测试是否触发正确且不错误触发
+    // 11. 参数一致性（instructions 使用 {course} 时必须有 course 参数）
     const hasCourseParam = draft.parameters.some((p) => p.name === "course");
     if (draft.requiredTools.length > 0 && !hasCourseParam && draft.instructions.includes("{course}")) {
       errors.push("missing course param but instructions uses {course}");
@@ -132,15 +128,13 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
     try {
       const bridge = (window as unknown as { classflowDesktop?: { skills?: { create: (input: unknown) => Promise<unknown> } } }).classflowDesktop?.skills;
       if (!bridge) throw new Error("桌面环境不可用");
+      // S1：structured Kiro metadata 写入 agents/kiro.json（绝不塞进 SKILL.md metadata）
+      const kiroManifest = kiroSkillManifestFromDraft(draft);
       await bridge.create({
         name: draft.name,
         description: draft.description,
         instructions: draft.instructions,
-        metadata: {
-          parameters: draft.parameters,
-          requiredTools: draft.requiredTools,
-          sourceTurnId: draft.sourceTurnId,
-        },
+        kiroManifest,
       });
       onSaved?.(draft.name);
       onOpenChange(false);
@@ -219,16 +213,9 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
                 data-testid="skill-distill-description"
                 className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm"
               />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-charcoal">触发条件</label>
-              <p className="text-[11px] text-sandrift">何时使用此 Skill</p>
-              <input
-                value={draft.triggers?.join(", ") ?? ""}
-                onChange={(e) => setDraft({ ...draft, triggers: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-                placeholder="课程, 作业"
-                className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm"
-              />
+              <p className="text-[11px] text-sandrift mt-1">
+                描述同时用于帮助 Kiro 判断何时使用此 Skill，请说明它能做什么，以及适用场景。
+              </p>
             </div>
             <div>
               <label className="text-xs font-bold text-charcoal">工作流程</label>

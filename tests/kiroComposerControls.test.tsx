@@ -367,7 +367,7 @@ describe("Kiro Composer — 回归", () => {
     expect(handlers.onAddFiles).toHaveBeenCalledWith([file]);
 
     (window as unknown as { classflowDesktop?: unknown }).classflowDesktop = {
-      skills: { list: async () => ({ skills: [{ name: "doc", description: "文档", enabled: true }] }) },
+      skills: { list: async () => ({ skills: [{ name: "doc", description: "文档", enabled: true, kind: "workflow" }] }) },
     };
     const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     await act(async () => {
