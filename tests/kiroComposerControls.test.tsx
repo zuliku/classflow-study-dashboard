@@ -367,23 +367,48 @@ describe("Kiro Composer P3 — Reasoning 滑块（Model 左侧）", () => {
     expect(q('[data-testid="kiro-composer-reasoning"]')).toBeNull();
   });
 
-  it("弹层：当前档位 + 模型名 + 分段滑块（dots = supportedEfforts）+ 键盘调整", async () => {
+  it("弹层：当前档位 + 模型名 + 分段轨道（点击选中，不关闭弹窗）", async () => {
     await renderComposer();
     await click('[data-testid="kiro-composer-reasoning"]');
     const menu = q('[data-testid="kiro-composer-reasoning-menu"]')!;
     expect(menu.textContent).toContain("高");
     expect(menu.textContent).toContain("GPT-5.6 Sol");
-    const slider = menu.querySelector('[role="slider"]')!;
-    expect(slider.getAttribute("aria-valuemax")).toBe("2");
-    expect(slider.getAttribute("aria-valuenow")).toBe("2");
-    // 每个 supportedEffort 一个 dot（3 档）
-    expect(menu.querySelectorAll("span.rounded-full.w-1\\.5").length).toBe(3);
-    // 键盘 ← 降低一档
+    // 无滚动条：popover surface 明确 overflow-hidden
+    expect(menu.parentElement?.className).toContain("overflow-hidden");
+    const group = q('[data-testid="kiro-composer-reasoning-track"]')!;
+    expect(group.getAttribute("role")).toBe("radiogroup");
+    const radios = group.querySelectorAll('[role="radio"]');
+    expect(radios.length).toBe(3); // default / medium / high
+    expect((radios[2] as HTMLElement).getAttribute("aria-checked")).toBe("true");
+    // 点击「中」→ 选中且弹窗保持打开（不拖拽放置）
     await act(async () => {
-      slider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+      (radios[1] as HTMLButtonElement).click();
     });
     await flush();
     expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("medium");
+    expect(q('[data-testid="kiro-composer-reasoning-menu"]')).toBeTruthy();
+  });
+
+  it("键盘 ← → 调整档位（radiogroup）", async () => {
+    await renderComposer();
+    await click('[data-testid="kiro-composer-reasoning"]');
+    const group = q('[data-testid="kiro-composer-reasoning-track"]')!;
+    await act(async () => {
+      group.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    await flush();
+    expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("medium");
+  });
+
+  it("使用共享 KiroReasoningIcon（非闪电图标）", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(
+      join(process.cwd(), "components/kiro/composer/KiroComposerReasoningControl.tsx"),
+      "utf8"
+    );
+    expect(src).toContain("KiroReasoningIcon");
+    expect(src).not.toContain("Zap");
   });
 
   it("↺ 恢复默认（default）", async () => {

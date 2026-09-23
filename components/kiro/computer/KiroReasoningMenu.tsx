@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import { Popover } from "@/components/ui/Popover";
 import { DropdownMenuPanel, DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
+import { KiroReasoningIcon } from "@/components/kiro/KiroReasoningIcon";
 import { cn } from "@/lib/utils";
 
 const EFFORT_LABELS: Record<KiroReasoningEffort, string> = {
@@ -53,7 +54,7 @@ export function KiroReasoningMenu({
             : cn("gap-1 px-2.5", open ? "bg-alabaster text-charcoal border border-line-strong" : "text-sandrift border border-transparent hover:bg-alabaster hover:text-charcoal")
         )}
       >
-        <BrainIcon />
+        <KiroReasoningIcon className="w-3.5 h-3.5 shrink-0" />
         {!iconOnly && `思考 ${effort === "default" ? "默认" : EFFORT_LABELS[effort]}`}
       </button>
       {/* Composer 位于页面底部 → 向上展开，避免越出 viewport */}
@@ -81,15 +82,5 @@ export function KiroReasoningMenu({
         ))}
       </DropdownMenuPanel>
     </Popover>
-  );
-}
-
-function BrainIcon() {
-  return (
-    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
-      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
-      <path d="M12 5v13" />
-    </svg>
   );
 }
