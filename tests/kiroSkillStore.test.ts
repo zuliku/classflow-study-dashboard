@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 /**
  * S1 — Main Skill Store（userData/skills）读写契约测试（§62/§65/§67）。
  *
@@ -62,17 +62,17 @@ function manifest(overrides: Record<string, unknown> = {}) {
 describe("Main Skill Store — create / read canonical package", () => {
   it("create 写入 SKILL.md + agents/kiro.json；getSkill 返回 kind / origin / manifest", () => {
     const created = createSkill({
-      name: "study-planning",
+      name: "my-study-planner",
       description: "制定与调整学习计划。",
       instructions: "# Workflow\n\n1. 收集目标",
       kiroManifest: manifest(),
     });
     expect(created.kind).toBe("workflow");
     expect(created.origin).toBe("user");
-    expect(existsSync(join(skillsDir, "study-planning", "SKILL.md"))).toBe(true);
-    expect(existsSync(join(skillsDir, "study-planning", "agents", "kiro.json"))).toBe(true);
+    expect(existsSync(join(skillsDir, "my-study-planner", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skillsDir, "my-study-planner", "agents", "kiro.json"))).toBe(true);
 
-    const read = getSkill("study-planning")!;
+    const read = getSkill("my-study-planner")!;
     expect(read.kind).toBe("workflow");
     expect(read.kiroManifest?.requiredTools).toEqual(["propose_study_plan"]);
     expect(read.requiredTools).toEqual(["propose_study_plan"]);
@@ -83,18 +83,18 @@ describe("Main Skill Store — create / read canonical package", () => {
 
   it("structured Kiro metadata 绝不写入 SKILL.md（无 metadata block / 无 [object Object]）", () => {
     createSkill({
-      name: "study-planning",
+      name: "my-study-planner",
       description: "desc",
       instructions: "# Workflow",
       kiroManifest: manifest(),
     });
-    const md = readFileSync(join(skillsDir, "study-planning", "SKILL.md"), "utf8");
+    const md = readFileSync(join(skillsDir, "my-study-planner", "SKILL.md"), "utf8");
     expect(md).not.toContain("metadata:");
     expect(md).not.toContain("[object Object]");
     expect(md).not.toContain("sourceTurnId");
     expect(md).not.toContain("propose_study_plan");
     // manifest 在 sidecar 中
-    const sidecar = readFileSync(join(skillsDir, "study-planning", "agents", "kiro.json"), "utf8");
+    const sidecar = readFileSync(join(skillsDir, "my-study-planner", "agents", "kiro.json"), "utf8");
     expect(sidecar).toContain('"requiredTools"');
     expect(sidecar).toContain('"sourceTurnId"');
   });
@@ -122,13 +122,13 @@ describe("Main Skill Store — create / read canonical package", () => {
 
   it("updateSkill(description) 保留既有 manifest sidecar（不重建 / 不清空）", () => {
     createSkill({
-      name: "study-planning",
+      name: "my-study-planner",
       description: "old",
       instructions: "# Workflow",
       kiroManifest: manifest(),
     });
-    updateSkill("study-planning", { description: "new description" });
-    const read = getSkill("study-planning")!;
+    updateSkill("my-study-planner", { description: "new description" });
+    const read = getSkill("my-study-planner")!;
     expect(read.description).toBe("new description");
     expect(read.kiroManifest?.requiredTools).toEqual(["propose_study_plan"]);
     expect(read.kiroManifest?.parameters[0].name).toBe("course");
@@ -151,13 +151,13 @@ describe("Main Skill Store — create / read canonical package", () => {
 
   it("export 只导出 SKILL.md 文本（不是完整 package export）", () => {
     createSkill({
-      name: "study-planning",
+      name: "my-study-planner",
       description: "desc",
       instructions: "# Workflow",
       kiroManifest: manifest(),
     });
-    const exported = exportSkill("study-planning");
-    expect(exported).toContain("name: study-planning");
+    const exported = exportSkill("my-study-planner");
+    expect(exported).toContain("name: my-study-planner");
     expect(exported).not.toContain('"version"');
     expect(exported).not.toContain("requiredTools");
   });
@@ -244,12 +244,12 @@ describe("Main Skill Store — legacy / malformed manifest 兼容", () => {
 describe("Main Skill Store — deterministic testSkill（schema / contract）", () => {
   it("合法 skill → ok", () => {
     createSkill({
-      name: "study-planning",
+      name: "my-study-planner",
       description: "制定与调整学习计划。",
       instructions: "# Workflow",
       kiroManifest: manifest(),
     });
-    expect(testSkill("study-planning")).toEqual({ ok: true, errors: [] });
+    expect(testSkill("my-study-planner")).toEqual({ ok: true, errors: [] });
   });
 
   it("unknown tool → error；external MCP 名字不误判", () => {

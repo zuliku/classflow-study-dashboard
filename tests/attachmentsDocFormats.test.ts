@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { routeAttachment, kindToMaterialType } from "@/lib/ai/attachments/router";
 import { extractXlsx, extractXlsxRawText } from "@/lib/ai/attachments/xlsx";
 import { extractPptx, extractPptxRawText, unescapeXmlText } from "@/lib/ai/attachments/pptx";
@@ -180,18 +180,24 @@ describe("材料 kind 消歧（type + 标题扩展名 + MIME）", () => {
   });
 });
 
-describe("内置 document-handling Skill", () => {
-  it("包形状合法：命名规范 + 有描述与正文", () => {
+describe("内置 course-material-analysis Skill", () => {
+  it("包形状合法：命名规范 + 有描述与正文（S2：方法论，不是文件后缀说明书）", () => {
     expect(BUILTIN_SKILLS.length).toBeGreaterThanOrEqual(1);
-    const doc = BUILTIN_SKILLS.find((s) => s.name === "document-handling")!;
+    const doc = BUILTIN_SKILLS.find((s) => s.name === "course-material-analysis")!;
     expect(doc).toBeDefined();
     expect(doc.enabled).toBe(true);
+    expect(doc.kind).toBe("workflow");
+    expect(doc.origin).toBe("builtin");
     expect(doc.description.length).toBeGreaterThan(10);
     expect(doc.instructions).toContain("read_material");
     expect(doc.instructions).toContain("read_project_file");
     expect(doc.instructions).toContain("search_project_file");
-    expect(doc.instructions).toContain(".pptx");
-    expect(doc.instructions).toContain(".xlsx");
+    // 资料分析方法论：先定位再深读 / 跨来源综合 / 证据纪律
+    expect(doc.instructions).toContain("先定位");
+    expect(doc.instructions).toContain("跨来源综合");
+    // 不再逐后缀解释解析实现（Parser contract 属于 Core / Tool Result）
+    expect(doc.instructions).not.toContain(".pptx");
+    expect(doc.instructions).not.toContain(".xlsx");
   });
 
   it("instructions 无提权表述（与 Skill 安全红线一致）", () => {
@@ -205,32 +211,32 @@ describe("内置 document-handling Skill", () => {
       { name: "a", description: "d", instructions: "i", rawContent: "r", folderName: "a", enabled: false },
     ];
     const merged = withBuiltinSkills(user as never);
-    expect(merged.map((m) => m.name)).toContain("document-handling");
+    expect(merged.map((m) => m.name)).toContain("course-material-analysis");
     expect(merged.find((m) => m.name === "a")!.enabled).toBe(false);
     // S1：Builtin reserved name authoritative（不删除用户数据，但 canonical 版本是 builtin）
     const clash = withBuiltinSkills([
-      { name: "document-handling", description: "mine", instructions: "i", rawContent: "r", folderName: "document-handling", enabled: true },
+      { name: "course-material-analysis", description: "mine", instructions: "i", rawContent: "r", folderName: "course-material-analysis", enabled: true },
     ] as never);
-    expect(clash.filter((m) => m.name === "document-handling")).toHaveLength(1);
+    expect(clash.filter((m) => m.name === "course-material-analysis")).toHaveLength(1);
     expect(clash[0].description).not.toBe("mine");
     expect(clash[0].origin).toBe("builtin");
   });
 
   it("activateSkill 可激活内置 skill", () => {
     const merged = withBuiltinSkills([]);
-    const r = activateSkill(merged, { skillName: "document-handling" });
+    const r = activateSkill(merged, { skillName: "course-material-analysis" });
     expect(r.ok).toBe(true);
     expect(r.instructions).toContain("read_material");
   });
 
   it("validator 拒绝新建/导入同名（保留名）", () => {
-    expect(validateSkillName("document-handling").ok).toBe(false);
-    expect(validateSkillName("document-handling").reason).toContain("RESERVED_NAME");
+    expect(validateSkillName("course-material-analysis").ok).toBe(false);
+    expect(validateSkillName("course-material-analysis").reason).toContain("RESERVED_NAME");
     expect(validateSkillName("course-notification").ok).toBe(true);
   });
 
   it("assertNotBuiltinSkillName 中英文案", () => {
-    expect(assertNotBuiltinSkillName("document-handling").ok).toBe(false);
+    expect(assertNotBuiltinSkillName("course-material-analysis").ok).toBe(false);
     expect(assertNotBuiltinSkillName("other").ok).toBe(true);
   });
 });

@@ -12,16 +12,19 @@
 import type { SkillPackage, SkillActivationResult } from "@/lib/ai/skills/types";
 import { SKILL_PERMISSIONS_NOTE } from "@/lib/ai/skills/types";
 import { classifySkillPackage } from "@/lib/ai/skills/registry";
+import { resolveBuiltinSkillAlias } from "@/lib/ai/skills/builtinAliases";
 
 export interface ActivateSkillInput {
   skillName: string;
 }
 
 export function activateSkill(packages: SkillPackage[], input: ActivateSkillInput): SkillActivationResult {
-  const { skillName } = input;
-  if (typeof skillName !== "string" || skillName.trim().length === 0) {
+  const requested = typeof input.skillName === "string" ? input.skillName.trim() : "";
+  if (requested.length === 0) {
     return { ok: false, code: "INVALID_INPUT", error: "skillName required" };
   }
+  // S2 §40：legacy alias 在 lookup boundary 解析为 canonical 名称（返回 canonical name，不返回假 Skill）
+  const skillName = resolveBuiltinSkillAlias(requested) ?? requested;
   const pkg = packages.find((p) => p.name === skillName);
   if (!pkg) {
     return { ok: false, code: "NOT_FOUND", error: `Skill not found: ${skillName}` };
@@ -55,7 +58,7 @@ export const ACTIVATE_SKILL_TOOL_DEFINITION = {
     type: "object",
     required: ["skillName"],
     properties: {
-      skillName: { type: "string", description: "Workflow skill folder name (e.g. study-plan)" },
+      skillName: { type: "string", description: "Workflow skill folder name (e.g. study-planning)" },
     },
   },
 } as const;

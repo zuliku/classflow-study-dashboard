@@ -227,7 +227,8 @@ function buildDesktopActionSection(snapshot: KiroComputerTurnSnapshot | null): s
     "",
     "- Runtime: available",
     "- User permission: enabled",
-    "- desktop_action（click / double_click / focus / type / key / scroll / wait）: available",
+    "- desktop_action（click / double_click / focus / type / key / scroll / wait / hover / right_click / drag）: available",
+    "- desktop_action（clipboard_read / clipboard_write / upload_file）: 受独立设置与逐次确认约束（见下方动作覆盖）",
     "",
     "工作流程必须是 Observe → Action → Observe：",
     "1. 先 observe_desktop，从返回元素中选择 elementId（不要猜测坐标）。",
@@ -238,7 +239,7 @@ function buildDesktopActionSection(snapshot: KiroComputerTurnSnapshot | null): s
     "边界：",
     "- 发送消息、提交表单、下载、删除、修改系统设置等高风险动作会请求用户确认；用户拒绝时立即停止。",
     "- 密码、API Key、Token、Secret 等敏感信息绝不可作为 text 传入，也不要尝试绕过。",
-    "- 本阶段不支持拖拽、剪贴板和文件上传；用户要求时如实说明。",
+    "- 拖拽、剪贴板读写与文件上传均受当前 Runtime / 设置 / 逐次确认约束：能力未开启时如实说明并引导到 设置 → Agent 与权限，不要尝试绕过。",
     "- 用户点击停止后不得继续任何 GUI 操作。",
   ].join("\n");
 }

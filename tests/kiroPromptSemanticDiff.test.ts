@@ -11,7 +11,7 @@ describe("Prompt V2 semantic diff（旧规则逐项保留）", () => {
     ["6. get_assignment_health", "get_assignment_health"],
     ["7. get_available_time", "get_available_time"],
     ["8. propose_study_plan", "propose_study_plan"],
-    ["9. Proposal ≠ applied StudyBlock", "只生成建议，不创建任何 StudyBlock"],
+    ["9. Proposal ≠ applied StudyBlock", "只生成建议，不创建 / 不移动任何 StudyBlock"],
     ["10. propose_task_breakdown", "propose_task_breakdown"],
     ["11. AI estimate 标注", "必须明确标注\"估计\""],
     ["12. linkedMaterials 按需读取", "不要每次进入任务就自动读取所有关联资料"],

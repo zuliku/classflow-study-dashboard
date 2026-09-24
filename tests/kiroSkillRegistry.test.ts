@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 /**
  * S1 — Skill Registry / Catalog / Slash / Activation 分类测试（§63）。
  *
@@ -38,10 +38,10 @@ function pkg(overrides: Partial<SkillPackage> & { name: string }): SkillPackage 
 describe("Registry 分类（唯一来源）", () => {
   it("workflow 进入 workflows；recipe 进入 recipes", () => {
     const registry = buildKiroSkillRegistry([
-      pkg({ name: "study-plan" }),
+      pkg({ name: "exam-review" }),
       pkg({ name: "desktop-wechat-send-file", kind: "recipe" }),
     ]);
-    expect(registry.workflows.map((p) => p.name)).toEqual(["study-plan"]);
+    expect(registry.workflows.map((p) => p.name)).toEqual(["exam-review"]);
     expect(registry.recipes.map((p) => p.name)).toEqual(["desktop-wechat-send-file"]);
   });
 
@@ -63,12 +63,20 @@ describe("Registry 分类（唯一来源）", () => {
     expect(listRecipeSkills(packages, { enabledOnly: true }).map((p) => p.name)).toEqual(["desktop-c"]);
   });
 
-  it("同名去重（builtin 合并后 builtin 保留）", () => {
-    const merged = withBuiltinSkills([pkg({ name: "study-plan", description: "user 版本" })]);
-    const studyPlan = merged.filter((p) => p.name === "study-plan");
-    expect(studyPlan).toHaveLength(1);
-    expect(studyPlan[0].origin).toBe("builtin");
-    // 不删除用户数据：原 user package 仍在磁盘（此处仅验证 merge 语义）
+  it("同名去重（builtin 合并后 builtin authoritative；alias 名同样让位）", () => {
+    const merged = withBuiltinSkills([
+      pkg({ name: "study-planning", description: "user 版本" }),
+      pkg({ name: "study-plan", description: "legacy alias 版本" }),
+      pkg({ name: "exam-review", description: "user 自有" }),
+    ]);
+    const canonical = merged.filter((p) => p.name === "study-planning");
+    expect(canonical).toHaveLength(1);
+    expect(canonical[0].origin).toBe("builtin");
+    // legacy alias 名称不是独立 Skill（被保留名过滤，不会与 canonical 混淆）
+    expect(merged.some((p) => p.name === "study-plan")).toBe(false);
+    // 普通用户 Skill 不受影响
+    expect(merged.filter((p) => p.name === "exam-review")).toHaveLength(1);
+    expect(merged.find((p) => p.name === "exam-review")!.origin).toBe("user");
   });
 
   it("origin builtin / user 正确", () => {
@@ -81,12 +89,12 @@ describe("Registry 分类（唯一来源）", () => {
 describe("Catalog 只含 Workflow Skill", () => {
   it("recipe 不进入 Available Skills（即便 enabled）", () => {
     const catalog = buildSkillCatalog([
-      pkg({ name: "study-plan" }),
+      pkg({ name: "exam-review" }),
       pkg({ name: "desktop-wechat-send-file", kind: "recipe" }),
     ]);
-    expect(catalog.map((c) => c.name)).toEqual(["study-plan"]);
+    expect(catalog.map((c) => c.name)).toEqual(["exam-review"]);
     const section = buildSkillCatalogSection(catalog);
-    expect(section).toContain("study-plan");
+    expect(section).toContain("exam-review");
     expect(section).not.toContain("desktop-wechat-send-file");
     expect(section).not.toContain("trigger");
   });
@@ -104,16 +112,16 @@ describe("Catalog 只含 Workflow Skill", () => {
 describe("Slash 只含 Workflow Skill", () => {
   it("recipe 不进入 Slash 选项；explicit slash 不命中 recipe", () => {
     const options = toSlashSkillOptions([
-      { name: "study-plan", description: "S", enabled: true, kind: "workflow" },
+      { name: "exam-review", description: "S", enabled: true, kind: "workflow" },
       { name: "desktop-wechat-send-file", description: "R", enabled: true, kind: "recipe" },
       { name: "disabled", description: "D", enabled: false, kind: "workflow" },
     ]);
-    expect(options.map((o) => o.name)).toEqual(["study-plan"]);
+    expect(options.map((o) => o.name)).toEqual(["exam-review"]);
 
     const catalog = options.map((o) => ({ ...o, enabled: true }));
-    expect(isSlashSkillInvocation("/study-plan", catalog)).toBe(true);
+    expect(isSlashSkillInvocation("/exam-review", catalog)).toBe(true);
     expect(isSlashSkillInvocation("/desktop-wechat-send-file", catalog)).toBe(false);
-    expect(getEnabledSkillNamesForSlash(catalog)).toEqual(["study-plan"]);
+    expect(getEnabledSkillNamesForSlash(catalog)).toEqual(["exam-review"]);
   });
 });
 
@@ -131,16 +139,16 @@ describe("activate_skill 只激活 Workflow", () => {
     const result = activateSkill(
       [
         pkg({
-          name: "study-plan",
+          name: "exam-review",
           requiredTools: ["propose_study_plan"],
           requiredCapabilities: ["planning"],
           kiroManifest: undefined,
         }),
       ],
-      { skillName: "study-plan" }
+      { skillName: "exam-review" }
     );
     expect(result.ok).toBe(true);
-    expect(result.instructions).toBe("instructions-study-plan");
+    expect(result.instructions).toBe("instructions-exam-review");
     expect(result.requiredTools).toEqual(["propose_study_plan"]);
     expect(result.requiredCapabilities).toEqual(["planning"]);
     // 内部 provenance 绝不进入模型
@@ -150,7 +158,7 @@ describe("activate_skill 只激活 Workflow", () => {
   });
 
   it("disabled workflow → DISABLED", () => {
-    const result = activateSkill([pkg({ name: "study-plan", enabled: false })], { skillName: "study-plan" });
+    const result = activateSkill([pkg({ name: "exam-review", enabled: false })], { skillName: "exam-review" });
     expect(result.ok).toBe(false);
     expect(result.code).toBe("DISABLED");
   });

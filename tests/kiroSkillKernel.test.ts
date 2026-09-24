@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 /**
  * S1 §71 — Kernel 边界成功标准（可回答 A–G）。
  *
@@ -41,18 +41,18 @@ describe("S1 Kernel 边界", () => {
 
   it("A/B/D/F：Catalog 只含 workflow；recipe 只进 recipe prompt", () => {
     const registry = buildKiroSkillRegistry([
-      pkg({ name: "study-plan" }),
+      pkg({ name: "exam-review" }),
       pkg({ name: "desktop-wechat-send-file", kind: "recipe" }),
     ]);
     const catalog = buildSkillCatalog(registry.workflows);
-    expect(catalog.map((c) => c.name)).toEqual(["study-plan"]);
+    expect(catalog.map((c) => c.name)).toEqual(["exam-review"]);
     expect(buildDesktopRecipePromptSection(registry.recipes)).toContain("desktop-wechat-send-file");
-    expect(buildDesktopRecipePromptSection(registry.recipes)).not.toContain("study-plan");
+    expect(buildDesktopRecipePromptSection(registry.recipes)).not.toContain("exam-review");
   });
 
   it("E：只有 workflow 能 activate_skill", () => {
-    const packages = [pkg({ name: "study-plan" }), pkg({ name: "desktop-x", kind: "recipe" })];
-    expect(activateSkill(packages, { skillName: "study-plan" }).ok).toBe(true);
+    const packages = [pkg({ name: "exam-review" }), pkg({ name: "desktop-x", kind: "recipe" })];
+    expect(activateSkill(packages, { skillName: "exam-review" }).ok).toBe(true);
     expect(activateSkill(packages, { skillName: "desktop-x" }).code).toBe("NOT_ACTIVATABLE");
   });
 

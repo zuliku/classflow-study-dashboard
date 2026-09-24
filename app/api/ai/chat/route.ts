@@ -395,10 +395,11 @@ export async function handleChat(req: Request) {
       const skillName = parseSlashSkillCommand(lastText);
       if (skillName) {
         const { activateSkill } = await import("@/lib/ai/skills/activation");
-        // 只在 workflow 中查找：/desktop-*（recipe）不是可用 Skill command，绝不 fallback
+        // 只在 workflow 中查找：/desktop-*（recipe）不是可用 Skill command，绝不 fallback；
+        // legacy alias（如 /study-plan）在 activation lookup boundary 解析为 canonical 名称
         const result = activateSkill(registry.workflows, { skillName });
         if (result.ok && result.instructions) {
-          slashSkillSection = buildSkillActivationPrompt(skillName, result.instructions);
+          slashSkillSection = buildSkillActivationPrompt(result.name ?? skillName, result.instructions);
         }
       }
     }
