@@ -16,6 +16,10 @@ const RING_STROKE = 2.5;
 const RING_RADIUS = (24 - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
+/** 弹窗宽度（w-56）与 ring 点击区宽度：用于把弹窗精确居中对齐到 ring 中心 */
+const PANEL_WIDTH = 224;
+const RING_BUTTON_WIDTH = { compact: 36, regular: 28 } as const;
+
 const TONE_CLASS: Record<"unknown" | "ok" | "warn" | "danger", string> = {
   unknown: "text-line-strong",
   ok: "text-charcoal",
@@ -101,36 +105,52 @@ export function KiroComposerContextUsage({
         </svg>
       </button>
 
-      <PopoverPanel
-        open={open}
-        placement="top-end"
-        motionProfile="kiro"
-        className="w-56 max-w-[calc(100vw-24px)]"
+      {/* 弹窗锚点：位于 ring 中心（inline style 保证 containing block，不依赖祖先布局）；
+          面板以固定宽度居中于锚点 → 与下方状态环精确对齐 */}
+      <span
+        aria-hidden="true"
+        data-testid="kiro-composer-context-usage-anchor"
+        className="pointer-events-none"
+        style={{
+          position: "absolute",
+          left: (compact ? RING_BUTTON_WIDTH.compact : RING_BUTTON_WIDTH.regular) / 2,
+          top: 0,
+          width: 0,
+          height: 0,
+        }}
       >
-        <div
-          className="px-3 py-2 space-y-0.5"
-          data-testid="kiro-composer-context-usage-menu"
-          role="dialog"
-          aria-label="上下文占用"
+        <PopoverPanel
+          open={open}
+          placement="anchor"
+          motionProfile="kiro"
+          className="pointer-events-auto w-56 max-w-[calc(100vw-24px)]"
+          style={{ left: "50%", bottom: "100%", marginLeft: -(PANEL_WIDTH / 2), marginBottom: 6 }}
         >
-          {!view ? (
-            <>
-              <p className="text-xs font-bold text-charcoal">上下文占用</p>
-              <p className="text-[11px] text-sandrift">发送第一条消息后显示</p>
-            </>
-          ) : (
-            <>
-              <p className="text-xs font-bold text-charcoal">{view.title}</p>
-              <p className="text-[11px] font-semibold text-charcoal">{view.percentLine}</p>
-              <p className="text-[11px] text-sandrift">{view.tokensLine}</p>
-              {view.compactedLine && (
-                <p className="text-[11px] text-warning">{view.compactedLine}</p>
-              )}
-              {view.overflowLine && <p className="text-[11px] text-danger">{view.overflowLine}</p>}
-            </>
-          )}
-        </div>
-      </PopoverPanel>
+          <div
+            className="px-3 py-2 space-y-0.5"
+            data-testid="kiro-composer-context-usage-menu"
+            role="dialog"
+            aria-label="上下文占用"
+          >
+            {!view ? (
+              <>
+                <p className="text-xs font-bold text-charcoal">上下文占用</p>
+                <p className="text-[11px] text-sandrift">发送第一条消息后显示</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-bold text-charcoal">{view.title}</p>
+                <p className="text-[11px] font-semibold text-charcoal">{view.percentLine}</p>
+                <p className="text-[11px] text-sandrift">{view.tokensLine}</p>
+                {view.compactedLine && (
+                  <p className="text-[11px] text-warning">{view.compactedLine}</p>
+                )}
+                {view.overflowLine && <p className="text-[11px] text-danger">{view.overflowLine}</p>}
+              </>
+            )}
+          </div>
+        </PopoverPanel>
+      </span>
     </>
   );
 }

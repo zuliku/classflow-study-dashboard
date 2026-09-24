@@ -1,25 +1,19 @@
 ﻿// @vitest-environment node
 /**
- * Phase 2 — 模型窗口 % + Inspector 上下文历史（纯函数）。
+ * Phase 2 — 官方可核实 contextWindowTokens + 模型窗口口径（纯函数）。
  *
- * 覆盖：官方可核实 contextWindowTokens（只填有文档的模型，缺失不猜）；M 级格式化；
- * resolveModelWindowUsage（分母 = 模型窗口，分子 = 本请求总估算输入）；Inspector 历史
- * （新 → 旧、bounded、ratio clamp、tone、compacted 标记、provider 透传）。
+ * 覆盖：只填有官方文档的模型（缺失不猜）；M 级格式化；紧凑三段式在「有窗口 / 无窗口」下的分母切换。
  */
 import { describe, it, expect } from "vitest";
 import {
-  formatContextUsageTokens,
-  resolveModelWindowUsage,
+  buildContextUsageCompactView,
   buildContextUsageSnapshot,
+  formatContextUsageTokens,
 } from "@/lib/ai/contextBudget/usage";
 import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
 import { DEEPSEEK_MODELS } from "@/lib/ai/providers/deepseek";
 import { getModelContextWindowTokens } from "@/lib/ai/providers/registry";
-import {
-  INSPECTOR_CONTEXT_USAGE_LIMIT,
-  buildInspectorContextUsageHistory,
-} from "@/lib/ai/ui/kiroInspector";
 
 function snapshot(overrides: Partial<Parameters<typeof buildContextUsageSnapshot>[0]> = {}) {
   return buildContextUsageSnapshot({
@@ -94,63 +88,18 @@ describe("formatContextUsageTokens（M 级）", () => {
   });
 });
 
-describe("resolveModelWindowUsage", () => {
-  it("无窗口 / 无快照 → null（UI 不显示百分比）", () => {
-    expect(resolveModelWindowUsage(snapshot(), undefined)).toBeNull();
-    expect(resolveModelWindowUsage(snapshot(), null)).toBeNull();
-    expect(resolveModelWindowUsage(null, 1_000_000)).toBeNull();
-    expect(resolveModelWindowUsage(snapshot(), 0)).toBeNull();
-    expect(resolveModelWindowUsage(snapshot(), Number.NaN)).toBeNull();
+describe("紧凑三段式：分母切换", () => {
+  it("有官方窗口 → 以模型窗口为分母", () => {
+    const view = buildContextUsageCompactView(snapshot(), 1_050_000)!;
+    expect(view.title).toBe("上下文窗口：");
+    expect(view.percentLine).toBe("3% 已用（剩余 97%）");
+    expect(view.tokensLine).toBe("已用 30.3k tokens，共 1.05M");
   });
 
-  it("分母 = 模型窗口；分子 = 系统提示 + 工具 + 对话", () => {
-    const s = snapshot({ systemPromptTokens: 16_342, toolSchemaTokens: 4_200, conversationTokens: 9_800 });
-    const usage = resolveModelWindowUsage(s, 1_050_000)!;
-    const expectedPercent = ((16_342 + 4_200 + 9_800) / 1_050_000) * 100;
-    expect(usage.percent).toBe(Math.round(expectedPercent * 10) / 10);
-    expect(usage.label).toBe("占模型窗口 2.9%（已用 30.3k tokens，共 1.05M）");
-  });
-
-  it("占比超过 100% 也如实显示（不 clamp 到 100）", () => {
-    const s = snapshot({ systemPromptTokens: 60_000, toolSchemaTokens: 0, conversationTokens: 60_000 });
-    const usage = resolveModelWindowUsage(s, 100_000)!;
-    expect(usage.percent).toBe(120);
-    expect(usage.label).toContain("120%");
-  });
-});
-
-describe("buildInspectorContextUsageHistory", () => {
-  it("新 → 旧；序号按时间顺序；bounded（默认 8）", () => {
-    const snapshots = Array.from({ length: 12 }, (_, i) =>
-      snapshot({ conversationTokens: 1000 + i * 100, at: Date.parse("2026-09-24T10:00:00.000Z") + i * 60_000 })
-    );
-    const rows = buildInspectorContextUsageHistory(snapshots);
-    expect(rows).toHaveLength(INSPECTOR_CONTEXT_USAGE_LIMIT);
-    // 最新在最前（index = 12），最旧的在末尾（index = 5）
-    expect(rows[0].index).toBe(12);
-    expect(rows[rows.length - 1].index).toBe(5);
-    expect(rows[0].used).toBe(1000 + 11 * 100);
-  });
-
-  it("ratio clamp 0..1；tone 与压缩阈值一致；compacted / provider 透传", () => {
-    const rows = buildInspectorContextUsageHistory([
-      snapshot({ conversationTokens: 5_000 }),
-      snapshot({ conversationTokens: 19_000 }),
-      snapshot({ conversationTokens: 26_000, compacted: true }),
-    ]);
-    // 新 → 旧
-    expect(rows[0].tone).toBe("danger");
-    expect(rows[0].compacted).toBe(true);
-    expect(rows[0].ratio).toBe(1);
-    expect(rows[1].tone).toBe("warn");
-    expect(rows[2].tone).toBe("ok");
-    expect(rows[0].provider).toBe("opencode-go");
-    expect(rows[0].max).toBe(24_000);
-  });
-
-  it("空输入 → 空数组；limit 生效", () => {
-    expect(buildInspectorContextUsageHistory([])).toEqual([]);
-    const many = Array.from({ length: 5 }, () => snapshot());
-    expect(buildInspectorContextUsageHistory(many, { limit: 2 })).toHaveLength(2);
+  it("无窗口 → 以输入预算为分母（对话上下文）", () => {
+    const view = buildContextUsageCompactView(snapshot(), undefined)!;
+    expect(view.title).toBe("对话上下文：");
+    expect(view.percentLine).toBe("41% 已用（剩余 59%）");
+    expect(view.tokensLine).toBe("已用 9.8k tokens，共 24k");
   });
 });

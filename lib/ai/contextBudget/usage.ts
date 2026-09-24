@@ -168,25 +168,6 @@ export function formatContextUsageTokens(tokens: number): string {
   return `${k >= 100 ? Math.round(k) : k.toFixed(1).replace(/\.0$/, "")}k`;
 }
 
-/**
- * 模型窗口占用（Phase 2）：仅当 registry 有官方可核实的 contextWindowTokens 时返回。
- * 分母 = 模型窗口；分子 = 本请求总估算输入（系统提示 + 工具 + 对话部分）。
- * 缺失窗口 → null（UI 不显示百分比，绝不猜测）。
- */
-export function resolveModelWindowUsage(
-  snapshot: ContextUsageSnapshot | null | undefined,
-  windowTokens: number | null | undefined
-): { percent: number; label: string } | null {
-  if (!snapshot) return null;
-  if (typeof windowTokens !== "number" || !Number.isFinite(windowTokens) || windowTokens <= 0) return null;
-  const percent = (snapshot.totalEstimatedTokens / windowTokens) * 100;
-  const rounded = Math.max(0, Math.round(percent * 10) / 10);
-  return {
-    percent: rounded,
-    label: `占模型窗口 ${rounded}%（已用 ${formatContextUsageTokens(snapshot.totalEstimatedTokens)} tokens，共 ${formatContextUsageTokens(windowTokens)}）`,
-  };
-}
-
 /** 一行摘要（Composer 角标 title / aria-label） */
 export function formatContextUsageLabel(
   snapshot: ContextUsageSnapshot | null | undefined,

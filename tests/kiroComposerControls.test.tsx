@@ -318,6 +318,64 @@ describe("Kiro Composer — Reasoning / Model", () => {
     expect(q('[data-testid="kiro-composer-reasoning-menu"]')).toBeTruthy();
   });
 
+  it("Reasoning 滑块：最高档填满轨道 + knob 贴右端（w-8，无 hover 位移）；档位点保持小尺寸", async () => {
+    await renderComposer(); // reasoningEffort: "high" = 最高档（ADJUSTABLE 的最后一档）
+    await click('[data-testid="kiro-composer-reasoning"]');
+    const fill = q('[data-testid="kiro-composer-reasoning-fill"]')!;
+    expect(fill.style.width).toBe("100%");
+    const knob = q('[data-testid="kiro-composer-reasoning-knob"]')!;
+    expect(knob.style.left).toBe("calc(100% - 16px)");
+    expect(knob.className).toContain("w-8");
+    // 去除浮起效果：不残留 hover 位移/缩放
+    expect(knob.className).not.toContain("group-hover/track");
+    // 固定档位点不被放大
+    const dots = container!.querySelectorAll('[data-testid="kiro-composer-reasoning-dot"]');
+    expect(dots.length).toBeGreaterThan(0);
+    for (const dot of Array.from(dots)) {
+      expect(dot.className).toContain("w-1.5");
+      expect(dot.className).not.toContain("w-2");
+    }
+  });
+
+  it("Reasoning 拖动：按指针位置换算档位（pointerdown → pointermove），拖动期间关闭过渡", async () => {
+    await renderComposer({ reasoningEffort: "low" });
+    await click('[data-testid="kiro-composer-reasoning"]');
+    const track = q('[data-testid="kiro-composer-reasoning-track"]')!;
+    // jsdom 无布局：固定轨道几何（0..400px，4 档 → 每档 100px）
+    Object.defineProperty(track, "getBoundingClientRect", {
+      value: () => ({ left: 0, top: 0, width: 400, height: 36, right: 400, bottom: 36, x: 0, y: 0, toJSON: () => ({}) }),
+    });
+    const firePointer = (type: string, clientX: number) => {
+      const ev = new Event(type, { bubbles: true }) as Event & { clientX?: number };
+      Object.defineProperty(ev, "clientX", { value: clientX });
+      track.dispatchEvent(ev);
+    };
+
+    await act(async () => {
+      firePointer("pointerdown", 220); // 55% → 第 3 段 → 中
+    });
+    expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("medium");
+    // 仅按下不算拖动；单击/拖动都保留 knob/fill 过渡（档位间平滑滑动）
+    expect(track.getAttribute("data-dragging")).toBeNull();
+    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-[width]");
+
+    await act(async () => {
+      firePointer("pointermove", 320); // 第 4 段 → 高（进入拖动）
+    });
+    expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("high");
+    expect(track.getAttribute("data-dragging")).toBe("true");
+    // 拖动过程中动画不缺失
+    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-[width]");
+    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).not.toContain("transition-none");
+    expect(q('[data-testid="kiro-composer-reasoning-knob"]')!.className).toContain("transition-[left]");
+
+    await act(async () => {
+      firePointer("pointerup", 380);
+    });
+    expect(track.getAttribute("data-dragging")).toBeNull();
+    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).not.toContain("transition-none");
+  });
+
   it("Model：只显示模型名，菜单不含思考程度；unavailable 显示 warning", async () => {
     await renderComposer();
     const model = q('[data-testid="kiro-composer-model"]')!;

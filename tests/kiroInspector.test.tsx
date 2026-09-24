@@ -136,8 +136,6 @@ function metaValue(): KiroSessionMetaValue {
     kiroRuntimeStatus: metaState.kiroRuntimeStatus,
     currentTurnSources: metaState.currentTurnSources,
     conversationSourcesVersion: metaState.conversationSourcesVersion,
-    contextUsageVersion: 0,
-    getConversationContextUsage: () => [],
     suggestionsKind: null,
     suggestionsGen: 0,
     lastUserTurnGen: 0,

@@ -23,6 +23,9 @@ import { cn } from "@/lib/utils";
 /** 弹窗固定宽度（w-64 = 256px）：用于锚点精确居中 */
 const KiroComposerReasoningControlWIDTH = 256;
 
+/** knob 直径（w-8 = 32px）：最高档时贴右端（右边缘 = 轨道右边缘） */
+const KNOB_SIZE = 32;
+
 export function KiroComposerReasoningControl({
   capability,
   effort,
@@ -44,6 +47,10 @@ export function KiroComposerReasoningControl({
 }) {
   const [internalOpen, setInternalOpen] = React.useState(false);
   const open = openProp ?? internalOpen;
+  // 拖动状态（hooks 必须在早退前，保持顺序稳定）
+  const trackRef = React.useRef<HTMLDivElement | null>(null);
+  const pointerActiveRef = React.useRef(false);
+  const [dragging, setDragging] = React.useState(false);
   const setOpen = React.useCallback(
     (next: boolean) => {
       onOpenChange?.(next);
@@ -56,10 +63,62 @@ export function KiroComposerReasoningControl({
 
   const steps = capability.supportedEfforts;
   const activeIndex = reasoningStepIndex(steps, effort);
-  const fillPercent = ((activeIndex + 1) / steps.length) * 100;
+  // 最高档：填充到轨道右端（不留右侧空余），knob 贴右端（右边缘 = 轨道右边缘）
+  const atMax = steps.length > 1 && activeIndex === steps.length - 1;
+  const stepCenterPercent = ((activeIndex + 0.5) / steps.length) * 100;
+  const fillPercent = atMax ? 100 : stepCenterPercent;
+  const knobLeft = atMax ? `calc(100% - ${KNOB_SIZE / 2}px)` : `${stepCenterPercent}%`;
 
   const commit = (step: KiroReasoningEffort) => {
     if (step !== effort) onChange(step);
+  };
+
+  /**
+   * 拖动调整（Pointer Events；轨道级单一 owner）：
+   * - pointerdown 只记录按下；首次 pointermove 进入 dragging（仅作 data 标记）
+   * - pointermove 持续按 x 换算档位；同档位不重复触发
+   * - knob/fill 始终保留过渡（单击与拖动都在档位间平滑滑动）
+   * - 无坐标（合成事件 / 无法测量）→ 不做换算（仍由档位按钮的 pointerdown 精确落地）
+   */
+  const commitAtClientX = (clientX: number) => {
+    const el = trackRef.current;
+    if (!el) return;
+    if (typeof clientX !== "number" || !Number.isFinite(clientX)) return;
+    const rect = el.getBoundingClientRect();
+    if (!Number.isFinite(rect.width) || rect.width <= 0) return;
+    const ratio = (clientX - rect.left) / rect.width;
+    const index = Math.max(0, Math.min(steps.length - 1, Math.floor(ratio * steps.length)));
+    const step = steps[index];
+    if (step) commit(step);
+  };
+
+  const handleTrackPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    // 不冒泡到 Composer outside-click（弹窗保持打开）
+    e.stopPropagation();
+    pointerActiveRef.current = true;
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* jsdom / 旧引擎无 pointer capture：不影响点击路径 */
+    }
+    commitAtClientX(e.clientX);
+  };
+
+  const handleTrackPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointerActiveRef.current || disabled) return;
+    if (!dragging) setDragging(true);
+    commitAtClientX(e.clientX);
+  };
+
+  const handleTrackPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    pointerActiveRef.current = false;
+    setDragging(false);
+    try {
+      e.currentTarget.releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* 无 capture 时忽略 */
+    }
   };
 
   return (
@@ -134,8 +193,9 @@ export function KiroComposerReasoningControl({
           </div>
           <p className="mt-0.5 text-center text-[10px] text-sandrift truncate">{modelName}</p>
 
-          {/* 分段轨道（Codex-style）：点击选中；白色 knob 指示当前档位（恒在轨道内，不溢出） */}
+          {/* 分段轨道（Codex-style）：点击 / 拖动调整；白色 knob 指示当前档位（恒在轨道内，不溢出） */}
           <div
+            ref={trackRef}
             role="radiogroup"
             aria-label="思考程度"
             tabIndex={0}
@@ -149,34 +209,43 @@ export function KiroComposerReasoningControl({
                 commit(steps[activeIndex + 1]);
               }
             }}
+            onPointerDown={handleTrackPointerDown}
+            onPointerMove={handleTrackPointerMove}
+            onPointerUp={handleTrackPointerEnd}
+            onPointerCancel={handleTrackPointerEnd}
             data-testid="kiro-composer-reasoning-track"
-            className="relative mt-2 h-9 rounded-full bg-alabaster overflow-hidden focus:outline-none focus-visible:ring-1 focus-visible:ring-line-strong"
+            data-dragging={dragging ? "true" : undefined}
+            className="relative mt-2 h-9 rounded-full bg-alabaster overflow-hidden touch-none focus:outline-none focus-visible:ring-1 focus-visible:ring-line-strong"
           >
-            {/* 填充：到当前档位中心（knob 覆盖接缝，视觉连续） */}
+            {/* 填充：到当前档位中心；最高档填满整条轨道（直边 + 轨道裁剪，窄档位不变形）；
+                拖动过程中同样保留 width 过渡（档位间平滑滑动，不瞬跳） */}
             <span
               aria-hidden="true"
+              data-testid="kiro-composer-reasoning-fill"
               className="absolute inset-y-0 left-0 bg-pastel-mint transition-[width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
-              style={{ width: `${((activeIndex + 0.5) / steps.length) * 100}%` }}
+              style={{ width: `${fillPercent}%` }}
             />
-            {/* 档位点：未选中显示小点；选中位置由 knob 表达 */}
+            {/* 档位点：未选中显示小点（固定位置标记，保持原尺寸）；选中位置由 knob 表达 */}
             {steps.map((step, index) =>
               index === activeIndex ? null : (
                 <span
                   key={step}
                   aria-hidden="true"
+                  data-testid="kiro-composer-reasoning-dot"
                   className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-sandrift/50"
                   style={{ left: `${((index + 0.5) / steps.length) * 100}%` }}
                 />
               )
             )}
-            {/* 白色 knob：位置 = 当前档位中心 */}
+            {/* 白色 knob（滑块点）：位置 = 当前档位中心；最高档贴右端（静态，无 hover 位移）；
+                拖动过程中同样保留 left 过渡（平滑跟到目标档位） */}
             <span
               aria-hidden="true"
               data-testid="kiro-composer-reasoning-knob"
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-surface border border-line shadow-subtle transition-[left] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
-              style={{ left: `${((activeIndex + 0.5) / steps.length) * 100}%` }}
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-surface border border-line shadow-subtle transition-[left] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
+              style={{ left: knobLeft }}
             />
-            {/* 可点击段：每档一个（点击选中；弹窗保持打开） */}
+            {/* 可点击段：每档一个（点击 / 键盘选中；拖动由轨道级 Pointer 处理统一负责） */}
             <div className="absolute inset-0 flex">
               {steps.map((step, index) => {
                 const selected = index === activeIndex;
@@ -187,10 +256,8 @@ export function KiroComposerReasoningControl({
                     role="radio"
                     aria-checked={selected}
                     aria-label={`思考程度：${reasoningEffortLabel(step)}`}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      commit(step);
-                    }}
+                    // pointerdown 即生效（精确档位；不 stopPropagation → 轨道同时开始拖动）
+                    onPointerDown={() => commit(step)}
                     onClick={() => commit(step)}
                     className="flex flex-1 min-w-0 items-center justify-center rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-line-strong"
                   >

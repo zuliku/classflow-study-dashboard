@@ -175,4 +175,22 @@ describe("上下文占用 ring — 受控弹层与明细", () => {
       expect(html, forbidden).not.toContain(forbidden);
     }
   });
+
+  it("弹窗锚点：位于 ring 中心、面板固定宽度居中（与下方状态环对齐）", async () => {
+    await render({ snapshot: usage(9800), open: true });
+    const anchor = q('[data-testid="kiro-composer-context-usage-anchor"]')!;
+    expect(anchor.style.position).toBe("absolute");
+    // 非 compact：w-7（28px）→ 锚点 left = 14
+    expect(anchor.style.left).toBe("14px");
+    expect(anchor.style.width).toBe("0px");
+    const panel = q('[data-testid="kiro-composer-context-usage-menu"]')!.parentElement!;
+    expect(panel.className).toContain("w-56");
+    expect(panel.style.left).toBe("50%");
+    expect(panel.style.bottom).toBe("100%");
+    expect(panel.style.marginLeft).toBe("-112px");
+
+    // compact：w-9（36px）→ 锚点 left = 18
+    await render({ snapshot: usage(9800), open: true, compact: true });
+    expect(q('[data-testid="kiro-composer-context-usage-anchor"]')!.style.left).toBe("18px");
+  });
 });
