@@ -196,11 +196,13 @@ export function Sidebar() {
     return () => ro.disconnect();
   }, []);
 
-  /** Nav 行共用工具提示（始终 mounted；manual morph 期间 CSS 强制隐藏） */
+  /** Nav 行共用工具提示（始终 mounted；manual morph 期间 CSS 强制隐藏）
+   * S2-3：纯视觉镜像 —— 宿主按钮已有同文 aria-label，tooltip 不进读屏（aria-hidden），
+   * 故不做 aria-describedby 关联（关联反而会导致同文播报两次）。 */
   const tooltip = (label: string) => (
     <span
       data-testid="nav-tooltip"
-      role="tooltip"
+      aria-hidden="true"
       className={cn(
         "sidebar-tooltip absolute left-full top-1/2 -translate-y-1/2 ml-2",
         "px-2 py-1 rounded-lg bg-charcoal text-white text-[11px] whitespace-nowrap",

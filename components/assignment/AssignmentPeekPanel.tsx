@@ -1,9 +1,10 @@
 ﻿"use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { X, BookOpen, CheckCircle2, Clock, Flag, ListChecks, CalendarClock, Tags } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { usePresence } from "@/lib/usePresence";
+import { hasAnyOverlay } from "@/lib/overlayStack";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { getPriorityMeta } from "@/lib/utils";
 import { getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
@@ -34,6 +35,20 @@ export function AssignmentPeekPanel() {
   // Motion Contract（BUG-072 修正）：入场 --motion-panel(230)；退场对齐 Drawer 家族
   // exit-panel(160) —— presence 窗口与 CSS 退出过渡同源，不再借用入场档当卸载窗口。
   const { mounted, visible } = usePresence(!!assignment, MOTION_EXIT_MS.panel);
+  const peekOpen = !!assignment;
+
+  // S2-3：页脚承诺「Esc 关闭」自持 —— 焦点在面板内时 Table 列表处理器够不到；
+  // 有 Overlay 在栈上时让栈 own Esc（OverlayLayer topmost 处理，不抢 Dialog/Drawer）。
+  useEffect(() => {
+    if (!peekOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (hasAnyOverlay()) return;
+      setAssignmentPeekId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [peekOpen, setAssignmentPeekId]);
 
   if (!mounted || !assignment) return null;
 
@@ -73,6 +88,7 @@ export function AssignmentPeekPanel() {
   return (
     <aside
       data-testid="assignment-peek"
+      aria-label="任务快速预览"
       className={cn(
         "fixed right-0 top-24 bottom-24 w-80 z-30 bg-surface border-l border-line shadow-drawer rounded-l-2xl flex flex-col overflow-hidden ux-drawer-panel",
         visible
