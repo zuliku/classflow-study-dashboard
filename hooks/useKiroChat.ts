@@ -128,6 +128,7 @@ import { StudyPlanProposal } from "@/lib/planning/studyPlanner";
 import { TaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
 import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
 import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
+import { normalizeContextUsageSnapshot, type ContextUsageSnapshot } from "@/lib/ai/contextBudget/usage";
 import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
@@ -241,6 +242,8 @@ export interface KiroChatMessageView {
   computerTask?: KiroAgentTask;
   /** 历史恢复的 Computer Task 展示事实（无 checkpoint → 不能 Undo） */
   historyComputerTask?: PersistedComputerTaskView;
+  /** 上下文占用快照（Codex-style 指示；来自该 assistant message 的 stream metadata） */
+  contextUsage?: ContextUsageSnapshot;
 }
 
 export interface KiroActionResultView {
@@ -334,7 +337,10 @@ export function lastTurnCanRegenerate(messages: Pick<UIMessage, "role" | "parts"
   return false;
 }
 
-function toView(
+/**
+ * UIMessage → KiroChatMessageView（导出供测试：view 缓存 / metadata 快照读取的纯函数边界）。
+ */
+export function buildKiroMessageView(
   m: UIMessage,
   turnInFlight: boolean,
   commit?: LiveTurnCommitState
@@ -424,6 +430,15 @@ function toView(
     }
   }
 
+  // 上下文占用快照：来自本 assistant message 的 stream metadata（历史恢复时来自持久化记录）；
+  // 只接受归一化后的有界数字快照，旧数据 / 非法数据 → undefined
+  const contextUsage =
+    m.role === "assistant"
+      ? (normalizeContextUsageSnapshot(
+          (m.metadata as Record<string, unknown> | undefined)?.contextUsage
+        ) ?? undefined)
+      : undefined;
+
   return {
     id: m.id,
     role: m.role === "assistant" ? "assistant" : "user",
@@ -439,6 +454,7 @@ function toView(
     // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
     canRegenerate: !restored && !messageHasWriteToolCalls(m),
     assistantTurn,
+    contextUsage,
   };
 }
 
@@ -3195,19 +3211,21 @@ export function useKiroChat({
       const sourcesMap = new Map<string, KiroSourceMeta[]>();
       const computerTasksMap = new Map<string, PersistedComputerTaskView>();
       const visualProposalHistoryMap = new Map<string, PersistedVisualProposalView[]>();
-      const restored: UIMessage[] = record.messages.map((pm) => {
-        if (pm.attachments && pm.attachments.length > 0) attachmentsMap.set(pm.id, pm.attachments);
-        if (pm.actions && pm.actions.length > 0) actionsMap.set(pm.id, pm.actions);
-        if (pm.sources && pm.sources.length > 0) sourcesMap.set(pm.id, pm.sources);
-        if (pm.computerTask) computerTasksMap.set(pm.id, pm.computerTask);
-        if (pm.visualProposals && pm.visualProposals.length > 0) visualProposalHistoryMap.set(pm.id, pm.visualProposals);
-        return {
-          id: pm.id,
-          role: pm.role,
-          parts: [{ type: "text", text: pm.content }],
-          metadata: { restored: "1" },
-        };
-      });
+    const restored: UIMessage[] = record.messages.map((pm) => {
+      if (pm.attachments && pm.attachments.length > 0) attachmentsMap.set(pm.id, pm.attachments);
+      if (pm.actions && pm.actions.length > 0) actionsMap.set(pm.id, pm.actions);
+      if (pm.sources && pm.sources.length > 0) sourcesMap.set(pm.id, pm.sources);
+      if (pm.computerTask) computerTasksMap.set(pm.id, pm.computerTask);
+      if (pm.visualProposals && pm.visualProposals.length > 0) visualProposalHistoryMap.set(pm.id, pm.visualProposals);
+      // 上下文占用快照（Codex-style 指示）：只恢复归一化后的有界快照
+      const restoredContextUsage = normalizeContextUsageSnapshot(pm.contextUsage);
+      return {
+        id: pm.id,
+        role: pm.role,
+        parts: [{ type: "text", text: pm.content }],
+        metadata: { restored: "1", ...(restoredContextUsage ? { contextUsage: restoredContextUsage } : {}) },
+      };
+    });
       clearComputerSessionState(true);
       restoredComputerTasksRef.current = computerTasksMap;
       restoredActionsRef.current = actionsMap;
@@ -3326,7 +3344,7 @@ export function useKiroChat({
       const statusRef: string = currentTurnInFlight ? "live" : "settled";
       const commit = m.role === "assistant" ? getOrCreateLiveTurnCommit(m.id) : undefined;
       let view = reuseMessageView(viewCacheRef.current, m.id, partsRef, metadataRef, () =>
-        toView(m, currentTurnInFlight, commit),
+        buildKiroMessageView(m, currentTurnInFlight, commit),
         statusRef
       );
 
@@ -3438,6 +3456,18 @@ export function useKiroChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.messages, turnExecution, tasksState]);
 
+  /**
+   * 上下文占用（Codex-style 指示）：取最近一条带快照的 assistant 消息。
+   * 快照对象 identity 来自 view 缓存（metadata 不变 → 引用稳定），不随 token 流变化。
+   */
+  const latestContextUsage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const usage = messages[i].contextUsage;
+      if (usage) return usage;
+    }
+    return null;
+  }, [messages]);
+
   /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled；
    *  Desktop Terminal V1：立即 cancel 所有活跃 terminal process tree（bridge.cancel；每个 execution 一次） */
   const handleStop = useCallback(() => {
@@ -3498,6 +3528,13 @@ export function useKiroChat({
      */
     computerActive,
     error: normalizedError,
+    /**
+     * 上下文占用（Codex-style 指示）：最近一条 assistant 消息的快照（历史恢复同样可用）；
+     * 只含数字 / model / 时间戳，不参与任何预算决策
+     */
+    contextUsage: latestContextUsage,
+    /** 本 Turn 是否因超出输入预算失败（驱动 danger 状态；不猜测，来自真实 error code） */
+    contextOverflow: normalizedError?.code === "CONTEXT_TOO_LARGE",
     activity,
     /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */
     sources,

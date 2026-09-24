@@ -46,6 +46,7 @@ import {
 } from "@/lib/ai/contextBudget/planner";
 import { KiroPlannableMessage } from "@/lib/ai/contextBudget/types";
 import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
+import { buildContextUsageSnapshot, estimateToolSchemaTokens } from "@/lib/ai/contextBudget/usage";
 import {
   normalizeVisualPendingContinuation,
   buildVisualPendingContinuationSection,
@@ -591,11 +592,27 @@ export async function handleChat(req: Request) {
       }),
     });
 
+    // 上下文占用快照（Codex-style 指示；只展示，不参与预算 / 压缩 / 路由决策）
+    const contextUsage = buildContextUsageSnapshot({
+      provider: parsed.provider,
+      model: parsed.model,
+      systemPromptTokens: estimateTokens(trustedBasePrompt),
+      toolSchemaTokens: estimateToolSchemaTokens(tools),
+      conversationTokens: plan.budgetReport.estimatedTokens,
+      attachmentTokens: plan.attachmentContext.reduce((sum, a) => sum + estimateTokens(a.text ?? ""), 0),
+      summaryTokens: estimateTokens(conversationSummary?.text ?? ""),
+      budget: DEFAULT_CONTEXT_BUDGET,
+      compacted: overBudget,
+    });
+
     const uiStream = toUIMessageStream({
       stream: guardStream(result.stream),
       // 多轮 client tool call 时保留同一 assistant message id，避免重复消息
       // UI 连续性 / Message ID / Tool Loop 始终基于真实 originalMessages（不做 compact 替换）
       originalMessages: parsed.messages as never,
+      // 上下文占用（Codex-style 指示）：start / finish 各带一次估算快照（只含数字与 model 名）
+      messageMetadata: ({ part }: { part: { type: string } }) =>
+        part.type === "start" || part.type === "finish" ? { contextUsage } : undefined,
       onError: (err: unknown) => {
         logProviderError("chat/stream", err);
         const aiErr = normalizeAIError(err);

@@ -142,6 +142,11 @@ export interface PersistedKiroMessage {
   computerTask?: PersistedComputerTaskView;
   /** Visual Action Intake V1.3：历史只读 Proposal 快照（display-only；恢复后不可执行） */
   visualProposals?: PersistedVisualProposalView[];
+  /**
+   * 上下文占用快照（Codex-style 指示；只含数字 / model / 时间戳）。
+   * 旧记录无此字段（= 未知），恢复后自然显示「等待首次请求」。
+   */
+  contextUsage?: import("@/lib/ai/contextBudget/usage").ContextUsageSnapshot;
 }
 
 /** Conversation Summary（Task 7）：内部 Model Context，不代表当前 ClassFlow 数据 */

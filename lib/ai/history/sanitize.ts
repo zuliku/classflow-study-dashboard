@@ -18,6 +18,7 @@ import { sanitizeVisualProposalReceipt, VisualProposalReceiptView } from "@/lib/
 import { KiroContextRef } from "@/lib/ai/context/types";
 import type { AppState } from "@/store/useAppStore";
 import { KiroAgentTask } from "@/lib/ai/computer/task";
+import { normalizeContextUsageSnapshot } from "@/lib/ai/contextBudget/usage";
 
 /** 单条消息内容上限（极宽但有限，防止异常历史卡死 UI） */
 export const MAX_PERSISTED_MESSAGE_CONTENT = 100_000;
@@ -204,6 +205,8 @@ export function sanitizeConversation(input: {
         ),
         ...(m.historyVisualActionProposals ?? []),
       ];
+      // 上下文占用快照（Codex-style 指示）：只持久化归一化后的有界数字快照
+      const contextUsage = normalizeContextUsageSnapshot(m.contextUsage);
       return {
         id: m.id,
         role: m.role,
@@ -215,6 +218,7 @@ export function sanitizeConversation(input: {
         // Computer Task 展示事实（Part 3；无 review/checkpoint/beforeText）
         computerTask: toPersistedComputerTask(m.computerTask, m.historyComputerTask),
         ...(visualProposals.length > 0 ? { visualProposals } : {}),
+        ...(contextUsage ? { contextUsage } : {}),
       };
     });
 

@@ -255,6 +255,9 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         reasoningCapability={reasoningCapability}
         reasoningEffort={effectiveReasoningEffort}
         onSetReasoningEffort={setReasoningEffort}
+        // 上下文占用（Codex-style ring）：最近一次请求的估算快照（历史恢复同样可用）
+        contextUsage={chat.contextUsage}
+        contextOverflow={chat.contextOverflow}
         workspace={workspace}
         workspaceIsSandbox={workspaceIsSandbox}
       />

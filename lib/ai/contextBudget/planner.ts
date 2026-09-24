@@ -89,7 +89,10 @@ export function buildKiroModelContext(input: BuildKiroModelContextInput): KiroMo
   };
 }
 
-/** 是否触发 compaction（估算达到预算的 70–80%） */
+/** 触发后台自动压缩的预算占比（唯一事实来源；UI 展示与压缩判定共用） */
+export const CONTEXT_COMPACT_RATIO = 0.75;
+
+/** 是否触发 compaction（估算达到预算的 75–80%） */
 export function shouldCompact(estimatedTokens: number, budget: KiroContextBudget): boolean {
-  return estimatedTokens >= budget.maxInputTokens * 0.75;
+  return estimatedTokens >= budget.maxInputTokens * CONTEXT_COMPACT_RATIO;
 }

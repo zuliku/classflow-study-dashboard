@@ -12,6 +12,8 @@ import {
 } from "@/components/kiro/composer/KiroComposerAccessControl";
 import { KiroComposerModelControl } from "@/components/kiro/composer/KiroComposerModelControl";
 import { KiroComposerReasoningControl } from "@/components/kiro/composer/KiroComposerReasoningControl";
+import { KiroComposerContextUsage } from "@/components/kiro/composer/KiroComposerContextUsage";
+import type { ContextUsageSnapshot } from "@/lib/ai/contextBudget/usage";
 import {
   composerAccessAgentMode,
   composerAccessRequiresComputer,
@@ -28,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { filterSlashSkills, moveSlashIndex, parseSlashQuery, toSlashSkillOptions } from "@/lib/ai/skills/slashMenu";
 
 /** P3：Composer 只允许一个菜单同时打开（add / access / model） */
-type ComposerMenu = "add" | "access" | "reasoning" | "model" | null;
+type ComposerMenu = "add" | "access" | "reasoning" | "model" | "contextUsage" | null;
 
 /**
  * Kiro Composer（Task 4 / P3 Productization）：真实发送入口 + 附件（上传/拖拽/粘贴/课程资料/保存）。
@@ -77,6 +79,8 @@ export function KiroComposer({
   grantWarning,
   permissionSummary,
   onOpenAgentSettings,
+  contextUsage,
+  contextOverflow,
   introActive = false,
 }: {
   contexts: KiroContextRef[];
@@ -131,6 +135,10 @@ export function KiroComposer({
   permissionSummary?: KiroComposerPermissionSummary;
   /** P3：管理 Agent 权限…（设置 → Agent 与权限） */
   onOpenAgentSettings?: () => void;
+  /** 上下文占用快照（Codex-style ring；只展示，不参与任何预算决策） */
+  contextUsage?: ContextUsageSnapshot | null;
+  /** 本 Turn 因超出输入预算失败（danger 状态） */
+  contextOverflow?: boolean;
   /** Motion V1：本轮 Empty Intro claim 成功后 Composer 轻进入（workspace/sidecar 各自 timing scope） */
   introActive?: boolean;
 }) {
@@ -145,6 +153,7 @@ export function KiroComposer({
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const addRef = useRef<HTMLDivElement | null>(null);
   const accessRef = useRef<HTMLDivElement | null>(null);
+  const contextUsageRef = useRef<HTMLDivElement | null>(null);
   const reasoningRef = useRef<HTMLDivElement | null>(null);
   const modelRef = useRef<HTMLDivElement | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
@@ -314,6 +323,7 @@ export function KiroComposer({
         insideMenu ||
         (addRef.current?.contains(t) ?? false) ||
         (accessRef.current?.contains(t) ?? false) ||
+        (contextUsageRef.current?.contains(t) ?? false) ||
         (reasoningRef.current?.contains(t) ?? false) ||
         (modelRef.current?.contains(t) ?? false);
       if (!inside) setOpenMenu(null);
@@ -598,8 +608,17 @@ export function KiroComposer({
                 </div>
               </div>
 
-              {/* 右组：思考程度（Codex-style 滑块）+ 模型 + 发送（Sidecar compact 仅图标化） */}
+              {/* 右组：上下文占用（Codex-style ring）+ 思考程度（Codex-style 滑块）+ 模型 + 发送 */}
               <div className="flex items-center gap-1 shrink-0">
+                <div ref={contextUsageRef} className="relative shrink-0">
+                  <KiroComposerContextUsage
+                    snapshot={contextUsage ?? null}
+                    overflow={contextOverflow}
+                    compact={compact}
+                    open={openMenu === "contextUsage"}
+                    onOpenChange={(next) => setOpenMenu(next ? "contextUsage" : null)}
+                  />
+                </div>
                 <div ref={reasoningRef} className="relative">
                   <KiroComposerReasoningControl
                     capability={reasoningCapability}
