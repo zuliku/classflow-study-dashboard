@@ -8,8 +8,9 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        /* ===== 基础色卡（唯一来源） ===== */
-        background: "#F7F5F5", // White
+        /* ===== 基础色卡（派生自 app/globals.css :root，S1 立约后 :root 为唯一真值；
+           此处字面量须与 :root 同值，由 tests/tokenContract.test.ts 校验，勿单方面修改） ===== */
+        background: "#F7F5F5", // Warm paper page bg（非纯白，by design；Light-only，无 darkMode）
         alabaster: "#F0EBE1",
         "stone-beige": "#CDB9AB",
         charcoal: "#313032",
@@ -58,10 +59,32 @@ module.exports = {
         subtle: "0 2px 8px -2px rgba(49, 48, 50, 0.04), 0 1px 3px -1px rgba(49, 48, 50, 0.02)",
         card: "0 4px 16px -4px rgba(49, 48, 50, 0.06), 0 2px 6px -2px rgba(49, 48, 50, 0.03)",
         drawer: "-4px 0 24px -4px rgba(49, 48, 50, 0.12)",
+        modal: "0 12px 40px -8px rgba(49, 48, 50, 0.18), 0 4px 12px -4px rgba(49, 48, 50, 0.08)",
       },
       borderRadius: {
         xl: "0.875rem",
         "2xl": "1.125rem",
+        // S1 立约新增（派生自 :root --r-*，零视觉变更：只新增 utilities，不改既有档位）
+        sm: "var(--r-sm)",
+        md: "var(--r-md)",
+        "3xl": "var(--r-2xl)",
+        sidecar: "var(--r-sidecar)",
+      },
+      fontSize: {
+        // S1 立约新增（派生自 :root --text-*/--leading-*；收敛 text-[任意px] 目标）
+        caption: ["var(--text-caption)", "var(--leading-caption)"],
+        body: ["var(--text-body)", "var(--leading-body)"],
+        title: ["var(--text-title)", "var(--leading-title)"],
+        h: ["var(--text-h)", "var(--leading-h)"],
+      },
+      zIndex: {
+        // S1 立约新增（派生自 :root --z-*；Peek/BottomNav 同级冲突见 S4）
+        header: "var(--z-header)",
+        peek: "var(--z-peek)",
+        sidecar: "var(--z-sidecar)",
+        dialog: "var(--z-dialog)",
+        reminder: "var(--z-reminder)",
+        titlebar: "var(--z-titlebar)",
       },
     },
   },

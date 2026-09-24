@@ -1,5 +1,7 @@
 /** 课程配色唯一来源：AddCourseModal 与 Kiro 创建课程共用，避免两套默认值 */
 
+import { contrastTextForHex, normalizeHex } from "@/lib/color";
+
 export interface CourseAppearance {
   name: string;
   bgHex: string;
@@ -24,13 +26,10 @@ export function getDefaultCourseAppearance(): CourseAppearance {
       const idx = state.courses.length % state.preferences.coursePalette.length;
       const hex = state.preferences.coursePalette[idx];
       // 从调色板生成完整外观：bg 为选中色，border 略深，text 自动对比
-      const isLight = (() => {
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        return (r * 299 + g * 587 + b * 114) / 1000 > 128;
-      })();
-      return { name: `自定义 ${idx + 1}`, bgHex: hex, borderHex: hex, textHex: isLight ? "#313032" : "#FFFFFF" };
+      // 亮度判断与 lib/color.ts isLightHex 同源（S1 立约去重，此前为内联 IIFE 双实现）；
+      // 非法 HEX 回退保持旧行为（白字），避免脏数据变色
+      const textHex = normalizeHex(hex) ? contrastTextForHex(hex) : "#FFFFFF";
+      return { name: `自定义 ${idx + 1}`, bgHex: hex, borderHex: hex, textHex };
     }
   } catch {}
   return COURSE_COLOR_OPTIONS[0];

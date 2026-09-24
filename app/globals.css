@@ -118,6 +118,61 @@
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
+
+  /* Design Token V1 单一来源声明（S1 立约）：
+     本 :root 为颜色 / 字号 / 间距 / 圆角 / 层级 / 焦点环的唯一真值；
+     tailwind.config.cjs 只做派生（字面量须与此处一致）；
+     lib/tokens.ts 为 JS 镜像。tests/tokenContract.test.ts 做三方校验。
+     新增 token 先加此处，再派生，禁止反向在调用方发明新值。 */
+  /* Ink 别名收敛目标：charcoal / --dark-charcoal / #313032 三写法统一收敛到 --ink-primary；
+     本轮只加别名不删旧名（零视觉变更），调用方迁移见 S1-2。 */
+  --ink-primary: #313032;
+  --ink-secondary: #676266;
+  --ink-muted: #A48F82;
+  /* Spacing（4pt 基准） */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --gutter-sm: 16px;
+  --gutter-md: 24px;
+  --shell-w-rail: 64px;
+  --shell-w-full: 224px;
+  /* Typography scale（收敛 text-[9/10/11/15/17/19/22px] 自由值目标档） */
+  --text-caption: 11px;
+  --leading-caption: 16px;
+  --text-body: 13px;
+  --leading-body: 20px;
+  --text-title: 14px;
+  --leading-title: 20px;
+  --text-h: 19px;
+  --leading-h: 26px;
+  /* Radius（映射：r-sm≈rounded-lg默认8px；r-lg=tailwind xl 14px；r-xl=tailwind 2xl 18px；
+     r-2xl=Drawer floating 22px；r-sidecar=最大值28px封顶） */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 14px;
+  --r-xl: 18px;
+  --r-2xl: 22px;
+  --r-sidecar: 28px;
+  /* Z（与实际层级一致：Header 20 < Peek 30 < Sidecar/Drawer 40 < Dialog/Command 50 < Reminder 80 < TitleBar 100；
+     Peek 与 BottomNav 同 z-30 为已知冲突，见 S4） */
+  --z-header: 20;
+  --z-peek: 30;
+  --z-sidecar: 40;
+  --z-dialog: 50;
+  --z-reminder: 80;
+  --z-titlebar: 100;
+  /* Focus ring（全链 focus-visible 统一目标，见 S2） */
+  --ring: rgba(49, 48, 50, 0.3);
+  --ring-width: 2px;
+  --ring-offset: 2px;
 }
 @media (max-height: 720px) {
   :root {
