@@ -4,6 +4,7 @@
 import React, { useRef } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { createPortal } from "react-dom";
 import { useFocusTrap, getFocusableElements } from "@/lib/useFocusTrap";
 
 afterEach(() => cleanup());
@@ -73,5 +74,35 @@ describe("useFocusTrap", () => {
     tabOn(root);
     // jsdom 不自动移动焦点；关键是 trap 未调用 preventDefault 接管
     expect(document.activeElement).toBe(btns[3]);
+  });
+
+  it("S2-1 嵌套守卫：父陷阱忽略子树外目标（子 portal 经 React 树冒泡）", () => {
+    function Nested() {
+      const ref = useRef<HTMLDivElement | null>(null);
+      const trap = useFocusTrap(ref, true);
+      return (
+        <div ref={ref} onKeyDown={trap} data-testid="parent-trap">
+          <button type="button">父一</button>
+          {createPortal(<button type="button">子一</button>, document.body)}
+        </div>
+      );
+    }
+    render(<Nested />);
+    const child = screen.getByText("子一");
+    (child as HTMLElement).focus();
+    // 子内 Shift+Tab（非包裹位）：旧逻辑会因 !contains 拽回父末尾；新逻辑不干预
+    const ev = new window.KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+      shiftKey: true,
+    });
+    let prevented = false;
+    ev.preventDefault = () => {
+      prevented = true;
+    };
+    child.dispatchEvent(ev);
+    expect(prevented).toBe(false);
+    expect(document.activeElement).toBe(child);
   });
 });

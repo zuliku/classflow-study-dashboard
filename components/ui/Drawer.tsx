@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +13,10 @@ import { cn } from "@/lib/utils";
  * - presentation="edge"（默认）：现有 full-height edge drawer，行为/class 完全不变
  * - presentation="floating"（opt-in）：bounded floating detail panel
  *   （viewport inset、rounded、full border + shadow；Task/DDL Detail Panel UX Refresh）
- * - 无 focus trap / scroll lock
+ * - 焦点陷阱与 aria-modal 一致（S2-1）：edge 默认 trap（blocking modal），
+ *   floating 默认不 trap（背景可交互，trap 会破坏“直接点击其他任务”工作流）；
+ *   可用 trapFocus 显式覆盖。
+ * - 无 scroll lock
  */
 export type DrawerPresentation = "edge" | "floating";
 
@@ -27,6 +31,11 @@ export interface DrawerProps extends React.HTMLAttributes<HTMLDivElement> {
   overlayClassName?: string;
   /** edge = 现状 full-height；floating = bounded floating panel（默认 edge） */
   presentation?: DrawerPresentation;
+  /**
+   * 焦点陷阱（默认跟随 presentation，S2-1）：edge → true（blocking modal），
+   * floating → false（背景可交互）。显式传值可覆盖。
+   */
+  trapFocus?: boolean;
   /**
    * opt-in：open 期间该 key 变化（实体切换）→ focus restore 跟随最近 trigger。
    * 无该 prop 的 consumer 行为完全不变。
@@ -97,11 +106,16 @@ export function Drawer({
   onEscapeKeyDown,
   overlayClassName,
   presentation = "edge",
+  trapFocus = presentation === "edge",
   focusRestoreKey,
   className,
   children,
   ...props
 }: DrawerProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const trapTab = useFocusTrap(panelRef, open && trapFocus);
+  // S2-1：trap 与 consumer onKeyDown 组合（与 Dialog 同模式）
+  const { onKeyDown: consumerOnKeyDown, ...rest } = props;
   return (
     <OverlayLayer
       open={open}
@@ -118,8 +132,17 @@ export function Drawer({
         <div
           role="dialog"
           aria-modal={resolveDrawerAriaModal(presentation)}
+          ref={panelRef}
+          onKeyDown={
+            trapFocus
+              ? (e) => {
+                  trapTab(e);
+                  consumerOnKeyDown?.(e);
+                }
+              : consumerOnKeyDown
+          }
           className={cn(resolveDrawerPresentation(presentation, visible).panelClassName, className)}
-          {...props}
+          {...rest}
         >
           {children}
         </div>
