@@ -38,5 +38,33 @@ export const MOTION_EXIT_MS = {
   panel: 160,
 } as const;
 
+/**
+ * Kiro Motion tiers（S3-1 立约，零行为变更：数值 = app/globals.css :root 默认值）。
+ * - workspace scope 与 :root 同值；sidecar scope 更快（小浮层节奏），见 KIRO_MOTION_SIDECAR_MS。
+ * - presence/unmount 计时引用本文件常量；CSS transition 引用同名 --kiro-motion-* 变量。
+ * - stagger（delay 55/75/95/140 与 empty 60/110 + index*32）尚未 token 化，见 S3-3。
+ */
+export const KIRO_MOTION_MS = {
+  control: 120,
+  structure: 150,
+  spatial: 220,
+  popoverEnter: 140,
+  popoverExit: 120,
+  intro: 320,
+  composerIntro: 220,
+} as const;
+
+/** Sidecar scope 更快档（= .kiro-motion-sidecar 覆盖值） */
+export const KIRO_MOTION_SIDECAR_MS = {
+  control: 100,
+  structure: 130,
+  spatial: 180,
+  popoverEnter: 120,
+  popoverExit: 100,
+  intro: 250,
+  composerIntro: 130,
+} as const;
+
 export type MotionTier = keyof typeof MOTION_MS;
 export type MotionExitTier = keyof typeof MOTION_EXIT_MS;
+export type KiroMotionTier = keyof typeof KIRO_MOTION_MS;

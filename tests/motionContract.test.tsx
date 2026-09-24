@@ -19,7 +19,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-import { MOTION_MS, MOTION_EXIT_MS } from "@/lib/motion";
+import { MOTION_MS, MOTION_EXIT_MS, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS } from "@/lib/motion";
 import { usePresence } from "@/lib/usePresence";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -81,6 +81,31 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(MOTION_EXIT_MS.base).toBeGreaterThanOrEqual(MOTION_MS.base * 0.7);
     expect(MOTION_EXIT_MS.base).toBeLessThan(MOTION_MS.base);
     expect(MOTION_EXIT_MS.panel).toBeLessThan(MOTION_MS.overlay);
+  });
+
+  it.each([
+    ["control", "--kiro-motion-control", KIRO_MOTION_MS.control],
+    ["structure", "--kiro-motion-structure", KIRO_MOTION_MS.structure],
+    ["spatial", "--kiro-motion-spatial", KIRO_MOTION_MS.spatial],
+    ["popoverEnter", "--kiro-motion-popover-enter", KIRO_MOTION_MS.popoverEnter],
+    ["popoverExit", "--kiro-motion-popover-exit", KIRO_MOTION_MS.popoverExit],
+    ["intro", "--kiro-motion-intro", KIRO_MOTION_MS.intro],
+    ["composerIntro", "--kiro-motion-composer-intro", KIRO_MOTION_MS.composerIntro],
+  ] as const)("S3-1 KIRO_MOTION_MS.%s = :root %s (%sms)", (tier, cssVar, value) => {
+    expect(css).toMatch(new RegExp(`${cssVar}:\\s*${value}ms`));
+  });
+
+  it.each([
+    ["control", 100],
+    ["structure", 130],
+    ["spatial", 180],
+    ["popoverEnter", 120],
+    ["popoverExit", 100],
+    ["intro", 250],
+    ["composerIntro", 130],
+  ] as const)("S3-1 sidecar scope 更快：KIRO_MOTION_SIDECAR_MS.%s = %sms", (tier, value) => {
+    expect(KIRO_MOTION_SIDECAR_MS[tier]).toBe(value);
+    expect(css).toMatch(new RegExp(`\\.kiro-motion-sidecar\\s*\\{[^}]*${value}ms`, "s"));
   });
 
   it("Primitive 层不再散落裸魔法 exit duration（源码护栏）", () => {
