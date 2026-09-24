@@ -75,6 +75,8 @@ function metaValue(): KiroSessionMetaValue {
   kiroRuntimeStatus: "idle",
   currentTurnSources: [],
   conversationSourcesVersion: 0,
+  contextUsageVersion: 0,
+  getConversationContextUsage: () => [],
   suggestionsKind: null,
   suggestionsGen: 0,
   lastUserTurnGen: 0,
@@ -312,8 +314,9 @@ describe("Kiro Inspector — 高度自适应 / 排版层级", () => {
     ]);
     await render(<KiroInspector open />);
     const headers = container!.querySelectorAll('[data-testid="kiro-inspector-section-header"]');
-    expect(headers.length).toBe(2);
-    // Outputs 有 1 条 → 计数 pill；Sources 为 0 → 不显示
+    // Outputs / Sources / 上下文（Phase 2：会话占用历史）
+    expect(headers.length).toBe(3);
+    // Outputs 有 1 条 → 计数 pill；Sources / 上下文为 0 → 不显示
     const counts = container!.querySelectorAll('[data-testid="kiro-inspector-section-count"]');
     expect(counts.length).toBe(1);
     expect(counts[0].textContent).toBe("1");

@@ -213,6 +213,13 @@ export interface KiroSessionMetaValue {
   currentTurnSources: KiroSourceMeta[];
   /** Kiro Inspector P2：Conversation Source 版本（turn settled 绑定 / 会话切换时 +1；低频 scalar） */
   conversationSourcesVersion: number;
+  /**
+   * Kiro Inspector P2.2：上下文占用历史版本（新快照 / 会话切换时 +1；低频 scalar）
+   * 与 getConversationContextUsage 配套，Inspector 不订阅 token-level messages。
+   */
+  contextUsageVersion: number;
+  /** Kiro Inspector P2.2：会话上下文历史（ref 读取；按 version 缓存） */
+  getConversationContextUsage: () => import("@/lib/ai/contextBudget/usage").ContextUsageSnapshot[];
   suggestionsKind: KiroSuggestionsKind | null;
   suggestionsGen: number;
   lastUserTurnGen: number;
@@ -1177,6 +1184,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       kiroRuntimeStatus,
       currentTurnSources,
       conversationSourcesVersion,
+      contextUsageVersion: chat.contextUsageVersion,
+      getConversationContextUsage: chat.getConversationContextUsage,
       suggestionsKind,
       suggestionsGen: suggestionsGenRef.current,
       lastUserTurnGen,

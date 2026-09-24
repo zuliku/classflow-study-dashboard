@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Kiro Inspector V1 — 纯数据归一（无 React / 无 IO）。
  *
  * 职责边界：
@@ -9,6 +9,7 @@
  */
 import type { KiroArtifact } from "@/lib/ai/computer/artifacts/types";
 import type { KiroSourceMeta } from "@/lib/ai/citations/types";
+import { resolveContextUsageTone, type ContextUsageSnapshot, type ContextUsageTone } from "@/lib/ai/contextBudget/usage";
 
 /** Outputs：Artifact 是否属于某 Conversation（唯一判据 = sourceConversationId） */
 export function artifactBelongsToConversation(
@@ -79,3 +80,54 @@ export const INSPECTOR_SOURCES_PREVIEW_LIMIT = 6;
 
 /** Outputs 展示上限（Conversation Artifact） */
 export const INSPECTOR_OUTPUTS_LIMIT = 8;
+
+/* ---------------- 上下文占用历史（Phase 2：会话占用进 Inspector） ---------------- */
+
+/** Inspector 上下文历史展示上限（最近 N 次请求；新 → 旧） */
+export const INSPECTOR_CONTEXT_USAGE_LIMIT = 8;
+
+export interface InspectorContextUsageRow {
+  /** 稳定 key（时间戳 + 序号；同一快照不重复） */
+  id: string;
+  /** 该快照在会话中的序号（1-based，按时间顺序） */
+  index: number;
+  used: number;
+  max: number;
+  /** 0..1（对话部分 / 输入预算） */
+  ratio: number;
+  tone: ContextUsageTone;
+  compacted: boolean;
+  provider: string;
+  model: string;
+  at: string;
+}
+
+/**
+ * 会话上下文占用历史（纯函数；新 → 旧，bounded）。
+ * 只消费归一化后的快照（非法数据已在读取边界丢弃）；不重新计算任何预算。
+ */
+export function buildInspectorContextUsageHistory(
+  snapshots: ContextUsageSnapshot[],
+  opts?: { limit?: number }
+): InspectorContextUsageRow[] {
+  const limit = Math.max(1, opts?.limit ?? INSPECTOR_CONTEXT_USAGE_LIMIT);
+  const rows: InspectorContextUsageRow[] = [];
+  for (let i = 0; i < snapshots.length; i++) {
+    const snapshot = snapshots[i];
+    const used = snapshot.conversationBudget.used;
+    const max = Math.max(1, snapshot.conversationBudget.max);
+    rows.push({
+      id: `${snapshot.at || "unknown"}-${i}`,
+      index: i + 1,
+      used,
+      max: snapshot.conversationBudget.max,
+      ratio: Math.max(0, Math.min(1, used / max)),
+      tone: resolveContextUsageTone(snapshot),
+      compacted: snapshot.conversationBudget.compacted,
+      provider: snapshot.provider,
+      model: snapshot.model,
+      at: snapshot.at,
+    });
+  }
+  return rows.slice(-limit).reverse();
+}

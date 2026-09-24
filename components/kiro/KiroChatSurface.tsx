@@ -6,7 +6,7 @@ import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroRuntime, useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { KiroEmptyExperience } from "@/components/kiro/motion/KiroEmptyExperience";
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
-import { getActiveModelName, getActiveModelVendor, getModelsForProvider } from "@/lib/ai/providers/registry";
+import { getActiveModelName, getActiveModelVendor, getModelContextWindowTokens, getModelsForProvider } from "@/lib/ai/providers/registry";
 import { findApprovalOwnerMessageId } from "@/lib/ai/ui/kiroAgentRun";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
@@ -96,6 +96,17 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   // 当前模型失效（不在 Catalog）：提示重新选择，不自动覆盖设置
   const modelUnavailable =
     provider !== "custom-openai" && !!model && !catalogModels.some((m) => m.id === model);
+
+  // 上下文占用（Codex-style ring）：快照来自最近一次真实请求（provider/model 以快照为准）；
+  // 模型窗口只在 registry 有官方可核实值时显示（Phase 2）
+  const contextWindowTokens = useMemo(
+    () =>
+      getModelContextWindowTokens({
+        provider: chat.contextUsage?.provider ?? provider,
+        model: chat.contextUsage?.model ?? model,
+      }),
+    [chat.contextUsage?.provider, chat.contextUsage?.model, provider, model]
+  );
 
   const activeModel = useMemo(
     () => catalogModels.find((m) => m.id === model),
@@ -258,6 +269,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         // 上下文占用（Codex-style ring）：最近一次请求的估算快照（历史恢复同样可用）
         contextUsage={chat.contextUsage}
         contextOverflow={chat.contextOverflow}
+        contextWindowTokens={contextWindowTokens}
         workspace={workspace}
         workspaceIsSandbox={workspaceIsSandbox}
       />

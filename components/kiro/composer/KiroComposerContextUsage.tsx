@@ -8,6 +8,7 @@ import {
   formatContextUsageLabel,
   formatContextUsageTokens,
   resolveContextUsageTone,
+  resolveModelWindowUsage,
 } from "@/lib/ai/contextBudget/usage";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ export function KiroComposerContextUsage({
   snapshot,
   overflow,
   compact,
+  windowTokens,
   open,
   onOpenChange,
 }: {
@@ -44,12 +46,15 @@ export function KiroComposerContextUsage({
   /** 本 Turn 因超出输入预算失败（来自真实 error code，不猜测） */
   overflow?: boolean;
   compact?: boolean;
+  /** 官方可核实的模型窗口（Phase 2；缺失 → 不显示百分比） */
+  windowTokens?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const tone = overflow ? "danger" : resolveContextUsageTone(snapshot);
   const label = formatContextUsageLabel(snapshot, { overflow });
   const detail = formatContextUsageDetail(snapshot);
+  const windowUsage = resolveModelWindowUsage(snapshot, windowTokens);
 
   // 进度只表达「对话部分 / 预算」；unknown → 空环（不假装有数据）
   const ratio = snapshot
@@ -148,6 +153,12 @@ export function KiroComposerContextUsage({
               )}
 
               <p className="text-[10px] text-sandrift leading-relaxed">{detail!.fixed}</p>
+              {/* Phase 2：模型窗口 %（只在 registry 有官方可核实窗口时显示） */}
+              {windowUsage && (
+                <p className="text-[10px] text-sandrift leading-relaxed" data-testid="kiro-context-window-usage">
+                  {windowUsage.label}
+                </p>
+              )}
               <p className="text-[10px] text-sandrift leading-relaxed">{detail!.compact}</p>
             </>
           )}

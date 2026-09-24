@@ -52,11 +52,16 @@ export interface AIModelDefinition {
     /** 显式声明的推理可调能力；缺失 = fixed（绝不由模型名/厂商/transport 推断） */
     reasoning?: ReasoningCapability;
   };
-  /** 可靠的模型 Context 覆盖（无可靠 metadata 时不设；Custom Provider 一律用 ClassFlow 默认预算） */
-  contextBudget?: {
-    maxInputTokens: number;
-  };
-}
+    /** 可靠的模型 Context 覆盖（无可靠 metadata 时不设；Custom Provider 一律用 ClassFlow 默认预算） */
+    contextBudget?: {
+      maxInputTokens: number;
+    };
+    /**
+     * 官方可核实的模型 Context Window（仅展示：Inspector / Composer 的「模型窗口 %」）。
+     * 只在厂商官方文档明确给出时填写；缺失 = 未知（UI 不显示百分比，绝不猜测）。
+     */
+    contextWindowTokens?: number;
+  }
 
 /** Provider 连接配置（Server Route 使用） */
 export interface AIProviderConfig {

@@ -23,6 +23,8 @@ export const DEEPSEEK_MODELS: AIModelDefinition[] = [
         mechanism: "deepseek-thinking",
       },
     },
+    // DeepSeek 官方 Models & Pricing：DeepSeek-V4.1-Flash context length = 1M
+    contextWindowTokens: 1_000_000,
   },
   {
     id: "deepseek-v4-pro",
@@ -41,6 +43,8 @@ export const DEEPSEEK_MODELS: AIModelDefinition[] = [
         mechanism: "deepseek-thinking",
       },
     },
+    // DeepSeek 官方 Models & Pricing：DeepSeek-V4-Pro-0813 context length = 1M
+    contextWindowTokens: 1_000_000,
   },
 ];
 

@@ -63,6 +63,7 @@ async function render(props: Partial<React.ComponentProps<typeof KiroComposerCon
         snapshot={props.snapshot ?? null}
         overflow={props.overflow}
         compact={props.compact}
+        windowTokens={props.windowTokens}
         open={props.open ?? false}
         onOpenChange={onOpenChange}
       />
@@ -158,6 +159,16 @@ describe("上下文占用 ring — 受控弹层与明细", () => {
     await render({ snapshot: usage(9800), overflow: true, open: true });
     const menu = q('[data-testid="kiro-composer-context-usage-menu"]')!;
     expect(menu.textContent).toContain("本次请求因超出输入预算失败");
+  });
+
+  it("Phase 2：提供官方模型窗口 → 明细显示「占模型窗口 %」；缺失 → 不显示", async () => {
+    await render({ snapshot: usage(9800), open: true, windowTokens: 1_050_000 });
+    const windowLine = q('[data-testid="kiro-context-window-usage"]')!;
+    expect(windowLine.textContent).toContain("占模型窗口");
+    expect(windowLine.textContent).toContain("1.05M");
+
+    await render({ snapshot: usage(9800), open: true });
+    expect(q('[data-testid="kiro-context-window-usage"]')).toBeNull();
   });
 
   it("渲染内容不含消息正文 / 路径 / 内部字段", async () => {

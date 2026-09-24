@@ -202,6 +202,9 @@ export type KiroTurnExecutionState =
   | "awaiting-continuation"
   | "settled";
 
+/** Inspector 上下文历史读取上限（会话内最多保留的快照数；bounded） */
+const MAX_CONVERSATION_CONTEXT_USAGE = 24;
+
 /** 统一 Message 视图模型：UI 组件只消费它，不依赖 Provider 原始结构 */
 export interface KiroChatMessageView {
   id: string;
@@ -3468,6 +3471,33 @@ export function useKiroChat({
     return null;
   }, [messages]);
 
+  /**
+   * Inspector 上下文历史：快照版本号（只在出现新快照 / 会话切换时 +1）。
+   * 低频 scalar → Inspector 不需要订阅 token-level messages。
+   */
+  const [contextUsageVersion, setContextUsageVersion] = useState(0);
+  const lastContextUsageRef = useRef<ContextUsageSnapshot | null>(null);
+  useEffect(() => {
+    if (latestContextUsage === lastContextUsageRef.current) return;
+    lastContextUsageRef.current = latestContextUsage;
+    setContextUsageVersion((v) => v + 1);
+  }, [latestContextUsage]);
+
+  /**
+   * Inspector 上下文历史读取（ref 读取；按 contextUsageVersion 缓存）：
+   * 按时间顺序返回会话内全部快照（bounded），调用方负责 reverse / limit。
+   */
+  const getConversationContextUsage = useCallback((): ContextUsageSnapshot[] => {
+    const out: ContextUsageSnapshot[] = [];
+    for (const m of latestChatRef.current.messages) {
+      const usage = normalizeContextUsageSnapshot(
+        (m.metadata as Record<string, unknown> | undefined)?.contextUsage
+      );
+      if (usage) out.push(usage);
+    }
+    return out.slice(-MAX_CONVERSATION_CONTEXT_USAGE);
+  }, []);
+
   /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled；
    *  Desktop Terminal V1：立即 cancel 所有活跃 terminal process tree（bridge.cancel；每个 execution 一次） */
   const handleStop = useCallback(() => {
@@ -3535,6 +3565,13 @@ export function useKiroChat({
     contextUsage: latestContextUsage,
     /** 本 Turn 是否因超出输入预算失败（驱动 danger 状态；不猜测，来自真实 error code） */
     contextOverflow: normalizedError?.code === "CONTEXT_TOO_LARGE",
+    /**
+     * Inspector P2.2：上下文历史版本（低频；新快照 / 会话切换时 +1）
+     * 与 getConversationContextUsage 配套，避免 Inspector 订阅 token-level messages
+     */
+    contextUsageVersion,
+    /** Inspector P2.2：会话上下文历史（ref 读取；调用方按 version 缓存） */
+    getConversationContextUsage,
     activity,
     /** 本 Turn 的文档来源（Citation 渲染用；不含正文） */
     sources,

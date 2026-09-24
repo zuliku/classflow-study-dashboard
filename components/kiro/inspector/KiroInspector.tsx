@@ -5,6 +5,7 @@ import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { KiroInspectorOutputs } from "@/components/kiro/inspector/KiroInspectorOutputs";
 import { KiroInspectorSources } from "@/components/kiro/inspector/KiroInspectorSources";
+import { KiroInspectorContextUsage } from "@/components/kiro/inspector/KiroInspectorContextUsage";
 import { KiroInspectorDivider } from "@/components/kiro/inspector/KiroInspectorSection";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +58,9 @@ export function KiroInspector({ open }: { open: boolean }) {
               <KiroInspectorOutputs />
               <KiroInspectorDivider />
               <KiroInspectorSources />
+              <KiroInspectorDivider />
+              {/* Phase 2：会话上下文占用历史（只读；不订阅 token / messages） */}
+              <KiroInspectorContextUsage />
             </div>
           </aside>
         </div>

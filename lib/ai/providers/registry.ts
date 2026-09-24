@@ -58,6 +58,19 @@ export function getModelsForProvider(provider: AIProviderId): AIModelDefinition[
 }
 
 /**
+ * 模型 Context Window（展示用；只返回官方可核实值）。
+ * provider 为快照里的字符串（"opencode-go" / "deepseek"）；Custom / 未知 → undefined。
+ */
+export function getModelContextWindowTokens(input: {
+  provider: string;
+  model: string;
+}): number | undefined {
+  if (input.provider !== "opencode-go" && input.provider !== "deepseek") return undefined;
+  const def = getModelsForProvider(input.provider).find((m) => m.id === input.model);
+  return def?.contextWindowTokens;
+}
+
+/**
  * 选择器（Settings / Composer 模型列表）用模型集合：
  * - opencode-go：精选列表（少而精，新的 / 能力强的优先；顺序即展示顺序）
  * - 其它 provider：与 registry 一致

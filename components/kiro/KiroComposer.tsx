@@ -81,6 +81,7 @@ export function KiroComposer({
   onOpenAgentSettings,
   contextUsage,
   contextOverflow,
+  contextWindowTokens,
   introActive = false,
 }: {
   contexts: KiroContextRef[];
@@ -139,6 +140,8 @@ export function KiroComposer({
   contextUsage?: ContextUsageSnapshot | null;
   /** 本 Turn 因超出输入预算失败（danger 状态） */
   contextOverflow?: boolean;
+  /** 官方可核实的模型窗口（Phase 2；缺失 → 不显示「模型窗口 %」） */
+  contextWindowTokens?: number;
   /** Motion V1：本轮 Empty Intro claim 成功后 Composer 轻进入（workspace/sidecar 各自 timing scope） */
   introActive?: boolean;
 }) {
@@ -615,6 +618,7 @@ export function KiroComposer({
                     snapshot={contextUsage ?? null}
                     overflow={contextOverflow}
                     compact={compact}
+                    windowTokens={contextWindowTokens}
                     open={openMenu === "contextUsage"}
                     onOpenChange={(next) => setOpenMenu(next ? "contextUsage" : null)}
                   />
