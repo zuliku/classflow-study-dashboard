@@ -2,7 +2,7 @@
 
 import React from "react";
 import { usePresence } from "@/lib/usePresence";
-import { MOTION_EXIT_MS } from "@/lib/motion";
+import { KIRO_MOTION_MS } from "@/lib/motion";
 import { KiroInspectorOutputs } from "@/components/kiro/inspector/KiroInspectorOutputs";
 import { KiroInspectorSources } from "@/components/kiro/inspector/KiroInspectorSources";
 import { KiroInspectorDivider } from "@/components/kiro/inspector/KiroInspectorSection";
@@ -25,7 +25,9 @@ export const KIRO_INSPECTOR_WIDTH = 296;
  * - 非 xl breakpoint 由 Header 的「最近文件」Popover 兜底；Mobile 不渲染
  */
 export function KiroInspector({ open }: { open: boolean }) {
-  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.panel);
+  // S3-2：presence 卸载窗口 = spatial(220)，与 shell width morph 同长 ——
+  // 此前用 panel(160) 会在 width morph 播到 73% 时卸载造成截断感。
+  const { mounted, visible } = usePresence(open, KIRO_MOTION_MS.spatial);
 
   return (
     <div

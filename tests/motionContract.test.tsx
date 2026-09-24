@@ -108,6 +108,13 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(css).toMatch(new RegExp(`\\.kiro-motion-sidecar\\s*\\{[^}]*${value}ms`, "s"));
   });
 
+  it("S3-2 Inspector presence 窗口 = spatial（退出不截断 width morph）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    const inspector = read("components/kiro/inspector/KiroInspector.tsx");
+    expect(inspector).toContain("KIRO_MOTION_MS.spatial");
+    expect(inspector).not.toContain("MOTION_EXIT_MS.panel");
+  });
+
   it("Primitive 层不再散落裸魔法 exit duration（源码护栏）", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
     // Dialog：CSS exit var 与 presence 常量同源
