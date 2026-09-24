@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 /**
  * Phase 2 — Inspector 上下文占用组件测试。
  *
@@ -90,7 +90,7 @@ describe("Inspector 上下文 — 空态", () => {
     await render([]);
     expect(q('[data-testid="kiro-inspector-context-usage"]')).toBeTruthy();
     expect(container!.textContent).toContain("暂无占用记录");
-    expect(container!.textContent).toContain("发送第一条消息后显示每次请求的上下文占用趋势");
+    expect(container!.textContent).toContain("发送第一条消息后显示");
     expect(q('[data-testid="kiro-inspector-context-row"]')).toBeNull();
   });
 });

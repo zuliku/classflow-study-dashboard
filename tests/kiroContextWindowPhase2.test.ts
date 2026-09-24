@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 /**
  * Phase 2 — 模型窗口 % + Inspector 上下文历史（纯函数）。
  *
@@ -108,7 +108,7 @@ describe("resolveModelWindowUsage", () => {
     const usage = resolveModelWindowUsage(s, 1_050_000)!;
     const expectedPercent = ((16_342 + 4_200 + 9_800) / 1_050_000) * 100;
     expect(usage.percent).toBe(Math.round(expectedPercent * 10) / 10);
-    expect(usage.label).toBe("占模型窗口 2.9%（估算 30.3k / 1.05M）");
+    expect(usage.label).toBe("占模型窗口 2.9%（已用 30.3k tokens，共 1.05M）");
   });
 
   it("占比超过 100% 也如实显示（不 clamp 到 100）", () => {

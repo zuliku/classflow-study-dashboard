@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useMemo } from "react";
 import { Gauge } from "lucide-react";
@@ -64,7 +64,7 @@ export function KiroInspectorContextUsage() {
         <KiroInspectorEmptyState
           icon={<Gauge className="w-3.5 h-3.5" />}
           text="暂无占用记录"
-          hint="发送第一条消息后显示每次请求的上下文占用趋势。"
+          hint="发送第一条消息后显示"
         />
       ) : (
         <>

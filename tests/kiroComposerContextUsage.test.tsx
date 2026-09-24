@@ -126,49 +126,46 @@ describe("上下文占用 ring — 受控弹层与明细", () => {
     expect(q('[data-testid="kiro-composer-context-usage"]')!.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("展开：对话占用 / 固定开销 / 压缩阈值 / 附件与摘要明细", async () => {
+  it("展开：Codex-style 三段式（无窗口 → 对话上下文为分母）", async () => {
     await render({ snapshot: usage(9800), open: true });
     const menu = q('[data-testid="kiro-composer-context-usage-menu"]')!;
-    expect(menu.textContent).toContain("上下文占用");
-    expect(menu.textContent).toContain("deepseek-v4.1-flash");
-    expect(menu.textContent).toContain("对话上下文 9.8k / 24k");
-    expect(menu.textContent).toContain("固定开销（不计入压缩预算）");
-    expect(menu.textContent).toContain("系统提示 ~16.3k");
-    expect(menu.textContent).toContain("工具定义 ~4.2k");
-    expect(menu.textContent).toContain("达到 18k 时会自动压缩较早对话");
-    expect(menu.textContent).toContain("附件正文 ~1.2k");
-    expect(menu.textContent).toContain("较早对话摘要 ~800");
-    expect(menu.textContent).toContain("估算值（CJK ≈ 1 token/字）");
+    expect(menu.textContent).toContain("对话上下文：");
+    expect(menu.textContent).toContain("41% 已用（剩余 59%）");
+    expect(menu.textContent).toContain("已用 9.8k tokens，共 24k");
+    // 去除描述性段落：不再出现口径解释 / 固定开销 / 压缩阈值说明
+    expect(menu.textContent).not.toContain("固定开销");
+    expect(menu.textContent).not.toContain("CJK");
+    expect(menu.textContent).not.toContain("自动压缩较早对话");
+    expect(menu.textContent).not.toContain("deepseek-v4.1-flash");
   });
 
-  it("附件 / 摘要为 0 时不渲染对应行", async () => {
-    const snapshot = { ...usage(9800), breakdown: { ...usage(9800).breakdown, attachmentTokens: 0, summaryTokens: 0 } };
-    await render({ snapshot, open: true });
+  it("展开（有官方窗口）：以模型窗口为分母", async () => {
+    await render({ snapshot: usage(9800), open: true, windowTokens: 1_050_000 });
     const menu = q('[data-testid="kiro-composer-context-usage-menu"]')!;
-    expect(menu.textContent).not.toContain("附件正文");
-    expect(menu.textContent).not.toContain("较早对话摘要");
+    expect(menu.textContent).toContain("上下文窗口：");
+    expect(menu.textContent).toContain("3% 已用（剩余 97%）");
+    expect(menu.textContent).toContain("已用 30.3k tokens，共 1.05M");
   });
 
-  it("无快照展开：说明「发送第一条消息后显示占用估算」", async () => {
+  it("compacted → 单行短句（只在真实发生压缩时出现）", async () => {
+    const compacted = { ...usage(9800), conversationBudget: { ...usage(9800).conversationBudget, compacted: true } };
+    await render({ snapshot: compacted, open: true });
+    expect(q('[data-testid="kiro-composer-context-usage-menu"]')!.textContent).toContain("已压缩较早对话");
+  });
+
+  it("无快照展开：单行提示（无描述段落）", async () => {
     await render({ open: true });
     const menu = q('[data-testid="kiro-composer-context-usage-menu"]')!;
-    expect(menu.textContent).toContain("发送第一条消息后显示占用估算");
+    expect(menu.textContent).toContain("发送第一条消息后显示");
+    expect(menu.textContent).not.toContain("只统计对话上下文");
+    expect(menu.textContent).not.toContain("估算值");
   });
 
-  it("overflow 展开：说明本次请求因超出输入预算失败", async () => {
+  it("overflow 展开：单行短句", async () => {
     await render({ snapshot: usage(9800), overflow: true, open: true });
     const menu = q('[data-testid="kiro-composer-context-usage-menu"]')!;
-    expect(menu.textContent).toContain("本次请求因超出输入预算失败");
-  });
-
-  it("Phase 2：提供官方模型窗口 → 明细显示「占模型窗口 %」；缺失 → 不显示", async () => {
-    await render({ snapshot: usage(9800), open: true, windowTokens: 1_050_000 });
-    const windowLine = q('[data-testid="kiro-context-window-usage"]')!;
-    expect(windowLine.textContent).toContain("占模型窗口");
-    expect(windowLine.textContent).toContain("1.05M");
-
-    await render({ snapshot: usage(9800), open: true });
-    expect(q('[data-testid="kiro-context-window-usage"]')).toBeNull();
+    expect(menu.textContent).toContain("已超出输入预算");
+    expect(menu.textContent).not.toContain("请新开会话或清理上下文");
   });
 
   it("渲染内容不含消息正文 / 路径 / 内部字段", async () => {

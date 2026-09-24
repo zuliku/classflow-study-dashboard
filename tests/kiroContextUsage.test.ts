@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 /**
  * 上下文占用（Codex-style 指示）— 纯函数测试。
  *
@@ -8,9 +8,9 @@
 import { describe, it, expect } from "vitest";
 import {
   CONTEXT_USAGE_VERSION,
+  buildContextUsageCompactView,
   buildContextUsageSnapshot,
   estimateToolSchemaTokens,
-  formatContextUsageDetail,
   formatContextUsageLabel,
   formatContextUsageTokens,
   normalizeContextUsageSnapshot,
@@ -106,17 +106,34 @@ describe("格式化", () => {
     );
   });
 
-  it("formatContextUsageDetail：对话 / 固定开销 / 压缩说明", () => {
-    const detail = formatContextUsageDetail(snapshot())!;
-    expect(detail.conversation).toBe("对话上下文 9.8k / 24k");
-    expect(detail.fixed).toContain("固定开销（不计入压缩预算）");
-    expect(detail.fixed).toContain("系统提示 ~16.3k");
-    expect(detail.fixed).toContain("工具定义 ~4.2k");
-    expect(detail.compact).toBe("达到 18k 时会自动压缩较早对话");
-    expect(formatContextUsageDetail(null)).toBeNull();
+  it("buildContextUsageCompactView：Codex-style 三段式（有窗口 → 窗口为分母）", () => {
+    const s = snapshot({ systemPromptTokens: 16_342, toolSchemaTokens: 4_200, conversationTokens: 9_800 });
+    const view = buildContextUsageCompactView(s, 1_050_000)!;
+    expect(view.title).toBe("上下文窗口：");
+    // 30.3k / 1.05M ≈ 2.9% → 3%
+    expect(view.percentLine).toBe("3% 已用（剩余 97%）");
+    expect(view.tokensLine).toBe("已用 30.3k tokens，共 1.05M");
+    expect(view.compactedLine).toBeUndefined();
+    expect(view.overflowLine).toBeUndefined();
+  });
 
-    const compacted = formatContextUsageDetail(snapshot({ compacted: true }))!;
-    expect(compacted.compact).toContain("本 Turn 已使用更激进的裁剪");
+  it("buildContextUsageCompactView：无窗口 → 以输入预算为分母（对话上下文）", () => {
+    const view = buildContextUsageCompactView(snapshot({ conversationTokens: 9_800 }), undefined)!;
+    expect(view.title).toBe("对话上下文：");
+    expect(view.percentLine).toBe("41% 已用（剩余 59%）");
+    expect(view.tokensLine).toBe("已用 9.8k tokens，共 24k");
+  });
+
+  it("buildContextUsageCompactView：compacted / 超预算短句；无快照 → null", () => {
+    const compacted = buildContextUsageCompactView(snapshot({ compacted: true }), 1_000_000)!;
+    expect(compacted.compactedLine).toBe("已压缩较早对话");
+    const over = buildContextUsageCompactView(snapshot({ conversationTokens: 26_000 }), 1_000_000)!;
+    expect(over.overflowLine).toBe("已超出输入预算");
+    const overByFlag = buildContextUsageCompactView(snapshot({ conversationTokens: 1_000 }), 1_000_000, {
+      overflow: true,
+    })!;
+    expect(overByFlag.overflowLine).toBe("已超出输入预算");
+    expect(buildContextUsageCompactView(null, 1_000_000)).toBeNull();
   });
 });
 

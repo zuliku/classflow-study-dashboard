@@ -4,11 +4,9 @@ import React from "react";
 import { PopoverPanel } from "@/components/ui/Popover";
 import {
   ContextUsageSnapshot,
-  formatContextUsageDetail,
+  buildContextUsageCompactView,
   formatContextUsageLabel,
-  formatContextUsageTokens,
   resolveContextUsageTone,
-  resolveModelWindowUsage,
 } from "@/lib/ai/contextBudget/usage";
 import { cn } from "@/lib/utils";
 
@@ -29,10 +27,10 @@ const TONE_CLASS: Record<"unknown" | "ok" | "warn" | "danger", string> = {
  * Kiro 上下文占用指示（Codex-style ring）。
  *
  * 契约：
- * - 只展示 server 返回的估算快照（对话部分 vs ClassFlow 输入预算；固定开销在明细里说明）；
- * - 不改变任何预算 / 压缩 / 路由行为（纯展示）；
- * - 无快照 → 中性空心环（等待首次请求）；达到压缩阈值 → warning；超出预算 / 失败 → danger；
- * - 单一 menu ownership 由 Composer 提供（open / onOpenChange）。
+ * - 只展示 server 返回的估算快照；不改变任何预算 / 压缩 / 路由行为；
+ * - 二级弹窗保持 Codex-style 三段式事实行（有官方模型窗口 → 窗口为分母；否则 → 输入预算），
+ *   不做口径解释、不列内部固定开销；
+ * - 无快照 → 中性空心环 + 单行提示；达到压缩阈值 → warning；超出预算 / 失败 → danger。
  */
 export function KiroComposerContextUsage({
   snapshot,
@@ -46,15 +44,14 @@ export function KiroComposerContextUsage({
   /** 本 Turn 因超出输入预算失败（来自真实 error code，不猜测） */
   overflow?: boolean;
   compact?: boolean;
-  /** 官方可核实的模型窗口（Phase 2；缺失 → 不显示百分比） */
+  /** 官方可核实的模型窗口（Phase 2；缺失 → 以 ClassFlow 输入预算为分母） */
   windowTokens?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const tone = overflow ? "danger" : resolveContextUsageTone(snapshot);
   const label = formatContextUsageLabel(snapshot, { overflow });
-  const detail = formatContextUsageDetail(snapshot);
-  const windowUsage = resolveModelWindowUsage(snapshot, windowTokens);
+  const view = buildContextUsageCompactView(snapshot, windowTokens, { overflow });
 
   // 进度只表达「对话部分 / 预算」；unknown → 空环（不假装有数据）
   const ratio = snapshot
@@ -108,66 +105,30 @@ export function KiroComposerContextUsage({
         open={open}
         placement="top-end"
         motionProfile="kiro"
-        className="w-72 max-w-[calc(100vw-24px)]"
+        className="w-56 max-w-[calc(100vw-24px)]"
       >
-        <div className="p-3 space-y-2" data-testid="kiro-composer-context-usage-menu" role="dialog" aria-label="上下文占用">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xs font-bold text-charcoal">上下文占用</span>
-            {snapshot && (
-              <span className="text-[10px] text-sandrift truncate max-w-[140px]" title={snapshot.model}>
-                {snapshot.model}
-              </span>
-            )}
-          </div>
-
-          {!snapshot ? (
-            <p className="text-[11px] text-sandrift leading-relaxed">
-              发送第一条消息后显示占用估算（只统计对话上下文，不含系统提示与工具定义）。
-            </p>
+        <div
+          className="px-3 py-2 space-y-0.5"
+          data-testid="kiro-composer-context-usage-menu"
+          role="dialog"
+          aria-label="上下文占用"
+        >
+          {!view ? (
+            <>
+              <p className="text-xs font-bold text-charcoal">上下文占用</p>
+              <p className="text-[11px] text-sandrift">发送第一条消息后显示</p>
+            </>
           ) : (
             <>
-              {/* 对话上下文进度（真实驱动自动压缩的部分） */}
-              <div>
-                <p className="text-[11px] font-semibold text-charcoal">{detail!.conversation}</p>
-                <div className="mt-1 h-1.5 rounded-full bg-alabaster overflow-hidden" aria-hidden="true">
-                  <span
-                    className={cn(
-                      "block h-full rounded-full transition-[width] duration-[var(--motion-fast)]",
-                      tone === "danger" ? "bg-danger" : tone === "warn" ? "bg-warning" : "bg-charcoal"
-                    )}
-                    style={{ width: `${Math.round(ratio * 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* 明细：对话构成（附件 / 摘要只在存在时显示） */}
-              {(snapshot.breakdown.attachmentTokens > 0 || snapshot.breakdown.summaryTokens > 0) && (
-                <ul className="space-y-0.5 text-[10px] text-sandrift">
-                  {snapshot.breakdown.attachmentTokens > 0 && (
-                    <li>附件正文 ~{formatContextUsageTokens(snapshot.breakdown.attachmentTokens)}</li>
-                  )}
-                  {snapshot.breakdown.summaryTokens > 0 && (
-                    <li>较早对话摘要 ~{formatContextUsageTokens(snapshot.breakdown.summaryTokens)}</li>
-                  )}
-                </ul>
+              <p className="text-xs font-bold text-charcoal">{view.title}</p>
+              <p className="text-[11px] font-semibold text-charcoal">{view.percentLine}</p>
+              <p className="text-[11px] text-sandrift">{view.tokensLine}</p>
+              {view.compactedLine && (
+                <p className="text-[11px] text-warning">{view.compactedLine}</p>
               )}
-
-              <p className="text-[10px] text-sandrift leading-relaxed">{detail!.fixed}</p>
-              {/* Phase 2：模型窗口 %（只在 registry 有官方可核实窗口时显示） */}
-              {windowUsage && (
-                <p className="text-[10px] text-sandrift leading-relaxed" data-testid="kiro-context-window-usage">
-                  {windowUsage.label}
-                </p>
-              )}
-              <p className="text-[10px] text-sandrift leading-relaxed">{detail!.compact}</p>
+              {view.overflowLine && <p className="text-[11px] text-danger">{view.overflowLine}</p>}
             </>
           )}
-
-          <p className="text-[10px] text-sandrift leading-relaxed">
-            {overflow
-              ? "本次请求因超出输入预算失败：请新开会话或清理上下文后重试。"
-              : "估算值（CJK ≈ 1 token/字）；模型输出预留与计费不在其中。"}
-          </p>
         </div>
       </PopoverPanel>
     </>

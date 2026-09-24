@@ -117,6 +117,45 @@ export function resolveContextUsageTone(
   return "ok";
 }
 
+/**
+ * 紧凑展示（Codex-style 三段式；用于 Composer 二级弹窗）：
+ * - 有官方模型窗口 → 以模型窗口为分母（「上下文窗口：」）
+ * - 无窗口 → 以 ClassFlow 输入预算为分母（「对话上下文：」）
+ * 只输出事实行；无描述性段落、无口径解释。
+ */
+export interface ContextUsageCompactView {
+  title: string;
+  /** 例：13% 已用（剩余 87%） */
+  percentLine: string;
+  /** 例：已用 35k tokens，共 258k */
+  tokensLine: string;
+  /** 仅在真实发生压缩时出现 */
+  compactedLine?: string;
+  /** 超出输入预算（真实失败 / used > max）时的短句 */
+  overflowLine?: string;
+}
+
+export function buildContextUsageCompactView(
+  snapshot: ContextUsageSnapshot | null | undefined,
+  windowTokens?: number | null,
+  opts?: { overflow?: boolean }
+): ContextUsageCompactView | null {
+  if (!snapshot) return null;
+  const { used, max } = snapshot.conversationBudget;
+  const hasWindow = typeof windowTokens === "number" && Number.isFinite(windowTokens) && windowTokens > 0;
+  const numerator = hasWindow ? snapshot.totalEstimatedTokens : used;
+  const denominator = hasWindow ? (windowTokens as number) : Math.max(1, max);
+  const percent = Math.max(0, Math.min(100, Math.round((numerator / denominator) * 100)));
+  const overflow = opts?.overflow === true || used > max;
+  return {
+    title: hasWindow ? "上下文窗口：" : "对话上下文：",
+    percentLine: `${percent}% 已用（剩余 ${100 - percent}%）`,
+    tokensLine: `已用 ${formatContextUsageTokens(numerator)} tokens，共 ${formatContextUsageTokens(denominator)}`,
+    ...(snapshot.conversationBudget.compacted ? { compactedLine: "已压缩较早对话" } : {}),
+    ...(overflow ? { overflowLine: "已超出输入预算" } : {}),
+  };
+}
+
 /** token 数紧凑显示：980 → "980"；9800 → "9.8k"；1_050_000 → "1.05M" */
 export function formatContextUsageTokens(tokens: number): string {
   const value = Math.max(0, Math.round(tokens));
@@ -144,7 +183,7 @@ export function resolveModelWindowUsage(
   const rounded = Math.max(0, Math.round(percent * 10) / 10);
   return {
     percent: rounded,
-    label: `占模型窗口 ${rounded}%（估算 ${formatContextUsageTokens(snapshot.totalEstimatedTokens)} / ${formatContextUsageTokens(windowTokens)}）`,
+    label: `占模型窗口 ${rounded}%（已用 ${formatContextUsageTokens(snapshot.totalEstimatedTokens)} tokens，共 ${formatContextUsageTokens(windowTokens)}）`,
   };
 }
 
@@ -163,21 +202,6 @@ export function formatContextUsageLabel(
   if (opts?.overflow || used > max) return `${base} · 已超出输入预算`;
   if (used >= compactAt) return `${base} · 较早对话将自动压缩`;
   return base;
-}
-
-/** Popover 明细文案（固定开销 / 对话部分 / 压缩阈值） */
-export function formatContextUsageDetail(
-  snapshot: ContextUsageSnapshot | null | undefined
-): { conversation: string; fixed: string; compact: string } | null {
-  if (!snapshot) return null;
-  const { breakdown, conversationBudget } = snapshot;
-  return {
-    conversation: `对话上下文 ${formatContextUsageTokens(conversationBudget.used)} / ${formatContextUsageTokens(conversationBudget.max)}`,
-    fixed: `固定开销（不计入压缩预算）：系统提示 ~${formatContextUsageTokens(breakdown.systemPromptTokens)} · 工具定义 ~${formatContextUsageTokens(breakdown.toolSchemaTokens)}`,
-    compact: conversationBudget.compacted
-      ? `本 Turn 已使用更激进的裁剪（压缩阈值 ${formatContextUsageTokens(conversationBudget.compactAt)}）`
-      : `达到 ${formatContextUsageTokens(conversationBudget.compactAt)} 时会自动压缩较早对话`,
-  };
 }
 
 /**
