@@ -332,15 +332,15 @@ html[data-motion-effective="reduced"] .kiro-now-course {
   background: #E4E0D8;
 }
 
-/* Keyboard focus: 可见焦点环，禁用状态下不显示 */
+/* Keyboard focus: 可见焦点环，禁用状态下不显示（S1 token 单源：--ring*，S2-2 收敛） */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [role="button"]:focus-visible {
-  outline: 2px solid rgba(49, 48, 50, 0.55);
-  outline-offset: 2px;
+  outline: var(--ring-width) solid var(--ring);
+  outline-offset: var(--ring-offset);
 }
 
 button:disabled {
