@@ -4,12 +4,18 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Kiro Sidecar Move Handle（Move V1）：顶部中央 hover-reveal 拖拽把手。
- * - 仅 pointer（mouse/pen）；aria-hidden，不进 Tab order（键盘用户不受影响）
- * - delta 相对 pointerdown 起点（不逐帧累计）；body userSelect 拖拽期间禁用
+ * Kiro Sidecar Move Handle（Move V1 + S6-2 键盘路径）：顶部中央 hover-reveal 拖拽把手。
+ * - pointer（mouse/pen）：delta 相对 pointerdown 起点；body userSelect 拖拽期间禁用
+ * - 键盘（S6-2）：聚焦后方向键按 24px 网格 discrete 移动（Shift 加速 96px），
+ *   走与 pointer 同一 onMoveStart/onMove/onMoveEnd 路径（含 clamp + 持久化）；
+ *   聚焦时 pill 同 hover 显现（键盘用户可见）；聚焦不滚动页面（preventDefault）
  * - unmount cleanup：拖拽中关闭 Sidecar 也必须恢复文本选择
  * - dragging 时 pill 保持可见（即使 pointer 离开 hit area）
  */
+
+/** 键盘步长：24px（viewport margin 网格），Shift 加速 96px */
+const KEY_STEP = 24;
+const KEY_FAST_STEP = 96;
 export function KiroSidecarMoveHandle({
   onMoveStart,
   onMove,
@@ -26,6 +32,8 @@ export function KiroSidecarMoveHandle({
 }) {
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
+  // S6-2：键盘聚焦时 pill 同 hover 显现（把手常态透明，聚焦不可见则键盘用户找不到）
+  const [focused, setFocused] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const prevBodyUserSelectRef = useRef("");
 
@@ -79,27 +87,57 @@ export function KiroSidecarMoveHandle({
     [onMove]
   );
 
+  // S6-2 键盘路径：discrete 步进（begin→apply→commit 同步走完；commit 内同步 flush，
+  // 松手清零 transform + 持久化复用 pointer 路径）
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      const step = e.shiftKey ? KEY_FAST_STEP : KEY_STEP;
+      let deltaX = 0;
+      let deltaY = 0;
+      if (e.key === "ArrowLeft") deltaX = -step;
+      else if (e.key === "ArrowRight") deltaX = step;
+      else if (e.key === "ArrowUp") deltaY = -step;
+      else if (e.key === "ArrowDown") deltaY = step;
+      else return;
+      e.preventDefault();
+      onMoveStart?.();
+      onMove({ deltaX, deltaY });
+      onMoveEnd?.();
+    },
+    [onMove, onMoveEnd, onMoveStart]
+  );
+
+  const pillVisible = hovered || dragging || focused;
+
   return (
     <div
       data-testid="kiro-sidecar-move-handle"
-      aria-hidden="true"
+      role="separator"
+      aria-label="移动 Kiro 面板"
+      aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+      title="拖拽或方向键移动（Shift 加速）"
+      tabIndex={0}
       className={cn(
-        // 顶部中央 activation hit area（约 56×16px；视觉透明，hover 显示 pill）
+        // 顶部中央 activation hit area（约 56×16px；视觉透明，hover/聚焦 显示 pill）
         "absolute left-1/2 top-0 z-30 h-4 w-14 -translate-x-1/2 touch-none select-none",
+        "focus:outline-none focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:rounded-full",
         dragging ? "cursor-grabbing" : "cursor-grab",
         className
       )}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finish}
       onPointerCancel={finish}
+      onKeyDown={onKeyDown}
     >
       <div
         className={cn(
           "mx-auto mt-[5px] h-[4px] w-8 rounded-full transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-          hovered || dragging ? "opacity-100" : "opacity-0",
+          pillVisible ? "opacity-100" : "opacity-0",
           dragging ? "bg-sandrift/70" : "bg-sandrift/40"
         )}
       />

@@ -399,13 +399,15 @@ describe("Move handle（Move V1）", () => {
   const panelRight = (s: ReturnType<typeof setup>) =>
     Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-right"));
 
-  it("A. handle 存在：testid + aria-hidden（不进 Tab order）", async () => {
+  it("A. handle 可聚焦：separator 语义 + Tab order + 键盘提示（S6-2，替代旧 aria-hidden）", async () => {
     const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
     expect(handle).toBeTruthy();
-    expect(handle.getAttribute("aria-hidden")).toBe("true");
-    expect(handle.hasAttribute("tabindex")).toBe(false);
+    expect(handle.hasAttribute("aria-hidden")).toBe(false);
+    expect(handle.getAttribute("tabindex")).toBe("0");
+    expect(handle.getAttribute("role")).toBe("separator");
+    expect(handle.getAttribute("aria-label")).toBe("移动 Kiro 面板");
     // 响应式隐藏类（mobile 不显示）
     expect(handle.className).toContain("hidden");
     s.cleanup();
@@ -657,6 +659,128 @@ describe("Drag Perf（手势帧零 reconcile + compositor 位移）", () => {
     expect(s.renderCount()).toBe(before);
     up(left, 200, 300);
     expect(useKiroPreferencesStore.getState().sidecarSize.width).toBe(SIDECAR_DEFAULT_SIZE.width + 100);
+    s.cleanup();
+  });
+});
+
+describe("Keyboard geometry（S6-1/S6-2：方向键 discrete 路径，走同一 clamp + 持久化）", () => {
+  function keyDown(el: Element, key: string, shift = false): boolean {
+    let prevented = false;
+    act(() => {
+      const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, shiftKey: shift });
+      ev.preventDefault = () => {
+        prevented = true;
+      };
+      (el as HTMLElement).dispatchEvent(ev);
+    });
+    return prevented;
+  }
+
+  const panelTop = (s: ReturnType<typeof setup>) =>
+    Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-top"));
+  const panelRight = (s: ReturnType<typeof setup>) =>
+    Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-right"));
+  const panelWidth = (s: ReturnType<typeof setup>) =>
+    Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-width"));
+  const panelHeight = (s: ReturnType<typeof setup>) =>
+    Number.parseFloat(s.panel()!.style.getPropertyValue("--kiro-sidecar-height"));
+
+  it("resize 把手可聚焦：三把手 tabindex + 方向语义 label", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const left = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
+    const bottom = s.container.querySelector('[data-sidecar-resize-handle="bottom"]')!;
+    const corner = s.container.querySelector('[data-sidecar-resize-handle="corner"]')!;
+    for (const h of [left, bottom, corner]) {
+      expect(h.getAttribute("tabindex")).toBe("0");
+      expect(h.getAttribute("role")).toBe("separator");
+    }
+    expect(left.getAttribute("aria-label")).toBe("调整宽度");
+    expect(bottom.getAttribute("aria-label")).toBe("调整高度");
+    expect(corner.getAttribute("aria-label")).toBe("调整尺寸");
+    s.cleanup();
+  });
+
+  it("left 把手：Left 加宽 16 / Right 收窄 16（与 pointer 拖拽同向），持久化", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const left = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
+    expect(keyDown(left, "ArrowLeft")).toBe(true);
+    expect(panelWidth(s)).toBe(SIDECAR_DEFAULT_SIZE.width + 16);
+    expect(useKiroPreferencesStore.getState().sidecarSize.width).toBe(SIDECAR_DEFAULT_SIZE.width + 16);
+    expect(panelRight(s)).toBe(24);
+    expect(keyDown(left, "ArrowRight")).toBe(true);
+    expect(panelWidth(s)).toBe(SIDECAR_DEFAULT_SIZE.width);
+    s.cleanup();
+  });
+
+  it("left 把手忽略纵向键；bottom 把手忽略横向键", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const left = s.container.querySelector('[data-sidecar-resize-handle="left"]')!;
+    const bottom = s.container.querySelector('[data-sidecar-resize-handle="bottom"]')!;
+    expect(keyDown(left, "ArrowUp")).toBe(false);
+    expect(panelWidth(s)).toBe(SIDECAR_DEFAULT_SIZE.width);
+    expect(panelHeight(s)).toBe(SIDECAR_DEFAULT_SIZE.height);
+    expect(keyDown(bottom, "ArrowLeft")).toBe(false);
+    expect(panelWidth(s)).toBe(SIDECAR_DEFAULT_SIZE.width);
+    s.cleanup();
+  });
+
+  it("bottom 把手：Shift+Down 加高 64；corner：Up 同调宽高", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const bottom = s.container.querySelector('[data-sidecar-resize-handle="bottom"]')!;
+    expect(keyDown(bottom, "ArrowDown", true)).toBe(true);
+    // 760 + 64 = 824（上限 900-48=852 内）
+    expect(panelHeight(s)).toBe(SIDECAR_DEFAULT_SIZE.height + 64);
+    const corner = s.container.querySelector('[data-sidecar-resize-handle="corner"]')!;
+    expect(keyDown(corner, "ArrowUp")).toBe(true);
+    expect(panelHeight(s)).toBe(SIDECAR_DEFAULT_SIZE.height + 64 - 16);
+    // corner Up 只调高度，宽度不变
+    expect(panelWidth(s)).toBe(SIDECAR_DEFAULT_SIZE.width);
+    s.cleanup();
+  });
+
+  it("move 把手：Left 左移 24（right 24→48）持久化；Shift+Down 受底边 clamp", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const move = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    expect(keyDown(move, "ArrowLeft")).toBe(true);
+    expect(panelRight(s)).toBe(48);
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN);
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: 40, right: 48 });
+    expect(keyDown(move, "ArrowDown", true)).toBe(true);
+    // 40 + 96 = 136 会越底边（136+760 > 900-24）→ clamp 到 maxTop = 900-760-24 = 116
+    expect(panelTop(s)).toBe(900 - SIDECAR_DEFAULT_SIZE.height - 24);
+    expect(useKiroPreferencesStore.getState().sidecarPosition.top).toBe(900 - SIDECAR_DEFAULT_SIZE.height - 24);
+    s.cleanup();
+  });
+
+  it("move 把手聚焦时 pill 显现（键盘用户可见）", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const move = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]') as HTMLElement;
+    const pill = move.firstElementChild as HTMLElement;
+    expect(pill.className).toContain("opacity-0");
+    act(() => {
+      move.focus();
+    });
+    expect(pill.className).toContain("opacity-100");
+    s.cleanup();
+  });
+
+  it("S6-3 <768 策略：resize/move 把手 hidden md:block（全屏下无几何手势）", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const move = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    expect(move.className).toContain("hidden");
+    expect(move.className).toContain("md:block");
+    for (const pos of ["left", "bottom", "corner"]) {
+      const h = s.container.querySelector(`[data-sidecar-resize-handle="${pos}"]`)!;
+      expect(h.className).toContain("hidden");
+      expect(h.className).toContain("md:block");
+    }
     s.cleanup();
   });
 });

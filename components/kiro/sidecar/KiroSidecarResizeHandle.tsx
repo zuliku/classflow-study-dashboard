@@ -21,11 +21,17 @@ const AREA: Record<SidecarHandlePosition, string> = {
 };
 
 /**
- * Sidecar resize handle（pointer 事件实现，无第三方依赖）。
- * - delta 语义：相对 pointerdown 起点（不累计中间帧）
+ * Sidecar resize handle（pointer + 键盘双路径，无第三方依赖）。
+ * - pointer：delta 相对 pointerdown 起点（不累计中间帧）
+ * - 键盘（S6-1）：方向键按步长 discrete 调整，走与 pointer 同一 onResizeStart/onResize/onResizeEnd
+ *   路径（含 clamp + 持久化）；左/角：Left/Right 调宽；底/角：Up/Down 调高；Shift 加速
  * - 拖拽期间禁止文本选择（body user-select none + preventDefault）
  * - unmount cleanup：拖拽中关闭/unmount 时恢复 userSelect（只恢复由本 handle 设置的值）
  */
+
+/** 键盘步长：16px 精调（4pt 网格），Shift 加速 64px */
+const KEY_STEP = 16;
+const KEY_FAST_STEP = 64;
 export function KiroSidecarResizeHandle({
   position,
   onResizeStart,
@@ -96,16 +102,50 @@ export function KiroSidecarResizeHandle({
     [onResize, position]
   );
 
+  // S6-1 键盘路径： discrete 步进（begin→apply→commit 同步走完，Shell 侧 clamp + 持久化复用；
+  // commit 内同步 flush pending，rAF 仅 pointer 连续手势需要）
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      const step = e.shiftKey ? KEY_FAST_STEP : KEY_STEP;
+      let deltaWidth = 0;
+      let deltaHeight = 0;
+      if (e.key === "ArrowLeft") {
+        if (position === "bottom") return;
+        deltaWidth = step; // 左边缘左移 → 更宽（与 pointer 拖拽同向）
+      } else if (e.key === "ArrowRight") {
+        if (position === "bottom") return;
+        deltaWidth = -step;
+      } else if (e.key === "ArrowUp") {
+        if (position === "left") return;
+        deltaHeight = -step;
+      } else if (e.key === "ArrowDown") {
+        if (position === "left") return;
+        deltaHeight = step;
+      } else {
+        return;
+      }
+      e.preventDefault();
+      onResizeStart?.();
+      onResize({ deltaWidth, deltaHeight });
+      onResizeEnd?.();
+    },
+    [onResize, onResizeEnd, onResizeStart, position]
+  );
+
   return (
     <div
       role="separator"
       aria-label={position === "left" ? "调整宽度" : position === "bottom" ? "调整高度" : "调整尺寸"}
+      aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+      title="拖拽或方向键调整（Shift 加速）"
+      tabIndex={0}
       data-sidecar-resize-handle={position}
       className={cn(
         "absolute z-20 touch-none select-none",
         AREA[position],
         CURSOR[position],
         "hover:bg-line/30 transition-colors",
+        "focus:outline-none focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:bg-line/30",
         position === "corner" && "rounded-bl-[28px]",
         className
       )}
@@ -113,6 +153,7 @@ export function KiroSidecarResizeHandle({
       onPointerMove={onPointerMove}
       onPointerUp={finish}
       onPointerCancel={finish}
+      onKeyDown={onKeyDown}
     />
   );
 }

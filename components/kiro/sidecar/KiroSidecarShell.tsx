@@ -23,6 +23,10 @@ import { cn } from "@/lib/utils";
  * - 进入/退出动画：usePresence（由 KiroSidecar host 唯一拥有；Shell 仅消费 present）
  * - Esc 可关闭；不点击外部关闭
  * - 尺寸：左边缘调宽 + 底边调高 + 左下角 handle；min/max + viewport clamp；持久化
+ *   - 键盘等价（S6）：三把手 tabindex + 方向键 discrete（16px/Shift 64px），
+ *     Move 把手聚焦 + 方向键（24px/Shift 96px）；走同一 clamp + 持久化路径
+ * - <768 策略（S6-3）：全屏（inset-0 无圆角），resize/move 把手 hidden md:block 不渲染，
+ *   几何手势无意义（无处可移/可调）；关闭/最小化按钮即等价出口（触屏点按 = pointer 事件统一处理）
  * - 位置（Move V1 + Desktop Polish）：顶部中央 hover-reveal 把手拖拽；top/right 表示；
  *   左/右/底 ≥24px、顶 ≥40px（--titlebar-h 26 + 14 safe gap，md+ 统一几何原则）；
  *   持久化；close/reopen 与 refresh 均保留；resize 与 position 共同遵守 geometry invariant
@@ -298,7 +302,7 @@ export function KiroSidecarShell({
         } as React.CSSProperties
       }
     >
-      {/* Move handle：md+ 顶部中央 hover-reveal（不进入 Tab order） */}
+      {/* Move handle：md+ 顶部中央 hover-reveal（S6-2 聚焦亦显现 + 方向键，进 Tab order） */}
       <KiroSidecarMoveHandle
         onMoveStart={beginMove}
         onMove={applyMove}
