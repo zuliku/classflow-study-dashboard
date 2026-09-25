@@ -258,6 +258,19 @@ describe("Horizontal gutter source guard", () => {
       expect(read(f)).not.toMatch(/!px-/);
     }
   });
+
+  it("S4-2 Analytics 顶栏 sticky（Header + ViewBar 与 Assignments/Timeline 一致钉住）", () => {
+    expect(read("components/analytics/LearningAnalyticsView.tsx")).toContain("sticky top-0 z-20 shrink-0");
+  });
+
+  it("S4-2 页面 body 不自建纵向滚动（唯一归 main；Group 卡内滚动与 Timeline 横滚除外）", () => {
+    for (const f of [
+      "components/course/CoursesWorkspace.tsx",
+      "components/analytics/LearningAnalyticsView.tsx",
+    ]) {
+      expect(read(f)).not.toContain("overflow-y-auto");
+    }
+  });
 });
 
 // ============================================================

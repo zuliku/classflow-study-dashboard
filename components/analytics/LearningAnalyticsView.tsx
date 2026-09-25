@@ -149,8 +149,9 @@ export function LearningAnalyticsView() {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      {/* App Chrome V2.3：WorkspaceHeader + AnalyticsWorkspaceViewBar（与 Body 同步拉伸，大屏充分利用宽度，保留 24–32px 安全边距） */}
-      <div className="shrink-0">
+      {/* App Chrome V2.3：WorkspaceHeader + AnalyticsWorkspaceViewBar（与 Body 同步拉伸，大屏充分利用宽度，保留 24–32px 安全边距）
+          S4-2：sticky chrome wrapper（Header + ViewBar 同 Assignments/Timeline 一起钉住；此前 shrink-0 使顶栏随滚） */}
+      <div className="sticky top-0 z-20 shrink-0">
         <WorkspaceHeader
           title="学习洞察"
           context="从学习历史中理解你的投入与节奏"
@@ -165,7 +166,8 @@ export function LearningAnalyticsView() {
         />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      {/* S4-2：纵向滚动唯一归 main（app/page outer main scrolling）；内层不再自建滚动上下文 */}
+      <div className="flex-1 min-h-0">
         <div
           data-testid="analytics-body"
           // 水平 gutter 单一来源（workspace-gutter 16/24）+ intentional xl:px-8 大屏档；
