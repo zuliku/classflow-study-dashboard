@@ -179,6 +179,9 @@ export default function Home() {
                     {activeTab === "courses" && <CoursesWorkspace />}
 
 {activeTab === "kiro" && (
+            // S4-3 Header 归属说明（by design，非分叉）：Kiro 用 overflow-hidden + 自有滚动，
+            // Header 须与 KiroWorkspace 同处一个 flex 列且不进入各 Workspace 自持模式；
+            // 其余 6 页 Header 由各 Workspace 自持（sticky 语义见各文件）。
             <div className="flex flex-1 min-h-0 flex-col">
               <WorkspaceHeader
                 title="Kiro"

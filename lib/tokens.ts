@@ -53,6 +53,7 @@ export const TOKEN_SPACE_PX = {
   10: 40,
   12: 48,
   16: 64,
+  18: 72, // S4-3：Navigator 预留 = shellRail(64) + 8 breathing
   gutterSm: 16,
   gutterMd: 24,
   shellRail: 64,

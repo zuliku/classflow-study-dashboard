@@ -62,6 +62,11 @@ describe("Token Contract：CSS :root ↔ JS 镜像一致", () => {
     expect(key).toBeTruthy();
   });
 
+  it("S4-3 TOKEN_SPACE_PX[18] = --space-18 (Navigator 预留 72px)", () => {
+    expect(TOKEN_SPACE_PX[18]).toBe(72);
+    expect(css).toMatch(/--space-18:\s*72px/);
+  });
+
   it.each([
     ["caption", "--text-caption", TOKEN_TEXT.caption.size],
     ["body", "--text-body", TOKEN_TEXT.body.size],

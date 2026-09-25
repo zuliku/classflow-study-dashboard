@@ -140,6 +140,7 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+  --space-18: 72px; /* S4-3：Navigator 预留（52 rail + 12 offset + 8 breathing） */
   --gutter-sm: 16px;
   --gutter-md: 24px;
   --shell-w-rail: 64px;

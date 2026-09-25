@@ -57,10 +57,11 @@ export function KiroWorkspace() {
       {/* Unified Kiro Navigator（Sidecar 不渲染此组件） */}
       <KiroNavigator />
 
-      {/* 主内容区：md 下为 Navigator 预留左侧空间（lg+ 聊天居中不受影响）；
+      {/* 主内容区：md 下为 Navigator 预留左侧空间（S4-3：--space-18 = 52 rail + 12 offset + 8 breathing；
+          lg+ 聊天居中不受影响）；
           移动端 pb-24 为固定底部导航（BottomNav，h-14 + safe-area）预留空间，避免遮挡 Composer 发送按钮。
           Navigator 为纯悬浮层（expanded/collapsed 都不改变聊天宽度）；Inspector 为可开关右列（xl+）。 */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-4 md:pr-6 md:pl-[72px] lg:px-6 pt-4 md:pt-6 pb-24 md:pb-6">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden px-4 md:pr-6 md:pl-[var(--space-18)] lg:px-6 pt-4 md:pt-6 pb-24 md:pb-6">
         <KiroHeader
           onNewChat={newChat}
           onOpenHistory={() => setHistoryOpen(true)}

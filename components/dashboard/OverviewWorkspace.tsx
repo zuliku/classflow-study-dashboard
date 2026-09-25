@@ -129,9 +129,11 @@ export function OverviewWorkspace() {
             </div>
           </section>
 
-          {/* Overview Secondary Section：完全位于首屏 fold 以下，滚动后才可见 */}
-          <section className="grid gap-4 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(520px,1fr))] workspace-gutter pb-24 md:pb-5">
-            <div className="md:min-h-[460px]" data-testid="overview-load-wrap">
+          {/* Overview Secondary Section：完全位于首屏 fold 以下，滚动后才可见
+              S4-3：min(520px,100%) —— 窄窗（1024–1280）自动单列不断裂；宽屏保持双列。
+              子项 min-w-0 防图表长内容撑破 grid（grid item 默认 min-width:auto）。 */}
+          <section className="grid gap-4 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(min(520px,100%),1fr))] workspace-gutter pb-24 md:pb-5">
+            <div className="md:min-h-[460px] min-w-0" data-testid="overview-load-wrap">
               <StudyLoadChart />
             </div>
             <div className="md:min-h-[460px] min-w-0" data-testid="overview-tasks-wrap">
