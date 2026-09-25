@@ -440,7 +440,7 @@ export function KiroProjectPanel({
               // expanded 或退出中 → 立即淡出（无 delay）；collapsed 可见态延迟进入
               expanded || !collapsedPresence.visible
                 ? "opacity-0 translate-x-[3px] duration-[var(--motion-snap)]"
-                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[140ms]"
+                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-3,140ms)]"
             )}
           >
             <button
@@ -484,7 +484,7 @@ export function KiroProjectPanel({
               className={cn(
                 "shrink-0",
                 "transition-opacity ease-[var(--ease-standard)]",
-                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[55ms]" : "opacity-0"
+                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-0,55ms)]" : "opacity-0"
               )}
             >
               {header}
@@ -493,7 +493,7 @@ export function KiroProjectPanel({
               className={cn(
                 "flex-1 min-h-0 flex flex-col overflow-hidden",
                 "transition-opacity ease-[var(--ease-standard)]",
-                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[90ms]" : "opacity-0"
+                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-2,95ms)]" : "opacity-0"
               )}
             >
             <DisclosureRegion open={formOpen !== null}>

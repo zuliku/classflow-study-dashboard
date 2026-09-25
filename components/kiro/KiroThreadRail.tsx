@@ -259,7 +259,7 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
               // expanded 或退出中 → 立即淡出（无 delay）；collapsed 可见态延迟进入
               expanded || !collapsedPresence.visible
                 ? "opacity-0 -translate-x-[3px] duration-[var(--motion-snap)]"
-                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[140ms]"
+                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-3,140ms)]"
             )}
           >
           <button
@@ -341,7 +341,7 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
             className={cn(
               "shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-surface",
               "transition-opacity ease-[var(--ease-standard)]",
-              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[55ms]" : "opacity-0"
+              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-0,55ms)]" : "opacity-0"
             )}
           >
             <div className="flex items-center gap-2 min-w-0 group/plate">
@@ -372,7 +372,7 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
             className={cn(
               "shrink-0 space-y-1.5 px-2.5 pt-2.5 pb-2",
               "transition-opacity ease-[var(--ease-standard)]",
-              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[75ms]" : "opacity-0"
+              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-1,75ms)]" : "opacity-0"
             )}
           >
             <button
@@ -411,7 +411,7 @@ export function KiroThreadRail({ onOpenProjects }: { onOpenProjects?: () => void
             className={cn(
               "flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5",
               "transition-opacity ease-[var(--ease-standard)]",
-              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[95ms]" : "opacity-0"
+              expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-2,95ms)]" : "opacity-0"
             )}
           >
             <p className="text-[10px] font-semibold text-sandrift px-1.5 pt-1 pb-1">

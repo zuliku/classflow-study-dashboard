@@ -307,10 +307,12 @@ body {
 }
 
 
-/* 当前正在上课的课程卡：克制外框高亮（深于课程边框的强调色，轻微呼吸） */
+/* 当前正在上课的课程卡：克制外框高亮（深于课程边框的强调色，轻微呼吸）
+   S3-3：全产品唯一的常驻 infinite ambient（TimetableGrid 744 单处使用），
+   时长收归 token 治理；reduced-motion 下静态（见下）。不扩散到其他场景。 */
 .kiro-now-course {
   box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.32);
-  animation: kiro-now-course-breathe 3.2s var(--ease-standard) infinite;
+  animation: kiro-now-course-breathe var(--kiro-ambient-breathe, 3.2s) var(--ease-standard) infinite;
 }
 
 @keyframes kiro-now-course-breathe {
@@ -1250,6 +1252,20 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   --kiro-motion-intro: 320ms;
   --kiro-motion-composer-intro: 220ms;
   --kiro-motion-offset: 3px;
+  /* Stagger（S3-3 立约，与 lib/motion.ts STAGGER_MS 一一对应）：
+     s0 首批 / s1 次批 / s2 末批 / s3 容器；
+     Panel 90ms 收敛至 s2 95ms（5ms 不可感知；Rail/Panel 为遗留文件，S5 删除）。
+     empty 家族供 Empty intro choreography（base + index*step，见下方）。 */
+  --kiro-stagger-0: 55ms;
+  --kiro-stagger-1: 75ms;
+  --kiro-stagger-2: 95ms;
+  --kiro-stagger-3: 140ms;
+  --kiro-stagger-empty-1: 60ms;
+  --kiro-stagger-empty-2: 110ms;
+  --kiro-stagger-empty-base: 150ms;
+  --kiro-stagger-empty-step: 32ms;
+  /* 全产品唯一的常驻 ambient（S3-3；TimetableGrid 当前课程呼吸） */
+  --kiro-ambient-breathe: 3.2s;
 }
 
 .kiro-motion-workspace {
@@ -1342,15 +1358,15 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   }
   .kiro-empty-title-intro {
     animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
-    animation-delay: 60ms;
+    animation-delay: var(--kiro-stagger-empty-1, 60ms);
   }
   .kiro-empty-subtitle-intro {
     animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
-    animation-delay: 110ms;
+    animation-delay: var(--kiro-stagger-empty-2, 110ms);
   }
   .kiro-empty-suggestion-intro {
     animation: kiro-empty-fade-in var(--kiro-motion-intro) var(--ease-standard) both;
-    animation-delay: calc(150ms + var(--kiro-stagger-index, 0) * 32ms);
+    animation-delay: calc(var(--kiro-stagger-empty-base, 150ms) + var(--kiro-stagger-index, 0) * var(--kiro-stagger-empty-step, 32ms));
   }
 
   @keyframes kiro-empty-logo-in {

@@ -12,6 +12,7 @@ import { findScheduleConflicts } from "@/lib/conflicts";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { getNowIndicatorPosition } from "@/lib/timeline/nowIndicator";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { MOTION_MS } from "@/lib/motion";
 import { Course, CourseSchedule, ScheduleConflict } from "@/types";
 import {
   TIMETABLE_DAY_START_MINUTES,
@@ -443,9 +444,11 @@ export function TimetableGrid({
       // 有效：立即写 Store，并给出可撤销 Toast（恢复 origin，同一 id，全部字段）
       updateSchedule(next);
       // 落位 settle：只给刚提交的卡片一个极轻的 opacity 归位
+      // S3-3：flag 窗口 = data(200) + 60ms 掉帧余量 —— 计时必须 ≥ 视觉（ux-settle-in），
+      // 对齐相等会在掉帧时闪回未 settle 态（与 Inspector 截断反方向，彼处是卸载早于视觉）。
       setSettleId(it.candidate.id);
       if (settleTimerRef.current) window.clearTimeout(settleTimerRef.current);
-      settleTimerRef.current = window.setTimeout(() => setSettleId(null), 260);
+      settleTimerRef.current = window.setTimeout(() => setSettleId(null), MOTION_MS.data + 60);
       pushToast({
         message: "课程时间已调整",
         actionLabel: "撤销",

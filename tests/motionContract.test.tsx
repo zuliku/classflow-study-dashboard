@@ -19,7 +19,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-import { MOTION_MS, MOTION_EXIT_MS, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS } from "@/lib/motion";
+import { MOTION_MS, MOTION_EXIT_MS, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
 import { usePresence } from "@/lib/usePresence";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -113,6 +113,76 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     const inspector = read("components/kiro/inspector/KiroInspector.tsx");
     expect(inspector).toContain("KIRO_MOTION_MS.spatial");
     expect(inspector).not.toContain("MOTION_EXIT_MS.panel");
+  });
+
+  it.each([
+    ["s0", "--kiro-stagger-0", STAGGER_MS.s0],
+    ["s1", "--kiro-stagger-1", STAGGER_MS.s1],
+    ["s2", "--kiro-stagger-2", STAGGER_MS.s2],
+    ["s3", "--kiro-stagger-3", STAGGER_MS.s3],
+    ["empty1", "--kiro-stagger-empty-1", STAGGER_MS.empty1],
+    ["empty2", "--kiro-stagger-empty-2", STAGGER_MS.empty2],
+    ["emptyBase", "--kiro-stagger-empty-base", STAGGER_MS.emptyBase],
+    ["emptyStep", "--kiro-stagger-empty-step", STAGGER_MS.emptyStep],
+  ] as const)("S3-3 STAGGER_MS.%s = :root %s (%sms)", (tier, cssVar, value) => {
+    expect(css).toMatch(new RegExp(`${cssVar}:\\s*${value}ms`));
+  });
+  it("S3-3 调用方 stagger 经 token 引用（无裸 delay-[Nms]）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    for (const f of [
+      "components/kiro/navigation/KiroNavigator.tsx",
+      "components/kiro/KiroThreadRail.tsx",
+      "components/kiro/KiroProjectPanel.tsx",
+    ]) {
+      const src = read(f);
+      expect(src).not.toMatch(/delay-\[\d+ms\]/);
+      expect(src).toMatch(/delay-\[var\(--kiro-stagger-/);
+    }
+    // Empty intro：CSS 侧经 token（60/110/base+index*step）
+    expect(css).toMatch(/animation-delay:\s*var\(--kiro-stagger-empty-1/);
+    expect(css).toMatch(/animation-delay:\s*var\(--kiro-stagger-empty-2/);
+    expect(css).toMatch(/var\(--kiro-stagger-empty-base[^)]*\)\s*\+\s*var\(--kiro-stagger-index[^)]*\)\s*\*\s*var\(--kiro-stagger-empty-step/);
+  });
+
+  it("S3-3 常驻 infinite 全部收归 token（breathe + Rail 品牌态，不扩散）", () => {
+    expect(css).toMatch(/--kiro-ambient-breathe:\s*3\.2s/);
+    expect(css).toMatch(/animation:\s*kiro-now-course-breathe\s+var\(--kiro-ambient-breathe/);
+    // 每条常驻 infinite 必须引用治理中的 token/时长：ambient-breathe、flow 三档、
+    // computer ring、thinking pulse 2.1s —— 新增常驻动画会触发本测试
+    const infiniteLines = css
+      .split("\n")
+      .filter((l) => l.includes("infinite") && l.includes("animation:"));
+    expect(infiniteLines.length).toBeGreaterThan(0);
+    for (const line of infiniteLines) {
+      expect(line).toMatch(
+        /var\(--kiro-(ambient-breathe|flow-ambient|flow-active|flow-working|computer-ring-duration)\)?|kiro-rail-thinking-pulse 2\.1s/
+      );
+    }
+  });
+
+  it("S3-3 pulse/spin 用 Tailwind 默认档（无任意动画、无 bounce/ping）", () => {
+    const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
+    let out = "";
+    try {
+      out = execFileSync("git", ["grep", "-n", "-E", "animate-\\[|animate-(bounce|ping)", "--", "components", "app", "src", "lib"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      }) as string;
+    } catch (e) {
+      // git grep 无命中时 exit 1：stdout 为空即通过
+      const stdout = (e as { stdout?: unknown }).stdout;
+      out = typeof stdout === "string" ? stdout : Buffer.isBuffer(stdout) ? stdout.toString("utf8") : "";
+    }
+    expect(out.trim()).toBe("");
+  });
+
+  it("S3-3 Popover kiro presence 为上界（≥ 任一 scope 视觉退出，不截断）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    const popover = read("components/ui/Popover.tsx");
+    // kiro=160 ≥ workspace exit 120 且 ≥ sidecar exit 100（注释已说明上界语义）
+    expect(popover).toMatch(/motionProfile === "kiro" \? 160/);
+    expect(KIRO_MOTION_MS.popoverExit).toBeLessThanOrEqual(160);
+    expect(KIRO_MOTION_SIDECAR_MS.popoverExit).toBeLessThanOrEqual(160);
   });
 
   it("Primitive 层不再散落裸魔法 exit duration（源码护栏）", () => {

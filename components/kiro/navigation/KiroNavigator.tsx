@@ -334,7 +334,7 @@ export function KiroNavigator() {
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
               expanded || !collapsedPresence.visible
                 ? "opacity-0 -translate-x-[3px] duration-[var(--motion-snap)]"
-                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[140ms]"
+                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-3,140ms)]"
             )}
           >
             <button
@@ -424,7 +424,7 @@ export function KiroNavigator() {
               className={cn(
                 "shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-surface",
                 "transition-opacity ease-[var(--ease-standard)]",
-                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[55ms]" : "opacity-0"
+                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-0,55ms)]" : "opacity-0"
               )}
             >
               <div className="flex items-center gap-2 min-w-0 group/plate">

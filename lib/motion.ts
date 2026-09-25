@@ -65,6 +65,23 @@ export const KIRO_MOTION_SIDECAR_MS = {
   composerIntro: 130,
 } as const;
 
+/**
+ * Stagger delays（S3-3 立约，与 :root --kiro-stagger-* 一一对应）。
+ * s0 首批 / s1 次批 / s2 末批（Panel 90 收敛至 95）/ s3 容器；
+ * empty 家族供 Empty intro（base + index*step）。
+ * CSS 侧用 var(--kiro-stagger-*, <fallback>) 引用；JS 侧仅契约与文档用途。
+ */
+export const STAGGER_MS = {
+  s0: 55,
+  s1: 75,
+  s2: 95,
+  s3: 140,
+  empty1: 60,
+  empty2: 110,
+  emptyBase: 150,
+  emptyStep: 32,
+} as const;
+
 export type MotionTier = keyof typeof MOTION_MS;
 export type MotionExitTier = keyof typeof MOTION_EXIT_MS;
 export type KiroMotionTier = keyof typeof KIRO_MOTION_MS;
