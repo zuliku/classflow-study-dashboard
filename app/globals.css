@@ -368,18 +368,11 @@ button:disabled {
     background-color: var(--surface-soft);
     border: 1px solid var(--line-soft);
   }
-}
 
-/* 按下反馈：只对显式 .ux-press 的独立操作按钮做轻缩放。
-   空间稳定型控件（日期格 / 导航 / 拖拽面 / Resize handle / 周月切换几何控件）一律不缩放。 */
-.ux-press:active:not(:disabled) {
-  transform: scale(0.985);
-}
-
-/* 统一过渡与动效工具类 */
-@layer utilities {
-  /* Workspace gutter：App Shell 结构层（WorkspaceHeader）与页面 body 的统一水平内边距。
-     页面标题左缘与内容卡片左缘精确对齐；Kiro full-bleed 等特殊布局不使用本 utility。 */
+  /* Workspace gutter：App Shell 结构层（WorkspaceHeader/ViewBar）与页面 body 的统一水平内边距。
+     页面标题左缘与内容卡片左缘精确对齐；Kiro full-bleed 等特殊布局不使用本 utility。
+     S4-1：置于 components 层（低于 utilities）—— 有意的 xl:px-8 等覆盖不再需要 !important；
+     基础值 1rem / md 1.5rem（= px-4 / md:px-6，被取代的手写值见 WorkspaceViewBar）。 */
   .workspace-gutter {
     padding-left: 1rem;
     padding-right: 1rem;
@@ -390,7 +383,16 @@ button:disabled {
       padding-right: 1.5rem;
     }
   }
+}
 
+/* 按下反馈：只对显式 .ux-press 的独立操作按钮做轻缩放。
+   空间稳定型控件（日期格 / 导航 / 拖拽面 / Resize handle / 周月切换几何控件）一律不缩放。 */
+.ux-press:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+/* 统一过渡与动效工具类 */
+@layer utilities {
   /* 遮罩：仅透明度过渡（介于 panel enter/exit 之间，不拖尾） */
   .ux-overlay {
     transition: opacity var(--motion-base) var(--ease-standard);

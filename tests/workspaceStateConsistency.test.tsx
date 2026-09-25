@@ -239,6 +239,25 @@ describe("Horizontal gutter source guard", () => {
   it("Overview 保持既有 workspace-gutter 用法（不回归）", () => {
     expect(read("components/dashboard/OverviewWorkspace.tsx")).toContain("workspace-gutter");
   });
+
+  it("S4-1 ViewBar 内层与 Header 同源（workspace-gutter，不再手写 px-4 md:px-6）", () => {
+    const src = read("components/layout/WorkspaceViewBar.tsx");
+    expect(src).toContain("workspace-gutter");
+    expect(src).not.toMatch(/px-4|md:px-6/);
+  });
+
+  it("S4-1 gutter 入 components 层后不再需要 !px- 横向覆盖（纵向 !pt/!pb 系高度守卫，不动）", () => {
+    for (const f of [
+      "components/analytics/LearningAnalyticsView.tsx",
+      "components/assignment/AssignmentsWorkspace.tsx",
+      "components/course/CoursesWorkspace.tsx",
+      "components/timeline/TimelineWorkspace.tsx",
+      "components/group/GroupCollaborationView.tsx",
+      "components/dashboard/OverviewWorkspace.tsx",
+    ]) {
+      expect(read(f)).not.toMatch(/!px-/);
+    }
+  });
 });
 
 // ============================================================
