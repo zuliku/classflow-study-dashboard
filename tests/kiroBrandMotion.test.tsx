@@ -66,7 +66,8 @@ describe("Kiro Brand Motion System V2", () => {
   });
 
   it("Thread Rail has status-driven motion by default (Kiro Rail Runtime Status V1)", async () => {
-    const railSrc = fs.readFileSync(path.join(process.cwd(), "components/kiro/KiroThreadRail.tsx"), "utf8");
+    // S5：遗留 KiroThreadRail 已删除；契约由现役 KiroNavigatorPlate 继承（同一 CSS 契约）
+    const railSrc = fs.readFileSync(path.join(process.cwd(), "components/kiro/navigation/KiroNavigatorPlate.tsx"), "utf8");
     expect(railSrc).toContain("data-kiro-status");
     expect(railSrc).toContain("kiro-rail-plate");
     const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");

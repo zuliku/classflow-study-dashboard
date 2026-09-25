@@ -3,7 +3,7 @@
 import React from "react";
 
 /**
- * Kiro Reasoning 图标（单一来源）：Composer 思考程度控件与 KiroReasoningMenu 共用。
+ * Kiro Reasoning 图标（单一来源）：Composer 思考程度控件使用（S5 已删除遗留 KiroReasoningMenu）。
  * 品牌语义：推理 / 思考（不使用闪电等运行状态语义——运行状态由 Rail 承担）。
  */
 export function KiroReasoningIcon({ className }: { className?: string }) {

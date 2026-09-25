@@ -6,7 +6,7 @@
  */
 import type { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
 
-/** 单一 effort label source（Composer / 菜单共用；Legacy KiroReasoningMenu 可后续迁移到此） */
+/** 单一 effort label source（Composer 思考程度控件共用；S5 已删除遗留 KiroReasoningMenu） */
 export const REASONING_EFFORT_LABELS: Record<KiroReasoningEffort, string> = {
   default: "默认",
   minimal: "极低",

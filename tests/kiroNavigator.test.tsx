@@ -577,6 +577,19 @@ describe("Kiro Navigator — Runtime Status（完整保留 + 与展开状态解�
     expect(expandedStatuses).toEqual(new Set(["computer-active"]));
   });
 
+  it("S5 expanded/current 只通过 data-emphasized 表达（不改变 Runtime status）", async () => {
+    metaState.kiroRuntimeStatus = "thinking";
+    await renderNavigator();
+    await clickPlate();
+    const shell = container!.querySelector('[data-testid="kiro-navigator-shell"]')!;
+    expect(shell.getAttribute("data-state")).toBe("expanded");
+    const emphasized = shell.querySelectorAll("[data-emphasized]");
+    expect(emphasized.length).toBeGreaterThan(0);
+    for (const plate of Array.from(emphasized)) {
+      expect(plate.getAttribute("data-kiro-status")).toBe("thinking");
+    }
+  });
+
   it("idle：collapsed title=Kiro 且 expanded 不显示状态小字", async () => {
     await renderNavigator();
     const button = container!.querySelector('button[aria-label="展开对话"]') as HTMLButtonElement;
@@ -626,5 +639,21 @@ describe("Kiro Workspace — 结构契约（source lock）", () => {
     const workspace = readFileSync(join(process.cwd(), "components/kiro/KiroWorkspace.tsx"), "utf8");
     expect(workspace).toContain("KiroHistoryPanel");
     expect(workspace).toContain("md:hidden");
+  });
+
+  it("S5 遗留双入口文件已删除（Rail/Panel/ReasoningMenu/AgentModeMenu + 其测试）", async () => {
+    const { existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    for (const f of [
+      "components/kiro/KiroThreadRail.tsx",
+      "components/kiro/KiroProjectPanel.tsx",
+      "components/kiro/computer/KiroReasoningMenu.tsx",
+      "components/kiro/computer/KiroAgentModeMenu.tsx",
+      "tests/kiroRailRuntimeStatus.test.tsx",
+      "tests/kiroProjectPanel.test.tsx",
+      "tests/kiroSidecarComposerIcons.test.tsx",
+    ]) {
+      expect(existsSync(join(process.cwd(), f)), f).toBe(false);
+    }
   });
 });

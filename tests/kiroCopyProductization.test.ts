@@ -45,7 +45,6 @@ const UI_FILES = [
   "components/kiro/KiroHistoryPanel.tsx",
   "components/kiro/KiroConversation.tsx",
   "components/kiro/KiroMessage.tsx",
-  "components/kiro/KiroProjectPanel.tsx",
   "components/kiro/KiroContextPicker.tsx",
   "components/kiro/KiroMaterialPicker.tsx",
   "components/kiro/KiroAttachmentPicker.tsx",

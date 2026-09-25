@@ -18,7 +18,9 @@ function read(relative: string): string {
 }
 
 const css = read("app/globals.css");
-const railSrc = read("components/kiro/KiroThreadRail.tsx");
+// S5：遗留 KiroThreadRail 已删除；Plate 契约由现役 KiroNavigatorPlate 继承
+const railSrc = read("components/kiro/navigation/KiroNavigatorPlate.tsx");
+const navigatorSrc = read("components/kiro/navigation/KiroNavigator.tsx");
 const providerSrc = read("components/kiro/KiroSessionProvider.tsx");
 const chatSrc = read("hooks/useKiroChat.ts");
 
@@ -126,15 +128,15 @@ describe("Kiro Rail Runtime Status V1 — CSS 状态语义", () => {
 });
 
 describe("Kiro Rail Runtime Status V1 — 组件接线", () => {
-  it("Rail Plate 只输出 data-kiro-status / data-emphasized（不再输出 data-kiro-flow）", () => {
+  it("Navigator Plate 只输出 data-kiro-status / data-emphasized（不再输出 data-kiro-flow）", () => {
     expect(railSrc).toContain("data-kiro-status={status}");
     expect(railSrc).toContain("data-emphasized={emphasized || undefined}");
     expect(railSrc).not.toContain("data-kiro-flow");
   });
 
-  it("Rail 不再自行推导状态（无 active/flow boolean 判断）", () => {
-    expect(railSrc).not.toContain('const flow: "ambient" | "active" | "working"');
-    expect(railSrc).toContain("meta.kiroRuntimeStatus");
+  it("Navigator 不自行推导状态（只消费 meta，不过 active/flow boolean 判断）", () => {
+    expect(navigatorSrc).not.toContain('const flow: "ambient" | "active" | "working"');
+    expect(navigatorSrc).toContain("meta.kiroRuntimeStatus");
   });
 
   it("Provider：由真实 Runtime Fact 解析并进入 Meta Context（低频 scalar）", () => {

@@ -13,9 +13,9 @@ import { KiroProjectRecord } from "@/lib/ai/projects/types";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 
 /**
- * Kiro Navigator — Project Detail 视图（V1）。
- * 能力来源：KiroProjectPanel Detail（项目指令 / 项目资料 / 项目内对话 / 移出项目 /
- * Project-scoped 新对话 / 编辑 / 删除），全部复用同一 Session actions + IndexedDB。
+ * Kiro Navigator — Project Detail 视图（V1；S5 起为项目能力的唯一承载）。
+ * 能力：项目指令 / 项目资料 / 项目内对话 / 移出项目 /
+ * Project-scoped 新对话 / 编辑 / 删除，全部复用同一 Session actions + IndexedDB。
  */
 export function KiroNavigatorProjectDetail({
   project,

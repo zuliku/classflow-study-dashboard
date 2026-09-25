@@ -129,11 +129,8 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
   });
   it("S3-3 调用方 stagger 经 token 引用（无裸 delay-[Nms]）", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
-    for (const f of [
-      "components/kiro/navigation/KiroNavigator.tsx",
-      "components/kiro/KiroThreadRail.tsx",
-      "components/kiro/KiroProjectPanel.tsx",
-    ]) {
+    // S5：遗留双入口（Rail/Panel）已删除，只剩现役 Navigator
+    for (const f of ["components/kiro/navigation/KiroNavigator.tsx"]) {
       const src = read(f);
       expect(src).not.toMatch(/delay-\[\d+ms\]/);
       expect(src).toMatch(/delay-\[var\(--kiro-stagger-/);
