@@ -6,6 +6,7 @@ import {
   COMPUTER_APPROVAL_DECISION_LABELS,
   getComputerApprovalPresentation,
 } from "@/lib/ai/ui/computerApprovalPresentation";
+import { ApprovalCountdown } from "@/components/kiro/run/ApprovalCountdown";
 import { cn } from "@/lib/utils";
 
 /**
@@ -82,6 +83,9 @@ export function KiroInlineApproval({
       {remaining > 0 && (
         <p className="text-[10px] text-sandrift">还有 {remaining} 项等待确认</p>
       )}
+
+      {/* S-fix：3 分钟超时倒计时（deadline 由超时 effect 写入 store；无 deadline 不渲染） */}
+      <ApprovalCountdown />
 
       {/* 只渲染 Runtime 允许的决策；窄容器（Sidecar）自动纵向排列 */}
       <div className="flex flex-col gap-1.5 sm:flex-row sm:justify-end">

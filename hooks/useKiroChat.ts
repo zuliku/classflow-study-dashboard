@@ -1028,6 +1028,7 @@ export function useKiroChat({
   const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
   const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
   const setPendingQueueLength = useKiroComputerRuntimeStore((s) => s.setPendingQueueLength);
+  const setApprovalDeadlineAt = useKiroComputerRuntimeStore((s) => s.setApprovalDeadlineAt);
 
   // V2.7.2：approval 超时自动取消（默认 3 分钟）——审批挂起不能永久阻塞 Tool Call
   //（用户忽略弹窗 / 页面在后台 / 旧 bundle 死锁等场景下，Kiro 必须最终收到确定结果）。
@@ -2351,9 +2352,11 @@ export function useKiroChat({
 
   // V2.7.2：approval 超时自动取消（3 分钟）——审批挂起不能永久阻塞 Tool Call
   //（用户忽略弹窗 / 页面后台 / 旧 bundle 死锁等场景，Kiro 必须最终收到确定结果）。
+  // S-fix：计时起点同步写入 approvalDeadlineAt，供审批 UI 倒计时（用户回来能看到而非发现已被取消）。
   useEffect(() => {
     if (!pendingApproval) return;
     if (approvalTimeoutTimersRef.current.has(pendingApproval.id)) return;
+    setApprovalDeadlineAt(Date.now() + APPROVAL_TIMEOUT_MS);
     const timer = setTimeout(() => {
       approvalTimeoutTimersRef.current.delete(pendingApproval.id);
       void handleApprovalDecision(pendingApproval.id, "deny", { timedOut: true });
@@ -2363,7 +2366,7 @@ export function useKiroChat({
       clearTimeout(timer);
       approvalTimeoutTimersRef.current.delete(pendingApproval.id);
     };
-  }, [pendingApproval, handleApprovalDecision]);
+  }, [pendingApproval, handleApprovalDecision, setApprovalDeadlineAt]);
 
   /** Task-level Undo（session runtime only）：reverse order + 每条 verified；失败 → undo_failed */
   const undoTask = useCallback(

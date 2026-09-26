@@ -9,6 +9,7 @@ import {
   COMPUTER_APPROVAL_DECISION_LABELS,
   getComputerApprovalPresentation,
 } from "@/lib/ai/ui/computerApprovalPresentation";
+import { ApprovalCountdown } from "@/components/kiro/run/ApprovalCountdown";
 
 const DECISION_VARIANTS: Record<ComputerApprovalDecision, "danger" | "primary" | "secondary" | "accent"> = {
   deny: "danger",
@@ -152,6 +153,8 @@ export function ComputerApprovalDialog({
             ? "只执行你批准的动作；敏感信息不会由 Kiro 输入。"
             : "只放行本应确认的操作，不改变工作区权限边界。"}
         </p>
+        {/* S-fix：3 分钟超时倒计时（与 Inline 共用同一 store deadline） */}
+        <ApprovalCountdown />
       </div>
     </Dialog>
   );
