@@ -93,8 +93,25 @@ describe("Demo Manual Injection Hardening", () => {
     vi.resetModules();
   }, 20000);
 
-  it("E. Manual re-injection works without marker", async () => {
+  it("G. 演示载入保留个人资料（兑现“不受影响”文案）", async () => {
     const { useAppStore } = await import("@/store/useAppStore");
+    const { buildFullDemoData } = await import("@/lib/dev/fullDemoData");
+    const { DataSettings } = await import("@/components/settings/DataSettings");
+    const { useConfirmStore } = await import("@/store/useConfirmStore");
+    // 真实用户资料
+    useAppStore.getState().updateUserProfile({ name: "真实姓名" } as never);
+    render(<DataSettings />);
+    const btn = screen.getByTestId("dev-demo-reload").querySelector("button");
+    fireEvent.click(btn!);
+    const req = useConfirmStore.getState().request!;
+    await req.onConfirm();
+    await waitFor(() => expect(useAppStore.getState().courses.length).toBeGreaterThan(0), { timeout: 4000 });
+    // 业务数据被替换，但真名保留（不再变成演示假人）
+    expect(useAppStore.getState().userProfile.name).toBe("真实姓名");
+    expect(useAppStore.getState().userProfile.name).not.toContain("晓阳");
+  }, 20000);
+
+  it("E. Manual re-injection works without marker", async () => {    const { useAppStore } = await import("@/store/useAppStore");
     const { buildFullDemoData } = await import("@/lib/dev/fullDemoData");
     // Start with some user data (use full data then replace)
     const base = buildFullDemoData();

@@ -49,15 +49,20 @@ export function DataSettings() {
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
   // 演示数据手动载入（设置 → 数据 唯一入口；用于体验与测试）
+  // 选项保留（by design）：载入后按文案兑现——个人资料原样保留（restoreAppData 会覆盖，
+  // 此处快照回填，备份恢复路径不受影响）
   const reloadDemoData = () => {
     useConfirmStore.getState().confirm({
       title: "载入演示数据？",
-      description: "用一学期的演示数据替换当前业务数据（覆盖课程、课表、任务等），用于快速体验功能。个人资料与偏好不受影响。",
+      description: "用一学期的演示数据替换当前业务数据（覆盖课程、课表、任务、学期等），用于快速体验功能。个人资料与偏好不受影响。",
       confirmLabel: "载入演示数据",
       onConfirm: () => {
         import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
           const store = useAppStore.getState();
+          const savedProfile = store.userProfile;
           store.restoreAppData(buildFullDemoData());
+          // 兑现“个人资料不受影响”：restoreAppData 整库覆盖，演示载入把真名回填
+          useAppStore.getState().updateUserProfile(savedProfile);
           // 演示学期开学于数周前：按新学期校准当前教学周
           store.resetToCurrentWeek();
           useToastStore.getState().pushToast({ message: "演示数据已载入", type: "success" });
@@ -152,7 +157,7 @@ export function DataSettings() {
           <div data-testid="dev-demo-reload">
             <SettingsActionRow
               title="载入完整演示数据"
-              description="一学期的演示数据（课程 / 课表 / 任务 / 资料），用于体验与测试；载入后替换当前业务数据，个人资料与偏好不受影响。"
+              description="一学期的演示数据（课程 / 课表 / 任务 / 资料），用于体验与测试；载入后替换当前业务数据（含学期），个人资料与偏好不受影响。"
               icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
               actionLabel="载入演示数据"
               onAction={reloadDemoData}
