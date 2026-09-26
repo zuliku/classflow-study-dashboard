@@ -179,6 +179,9 @@ export function KiroComposer({
     !hasProcessing &&
     !imagesBlocked &&
     !scannedBlocked &&
+    // S-fix：选中模型已下线/不在 Catalog → 发送前即禁用（此前可发送，白等一轮才报 MODEL_NOT_FOUND；
+    // ModelControl 已有 warning，此处拦住 submit + 置灰 Send，避免无效 Turn）
+    !modelUnavailable &&
     !turnInFlight &&
     !preparingSend &&
     !submitting &&

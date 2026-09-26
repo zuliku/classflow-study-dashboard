@@ -393,6 +393,24 @@ describe("Kiro Composer — Reasoning / Model", () => {
     await click('[data-testid="kiro-composer-model"]');
     expect(q('[data-testid="kiro-composer-model-menu"]')!.textContent).toContain("当前模型已不可用");
   });
+
+  it("S-fix 模型不可用时发送前即禁用（不再白等一轮 MODEL_NOT_FOUND）", async () => {
+    await renderComposer({ modelUnavailable: true, activeModelName: "模型不可用" });
+    const ta = q('textarea[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(ta, "帮我总结");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flush();
+    const send = q('[aria-label="发送"]') as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    await act(async () => {
+      send.click();
+    });
+    await flush();
+    expect(handlers.onSend).not.toHaveBeenCalled();
+  });
 });
 
 describe("Kiro Composer — 回归", () => {
