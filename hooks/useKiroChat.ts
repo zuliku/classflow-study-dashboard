@@ -123,9 +123,12 @@ import {
   messageHasMutatingToolCalls,
   truncateBeforeEditedUserMessage,
   UserMessageEditBlockReason,
+  classifyTurnToolScope,
+  buildRestoredMessageMetadata,
+  restoredMessageIsRegenerable,
+  TurnToolScope,
 } from "@/lib/ai/history/messageEditing";
-import { StudyPlanProposal } from "@/lib/planning/studyPlanner";
-import { TaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
+import { StudyPlanProposal } from "@/lib/planning/studyPlanner";import { TaskBreakdownProposal } from "@/lib/tasks/taskBreakdown";
 import { budgetAttachments } from "@/lib/ai/contextBudget/attachmentBudget";
 import { DEFAULT_CONTEXT_BUDGET } from "@/lib/ai/contextBudget/planner";
 import { normalizeContextUsageSnapshot, type ContextUsageSnapshot } from "@/lib/ai/contextBudget/usage";
@@ -240,8 +243,14 @@ export interface KiroChatMessageView {
   restored?: boolean;
   /** 不可编辑原因（canEdit=false 时） */
   editDisabledReason?: UserMessageEditBlockReason;
-  /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条 */
+  /** 是否可以「重新生成」：仅 live 且该轮无 Write Tool Call 的最后一条；
+   * 恢复消息仅 toolScope=="none"（落盘记载纯文本轮）可重生成 */
   canRegenerate: boolean;
+  /**
+   * S-fix 历史可重试：本消息落盘当时的 Turn 工具范围（live parts 判定；恢复消息透传落盘值）。
+   * sanitize 持久化 → loadConversation 恢复进 metadata.toolScope。
+   */
+  toolScope?: TurnToolScope;
   /** Task 1（Worklog V2）：Assistant Turn 有序 Presentation（commentary → tool → … → final answer） */
   assistantTurn?: KiroAssistantTurnPresentation;
   /** Computer Agent 主 Task（live：绑定本 assistant 消息的 toolCallIds；Part 3） */
@@ -330,15 +339,20 @@ function messageTextOf(m: { parts?: unknown[] }): string {
     .join("");
 }
 
-/** 判断上一轮能否安全 regenerate：最后一条 assistant 无 Write Tool 且非历史恢复 */
+/** 判断上一轮能否安全 regenerate：
+ * - live：最后一条 assistant 无 Write Tool（原语义不变）
+ * - 恢复：仅落盘明确记载 toolScope=="none" 的纯文本轮（旧记录缺省未知 → 禁止，保持现状） */
 export function lastTurnCanRegenerate(messages: Pick<UIMessage, "role" | "parts" | "metadata">[]): boolean {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.role !== "assistant") continue;
-    if ((m.parts ?? []).some((p) => typeof p.type === "string" && p.type.startsWith("tool-"))) {
-      return !messageHasWriteToolCalls(m as UIMessage) && !isRestoredMessage(m);
+    if (isRestoredMessage(m)) {
+      return restoredMessageIsRegenerable(m.metadata as Record<string, unknown> | undefined);
     }
-    return !isRestoredMessage(m);
+    if ((m.parts ?? []).some((p) => typeof p.type === "string" && p.type.startsWith("tool-"))) {
+      return !messageHasWriteToolCalls(m as UIMessage);
+    }
+    return true;
   }
   return false;
 }
@@ -450,6 +464,17 @@ export function buildKiroMessageView(
     role: m.role === "assistant" ? "assistant" : "user",
     content,
     streaming,
+    // S-fix 历史可重试：live 由 parts 实时判定；恢复透传落盘记载（仅接受三档字面量，
+    // 缺省未知 → undefined，sanitize 不写 → 下次恢复仍未知，保持禁止）
+    toolScope:
+      m.role === "assistant"
+        ? restored
+          ? (() => {
+              const s = (m.metadata as Record<string, unknown> | undefined)?.toolScope;
+              return s === "none" || s === "readonly" || s === "mutating" ? s : undefined;
+            })()
+          : classifyTurnToolScope(m.parts)
+        : undefined,
     actions: actions.length > 0 ? actions : undefined,
     proposals: proposals.length > 0 ? proposals : undefined,
     breakdowns: breakdowns.length > 0 ? breakdowns : undefined,
@@ -457,8 +482,9 @@ export function buildKiroMessageView(
     visualActionProposals: visualActionProposals.length > 0 ? visualActionProposals : undefined,
     timetableImportProposals: timetableImportProposals.length > 0 ? timetableImportProposals : undefined,
     restored,
-    // 历史恢复消息：禁止重新生成；live 且有 Write Tool Call 的轮次同样禁止
-    canRegenerate: !restored && !messageHasWriteToolCalls(m),
+    // 历史恢复消息：仅落盘明确记载纯文本轮（toolScope=="none"）可重生成；
+    // live 且有 Write Tool Call 的轮次同样禁止（原语义不变）
+    canRegenerate: (!restored || restoredMessageIsRegenerable(m.metadata as Record<string, unknown> | undefined)) && !messageHasWriteToolCalls(m),
     assistantTurn,
     contextUsage,
   };
@@ -3245,13 +3271,17 @@ export function useKiroChat({
       if (pm.sources && pm.sources.length > 0) sourcesMap.set(pm.id, pm.sources);
       if (pm.computerTask) computerTasksMap.set(pm.id, pm.computerTask);
       if (pm.visualProposals && pm.visualProposals.length > 0) visualProposalHistoryMap.set(pm.id, pm.visualProposals);
-      // 上下文占用快照（Codex-style 指示）：只恢复归一化后的有界快照
+      // 上下文占用快照（Codex-style 指示）：只恢复归一化后的有界快照；
+      // S-fix 历史可重试：落盘 toolScope 经 helper 透传进 metadata（缺省 = 旧记录 = 不可重生成）
       const restoredContextUsage = normalizeContextUsageSnapshot(pm.contextUsage);
       return {
         id: pm.id,
         role: pm.role,
         parts: [{ type: "text", text: pm.content }],
-        metadata: { restored: "1", ...(restoredContextUsage ? { contextUsage: restoredContextUsage } : {}) },
+        metadata: {
+          ...buildRestoredMessageMetadata(pm),
+          ...(restoredContextUsage ? { contextUsage: restoredContextUsage } : {}),
+        },
       };
     });
       clearComputerSessionState(true);

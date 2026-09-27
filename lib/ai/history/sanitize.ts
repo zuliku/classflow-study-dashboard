@@ -211,6 +211,9 @@ export function sanitizeConversation(input: {
         id: m.id,
         role: m.role,
         content: clampContent(m.content),
+        // S-fix 历史可重试：assistant 落盘当时的 Turn 工具范围（live parts 判定）；
+        // user 消息无意义不写；旧记录缺省 = 未知 = 不可重生成
+        ...(m.role === "assistant" && m.toolScope ? { toolScope: m.toolScope } : {}),
         attachments: toPersistedAttachments(m.attachments),
         actions,
         // Citation 来源最小元数据（不含正文；旧消息无 sources 则不写）

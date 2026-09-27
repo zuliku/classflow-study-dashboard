@@ -26,6 +26,23 @@ export function messageHasMutatingToolCalls(m: { parts?: unknown[] }): boolean {
   });
 }
 
+/**
+ * Turn 工具范围（S-fix 历史可重试：落盘时由 live parts 一次性判定，恢复后不再可推导）。
+ * - "none"：无任何 Tool Call（纯文本问答）—— 恢复后允许重新生成
+ * - "readonly"：仅只读工具 —— 恢复后仍禁止（工具上下文已随 parts 丢弃，重生成会失据）
+ * - "mutating"：含改写工具 —— 恢复后仍禁止（重执行会二次落盘）
+ */
+export type TurnToolScope = "none" | "readonly" | "mutating";
+
+export function classifyTurnToolScope(parts?: unknown[]): TurnToolScope {
+  const list = (parts ?? []) as { type?: string }[];
+  const hasTools = list.some(
+    (p) => typeof p.type === "string" && p.type.startsWith("tool-")
+  );
+  if (!hasTools) return "none";
+  return messageHasMutatingToolCalls({ parts }) ? "mutating" : "readonly";
+}
+
 export interface UserMessageEditCheckInput {
   /** 目标 user message；null = 未找到 */
   target: { text: string; hasAttachments: boolean } | null;
@@ -59,4 +76,27 @@ export function truncateBeforeEditedUserMessage<T extends { id: string }>(
   const idx = messages.findIndex((m) => m.id === messageId);
   if (idx === -1) return null;
   return messages.slice(0, idx);
+}
+
+/**
+ * S-fix 历史可重试：PersistedKiroMessage → 恢复用 UIMessage metadata（纯函数，可单测）。
+ * 置于 safety 层（无运行时重依赖，避免 sanitize→hook 循环 import）：
+ * - restored 标记 + 落盘 toolScope 透传（缺省 = 旧记录 = 未知 = 不可重生成）
+ * - contextUsage 由调用方按既有归一化逻辑附加（本函数只管 toolScope 透传）
+ */
+export function buildRestoredMessageMetadata(pm: {
+  toolScope?: "none" | "readonly" | "mutating";
+}): Record<string, unknown> {
+  const meta: Record<string, unknown> = { restored: "1" };
+  if (pm.toolScope === "none" || pm.toolScope === "readonly" || pm.toolScope === "mutating") {
+    meta.toolScope = pm.toolScope;
+  }
+  return meta;
+}
+
+/** 恢复消息是否明确记载为无工具轮（纯文本问答 → 允许重新生成；缺省/其他一律禁止） */
+export function restoredMessageIsRegenerable(
+  metadata: Record<string, unknown> | undefined
+): boolean {
+  return metadata?.toolScope === "none";
 }

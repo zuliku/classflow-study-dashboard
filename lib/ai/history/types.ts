@@ -134,7 +134,11 @@ export interface PersistedKiroMessage {
   id: string;
   role: PersistedRole;
   content: string;
-  attachments?: PersistedAttachmentView[];
+  /**
+   * S-fix 历史可重试：落盘时由 live parts 判定的 Turn 工具范围。
+   * 缺省 = 旧记录（未知，一律按不可重生成处理，保持现状）。
+   */
+  toolScope?: "none" | "readonly" | "mutating";  attachments?: PersistedAttachmentView[];
   actions?: PersistedActionView[];
   /** 本消息的文档来源（Citation 显示用；可选，旧记录无此字段无需迁移） */
   sources?: PersistedSourceMeta[];

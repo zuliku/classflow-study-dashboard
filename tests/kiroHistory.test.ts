@@ -9,6 +9,12 @@ import {
   clearConversationHistory,
 } from "@/lib/ai/history/db";
 import { messageHasWriteToolCalls, lastTurnCanRegenerate } from "@/hooks/useKiroChat";
+import { buildKiroMessageView } from "@/hooks/useKiroChat";
+import {
+  classifyTurnToolScope,
+  buildRestoredMessageMetadata,
+  restoredMessageIsRegenerable,
+} from "@/lib/ai/history/messageEditing";
 import { KiroChatMessageView } from "@/hooks/useKiroChat";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 import { resetKiroDbForTests } from "@/lib/ai/history/db";
@@ -279,6 +285,117 @@ describe("regenerate safety", () => {
     expect(lastTurnCanRegenerate(writeTurn)).toBe(false);
     const restoredTurn = [{ role: "assistant", parts: [part("tool-get_upcoming_assignments")], metadata: { restored: "1" } }] as never[];
     expect(lastTurnCanRegenerate(restoredTurn)).toBe(false);
+  });
+
+  it("S-fix 恢复纯文本轮可重生成；其余恢复仍禁止", () => {
+    const restoredNone = [
+      { role: "user", parts: [part("text")] },
+      { role: "assistant", parts: [part("text")], metadata: { restored: "1", toolScope: "none" } },
+    ] as never[];
+    expect(lastTurnCanRegenerate(restoredNone)).toBe(true);
+    for (const scope of ["readonly", "mutating", undefined]) {
+      const meta: Record<string, unknown> = { restored: "1" };
+      if (scope !== undefined) meta.toolScope = scope;
+      const turn = [
+        { role: "user", parts: [part("text")] },
+        { role: "assistant", parts: [part("text")], metadata: meta },
+      ] as never[];
+      // readonly：工具上下文已丢；mutating/缺省（旧记录未知）：一律禁止，保持现状
+      expect(lastTurnCanRegenerate(turn)).toBe(false);
+    }
+  });
+});
+
+describe("S-fix TurnToolScope（落盘标记）", () => {
+  const part = (type: string) => ({ type });
+
+  it("classifyTurnToolScope：none / readonly / mutating", () => {
+    expect(classifyTurnToolScope([{ type: "text" }])).toBe("none");
+    expect(classifyTurnToolScope([])).toBe("none");
+    expect(classifyTurnToolScope([{ type: "tool-get_upcoming_assignments" }])).toBe("readonly");
+    expect(classifyTurnToolScope([{ type: "tool-create_assignment" }])).toBe("mutating");
+    expect(
+      classifyTurnToolScope([{ type: "text" }, { type: "tool-get_upcoming_assignments" }])
+    ).toBe("readonly");
+  });
+
+  it("buildRestoredMessageMetadata：透传合法档，丢弃非法值", () => {
+    expect(buildRestoredMessageMetadata({ toolScope: "none" })).toEqual({
+      restored: "1",
+      toolScope: "none",
+    });
+    expect(buildRestoredMessageMetadata({})).toEqual({ restored: "1" });
+    expect(buildRestoredMessageMetadata({ toolScope: "bogus" as never })).toEqual({ restored: "1" });
+  });
+
+  it("restoredMessageIsRegenerable：仅 none", () => {
+    expect(restoredMessageIsRegenerable({ restored: "1", toolScope: "none" })).toBe(true);
+    expect(restoredMessageIsRegenerable({ restored: "1", toolScope: "readonly" })).toBe(false);
+    expect(restoredMessageIsRegenerable({ restored: "1" })).toBe(false);
+    expect(restoredMessageIsRegenerable(undefined)).toBe(false);
+  });
+
+  it("sanitize 持久化 assistant toolScope；user 不写", () => {
+    const rec = sanitizeConversation({
+      id: "c1",
+      title: "t",
+      createdAt: "2026-08-01T10:00:00.000Z",
+      provider: "p",
+      model: "m",
+      messages: [
+        viewMessage({ id: "u1", role: "user", content: "hi" }),
+        // buildKiroMessageView 产出的 view 才带 toolScope：此处模拟 live 纯文本轮
+        { ...viewMessage({ id: "a1", role: "assistant", content: "你好" }), toolScope: "none" as const },
+      ],
+      manualRefs: [],
+      entryRefs: [],
+    });
+    expect(rec.messages[0]).not.toHaveProperty("toolScope");
+    expect(rec.messages[1]).toMatchObject({ toolScope: "none" });
+  });
+
+  it("buildKiroMessageView：live 文本轮标记 none + 可重生成；恢复透传落盘值", () => {
+    const live = buildKiroMessageView(
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "hi" }] } as never,
+      false,
+      undefined
+    );
+    expect(live.toolScope).toBe("none");
+    expect(live.canRegenerate).toBe(true);
+
+    const liveWrite = buildKiroMessageView(
+      { id: "a2", role: "assistant", parts: [{ type: "tool-create_assignment" }] } as never,
+      false,
+      undefined
+    );
+    expect(liveWrite.toolScope).toBe("mutating");
+    expect(liveWrite.canRegenerate).toBe(false);
+
+    const restoredNone = buildKiroMessageView(
+      {
+        id: "a3",
+        role: "assistant",
+        parts: [{ type: "text", text: "hi" }],
+        metadata: { restored: "1", toolScope: "none" },
+      } as never,
+      false,
+      undefined
+    );
+    expect(restoredNone.toolScope).toBe("none");
+    expect(restoredNone.canRegenerate).toBe(true);
+
+    const restoredOld = buildKiroMessageView(
+      {
+        id: "a4",
+        role: "assistant",
+        parts: [{ type: "text", text: "hi" }],
+        metadata: { restored: "1" },
+      } as never,
+      false,
+      undefined
+    );
+    expect(restoredOld.toolScope).toBeUndefined();
+    expect(restoredOld.canRegenerate).toBe(false);
   });
 });
 

@@ -89,7 +89,8 @@ describe("接线守卫（源码锁定）", () => {
   it("hook：view 构建与历史恢复都走归一化", () => {
     const hook = readFileSync(join(process.cwd(), "hooks/useKiroChat.ts"), "utf8");
     expect(hook).toContain("normalizeContextUsageSnapshot(");
-    expect(hook).toContain("metadata: { restored: \"1\"");
+    // S-fix：恢复 metadata 经 buildRestoredMessageMetadata 构造（含 restored 标记 + toolScope 透传）
+    expect(hook).toContain("buildRestoredMessageMetadata(pm)");
     expect(hook).toContain("contextUsage: latestContextUsage");
     expect(hook).toContain('contextOverflow: normalizedError?.code === "CONTEXT_TOO_LARGE"');
   });
