@@ -137,6 +137,7 @@ import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
 import { aggregateInspectorSources } from "@/lib/ai/ui/kiroInspector";
 import { getComputerApprovalPresentation } from "@/lib/ai/ui/computerApprovalPresentation";
+import { createTimeoutFetch } from "@/lib/ai/chatTransport";
 import {
   APPROVAL_TIMEOUT_MS,
   writePendingApprovalSnapshot,
@@ -655,6 +656,13 @@ interface PendingComputerExecution {
 }
 
 /**
+ * S-fix（超时对齐）：Chat transport 共用带超时的 fetch（模块单例）。
+ * AI.CHAT_TIMEOUT_MS 先于传输层默认上限 abort → 超长流转为可重试 TIMEOUT，
+ * 而不是 socket 被掐断后的通用网络错误。用户 Stop 走 SDK 自有 signal，语义不变。
+ */
+const chatTransportFetch = createTimeoutFetch();
+
+/**
  * Kiro Chat runtime（Task 3）：Read + Write client-side tools。
  * 安全链：LLM → Tool Call → Client Validation → Existing ClassFlow Action → Tool Result。
  * 高风险工具（delete_*）强制 Confirm；普通编辑直接执行；成功写操作注册一次性 Undo。
@@ -1148,6 +1156,7 @@ export function useKiroChat({
     transport: new DefaultChatTransport({
       api: apiUrl("/api/ai/chat"),
       body: bodyRef.current,
+      fetch: chatTransportFetch,
     }),
     // Streaming UX V2 Phase 4：24ms 客户端节流（SDK 内建；不引入手写 queue / rAF / debounce）
     experimental_throttle: KIRO_CLIENT_STREAM_THROTTLE_MS,

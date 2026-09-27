@@ -59,6 +59,10 @@ import { resolveDesktopObservationCapability } from "@/lib/ai/computer/desktopOb
 import { resolveGuiControlCapability } from "@/lib/ai/computer/gui/capability";
 
 export const runtime = "nodejs";
+// S-fix（超时对齐）：maxDuration 是 Next/Vercel 语义 —— 桌面端路由走纯 Node
+// http server（src/main/httpServer.ts 直接调 handler），此处不生效；
+// 真正的天花板是传输层默认 ~300s，客户端由 AI.CHAT_TIMEOUT_MS 经
+// createTimeoutFetch 先行 abort（超长流转可重试 TIMEOUT）。保留本导出以兼容 Next 运行时。
 export const maxDuration = 60;
 
 /** smoothStream 中文分词器（module scope 复用；只作用于 final-answer text shaping） */

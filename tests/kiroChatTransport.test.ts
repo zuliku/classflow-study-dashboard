@@ -13,8 +13,7 @@ describe("Kiro Chat transport — Task 16D Phase 17/18/19", () => {
     expect(src).toContain('import { apiUrl }');
   });
 
-  it("webRequest injection preserves ReadableStream/AbortSignal for continuation and Stop", () => {
-    const helper = fs.readFileSync(path.join(process.cwd(), "src/main/security/localApiCapability.ts"), "utf8");
+  it("webRequest injection preserves ReadableStream/AbortSignal for continuation and Stop", () => {    const helper = fs.readFileSync(path.join(process.cwd(), "src/main/security/localApiCapability.ts"), "utf8");
     // Injection only adds header, does not consume body or signal
     expect(helper).toContain("x-classflow-capability");
     expect(helper).not.toContain("ReadableStream");
@@ -25,5 +24,11 @@ describe("Kiro Chat transport — Task 16D Phase 17/18/19", () => {
     expect(chatSrc).toContain("apiUrl(\"/api/ai/chat\")");
     expect(chatSrc).toContain("experimental_throttle");
     expect(chatSrc).toContain("chat.stop");
+  });
+
+  it("S-fix 超时对齐：transport 经超时中间件（Stop 语义不变）", () => {
+    const chatSrc = fs.readFileSync(path.join(process.cwd(), "hooks/useKiroChat.ts"), "utf8");
+    expect(chatSrc).toContain("fetch: chatTransportFetch");
+    expect(chatSrc).toContain('from "@/lib/ai/chatTransport"');
   });
 });
