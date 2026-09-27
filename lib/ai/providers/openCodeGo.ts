@@ -49,6 +49,16 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  *   thinking 常开且无 effort 参数 → 不声明 reasoning
  * - mimo-v2-omni（mimo, chat）：vision=true + JPEG/PNG/WEBP（小米官方：全模态基座）
  * 未取得官方能力证据的模型（hy3 / hy4-preview / longcat-2.0 / mimo-v2.5-pro / minimax-m2.7 等）保持保守。
+ *
+ * 远端 /v1/models 实测同步（Go 列表 43 款）：
+ * - 新增 gpt-6-luna（openai, responses，2026-09-22 发布）：OpenAI 官方模型页确认
+ *   Responses API + reasoning.effort none/low/medium/high/xhigh/max（默认 medium）+
+ *   1,050,000 context + 文图输入 → 与 5.6-luna 同档声明，进入精选首位（最新优先）
+ * - 新增 mimo-v2.6-flash（mimo, chat，同 v2.6-pro 协议族）：小米官方确认原生全模态
+ *   （文本/图像/视频/音频理解）+ 1M context → vision 开；effort 参数无证据 → 不声明 reasoning
+ * - 其余远端新增（kimi-k2.6 / longcat-2.5-preview-free / space-bunny-free / hy3-preview /
+ *   glm-5.x 旧版 / deepseek 旧版 / qwen 旧版 / grok-4.5 / muse-spark-1.2 / minimax-m2.5 /
+ *   mimo-v2-pro）按去旧留新与无证据不收录原则暂不进入注册表（space-bunny 未知厂商，同 omen-alpha 跳过）
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
@@ -84,6 +94,9 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" } }, contextWindowTokens: 1_000_000 },
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "mimo-v2.6-pro", name: "MiMo V2.6 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "high"], mechanism: "effort" } } },
+  // 小米官方（MiMo V2.6 系列同协议族）：Flash 为原生全模态（文本/图像/视频/音频理解）+ 1M context；
+  // effort 参数无官方证据 → 不声明 reasoning（保守）
+  { id: "mimo-v2.6-flash", name: "MiMo V2.6 Flash", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
   // 小米官方：MiMo-V2-Omni 为全模态基座（图像/视频/音频输入）→ vision 开
   { id: "mimo-v2-omni", name: "MiMo V2 Omni", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 262_144 },
   { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
@@ -170,6 +183,31 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     contextWindowTokens: 1_050_000,
   },
   {
+    id: "gpt-6-luna",
+    name: "GPT 6 Luna",
+    provider: "opencode-go",
+    vendor: "openai",
+    transport: "openai-responses",
+    capabilities: {
+      streaming: true,
+      tools: true,
+      // OpenAI 官方模型页（2026-09-22 发布）：文图输入 / 文本输出，函数调用与结构化输出；
+      // 推理配工具走 Responses API（Chat Completions 仅 reasoning_effort=none 才接 function calling）
+      vision: true,
+      fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      // OpenAI 官方 reasoning 文档：reasoning.effort 支持 none/low/medium/high/xhigh/max
+      // （默认 medium；与 5.6-luna 同档），mechanism 沿用 openai-responses-effort
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "low", "medium", "high", "xhigh", "max"],
+        mechanism: "openai-responses-effort",
+      },
+    },
+    // OpenAI 官方模型页：gpt-6-luna 1,050,000 context window（922K max input / 128K max output）
+    contextWindowTokens: 1_050_000,
+  },
+  {
     id: "muse-spark-1.3-contributor",
     name: "Muse Spark 1.3",
     provider: "opencode-go",
@@ -207,12 +245,14 @@ export const OPENCODE_DEFAULT_MODEL = "deepseek-v4.1-flash";
  * 选择器精选列表（Kiro 模型选择器展示的唯一来源；顺序 = 展示顺序）。
  *
  * 产品策略（2026-09）：**少而精** —— 每个厂商仅保留最新 / 最强的一款，新的与能力强的优先：
- * - 旗舰推理：GPT 5.6 Luna（OpenAI）/ Grok 4.7（xAI）/ Muse Spark 1.3（Meta，默认高推理）
+ * - 旗舰推理：GPT 6 Luna（OpenAI，2026-09-22 发布，精选首位）/ GPT 5.6 Luna / Grok 4.7（xAI）/
+ *   Muse Spark 1.3（Meta，默认高推理）
  * - 多模态旗舰：Kimi K3 / MiMo V2.6 Pro / GLM 5.3 Flash / MiniMax M3（均支持图片理解）
  * - 默认快模型：DeepSeek V4.1 Flash；Qwen 旗舰：Qwen3.8 Max
  * 未入选的已验证模型仍保留在 OPENCODE_MODELS（transport / 历史选择可继续解析），只是不在选择器中展示。
  */
 export const OPENCODE_SELECTOR_MODEL_IDS: readonly string[] = [
+  "gpt-6-luna",
   "gpt-5.6-luna",
   "grok-4.7",
   "muse-spark-1.3-contributor",

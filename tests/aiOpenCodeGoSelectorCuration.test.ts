@@ -27,13 +27,13 @@ describe("选择器精选列表", () => {
     }
   });
 
-  it("数量克制（≤ 10）且无重复；新 / 强优先顺序（gpt-5.6-luna → grok-4.7 → muse-spark-1.3）", () => {
+  it("数量克制（≤ 10）且无重复；新 / 强优先顺序（gpt-6-luna → gpt-5.6-luna → grok-4.7）", () => {
     expect(OPENCODE_SELECTOR_MODEL_IDS.length).toBeLessThanOrEqual(10);
     expect(new Set(OPENCODE_SELECTOR_MODEL_IDS).size).toBe(OPENCODE_SELECTOR_MODEL_IDS.length);
     expect(OPENCODE_SELECTOR_MODEL_IDS.slice(0, 3)).toEqual([
+      "gpt-6-luna",
       "gpt-5.6-luna",
       "grok-4.7",
-      "muse-spark-1.3-contributor",
     ]);
     // 默认模型必须在精选列表内（首次使用即可直接发送）
     expect(isOpenCodeSelectorModelId("deepseek-v4.1-flash")).toBe(true);
@@ -97,6 +97,30 @@ describe("选择器精选列表", () => {
     expect(byId.get("mimo-v2.5-pro")!.capabilities.vision).toBe(false);
     expect(byId.get("minimax-m2.7")!.capabilities.vision).toBe(false);
     expect(byId.get("hy3")!.capabilities.reasoning).toBeUndefined();
+  });
+
+  it("远端同步新增：gpt-6-luna（精选首位）/ mimo-v2.6-flash（注册表）官方文档能力", () => {
+    const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
+
+    const gpt6 = byId.get("gpt-6-luna")!;
+    expect(gpt6.transport).toBe("openai-responses");
+    expect(gpt6.capabilities.vision).toBe(true);
+    expect(gpt6.capabilities.visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(gpt6.capabilities.reasoning).toEqual({
+      adjustable: true,
+      supportedEfforts: ["default", "low", "medium", "high", "xhigh", "max"],
+      mechanism: "openai-responses-effort",
+    });
+    expect(gpt6.contextWindowTokens).toBe(1_050_000);
+    expect(isOpenCodeSelectorModelId("gpt-6-luna")).toBe(true);
+
+    const flash = byId.get("mimo-v2.6-flash")!;
+    expect(flash.transport).toBe("openai-chat");
+    expect(flash.capabilities.vision).toBe(true);
+    // effort 参数无官方证据 → 不声明 reasoning（保守），不进精选（Pro 代表 mimo）
+    expect(flash.capabilities.reasoning).toBeUndefined();
+    expect(flash.contextWindowTokens).toBe(1_000_000);
+    expect(isOpenCodeSelectorModelId("mimo-v2.6-flash")).toBe(false);
   });
 
   it("getSelectorModelsForProvider：opencode-go 精选；deepseek 与注册表一致", () => {
