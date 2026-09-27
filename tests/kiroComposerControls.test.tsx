@@ -344,9 +344,9 @@ describe("Kiro Composer — Reasoning / Model", () => {
     const track = q('[data-testid="kiro-composer-reasoning-track"]')!;
     expect(track.getAttribute("data-max")).toBe("true");
     const flow = q('[data-testid="kiro-composer-reasoning-flow"]')!;
-    // 流动层：与底填充同宽 + 显现（opacity crossfade，非颜色跳变）+ 宽高同过渡不断档
+    // 流动层：与底填充同宽 + 显现（500ms 柔光晕染，非颜色跳变）+ 宽高同过渡不断档
+    expect(flow.className).toContain("kiro-reasoning-flow-fade");
     expect(flow.className).toContain("opacity-100");
-    expect(flow.className).toContain("transition-[width,opacity]");
     expect(flow.style.width).toBe("100%");
     // 彩带：200% 宽 + 位移动画类（compositor 合成；高饱和亮色）
     const strip = q('[data-testid="kiro-composer-reasoning-flow-strip"]')!;
@@ -371,13 +371,13 @@ describe("Kiro Composer — Reasoning / Model", () => {
     // 位移（compositor）而非 background-position（重绘）；-50% 恰为一个色带周期
     expect(css).toContain("transform: translateX(-50%)");
     expect(css).not.toMatch(/kiro-reasoning-flow-slide[\s\S]{0,200}?background-position/);
-    // 亮色低饱和（300 档）；色带以 50% 为周期重复（0/50/100% 同色 → 首尾帧一致，不断档）
-    for (const hex of ["#FCD34D", "#FDA4AF", "#C4B5FD", "#7DD3FC"]) {
+    // 亮色低饱和（200 档粉彩）；色带以 50% 为周期重复（0/50/100% 同色 → 首尾帧一致，不断档）
+    for (const hex of ["#FDE68A", "#FECDD3", "#DDD6FE", "#BAE6FD"]) {
       expect(css).toContain(hex);
     }
-    expect(css).toContain("#FCD34D 0%");
-    expect(css).toContain("#FCD34D 50%");
-    expect(css).toContain("#FCD34D 100%");
+    expect(css).toContain("#FDE68A 0%");
+    expect(css).toContain("#FDE68A 50%");
+    expect(css).toContain("#FDE68A 100%");
     // reduced-motion：动画停但保留静态彩条
     expect(css).toContain("html[data-motion-effective=\"reduced\"] .kiro-reasoning-flow");
   });

@@ -1407,7 +1407,7 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     animation: kiro-structure-in var(--kiro-motion-structure) var(--ease-standard) both;
   }
 
-  /* 思考程度最高档流动彩条：亮色低饱和光谱（amber-300→rose-300→violet-300→sky-300），
+  /* 思考程度最高档流动彩条：亮色低饱和光谱（amber-200→rose-200→violet-200→sky-200），
      色带以 50% 为周期重复排布（0/50/100% 同色），内层 200% 宽条带 translateX(0→-50%)
      位移恰为一个周期 —— 首尾帧画面完全一致，无缝循环，不断档；
      显隐由调用方 opacity crossfade（过渡 structure 档），渐变本身不做颜色跳变；
@@ -1415,15 +1415,15 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   .kiro-reasoning-flow {
     background-image: linear-gradient(
       90deg,
-      #FCD34D 0%,
-      #FDA4AF 12.5%,
-      #C4B5FD 25%,
-      #7DD3FC 37.5%,
-      #FCD34D 50%,
-      #FDA4AF 62.5%,
-      #C4B5FD 75%,
-      #7DD3FC 87.5%,
-      #FCD34D 100%
+      #FDE68A 0%,
+      #FECDD3 12.5%,
+      #DDD6FE 25%,
+      #BAE6FD 37.5%,
+      #FDE68A 50%,
+      #FECDD3 62.5%,
+      #DDD6FE 75%,
+      #BAE6FD 87.5%,
+      #FDE68A 100%
     );
     animation: kiro-reasoning-flow-slide var(--kiro-reasoning-flow, 2.6s) linear infinite;
   }
@@ -1435,6 +1435,14 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     to {
       transform: translateX(-50%);
     }
+  }
+
+  /* 流动层显隐：宽度跟底填充同速（structure 档），opacity 单独 500ms ease 柔光晕染 ——
+     彩色是“洇”出来而不是“弹”出来；reduced-motion 由全局 0.01ms 兜底 */
+  .kiro-reasoning-flow-fade {
+    transition:
+      width var(--kiro-motion-structure) var(--ease-standard),
+      opacity 500ms ease;
   }
 
   @keyframes kiro-structure-in {
