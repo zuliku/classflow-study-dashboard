@@ -36,6 +36,8 @@ import { TypographyRuntime } from "@/components/runtime/TypographyRuntime";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { OverlayBoundary } from "@/components/ui/OverlayBoundary";
 import { PageTransition } from "@/components/ui/PageTransition";
+import { MotionGallery } from "@/components/motion/MotionGallery";
+import { MotionFpsProbe } from "@/components/motion/MotionFpsProbe";
 import { OverviewWorkspace } from "@/components/dashboard/OverviewWorkspace";
 import { useAppStore } from "@/store/useAppStore";
 import { useInboxChannelBridge } from "@/hooks/useInboxChannelBridge";
@@ -240,6 +242,10 @@ export default function Home() {
       </OverlayBoundary>
       <ConfirmDialog />
       <ToastViewport />
+      {/* Motion V3 收尾 dev 工具：Gallery（?motion-gallery=1）+ fps 探针（?motion-fps=1）；
+          组件内部 development 门禁，production 渲染 null，不影响路由/store/测试 */}
+      <MotionGallery />
+      <MotionFpsProbe />
       {/* Reminder Local Runtime + 站内通知（独立于 KiroSession；不依赖 Kiro Provider） */}
       <ReminderRuntime />
       <LearningHistoryRuntime />

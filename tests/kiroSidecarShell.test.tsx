@@ -468,6 +468,67 @@ describe("Move handle（Move V1）", () => {
     s.cleanup();
   });
 
+  it("Motion V3 Fling：果断甩动（3+ 采样 + 高速）→ 沿惯性多滑一段再持久化", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]') as HTMLElement;
+    let now = 5000;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => now);
+    try {
+      act(() => {
+        handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 1000, clientY: 100, pointerId: 1 }));
+      });
+      // 3 次 move，每次间隔 20ms：末速度 (-2, +0.5)px/ms，整段位移 ≈124px
+      for (const [x, y] of [[960, 110], [920, 120], [880, 130]] as const) {
+        now += 20;
+        act(() => {
+          handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+        });
+      }
+      act(() => {
+        handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, clientX: 880, clientY: 130, pointerId: 1 }));
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+    // 手指落位应为 right=144 / top=70；fling 沿惯性多滑（均更大），且 store 与面板一致
+    expect(panelRight(s)).toBeGreaterThan(144);
+    expect(panelTop(s)).toBeGreaterThan(70);
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({
+      top: panelTop(s),
+      right: panelRight(s),
+    });
+    s.cleanup();
+  });
+
+  it("Motion V3 Fling：慢速长拖（3 采样但低速）→ 无投射，原落位", async () => {
+    const s = setup("open", true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]') as HTMLElement;
+    let now = 9000;
+    const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => now);
+    try {
+      act(() => {
+        handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 1000, clientY: 100, pointerId: 1 }));
+      });
+      // 同样 3 次 move，但每次间隔 500ms：末速度 ≈0.08px/ms < 阈值
+      for (const [x, y] of [[960, 110], [920, 120], [880, 130]] as const) {
+        now += 500;
+        act(() => {
+          handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+        });
+      }
+      act(() => {
+        handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, clientX: 880, clientY: 130, pointerId: 1 }));
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+    expect(panelRight(s)).toBe(144);
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN + 30);
+    s.cleanup();
+  });
+
   it("F. clamp：拖出右上角 → top=40 / right=maxRight（TitleBar safe，不越边界）", async () => {
     const s = setup("open", true);
     await s.flush();

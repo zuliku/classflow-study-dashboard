@@ -142,6 +142,23 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(css).toMatch(/\.sidebar-shell\s*\{[^}]*transition-timing-function:\s*var\(--ease-spring\)/s);
   });
 
+  it("Motion V3 收尾：Gallery/fps/fling dev 门禁 + token-only（无裸时长旁路）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    // dev-only 门禁（production 永不渲染）
+    expect(read("components/motion/MotionGallery.tsx")).toMatch(/isMotionDev/);
+    expect(read("components/motion/MotionFpsProbe.tsx")).toMatch(/isMotionDev/);
+    expect(read("lib/motionDev.ts")).toMatch(/NODE_ENV === "development"/);
+    // Gallery 只引用 token（时长/easing 经 var() 或 Contract 常量，无 duration-[Nms]）
+    expect(read("components/motion/MotionGallery.tsx")).not.toMatch(/duration-\[\d+ms\]/);
+    expect(read("components/motion/MotionGallery.tsx")).toMatch(/duration-\[var\(--motion-/);
+    // fling 守卫常量存在且 Shell 接入（采样数 + 速度 + 位移三守卫，单次投射无 timer）
+    expect(read("lib/ai/ui/sidecarFling.ts")).toMatch(/FLING_MIN_SAMPLES/);
+    const shell = read("components/kiro/sidecar/KiroSidecarShell.tsx");
+    expect(shell).toMatch(/FLING_MIN_SAMPLES/);
+    expect(shell).toMatch(/projectFlingPosition/);
+    expect(shell).not.toMatch(/setTimeout\(.*fling/i);
+  });
+
   it.each([
     ["control", "--kiro-motion-control", KIRO_MOTION_MS.control],
     ["structure", "--kiro-motion-structure", KIRO_MOTION_MS.structure],
