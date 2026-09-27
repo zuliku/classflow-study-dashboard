@@ -1,9 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import { Pause, Timer } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useFocusClock } from "@/hooks/useFocusClock";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,22 +29,23 @@ export function TimelineActiveFocusChip() {
   const setSelectedCourseId = useAppStore((s) => s.setSelectedCourseId);
 
   const { remainingText } = useFocusClock(active);
+  // 进退场 presence（fast 档）：出现/消失做 opacity + 轻 scale，不再挤压 Header 布局；
+  // 退出 110ms 内保留最后一次快照内容（仅视觉淡出，不读新 store）。
+  const { mounted, visible } = usePresence(!!active, MOTION_EXIT_MS.fast);
+  const snapshotRef = useRef<{
+    running: boolean;
+    remainingText: string;
+    targetLabel: string;
+    interactive: boolean;
+    openTarget: () => void;
+  } | null>(null);
 
-  if (!active) return null;
-
-  const running = active.status === "running";
-  const linkedAssignment = active.assignmentId
+  const linkedAssignment = active?.assignmentId
     ? assignments.find((a) => a.id === active.assignmentId)
     : undefined;
   // label 优先级：有效 Assignment.title → title snapshot → 有效 Course.name → course snapshot → 未关联
-  const linkedCourse = active.courseId ? courses.find((c) => c.id === active.courseId) : undefined;
-  const targetLabel =
-    linkedAssignment?.title ??
-    active.assignmentTitleSnapshot ??
-    linkedCourse?.name ??
-    active.courseNameSnapshot ??
-    "未关联专注";
-
+  const linkedCourse = active?.courseId ? courses.find((c) => c.id === active.courseId) : undefined;
+  const interactive = Boolean(linkedAssignment || linkedCourse);
   const openTarget = () => {
     if (linkedAssignment) {
       setSelectedAssignmentId(linkedAssignment.id); // global owner：留在 Timeline 上下文
@@ -51,20 +54,51 @@ export function TimelineActiveFocusChip() {
     if (linkedCourse) setSelectedCourseId(linkedCourse.id);
     // 都不存在：只读 chip，不导航
   };
-  const interactive = Boolean(linkedAssignment || linkedCourse);
+
+  if (active) {
+    snapshotRef.current = {
+      running: active.status === "running",
+      remainingText,
+      targetLabel:
+        linkedAssignment?.title ??
+        active.assignmentTitleSnapshot ??
+        linkedCourse?.name ??
+        active.courseNameSnapshot ??
+        "未关联专注",
+      interactive,
+      openTarget,
+    };
+  }
+  const shown = active
+    ? {
+        running: active.status === "running",
+        remainingText,
+        targetLabel: snapshotRef.current?.targetLabel ?? "未关联专注",
+        interactive,
+        openTarget,
+      }
+    : snapshotRef.current
+      ? { ...snapshotRef.current, interactive: false }
+      : null;
+  if (!mounted || !shown) return null;
+  const { running, targetLabel, interactive: shownInteractive, openTarget: shownOpen } = shown;
 
   return (
     <button
       type="button"
       data-testid="timeline-active-focus-chip"
-      onClick={interactive ? openTarget : undefined}
-      disabled={!interactive}
-      aria-label={`当前专注：${targetLabel}${running ? `，剩余 ${remainingText}` : "（已暂停）"}`}
+      onClick={shownInteractive ? shownOpen : undefined}
+      disabled={!shownInteractive}
+      aria-label={`当前专注：${targetLabel}${running ? `，剩余 ${shown.remainingText}` : "（已暂停）"}`}
       title={`当前专注 · ${targetLabel}`}
       className={cn(
         // h-8 与 Header 右区其他按钮同高同基线；标题收紧，避免最宽元素挤压
         "flex h-8 max-w-[220px] items-center gap-1.5 rounded-full border px-2.5 text-left",
-        "transition-colors duration-[var(--motion-fast)]",
+        // 进退场：opacity + 轻 scale（fast 进入 / exit 加速离场）
+        "transition-[color,background-color,border-color,opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+        visible
+          ? "opacity-100 scale-100"
+          : "opacity-0 scale-95 pointer-events-none !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]",
         running
           ? "border-pastel-mint bg-pastel-mint/25 hover:bg-pastel-mint/40"
           : "border-line bg-alabaster/70 hover:bg-alabaster"
@@ -81,7 +115,7 @@ export function TimelineActiveFocusChip() {
           running ? "text-charcoal" : "text-satin-grey"
         )}
       >
-        {remainingText} · {running ? "专注中" : "已暂停"}
+        {shown.remainingText} · {running ? "专注中" : "已暂停"}
       </span>
       <span className="min-w-0 max-w-[88px] truncate text-[11px] font-semibold text-satin-grey">
         {targetLabel}

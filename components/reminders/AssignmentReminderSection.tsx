@@ -13,6 +13,7 @@ import {
   hasAssignmentReminderDuplicate,
 } from "@/lib/reminders/assignmentReminderView";
 import { cn } from "@/lib/utils";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 
 function localDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -239,9 +240,11 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
         </div>
       )}
 
-      {/* 添加/编辑 Picker（Drawer 内内联展开，与关联资料 picker 同一语言） */}
-      {pickerOpen && (
+      {/* 添加/编辑 Picker（Drawer 内内联展开，与关联资料 picker 同一语言；
+          presets ↔ custom 二级切换 key + 淡入） */}
+      <DisclosureRegion open={pickerOpen}>
         <div data-testid="assignment-reminder-picker" className="p-2.5 bg-[#F7F5F5] border border-line rounded-xl space-y-1">
+          <div key={pickerMode} className="ux-fade space-y-1">
           {pickerMode === "presets" ? (
             <>
               <div className="flex items-center justify-between">
@@ -333,8 +336,9 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
               {customError && <p className="text-[10px] font-semibold text-danger">{customError}</p>}
             </>
           )}
+          </div>
         </div>
-      )}
+      </DisclosureRegion>
     </div>
   );
 }

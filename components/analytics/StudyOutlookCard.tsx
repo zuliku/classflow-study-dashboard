@@ -125,7 +125,7 @@ export function StudyOutlookCard({
       </div>
 
       {firstCapacityShortfall && summary.workload.preferredShortfallMinutes > 0 && (
-        <div className="px-4 py-2 bg-[#9B5B57]/5 border-b border-line-soft">
+        <div key={`shortfall-${horizonDays}`} className="ux-fade px-4 py-2 bg-[#9B5B57]/5 border-b border-line-soft">
           <p className="text-[10px] text-[#9B5B57] leading-relaxed" data-testid="outlook-shortfall-strip">
             最早容量缺口：{formatDeadline(firstCapacityShortfall.deadline)} 前约缺{" "}
             {fmt(firstCapacityShortfall.shortfallMinutes)}
@@ -138,11 +138,11 @@ export function StudyOutlookCard({
       )}
 
       {tasks.length === 0 ? (
-        <div className="px-4 py-6 text-center">
+        <div key={`empty-${horizonDays}`} className="ux-settle px-4 py-6 text-center">
           <p className="text-[11px] text-sandrift">未来 {horizonDays} 天暂无需要安排的任务</p>
         </div>
       ) : (
-        <div className="divide-y divide-line-soft">
+        <div key={`list-${horizonDays}`} className="ux-settle divide-y divide-line-soft">
           {top.map((t) => (
             <OutlookTaskRow
               key={t.assignmentId}

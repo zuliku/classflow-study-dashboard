@@ -31,6 +31,7 @@ import {
 } from "@/lib/tasks/assignmentDetailView";
 
 import { cn } from "@/lib/utils";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { openAssignmentEditor, previewMaterial } from "@/lib/uiEvents";
 import { Drawer } from "@/components/ui/Drawer";
 import { IconButton } from "@/components/ui/IconButton";
@@ -562,8 +563,12 @@ export function AssignmentDrawer() {
             onPriorityChange={(p) => updateAssignmentPriority(assignment.id, p)}
           />
 
-          {/* PRIMARY ACTIONS：Focus slot + 完成/重新打开/日程/提醒/编辑 */}
+          {/* PRIMARY ACTIONS：Focus slot + 完成/重新打开/日程/提醒/编辑（三态切换 key + 淡入） */}
           <div className="space-y-1.5">
+            <div
+              key={focusView.active ? focusView.relation : canStartFocus ? "start" : "none"}
+              className="ux-fade"
+            >
             {focusView.relation === "current" && focusView.active ? (
               <AssignmentFocusControl
                 session={focusView.active}
@@ -595,6 +600,7 @@ export function AssignmentDrawer() {
                 onStart={handleStartFocus}
               />
             ) : null}
+            </div>
             <AssignmentDetailActions
               completed={completed}
               onComplete={() => updateAssignmentStatus(assignment.id, "completed")}
@@ -641,7 +647,7 @@ export function AssignmentDrawer() {
           {followUpSession && (
             <div
               data-testid="focus-follow-up"
-              className="flex items-center gap-2 rounded-xl border border-line bg-[#F7F5F5]/60 px-3 py-2"
+              className="animate-enter flex items-center gap-2 rounded-xl border border-line bg-[#F7F5F5]/60 px-3 py-2"
             >
               <span className="min-w-0 truncate text-xs font-semibold text-charcoal">
                 本次专注完成{recentDuration ? ` · ${recentDuration}` : ""}
@@ -830,6 +836,7 @@ export function AssignmentDrawer() {
                     )}
 
                     {materialPickerOpen && (
+                      <DisclosureRegion open={materialPickerOpen}>
                       <div data-testid="material-picker" className="space-y-0.5 rounded-xl border border-line bg-[#F7F5F5] p-2">
                         {courseMaterials.length === 0 ? (
                           <div className="space-y-1 px-1 py-0.5">
@@ -863,6 +870,7 @@ export function AssignmentDrawer() {
                           })
                         )}
                       </div>
+                      </DisclosureRegion>
                     )}
                   </div>
                 </DetailDisclosure>

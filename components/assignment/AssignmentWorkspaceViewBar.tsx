@@ -56,8 +56,8 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
   const primary = (
     <>
       {view === "archive" ? (
-        /* Archive：临时状态入口（不新增永久 Tab） */
-        <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
+        /* Archive：临时状态入口（不新增永久 Tab；分支切换淡入） */
+        <div className="ux-fade flex items-center gap-1 bg-alabaster p-0.5 rounded-xl border border-line-strong text-[11px] font-medium">
           <span className="flex items-center gap-1 px-2.5 py-0.5 font-bold text-charcoal">
             已归档 {counts.archive}
           </span>
@@ -69,8 +69,8 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
           </button>
         </div>
       ) : (
-        /* View Control Cluster：Segmented 拥有剩余空间；More 恒 shrink-0 */
-        <div className="flex items-stretch gap-1.5 min-w-0 max-w-full">
+        /* View Control Cluster：Segmented 拥有剩余空间；More 恒 shrink-0（分支切换淡入） */
+        <div className="ux-fade flex items-stretch gap-1.5 min-w-0 max-w-full">
           <SegmentedControl
             value={view}
             onChange={setView}
@@ -131,13 +131,13 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
         />
       </div>
 
-      {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；不新增第六个 Tab） */}
+      {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；挂载一次淡入；不新增第六个 Tab） */}
       {view === "focus" && atRiskCount > 0 && (
         <button
           onClick={() => setRiskOnly(!riskOnly)}
           data-testid="focus-risk-filter"
           aria-pressed={riskOnly}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-semibold transition-colors ${
+          className={`animate-enter flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-semibold transition-colors ${
             riskOnly
               ? "bg-danger-bg border-danger-border text-danger font-bold"
               : "bg-background border-line text-satin-grey hover:text-charcoal"

@@ -465,7 +465,7 @@ export function GroupCollaborationView() {
       {groupProjects.length === 0 ? (
         /* P0 修复：zero-project 时不再渲染 300px rail + 空 detail 的 split layout，
            而是全宽 Workspace Empty State（有项目后继续使用现有 master-detail） */
-        <div className="workspace-gutter flex flex-1 min-h-0 flex-col pt-4 pb-24 md:pt-6 md:pb-6">
+        <div key="empty" className="ux-settle workspace-gutter flex flex-1 min-h-0 flex-col pt-4 pb-24 md:pt-6 md:pb-6">
           <WorkspaceEmptyState
             icon={<Users className="w-8 h-8" strokeWidth={1.5} />}
             title="还没有小组项目"
@@ -479,7 +479,7 @@ export function GroupCollaborationView() {
           />
         </div>
       ) : (
-      <div className="workspace-gutter flex flex-1 min-h-0 flex-col lg:flex-row gap-4 pt-4 pb-24 md:pt-6 md:pb-6">
+      <div key="list" className="ux-settle workspace-gutter flex flex-1 min-h-0 flex-col lg:flex-row gap-4 pt-4 pb-24 md:pt-6 md:pb-6">
         {/* Left: Project List（一个 Surface 内 grouped rows；无独立 Card grid） */}
         <aside className="w-full lg:w-[300px] lg:shrink-0 min-h-0 flex flex-col">
           <div className="flex items-center justify-between px-1 pb-2">

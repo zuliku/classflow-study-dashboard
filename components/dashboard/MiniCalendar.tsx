@@ -22,6 +22,7 @@ import { cn, cardKeyHandler } from "@/lib/utils";
 import { Assignment } from "@/types";
 import { isValidDDL, moveAssignmentDDL, editAssignmentDDLTime } from "@/lib/ddlInteraction";
 import { useSlidingIndicator } from "@/lib/useSlidingIndicator";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { paginate } from "@/lib/pagination";
 import {
   format,
@@ -773,13 +774,14 @@ export function MiniCalendar() {
 
       {/* Selected Date Agenda：横向 Compact Event Grid（4 列/页，仅类型 + 图标；详情走 Drawer）。
           Layout Hotfix：可见性由 MiniCalendar 容器真实高度 + weekRows + hysteresis 决定
-          （不再用 @media(max-height:800px)）。隐藏时整个区块（标题/数量/分页/卡片/空态）
-          都不占布局空间，空间回流给 Calendar Grid。 */}
-      {agendaVisible && (
+          （不再用 @media(max-height:800px)）。
+          显隐走 DisclosureRegion（grid 折叠 + fade）：隐藏时高度平滑回流给 Calendar Grid，
+          不再整块卸载跳变；测量逻辑不受影响（折叠期 offsetHeight 0 被 if (a) 忽略）。 */}
+      <DisclosureRegion open={agendaVisible} className="shrink-0">
       <div
         ref={agendaRef}
         data-testid="calendar-agenda"
-        className="pt-1.5 pb-1 border-t border-line-soft shrink-0"
+        className="pt-1.5 pb-1 border-t border-line-soft"
       >
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 min-h-6 text-xs">
           <span className="font-bold text-charcoal min-w-0 truncate whitespace-nowrap">
@@ -905,7 +907,7 @@ export function MiniCalendar() {
           )}
         </div>
       </div>
-      )}
+      </DisclosureRegion>
 
       {/* DDL Move Feedback：局部轻量反馈（撤销 + 修改时间），不破坏全局 Toast */}
       {feedback && (

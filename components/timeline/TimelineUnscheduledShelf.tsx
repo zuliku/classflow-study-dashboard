@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import { ChevronDown, GripVertical, CalendarPlus } from "lucide-react";
 import { Assignment } from "@/types";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,7 +27,9 @@ export function TimelineUnscheduledShelf({
   onAssignmentPointerDown?: (event: React.PointerEvent, assignment: Assignment) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  if (assignments.length === 0) return null;
+  // 面板级 presence：最后一个待安排被安排后淡出再卸载（panel 档退出），不整块硬消失
+  const { mounted, visible } = usePresence(assignments.length > 0, MOTION_EXIT_MS.panel);
+  if (!mounted) return null;
 
   const ddlText = (a: Assignment): string => {
     if (!a.ddl) return "无截止日期";
@@ -38,7 +42,13 @@ export function TimelineUnscheduledShelf({
   return (
     <div
       data-testid="timeline-unscheduled"
-      className="bg-surface border border-line rounded-2xl shadow-subtle p-3 shrink-0"
+      className={cn(
+        "bg-surface border border-line rounded-2xl shadow-subtle p-3 shrink-0",
+        "transition-[opacity,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+        visible
+          ? "opacity-100 translate-y-0"
+          : "opacity-0 translate-y-1 pointer-events-none !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
+      )}
     >
       {/* Panel Header：计数 + 展开/收起 */}
       <div className="flex items-center justify-between mb-1.5">
@@ -61,9 +71,13 @@ export function TimelineUnscheduledShelf({
         </button>
       </div>
 
-      {/* 默认单行横向滚动；展开后允许换行 */}
+      {/* 默认单行横向滚动；展开后允许换行（模式切换 key + 淡入，不做 FLIP 布局动画） */}
       <div
-        className={expanded ? "flex flex-wrap gap-1.5" : "flex flex-nowrap items-center gap-1.5 overflow-x-auto kiro-attachment-tray"}
+        key={expanded ? "wrap" : "row"}
+        className={cn(
+          "ux-fade flex gap-1.5",
+          expanded ? "flex-wrap" : "flex-nowrap items-center overflow-x-auto kiro-attachment-tray"
+        )}
       >
         {assignments.map((a) => {
           const isDragging = draggingAssignmentId === a.id;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitForElementToBeRemoved } from "@testing-library/react";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -133,7 +133,7 @@ describe("TimelineActiveFocusChip", () => {
     expect(useAppStore.getState().selectedCourseId).toBeNull();
   });
 
-  it("completed 后 → chip 消失（active 会话不再存在）", () => {
+  it("completed 后 → chip 先淡出（110ms 退出窗口）再卸载（非硬卸）", async () => {
     useAppStore.setState({ focusSessions: [mkSession()] });
     const { rerender } = render(<TimelineActiveFocusChip />);
     expect(screen.getByTestId("timeline-active-focus-chip")).toBeTruthy();
@@ -142,7 +142,15 @@ describe("TimelineActiveFocusChip", () => {
       focusSessions: [mkSession({ status: "completed", activeStartedAt: undefined, endedAt: NOW })],
     });
     rerender(<TimelineActiveFocusChip />);
-    expect(screen.queryByTestId("timeline-active-focus-chip")).toBeNull();
+    // 退出窗口内仍在 DOM：淡出中、不可交互
+    const exiting = screen.getByTestId("timeline-active-focus-chip") as HTMLButtonElement;
+    expect(exiting.className).toMatch(/opacity-0/);
+    expect(exiting.className).toMatch(/pointer-events-none/);
+    expect(exiting.disabled).toBe(true);
+    // 退出动画播完后卸载
+    await waitForElementToBeRemoved(() => screen.queryByTestId("timeline-active-focus-chip"), {
+      timeout: 2000,
+    });
   });
 });
 

@@ -155,7 +155,7 @@ export function UpcomingDDL() {
 
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col py-1.5" style={{ ["--ddl-card-height" as string]: `${cardHeight}px` } as React.CSSProperties}>
         {pagedItems.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1 min-h-24">
+          <div className="ux-fade flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1 min-h-24">
             <CheckCircle2 className="w-6 h-6 text-success" />
             <p>暂无临近 DDL</p>
           </div>

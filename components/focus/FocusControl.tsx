@@ -9,6 +9,8 @@ import { deriveFocusClock } from "@/lib/focus/focusDomain";
 import { FOCUS_ERROR_MESSAGES, FOCUS_PRESETS, formatFocusClock } from "@/lib/focus/focusView";
 import { cn } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 
 /**
  * Overview 总览日历 Header 的低侵入 Focus 入口（Task 4，UI-only）。
@@ -32,6 +34,8 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
   );
 
   const [open, setOpen] = useState(false);
+  // popover 对称进退（fast 档；此前关闭直接卸载无退出，Idle/Running 整块换体硬切）
+  const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.fast);
   const getDefaultPlanned = () => String(useAppStore.getState().preferences.focusDefaultMinutes);
   const [planned, setPlanned] = useState(getDefaultPlanned);
   const [target, setTarget] = useState("none");
@@ -162,10 +166,15 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
         {!compact && <ChevronDown className="w-2.5 h-2.5 opacity-60" />}
       </button>
 
-      {open && (
+      {mounted && (
         <div
           data-testid="focus-popover"
-          className="absolute right-0 top-full mt-1.5 w-[260px] bg-surface border border-line-strong rounded-2xl shadow-card p-3 space-y-3 text-xs z-40 ux-inline"
+          className={cn(
+            "absolute right-0 top-full mt-1.5 w-[260px] bg-surface border border-line-strong rounded-2xl shadow-card p-3 space-y-3 text-xs z-40 ux-inline",
+            visible
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 translate-y-1 pointer-events-none !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
+          )}
         >
           {/* Workflow UX M4.1：单一关闭入口——右上角绝对定位，Idle/Running/Paused 共享 */}
           <button
@@ -175,8 +184,9 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
           >
             <X className="w-3.5 h-3.5" />
           </button>
+          {/* Idle / Running 整块切换：keyed + 淡入（此前整 Popover 换体硬切） */}
           {!active ? (
-            <>
+            <div key="idle" className="ux-fade space-y-3">
               <div className="space-y-1.5 pr-8">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">专注时间</p>
                 <div className="flex items-center gap-1">
@@ -244,9 +254,9 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
                 <Play className="w-3 h-3" />
                 开始专注
               </button>
-            </>
+            </div>
           ) : (
-            <>
+            <div key="active" className="ux-fade space-y-3">
               <div className="space-y-1 pr-8">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">专注中</p>
                 <p className="text-xs font-bold text-charcoal truncate">{snapshotLabel}</p>
@@ -282,7 +292,7 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
                   提前结束
                 </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       )}

@@ -100,7 +100,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
 
       <div className="flex-1 overflow-y-auto p-3">
         {retained.length === 0 ? (
-          <p className="text-xs text-sandrift text-center py-8">暂无消息</p>
+          <p key={filter} className="ux-page text-xs text-sandrift text-center py-8">暂无消息</p>
         ) : (
           <div key={filter} className="space-y-2 ux-page">
             {retained.map(({ item, exiting }) => (
