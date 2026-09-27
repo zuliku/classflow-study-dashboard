@@ -142,12 +142,16 @@ describe("Provider Registry", () => {
 });
 
 describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", () => {
-  it("1. glm-5.3-flash 已注册，transport = openai-chat", () => {
+  it("1. glm-5.3-flash 已注册，transport = openai-chat，官方三源确认 reasoning 档位", () => {
     const def = OPENCODE_MODELS.find((m) => m.id === "glm-5.3-flash");
     expect(def?.transport).toBe("openai-chat");
     expect(def?.vendor).toBe("zai");
     expect(def?.name).toBe("GLM 5.3 Flash");
-    expect(def?.capabilities.reasoning).toBeUndefined(); // 不声明 reasoning → fixed/default
+    expect(def?.capabilities.reasoning).toEqual({
+      adjustable: true,
+      supportedEfforts: ["default", "low", "high", "max"],
+      mechanism: "effort",
+    });
   });
 
   it("2. grok-4.6 已注册，transport = openai-responses，reasoning live 通过，vision 按官方 docs", () => {

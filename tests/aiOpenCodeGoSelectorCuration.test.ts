@@ -99,6 +99,35 @@ describe("选择器精选列表", () => {
     expect(byId.get("hy3")!.capabilities.reasoning).toBeUndefined();
   });
 
+  it("思考程度覆盖扩展：glm-5.3-flash 官方三源确认档位（与 glm-5.3 同档同机制）", () => {
+    const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
+    const flash = byId.get("glm-5.3-flash")!;
+    expect(flash.capabilities.reasoning).toEqual({
+      adjustable: true,
+      supportedEfforts: ["default", "low", "high", "max"],
+      mechanism: "effort",
+    });
+  });
+
+  it("暂缓清单：有思考但无可用档位形态，一律不声明 reasoning（防虚假 control）", () => {
+    const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
+    // MiniMax：effort 值仅开关深度（M2.x 常开不可调）
+    expect(byId.get("minimax-m3")!.capabilities.reasoning).toBeUndefined();
+    expect(byId.get("minimax-m2.7")!.capabilities.reasoning).toBeUndefined();
+    // mimo：仅 thinking 开关（v2.5/pro 各档效果一致；omni/flash 无档位证据）
+    for (const id of ["mimo-v2.5", "mimo-v2-omni", "mimo-v2.6-flash", "mimo-v2.5-pro"]) {
+      expect(byId.get(id)!.capabilities.reasoning, id).toBeUndefined();
+    }
+    // hy：adaptive 自适应，无可调差；k2.7-code：常开且无 effort 参数；longcat：无证据
+    expect(byId.get("hy3")!.capabilities.reasoning).toBeUndefined();
+    expect(byId.get("hy4-preview")!.capabilities.reasoning).toBeUndefined();
+    expect(byId.get("longcat-2.0")!.capabilities.reasoning).toBeUndefined();
+    // qwen3.8-max：官方确有档位，但 anthropic-effort mechanism 未实现 → 暂不声明
+    for (const id of ["qwen3.8-max", "qwen3.8-flash", "qwen3.7-plus"]) {
+      expect(byId.get(id)!.capabilities.reasoning, id).toBeUndefined();
+    }
+  });
+
   it("远端同步新增：gpt-6-luna（精选首位）/ mimo-v2.6-flash（注册表）官方文档能力", () => {
     const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
 

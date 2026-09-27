@@ -59,6 +59,17 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  * - 其余远端新增（kimi-k2.6 / longcat-2.5-preview-free / space-bunny-free / hy3-preview /
  *   glm-5.x 旧版 / deepseek 旧版 / qwen 旧版 / grok-4.5 / muse-spark-1.2 / minimax-m2.5 /
  *   mimo-v2-pro）按去旧留新与无证据不收录原则暂不进入注册表（space-bunny 未知厂商，同 omen-alpha 跳过）
+ *
+ * 思考程度覆盖扩展（官方文档档）：
+ * - glm-5.3-flash：智谱 + 阿里云 + TokenHub 三源确认 reasoning_effort 支持 low/high/max
+ *   （默认 max，thinking 常开不可关），与 glm-5.3 同档位同 mechanism（effort 直通）
+ * - 暂缓（有思考但无可用档位形态，暴露分段选择器属虚假 control，一律不声明）：
+ *   MiniMax 全系（M3 effort 值仅开关深度，M2.x 常开不可调；官方明确不调节深度）、
+ *   mimo 全系（v2.5/pro 仅 thinking 开关，effort 各档效果一致；omni/flash 无档位证据）、
+ *   hy3/hy4-preview（adaptive 自适应，档位即默认值，无可调差）、
+ *   kimi-k2.7-code（常开且无 effort 参数）、longcat-2.0（无 thinking 证据）、
+ *   qwen3.8-max（官方确有 low/medium/xhigh 档，但走 anthropic-messages，
+ *   本栈 anthropic-effort mechanism 未实现，声明即静默丢弃 → 等 mechanism 落地再放开）
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
@@ -102,7 +113,7 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
   { id: "hy4-preview", name: "Hy4 preview", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
+  { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" } }, contextWindowTokens: 1_000_000 },
   // 智谱官方 GLM-5.3 文档：text-only（vision 不开）；thinking 常开不可关，
   // reasoning_effort 支持 low/high/max（默认 max，无 medium）
   { id: "glm-5.3", name: "GLM 5.3", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false, reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" } }, contextWindowTokens: 1_000_000 },
