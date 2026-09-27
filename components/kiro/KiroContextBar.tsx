@@ -149,7 +149,7 @@ export function KiroContextBar({
               ref={popoverRef}
               role="dialog"
               aria-label="当前上下文"
-              className="absolute left-0 bottom-full mb-1.5 w-[280px] max-h-[min(320px,50vh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 z-40 ux-inline"
+              className="absolute left-0 bottom-full mb-1.5 w-[280px] max-h-[min(320px,50vh)] overflow-y-auto overflow-x-clip bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 z-40 ux-inline"
             >
               <p className="px-2.5 pt-1.5 pb-1 text-[10px] font-bold text-sandrift">当前上下文</p>
               {allForPopover.map((c) => {

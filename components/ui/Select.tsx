@@ -273,7 +273,7 @@ export function UISelect<T extends string | number>({
               zIndex: 100,
             }}
             className={cn(
-              "overflow-y-auto scrollbar-none rounded-lg border border-line bg-surface shadow-card py-1 pointer-events-auto",
+              "overflow-y-auto overflow-x-clip scrollbar-none rounded-lg border border-line bg-surface shadow-card py-1 pointer-events-auto",
               "transition-opacity transition-transform ease-[var(--ease-standard)]",
               // enter = --motion-fast；exit = --motion-exit-fast（更快），与 presence unmount 同源对应
               visible

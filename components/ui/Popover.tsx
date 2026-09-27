@@ -129,7 +129,9 @@ export function PopoverPanel({
       data-kiro-open={motionProfile === "kiro" ? String(visible) : undefined}
       className={cn(
         "absolute z-40 bg-surface border border-line-strong rounded-2xl shadow-card",
-        "max-h-[min(420px,60vh)] overflow-y-auto",
+        // 纵向滚动容器：必须显式 overflow-x-clip——否则 overflow-x 按规范计算为 auto，
+        // 进入/退出 ±3px 位移与 drill ±4px 切换会在面板底部闪出横向滚动条。
+        "max-h-[min(420px,60vh)] overflow-y-auto overflow-x-clip",
         PLACEMENT_CLASSES[placement],
         motionProfile === "kiro" && cn(KIRO_PLACEMENT_ORIGIN[placement], "kiro-popover-motion"),
         motionProfile === "default" &&

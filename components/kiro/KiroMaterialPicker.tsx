@@ -25,7 +25,7 @@ export function KiroMaterialPicker({
   const coursesWithMaterials = courses.filter((c) => c.materials.length > 0);
 
   return (
-    <div role="menu" aria-label="选择课程资料" className="py-1 max-h-[320px] overflow-y-auto">
+    <div role="menu" aria-label="选择课程资料" className="py-1 max-h-[320px] overflow-y-auto overflow-x-clip">
       {coursesWithMaterials.length === 0 && (
         <p className="px-3 py-2 text-xs text-sandrift">暂无课程资料</p>
       )}

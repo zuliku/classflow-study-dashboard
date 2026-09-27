@@ -267,7 +267,7 @@ export function AssignmentContextMenu({
       ref={menuRef}
       data-testid="assignment-context-menu"
       className={cn(
-        "fixed z-50 w-52 bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 text-xs ux-inline",
+        "fixed z-50 w-52 bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 text-xs ux-inline overflow-x-clip",
         // BUG-073：open 驱动进出场（fast 档上浮），退场期间冻结最后定位
         open && visible
           ? "opacity-100 translate-y-0"

@@ -189,7 +189,7 @@ export function KiroAttachmentChip({
                 ref={menuRef}
                 role="menu"
                 className={cn(
-                  "fixed z-50 w-56 max-h-[min(320px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-1 ux-inline",
+                  "fixed z-50 w-56 max-h-[min(320px,60dvh)] overflow-y-auto overflow-x-clip bg-surface border border-line-strong rounded-2xl shadow-card p-1 ux-inline",
                   menuPos ? "opacity-100" : "opacity-0"
                 )}
                 style={menuPos ? { left: menuPos.x, top: menuPos.y } : { left: anchorRect.right, top: anchorRect.top }}

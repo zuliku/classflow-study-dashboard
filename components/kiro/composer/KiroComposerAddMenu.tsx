@@ -109,7 +109,7 @@ export function KiroComposerAddMenu({
       <div
         role="menu"
         aria-label="添加"
-        className="py-1 max-h-[min(360px,55vh)] overflow-y-auto"
+        className="py-1 max-h-[min(360px,55vh)] overflow-y-auto overflow-x-clip"
         data-testid="kiro-composer-add-menu"
       >
         {/* drill 进入（root → 上下文）：keyed view + 右向进入，与 Navigator 同语法 */}

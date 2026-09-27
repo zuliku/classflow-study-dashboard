@@ -146,7 +146,7 @@ export function MotionGallery() {
               {EASE_ROWS.map((row) => (
                 <div key={row.token} className="flex items-center gap-2">
                   <span className="w-44 shrink-0 truncate text-[11px] text-satin-grey">{row.label}</span>
-                  <div className="relative h-6 min-w-0 flex-1 rounded-lg bg-alabaster">
+                  <div className="relative h-6 min-w-0 flex-1 overflow-x-clip rounded-lg bg-alabaster">
                     <div
                       key={`${row.token}-${nonce}`}
                       className="absolute top-1 h-4 w-16 rounded-md bg-charcoal transition-transform duration-[var(--motion-base)]"

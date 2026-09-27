@@ -116,7 +116,6 @@ describe("KiroComposerAddMenu drill 切换动效", () => {
 
 describe("同类 drill 切换源码契约", () => {
   const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
-
   it("KiroMessage More（actions ↔ 来源）：keyed + 方向进入", () => {
     const src = read("components/kiro/KiroMessage.tsx");
     expect(src).toMatch(/key=\{moreView\}[\s\S]*?ux-kiro-view-enter/);
@@ -127,5 +126,27 @@ describe("同类 drill 切换源码契约", () => {
     const src = read("components/assignment/AssignmentContextMenu.tsx");
     expect(src).toMatch(/key=\{view\}[\s\S]*?ux-kiro-view-enter/);
     expect(src).toMatch(/--motion-shift-x.*view === "main" \? "-4px" : "4px"/);
+  });
+});
+
+describe("横向滚动条闪现回归（overflow-y-auto 必须显式 overflow-x-clip）", () => {
+  const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+
+  it("Popover 基座：进入 ±3px / drill ±4px 不在面板底部闪出横向滚动条", () => {
+    const src = read("components/ui/Popover.tsx");
+    expect(src).toMatch(/overflow-y-auto overflow-x-clip/);
+  });
+
+  it.each([
+    "components/kiro/composer/KiroComposerAddMenu.tsx",
+    "components/kiro/KiroMaterialPicker.tsx",
+    "components/assignment/AssignmentContextMenu.tsx",
+    "components/kiro/KiroAttachmentChip.tsx",
+    "components/kiro/KiroContextBar.tsx",
+    "components/kiro/computer/KiroRecentArtifactsPopover.tsx",
+    "components/ui/Select.tsx",
+    "components/motion/MotionGallery.tsx",
+  ])("%s：纵向滚动/浮层容器裁剪横向溢出", (f) => {
+    expect(read(f)).toMatch(/overflow-x-clip/);
   });
 });

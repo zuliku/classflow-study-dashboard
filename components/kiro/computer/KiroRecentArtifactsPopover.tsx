@@ -132,7 +132,7 @@ export function KiroRecentArtifactsPopover() {
           </div>
 
           {/* V4.1：内容高度跟随真实文件数量——移除固定 min-height；仅超限滚动 */}
-          <div className="max-h-[min(420px,60dvh)] overflow-y-auto">
+          <div className="max-h-[min(420px,60dvh)] overflow-y-auto overflow-x-clip">
             {loading && entries.length === 0 && (
               <div className="h-[104px] flex flex-col items-center justify-center gap-2 text-sandrift">
                 <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden="true" />
