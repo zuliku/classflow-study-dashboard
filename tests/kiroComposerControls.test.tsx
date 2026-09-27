@@ -337,6 +337,48 @@ describe("Kiro Composer — Reasoning / Model", () => {
     }
   });
 
+  it("最高档流动彩条：max 显现 crossfade，非 max 隐藏；底填充过渡保留", async () => {
+    const MAXABLE = { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" };
+    await renderComposer({ reasoningCapability: MAXABLE, reasoningEffort: "max" });
+    await click('[data-testid="kiro-composer-reasoning"]');
+    const track = q('[data-testid="kiro-composer-reasoning-track"]')!;
+    expect(track.getAttribute("data-max")).toBe("true");
+    const flow = q('[data-testid="kiro-composer-reasoning-flow"]')!;
+    // 流动层：与底填充同宽 + 显现（opacity crossfade，非颜色跳变）+ 宽高同过渡不断档
+    expect(flow.className).toContain("opacity-100");
+    expect(flow.className).toContain("transition-[width,opacity]");
+    expect(flow.style.width).toBe("100%");
+    // 彩带：200% 宽 + 位移动画类（compositor 合成；高饱和亮色）
+    const strip = q('[data-testid="kiro-composer-reasoning-flow-strip"]')!;
+    expect(strip.className).toContain("kiro-reasoning-flow");
+    expect(strip.className).toContain("w-[200%]");
+    // 底填充保留 width 过渡（档位滑动不断）
+    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-[width]");
+  });
+
+  it("非最高档：流动层隐藏（opacity-0），底填充正常", async () => {
+    await renderComposer({ reasoningEffort: "low" });
+    await click('[data-testid="kiro-composer-reasoning"]');
+    const flow = q('[data-testid="kiro-composer-reasoning-flow"]')!;
+    expect(flow.className).toContain("opacity-0");
+    expect(q('[data-testid="kiro-composer-reasoning-track"]')!.getAttribute("data-max")).toBeNull();
+  });
+
+  it("流动彩条 CSS：位移动画无缝循环 + 高饱和亮色 + reduced-motion 静止保彩", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+    // 位移（compositor）而非 background-position（重绘）；-50% 恰为一个镜像周期
+    expect(css).toContain("transform: translateX(-50%)");
+    expect(css).not.toMatch(/kiro-reasoning-flow-slide[\s\S]{0,200}?background-position/);
+    // 高饱和亮色（非此前暗色系）
+    for (const hex of ["#FBBF24", "#FB7185", "#A78BFA", "#38BDF8"]) {
+      expect(css).toContain(hex);
+    }
+    // reduced-motion：动画停但保留静态彩条
+    expect(css).toContain("html[data-motion-effective=\"reduced\"] .kiro-reasoning-flow");
+  });
+
   it("Reasoning 拖动：按指针位置换算档位（pointerdown → pointermove），拖动期间关闭过渡", async () => {
     await renderComposer({ reasoningEffort: "low" });
     await click('[data-testid="kiro-composer-reasoning"]');

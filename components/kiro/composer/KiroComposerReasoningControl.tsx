@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
  * - 弹层：当前档位 + 模型名 + 分段轨道；**点击档位即选中（不关闭弹窗）**，不做拖拽放置
  * - 轨道为 flex 分段（无绝对定位溢出 → 不出现滚动条 / 不被裁剪）
  * - Reasoning 是 Model preference：与 Computer 开关无关；模型 fixed → 不渲染
+ * - 最高档：填充层上叠加流动彩条（opacity crossfade 进出，变色不生硬；reduced-motion 静止保彩）
  */
 /** 弹窗固定宽度（w-64 = 256px）：用于锚点精确居中 */
 const KiroComposerReasoningControlWIDTH = 256;
@@ -215,6 +216,7 @@ export function KiroComposerReasoningControl({
             onPointerCancel={handleTrackPointerEnd}
             data-testid="kiro-composer-reasoning-track"
             data-dragging={dragging ? "true" : undefined}
+            data-max={atMax || undefined}
             className="relative mt-2 h-9 rounded-full bg-alabaster overflow-hidden touch-none focus:outline-none focus-visible:ring-1 focus-visible:ring-line-strong"
           >
             {/* 填充：到当前档位中心；最高档填满整条轨道（直边 + 轨道裁剪，窄档位不变形）；
@@ -225,6 +227,25 @@ export function KiroComposerReasoningControl({
               className="absolute inset-y-0 left-0 bg-pastel-mint transition-[width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
               style={{ width: `${fillPercent}%` }}
             />
+            {/* 最高档流动彩条：与底填充同宽同位，opacity crossfade 进出（structure 档，
+                比 width 过渡略慢半拍，变色不生硬）；内层 200% 宽彩带做 translateX 位移
+                （compositor 合成，比 background-position 重绘更流畅；位移恰为一个镜像周期，无缝循环）；
+                reduced-motion 下静止但保留彩色 */}
+            <span
+              aria-hidden="true"
+              data-testid="kiro-composer-reasoning-flow"
+              className={cn(
+                "absolute inset-y-0 left-0 overflow-hidden transition-[width,opacity] duration-[var(--kiro-motion-structure,150ms)] ease-[var(--ease-standard)]",
+                atMax ? "opacity-100" : "opacity-0"
+              )}
+              style={{ width: `${fillPercent}%` }}
+            >
+              <span
+                aria-hidden="true"
+                data-testid="kiro-composer-reasoning-flow-strip"
+                className="block h-full w-[200%] kiro-reasoning-flow"
+              />
+            </span>
             {/* 档位点：未选中显示小点（固定位置标记，保持原尺寸）；选中位置由 knob 表达 */}
             {steps.map((step, index) =>
               index === activeIndex ? null : (

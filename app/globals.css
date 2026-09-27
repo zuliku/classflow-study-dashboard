@@ -1373,6 +1373,8 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   --kiro-stagger-empty-step: 32ms;
   /* 全产品唯一的常驻 ambient（S3-3；TimetableGrid 当前课程呼吸） */
   --kiro-ambient-breathe: 3.2s;
+  /* 思考程度最高档流动彩条周期（暖色光谱；reduced-motion 下静止但保留彩色终态） */
+  --kiro-reasoning-flow: 2.6s;
 }
 
 .kiro-motion-workspace {
@@ -1403,6 +1405,33 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   /* L2 structure settle：完整结构首次落位（opacity .88→1 + 上移 3px，不 scale） */
   .kiro-structure-settle {
     animation: kiro-structure-in var(--kiro-motion-structure) var(--ease-standard) both;
+  }
+
+  /* 思考程度最高档流动彩条：高饱和亮色光谱镜像渐变（amber→rose→violet→sky→mirror），
+     位移整条带 translateX(0→-50%) 恰为一个镜像周期，无缝循环；
+     显隐由调用方 opacity crossfade（过渡 structure 档），渐变本身不做颜色跳变；
+     位移动画只走 compositor（transform），不触发每帧重绘，比 background-position 版流畅 */
+  .kiro-reasoning-flow {
+    background-image: linear-gradient(
+      90deg,
+      #FBBF24 0%,
+      #FB7185 17%,
+      #A78BFA 33%,
+      #38BDF8 50%,
+      #A78BFA 67%,
+      #FB7185 83%,
+      #FBBF24 100%
+    );
+    animation: kiro-reasoning-flow-slide var(--kiro-reasoning-flow, 2.6s) linear infinite;
+  }
+
+  @keyframes kiro-reasoning-flow-slide {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
   }
 
   @keyframes kiro-structure-in {
@@ -1557,6 +1586,7 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
 
 /* Reduced Motion：Kiro motion 全部瞬时（最终态直达，无 translate/scale/stagger） */
 html[data-motion-effective="reduced"] .kiro-structure-settle,
+html[data-motion-effective="reduced"] .kiro-reasoning-flow,
 html[data-motion-effective="reduced"] .kiro-slash-enter,
 html[data-motion-effective="reduced"] .kiro-empty-logo-intro,
 html[data-motion-effective="reduced"] .kiro-empty-title-intro,
