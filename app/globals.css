@@ -1407,20 +1407,23 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     animation: kiro-structure-in var(--kiro-motion-structure) var(--ease-standard) both;
   }
 
-  /* 思考程度最高档流动彩条：高饱和亮色光谱镜像渐变（amber→rose→violet→sky→mirror），
-     位移整条带 translateX(0→-50%) 恰为一个镜像周期，无缝循环；
+  /* 思考程度最高档流动彩条：亮色低饱和光谱（amber-300→rose-300→violet-300→sky-300），
+     色带以 50% 为周期重复排布（0/50/100% 同色），内层 200% 宽条带 translateX(0→-50%)
+     位移恰为一个周期 —— 首尾帧画面完全一致，无缝循环，不断档；
      显隐由调用方 opacity crossfade（过渡 structure 档），渐变本身不做颜色跳变；
-     位移动画只走 compositor（transform），不触发每帧重绘，比 background-position 版流畅 */
+     位移动画只走 compositor（transform），不触发每帧重绘 */
   .kiro-reasoning-flow {
     background-image: linear-gradient(
       90deg,
-      #FBBF24 0%,
-      #FB7185 17%,
-      #A78BFA 33%,
-      #38BDF8 50%,
-      #A78BFA 67%,
-      #FB7185 83%,
-      #FBBF24 100%
+      #FCD34D 0%,
+      #FDA4AF 12.5%,
+      #C4B5FD 25%,
+      #7DD3FC 37.5%,
+      #FCD34D 50%,
+      #FDA4AF 62.5%,
+      #C4B5FD 75%,
+      #7DD3FC 87.5%,
+      #FCD34D 100%
     );
     animation: kiro-reasoning-flow-slide var(--kiro-reasoning-flow, 2.6s) linear infinite;
   }

@@ -229,7 +229,7 @@ export function KiroComposerReasoningControl({
             />
             {/* 最高档流动彩条：与底填充同宽同位，opacity crossfade 进出（structure 档，
                 比 width 过渡略慢半拍，变色不生硬）；内层 200% 宽彩带做 translateX 位移
-                （compositor 合成，比 background-position 重绘更流畅；位移恰为一个镜像周期，无缝循环）；
+                （compositor 合成；位移恰为一个色带周期，首尾帧一致，无缝不断档）；
                 reduced-motion 下静止但保留彩色 */}
             <span
               aria-hidden="true"

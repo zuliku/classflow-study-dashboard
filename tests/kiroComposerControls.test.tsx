@@ -364,17 +364,20 @@ describe("Kiro Composer — Reasoning / Model", () => {
     expect(q('[data-testid="kiro-composer-reasoning-track"]')!.getAttribute("data-max")).toBeNull();
   });
 
-  it("流动彩条 CSS：位移动画无缝循环 + 高饱和亮色 + reduced-motion 静止保彩", async () => {
+  it("流动彩条 CSS：位移动画无缝循环 + 亮色低饱和 + reduced-motion 静止保彩", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
     const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
-    // 位移（compositor）而非 background-position（重绘）；-50% 恰为一个镜像周期
+    // 位移（compositor）而非 background-position（重绘）；-50% 恰为一个色带周期
     expect(css).toContain("transform: translateX(-50%)");
     expect(css).not.toMatch(/kiro-reasoning-flow-slide[\s\S]{0,200}?background-position/);
-    // 高饱和亮色（非此前暗色系）
-    for (const hex of ["#FBBF24", "#FB7185", "#A78BFA", "#38BDF8"]) {
+    // 亮色低饱和（300 档）；色带以 50% 为周期重复（0/50/100% 同色 → 首尾帧一致，不断档）
+    for (const hex of ["#FCD34D", "#FDA4AF", "#C4B5FD", "#7DD3FC"]) {
       expect(css).toContain(hex);
     }
+    expect(css).toContain("#FCD34D 0%");
+    expect(css).toContain("#FCD34D 50%");
+    expect(css).toContain("#FCD34D 100%");
     // reduced-motion：动画停但保留静态彩条
     expect(css).toContain("html[data-motion-effective=\"reduced\"] .kiro-reasoning-flow");
   });
