@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
  *
  * Motion Contract：enter = --motion-overlay（220ms，与 Drawer panel enter 同档）；
  * exit = --motion-exit-base（150ms）；presence unmount = MOTION_EXIT_MS.base —— 三者同源对应。
+ * Motion V3：进入 --ease-standard（历史视觉不变），退出 --ease-exit（加速离场，进出不对称）。
  */
 export interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
   open: boolean;
@@ -87,8 +88,8 @@ export function Dialog({
               "w-full max-w-md bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
               // enter ≈220ms（scale 0.99→1 + 2px 上移归零）；exit =150ms（scale 1→0.99 + 2px），exit < enter
               visible
-                ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)]"
-                : "opacity-0 scale-[0.99] translate-y-0.5 !duration-[var(--motion-exit-base)]",
+                ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-standard)]"
+                : "opacity-0 scale-[0.99] translate-y-0.5 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]",
               className
             )}
             {...rest}

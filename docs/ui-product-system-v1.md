@@ -50,14 +50,20 @@
 
 ## 4. Motion
 
-沿用 globals.css 既有 tokens 与工具类，不引入动画 framework：
+沿用 globals.css 既有 tokens 与工具类，不引入动画 framework（Motion V3）：
 
-- tokens：`--motion-fast(140)` / `--motion-base(200)` / `--motion-panel(230)` / `--motion-page(180)` /
-  `--motion-data(200)` / `--motion-select(140)` / `--motion-snap(90)`。
+- durations：`--motion-snap(90)` / `--motion-fast(140)` / `--motion-base(180)` /
+  `--motion-overlay(220)` / `--motion-panel(230)` / `--motion-page(180)` / `--motion-data(200)`；
+  exit = enter 的 70–80%：`--motion-exit-fast(110)` / `--motion-exit-base(150)` /
+  `--motion-exit-panel(160)`（唯一真值见 `lib/motion.ts`，三方由 `tests/motionContract.test.tsx` 校验）。
+- easing：进入 `--ease-standard`（历史视觉不变，新代码可用 `--ease-enter`）/
+  品牌 `--ease-emphasized`；**所有退出分支用 `--ease-exit`（加速离场，进出不对称）**；
+  大位移 morph 可用 `--ease-spring`（无 bounce 通用档）。
 - PageTransition：opacity-only。
 - Row hover：background / text / icon color 120–150ms，无 scale / translate / shadow transition。
 - 普通 Card：无 hover 上浮 / scale / bounce / 强 shadow transition。
 - 直接操作（拖拽/调整）反馈：snap 吸附 + settle opacity 归位。
+- 首屏编排：staged fade（`--kiro-stagger-0/1/2/3`）+ skeleton shimmer（`ux-skeleton`），reduced-motion 下静态。
 - 图表动画 respect reduced motion（`useEffectiveReducedMotion`），时长 250–350ms 量级。
 - 原则：**Animate causality, not decoration.**
 

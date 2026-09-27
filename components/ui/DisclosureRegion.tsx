@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
  *   visual exit 在其后）。
  * - Motion Contract：enter = --motion-base；close = --motion-exit-base（exit < enter，收起更快）；
  *   presence unmount = MOTION_EXIT_MS.base —— 与 CSS close 时长同源一致。
+ *   Motion V3：进入 --ease-standard，收起 --ease-exit（加速离场）。
  * - reduced motion 由 usePresence + 全局 data-motion-effective 自然降级。
  */
 export interface DisclosureRegionProps {
@@ -57,7 +58,7 @@ export function DisclosureRegion({
         "grid transition-[grid-template-rows,opacity] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
         visible
           ? "grid-rows-[1fr] opacity-100"
-          : "grid-rows-[0fr] opacity-0 pointer-events-none !duration-[var(--motion-exit-base)]",
+          : "grid-rows-[0fr] opacity-0 pointer-events-none !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]",
         className
       )}
     >

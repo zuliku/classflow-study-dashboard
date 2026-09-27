@@ -51,12 +51,13 @@ export function AnalyticsSummaryStrip({
   );
 }
 
-/** Loading：布局与最终 strip 完全一致（同一 divider helper；值均为 —） */
+/** Loading：布局与最终 strip 完全一致（同一 divider helper；值均为 —）。
+ * Motion V3 P1：ux-skeleton 扫光渐进增强（保留 animate-pulse 占位语义，reduced-motion 下静态）。 */
 export function AnalyticsSummaryStripSkeleton() {
   return (
     <div
       data-testid="analytics-summary-strip"
-      className="grid grid-cols-2 lg:grid-cols-4 bg-surface border border-line rounded-2xl shadow-subtle"
+      className="ux-skeleton grid grid-cols-2 lg:grid-cols-4 bg-surface border border-line rounded-2xl shadow-subtle"
       aria-label="学习指标加载中"
     >
       {["实际专注", "完成任务", "计划执行", "按时完成"].map((label, i) => (

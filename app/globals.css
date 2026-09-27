@@ -88,6 +88,14 @@
   --motion-exit-panel: 160ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Motion V3：进出不对称（M3/Apple 对齐）——进入减速（decelerate），退出加速（accelerate）；
+     与 lib/motion.ts EASE 一一对应。进入保持 --ease-standard（历史视觉不变）；
+     所有退出分支用 --ease-exit；大位移 morph 可用 --ease-spring（无 bounce 通用档）。 */
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Motion V3 P1：skeleton 扫光周期（常驻 infinite 治理 token，不扩散到其他场景） */
+  --skeleton-sweep: 1.6s;
 
   /* Kiro Brand Motion tokens (V2 unified) */
   --kiro-flow-ambient: 6.5s;
@@ -497,6 +505,56 @@ button:disabled {
   .ux-channel-provider-enter {
     animation: ux-channel-provider-in var(--motion-fast) var(--ease-standard) both;
   }
+
+  /* Motion V3 P1 Choreography：首屏 staged fade（s0/s1/s2/s3 复用 stagger tokens）。
+     用法：hero 首卡 s0、次卡 s1、第二屏 s1/s2；一次性 animation，both fill。
+     reduced-motion 下由下方全局守卫降为静态（animation-duration 0.01ms）。 */
+  .ux-staged-s0 {
+    animation: ux-staged-in var(--motion-base) var(--ease-standard) both;
+    animation-delay: var(--kiro-stagger-0, 55ms);
+  }
+  .ux-staged-s1 {
+    animation: ux-staged-in var(--motion-base) var(--ease-standard) both;
+    animation-delay: var(--kiro-stagger-1, 75ms);
+  }
+  .ux-staged-s2 {
+    animation: ux-staged-in var(--motion-base) var(--ease-standard) both;
+    animation-delay: var(--kiro-stagger-2, 95ms);
+  }
+  .ux-staged-s3 {
+    animation: ux-staged-in var(--motion-base) var(--ease-standard) both;
+    animation-delay: var(--kiro-stagger-3, 140ms);
+  }
+
+  /* Motion V3 P1：skeleton shimmer（Linear/Stripe 式扫光）。
+     与 animate-pulse 共存渐进增强：保留 pulse 占位，叠加扫光伪元素；
+     reduced-motion 下扫光关闭（见下方守卫），pulse 由既有全局规则处理。 */
+  .ux-skeleton {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .ux-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      rgba(255, 255, 255, 0.55) 50%,
+      transparent 80%
+    );
+    transform: translateX(-100%);
+    animation: ux-skeleton-sweep var(--skeleton-sweep, 1.6s) var(--ease-standard) infinite;
+  }
+
+  /* Motion V3 P1：Detail 共享元素渐进增强（View Transitions API）。
+     不支持的浏览器自动忽略；调用方通过 --shared-name 区分实体（如 task/ddl/course）。 */
+  .ux-shared-detail {
+    view-transition-name: var(--shared-name, detail-panel);
+  }
 }
 
 @keyframes ux-enter {
@@ -654,6 +712,28 @@ button:disabled {
   }
 }
 
+/* Motion V3 P1：首屏 staged（4px 上移 + 淡入，base 档；延迟由调用类注入 stagger token） */
+@keyframes ux-staged-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Motion V3 P1：skeleton 扫光（伪元素 -100% → 100% 平移，1.6s 循环） */
+@keyframes ux-skeleton-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 /* 尊重系统减弱动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion-preference="full"]) *,
@@ -689,6 +769,17 @@ html[data-motion-effective="reduced"] .ux-channel-provider-enter {
   html:not([data-motion-preference="full"]) .kiro-empty-suggestion-intro {
     animation-delay: 0ms !important;
   }
+  /* Motion V3 P1：staged 延迟清零 + skeleton 扫光关闭 */
+  html:not([data-motion-preference="full"]) .ux-staged-s0,
+  html:not([data-motion-preference="full"]) .ux-staged-s1,
+  html:not([data-motion-preference="full"]) .ux-staged-s2,
+  html:not([data-motion-preference="full"]) .ux-staged-s3 {
+    animation-delay: 0ms !important;
+  }
+  html:not([data-motion-preference="full"]) .ux-skeleton::after {
+    animation: none !important;
+    display: none !important;
+  }
 }
 html[data-motion-effective="reduced"] .animate-spin,
 html[data-motion-effective="reduced"] .animate-pulse {
@@ -696,6 +787,17 @@ html[data-motion-effective="reduced"] .animate-pulse {
 }
 html[data-motion-effective="reduced"] .kiro-empty-suggestion-intro {
   animation-delay: 0ms !important;
+}
+/* Motion V3 P1：effective reduced 下 staged/skeleton 同等降级 */
+html[data-motion-effective="reduced"] .ux-staged-s0,
+html[data-motion-effective="reduced"] .ux-staged-s1,
+html[data-motion-effective="reduced"] .ux-staged-s2,
+html[data-motion-effective="reduced"] .ux-staged-s3 {
+  animation-delay: 0ms !important;
+}
+html[data-motion-effective="reduced"] .ux-skeleton::after {
+  animation: none !important;
+  display: none !important;
 }
 
 /* Kiro Math（KaTeX，Task 7C）：只作用于 Kiro 输出 scope（.kiro-markdown），不污染全局。
@@ -1025,11 +1127,13 @@ html[data-motion-effective="reduced"] .kiro-capsule .kiro-ring { animation: none
    决定；非手动 morph（hydration / 断点 / reduced-motion）一律瞬时切换。
    V2.1.1：先修静态最终几何（STATIC FINAL GEOMETRY FIRST），动画在两个正确布局之间插值。 */
 
-/* Sidebar Shell：仅手动 morph 播放 width transition */
+/* Sidebar Shell：仅手动 morph 播放 width transition。
+   Motion V3 P2：width morph 改用 --ease-spring（无 bounce 通用 spring 近似，230ms 内自然 settle；
+   时长不变，仅曲线从 emphasized 换为 spring，Apple bounce=0 通用档对齐）。 */
 .sidebar-shell {
   transition-property: width;
   transition-duration: var(--motion-panel);
-  transition-timing-function: var(--ease-emphasized);
+  transition-timing-function: var(--ease-spring);
 }
 .sidebar-shell[data-motion-active="false"] {
   transition: none;

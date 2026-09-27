@@ -97,7 +97,7 @@ export function OverviewWorkspace() {
           <section className="box-border flex flex-col shrink-0 min-h-0 workspace-gutter pt-4 pb-24 md:pt-5 md:pb-5 xl:h-[calc(100dvh-var(--titlebar-h)-4rem-var(--overview-fold-gap))] xl:mb-[var(--overview-fold-gap)] xl:pb-0 [@media(max-height:720px)]:!pt-2 [@media(max-height:720px)]:!pb-0">
             {/* 三卡 Grid：flex-1 eats remaining hero space, three cards same top/bottom */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch flex-1 min-h-0">
-              <div className="lg:col-span-2 flex flex-col min-h-0">
+              <div className="lg:col-span-2 flex flex-col min-h-0 ux-staged-s0">
                 <TimetableGrid
                   density="compact"
                   fillAvailableHeight
@@ -118,7 +118,7 @@ export function OverviewWorkspace() {
               {/* 右栏：DDL 吸收剩余高度（flex-1），Calendar 固定稳定高度（不随月份/内容变化）
                   右栏总高恒等于左侧课表 → 三卡同顶同底
                   高度受限（≤800px 视口）：Agenda 隐藏 + Calendar shell 缩短，空间让给 DDL */}
-              <div className="flex flex-col h-full min-h-0 gap-4">
+              <div className="flex flex-col h-full min-h-0 gap-4 ux-staged-s1">
                 <div className="flex-1 min-h-0">
                   <UpcomingDDL />
                 </div>
@@ -133,10 +133,10 @@ export function OverviewWorkspace() {
               S4-3：min(520px,100%) —— 窄窗（1024–1280）自动单列不断裂；宽屏保持双列。
               子项 min-w-0 防图表长内容撑破 grid（grid item 默认 min-width:auto）。 */}
           <section className="grid gap-4 items-stretch shrink-0 grid-cols-[repeat(auto-fit,minmax(min(520px,100%),1fr))] workspace-gutter pb-24 md:pb-5">
-            <div className="md:min-h-[460px] min-w-0" data-testid="overview-load-wrap">
+            <div className="md:min-h-[460px] min-w-0 ux-staged-s1" data-testid="overview-load-wrap">
               <StudyLoadChart />
             </div>
-            <div className="md:min-h-[460px] min-w-0" data-testid="overview-tasks-wrap">
+            <div className="md:min-h-[460px] min-w-0 ux-staged-s2" data-testid="overview-tasks-wrap">
               <AssignmentTable mode="compact" />
             </div>
           </section>

@@ -58,7 +58,8 @@ export function resolveDrawerAriaModal(
  *  edge = 右侧滑入；
  *  floating = 浮层位移 + 淡入（Workflow UX Motion M4：Stable Edge Exit——
  *  floating contextual panel 是右侧 detail surface，不做 Modal 式向心缩放；
- *  产品 Motion Grammar：Dialog → scale + fade；Drawer → translate + fade） */
+ *  产品 Motion Grammar：Dialog → scale + fade；Drawer → translate + fade）
+ * Motion V3：进入 --ease-emphasized（历史视觉不变），退出 --ease-exit（加速离场）。 */
 export function resolveDrawerPresentation(
   presentation: DrawerPresentation,
   visible: boolean
@@ -78,7 +79,7 @@ export function resolveDrawerPresentation(
         // exit：右侧轻移 + 淡出（--motion-exit-panel 160ms）；无 scale（M4 Stable Edge Exit）
         visible
           ? "translate-x-0 opacity-100 !duration-[var(--motion-overlay)]"
-          : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)]"
+          : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
       ),
     };
   }
@@ -90,7 +91,7 @@ export function resolveDrawerPresentation(
       // 与 floating 同一生命周期语义；不像是从屏幕外飞入
       visible
         ? "translate-x-0 opacity-100 !duration-[var(--motion-overlay)]"
-        : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)]"
+        : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
     ),
   };
 }

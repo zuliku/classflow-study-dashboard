@@ -21,7 +21,8 @@
     "test:docx:openxml": "node scripts/docx-compat/validate-openxml.mjs",
     "verify:preload-artifact": "node scripts/verify-preload-artifact.mjs",
     "pack:win": "electron-vite build && electron-builder --win nsis",
-    "security:secrets": "node scripts/check-secrets.mjs"
+    "security:secrets": "node scripts/check-secrets.mjs",
+    "lint:motion": "node scripts/check-motion.mjs"
   },
   "engines": {
     "node": ">=22.12 <23"

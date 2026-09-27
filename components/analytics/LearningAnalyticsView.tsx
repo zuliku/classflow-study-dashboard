@@ -36,7 +36,8 @@ import { AnalyticsWorkspaceViewBar } from "@/components/analytics/AnalyticsWorks
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 
 function ChartSkeleton() {
-  return <div className="h-64 w-full rounded-xl bg-alabaster animate-pulse" />;
+  // Motion V3 P1：ux-skeleton 扫光（保留 pulse 占位，reduced-motion 下静态）
+  return <div className="ux-skeleton h-64 w-full rounded-xl bg-alabaster animate-pulse" />;
 }
 
 /** B2/B9：双并列信息 Card 的统一列几何（Desktop 50/50；Tablet/Mobile 单列）。

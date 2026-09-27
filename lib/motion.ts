@@ -1,5 +1,5 @@
 /**
- * ClassFlow Motion Contract V2 —— 全局交互动效时间唯一真值（JS 侧）。
+ * ClassFlow Motion Contract V3 —— 全局交互动效时间 + 缓动唯一真值（JS 侧）。
  *
  * 与 app/globals.css :root 的同名 CSS 变量一一对应：
  *   MOTION_MS.snap        = --motion-snap        press / instant feedback
@@ -16,9 +16,18 @@
  *   MOTION_EXIT_MS.base   = --motion-exit-base   disclosure close / dialog exit / content swap-out
  *   MOTION_EXIT_MS.panel  = --motion-exit-panel  drawer exit / list-row structural collapse
  *
+ * Easing（V3 新增，M3/Apple 对齐：进入减速、退出加速）：
+ *   EASE.standard   = --ease-standard    通用进入 / 常驻（decelerate-like，保持历史视觉）
+ *   EASE.emphasized = --ease-emphasized  品牌 / intro / Sidebar morph（原值不变）
+ *   EASE.enter      = --ease-enter       新代码进入首选（M3 standard decelerate）
+ *   EASE.exit       = --ease-exit        所有退出首选（M3 standard accelerate，比进入更快离场）
+ *   EASE.spring     = --ease-spring      大位移 morph 近似 spring（无 bounce，bounce=0 通用档）
+ *
  * 约定：
  * - Primitive 的 CSS transition 时长必须引用上述 CSS 变量（或与注释声明对应），
  *   presence/unmount 计时必须引用本文件常量——一种交互语义只存在一个 Motion 时间真值。
+ * - 退出分支的 easing 必须用 --ease-exit（或 EASE.exit 注释对应），进入保持 --ease-standard
+ *   （历史视觉不变）——进出不对称，关闭更快离场。
  * - 特殊组件确需独立 duration 时，必须在使用处注释解释原因（如 PopoverPanel kiro profile）。
  * - Reduced Motion 不走这些常量：usePresence / useEffectiveReducedMotion 直接落最终态。
  */
@@ -36,6 +45,18 @@ export const MOTION_EXIT_MS = {
   fast: 110,
   base: 150,
   panel: 160,
+} as const;
+
+/**
+ * Easing 唯一真值（V3，与 :root --ease-* 一一对应）。
+ * 数值 = cubic-bezier 字面量（CSS 侧 var() 引用；JS 侧仅契约与 WAAPI/测试用途）。
+ */
+export const EASE = {
+  standard: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+  emphasized: "cubic-bezier(0.22, 1, 0.36, 1)",
+  enter: "cubic-bezier(0, 0, 0.2, 1)",
+  exit: "cubic-bezier(0.3, 0, 1, 1)",
+  spring: "cubic-bezier(0.32, 0.72, 0, 1)",
 } as const;
 
 /**
@@ -85,3 +106,4 @@ export const STAGGER_MS = {
 export type MotionTier = keyof typeof MOTION_MS;
 export type MotionExitTier = keyof typeof MOTION_EXIT_MS;
 export type KiroMotionTier = keyof typeof KIRO_MOTION_MS;
+export type EaseTier = keyof typeof EASE;

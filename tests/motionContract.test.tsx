@@ -19,7 +19,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-import { MOTION_MS, MOTION_EXIT_MS, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
+import { MOTION_MS, MOTION_EXIT_MS, EASE, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
 import { usePresence } from "@/lib/usePresence";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -30,6 +30,7 @@ import { useAppStore } from "@/store/useAppStore";
  * 2. Primitive 不再出现裸魔法 duration / exit timer 分裂
  * 3. presence lifecycle：open → mounted hidden → visible → close → hidden → duration 后 unmount
  * 4. Reduced Motion：不等待 exit timer，立即落最终态
+ * 5. Motion V3：easing 进出不对称（进入 standard，退出 exit 加速离场）
  */
 
 function setMotionPreference(pref: "system" | "full" | "reduced") {
@@ -81,6 +82,64 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(MOTION_EXIT_MS.base).toBeGreaterThanOrEqual(MOTION_MS.base * 0.7);
     expect(MOTION_EXIT_MS.base).toBeLessThan(MOTION_MS.base);
     expect(MOTION_EXIT_MS.panel).toBeLessThan(MOTION_MS.overlay);
+  });
+
+  it("Motion V3 easing：CSS token ↔ JS EASE 一一对应", () => {
+    expect(css).toMatch(/--ease-standard:\s*cubic-bezier\(0\.2,\s*0\.8,\s*0\.2,\s*1\)/);
+    expect(css).toMatch(/--ease-emphasized:\s*cubic-bezier\(0\.22,\s*1,\s*0\.36,\s*1\)/);
+    expect(css).toMatch(/--ease-enter:\s*cubic-bezier\(0,\s*0,\s*0\.2,\s*1\)/);
+    expect(css).toMatch(/--ease-exit:\s*cubic-bezier\(0\.3,\s*0,\s*1,\s*1\)/);
+    expect(css).toMatch(/--ease-spring:\s*cubic-bezier\(0\.32,\s*0\.72,\s*0,\s*1\)/);
+    expect(EASE.standard).toBe("cubic-bezier(0.2, 0.8, 0.2, 1)");
+    expect(EASE.emphasized).toBe("cubic-bezier(0.22, 1, 0.36, 1)");
+    expect(EASE.enter).toBe("cubic-bezier(0, 0, 0.2, 1)");
+    expect(EASE.exit).toBe("cubic-bezier(0.3, 0, 1, 1)");
+    expect(EASE.spring).toBe("cubic-bezier(0.32, 0.72, 0, 1)");
+  });
+
+  it("Motion V3：退出分支统一加速离场（--ease-exit），进入保持 standard", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    for (const f of [
+      "components/ui/Dialog.tsx",
+      "components/ui/Drawer.tsx",
+      "components/ui/Popover.tsx",
+      "components/ui/DisclosureRegion.tsx",
+      "components/ui/OverlayLayer.tsx",
+      "components/ui/ToastViewport.tsx",
+    ]) {
+      expect(read(f)).toMatch(/ease-\[var\(--ease-exit\)\]/);
+    }
+    expect(read("components/ui/Dialog.tsx")).toMatch(/ease-\[var\(--ease-standard\)\]/);
+  });
+
+  it("Motion V3 P1：staged/skeleton/shared 工具 + reduced 守卫", () => {
+    expect(css).toMatch(/\.ux-staged-s0/);
+    expect(css).toMatch(/\.ux-staged-s1/);
+    expect(css).toMatch(/\.ux-staged-s2/);
+    expect(css).toMatch(/\.ux-staged-s3/);
+    expect(css).toMatch(/animation-delay:\s*var\(--kiro-stagger-0/);
+    expect(css).toMatch(/@keyframes ux-staged-in/);
+    expect(css).toMatch(/\.ux-skeleton/);
+    expect(css).toMatch(/@keyframes ux-skeleton-sweep/);
+    expect(css).toMatch(/\.ux-shared-detail/);
+    // reduced-motion 下 staged 延迟清零 + skeleton 扫光关闭（双通道：media + effective）
+    expect(css).toMatch(/\.ux-staged-s0,\s*\n?\s*html[^\{]*\.ux-staged-s3\s*\{[^}]*animation-delay:\s*0ms/s);
+    expect(css).toMatch(/\.ux-skeleton::after\s*\{[^}]*display:\s*none/s);
+  });
+
+  it("Motion V3 P1：Overview 首屏编排 + skeleton 渐进增强（无裸 pulse 替换）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    const overview = read("components/dashboard/OverviewWorkspace.tsx");
+    expect(overview).toMatch(/ux-staged-s0/);
+    expect(overview).toMatch(/ux-staged-s1/);
+    expect(overview).toMatch(/ux-staged-s2/);
+    // skeleton 保留 animate-pulse 占位语义，只叠加 ux-skeleton 扫光
+    expect(read("components/analytics/AnalyticsSummaryStrip.tsx")).toMatch(/ux-skeleton/);
+    expect(read("components/analytics/AnalyticsSummaryStrip.tsx")).toMatch(/animate-pulse/);
+  });
+
+  it("Motion V3 P2：Sidebar width morph 走 spring（时长不变，仅曲线）", () => {
+    expect(css).toMatch(/\.sidebar-shell\s*\{[^}]*transition-timing-function:\s*var\(--ease-spring\)/s);
   });
 
   it.each([
@@ -145,14 +204,14 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(css).toMatch(/--kiro-ambient-breathe:\s*3\.2s/);
     expect(css).toMatch(/animation:\s*kiro-now-course-breathe\s+var\(--kiro-ambient-breathe/);
     // 每条常驻 infinite 必须引用治理中的 token/时长：ambient-breathe、flow 三档、
-    // computer ring、thinking pulse 2.1s —— 新增常驻动画会触发本测试
+    // computer ring、thinking pulse 2.1s、skeleton sweep —— 新增常驻动画会触发本测试
     const infiniteLines = css
       .split("\n")
       .filter((l) => l.includes("infinite") && l.includes("animation:"));
     expect(infiniteLines.length).toBeGreaterThan(0);
     for (const line of infiniteLines) {
       expect(line).toMatch(
-        /var\(--kiro-(ambient-breathe|flow-ambient|flow-active|flow-working|computer-ring-duration)\)?|kiro-rail-thinking-pulse 2\.1s/
+        /var\(--kiro-(ambient-breathe|flow-ambient|flow-active|flow-working|computer-ring-duration)\)?|kiro-rail-thinking-pulse 2\.1s|var\(--skeleton-sweep/
       );
     }
   });

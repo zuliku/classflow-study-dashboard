@@ -94,6 +94,7 @@ const KIRO_PLACEMENT_ORIGIN: Record<PopoverPlacement, string> = {
  *
  * Motion Contract（default profile）：enter = --motion-fast / exit = --motion-exit-fast，
  * presence unmount = MOTION_EXIT_MS.fast —— 三者同源对应，快于 Dialog/Drawer。
+ * Motion V3：进入 --ease-standard，退出 --ease-exit（加速离场）。
  * kiro profile 特殊 duration（160）：Kiro scope CSS 变量（--kiro-motion-popover-*）按
  * workspace/sidecar 作用域取值（120/100ms），presence 取上限档保证 unmount 晚于任一 scope 的
  * 视觉退出；属 Kiro Brand Motion 域，不并入全局 contract。
@@ -135,7 +136,7 @@ export function PopoverPanel({
           (visible
             ? "opacity-100 translate-x-0 translate-y-0 duration-[var(--motion-fast)] ux-inline"
             : cn(
-                "opacity-0 !duration-[var(--motion-exit-fast)] ux-inline",
+                "opacity-0 !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)] ux-inline",
                 // 仅 exit 阻塞 pointer（enter 是唯一 interaction owner，2 帧内可交互）
                 !open && "pointer-events-none",
                 PLACEMENT_ENTER_OFFSET[placement]

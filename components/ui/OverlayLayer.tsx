@@ -90,7 +90,7 @@ export function OverlayLayer({
     <div
       className={cn(
         "ux-overlay",
-        visible ? "opacity-100" : "opacity-0",
+        visible ? "opacity-100" : "opacity-0 !ease-[var(--ease-exit)]",
         !open && "pointer-events-none",
         className
       )}
