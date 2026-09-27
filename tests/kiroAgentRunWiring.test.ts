@@ -85,7 +85,10 @@ describe("P4 不修改既有 Runtime / 协议（守卫）", () => {
 
   it("Approval Runtime 契约未修改（timeout / one-shot / bulk API 保留）", () => {
     const chat = read("hooks/useKiroChat.ts");
-    expect(chat).toContain("APPROVAL_TIMEOUT_MS = 3 * 60 * 1000");
+    // S-fix（P0-2）：超时时长单源移至 pendingApprovalSnapshot（快照对账同源），hook 只引用
+    const snapshot = read("lib/ai/computer/pendingApprovalSnapshot.ts");
+    expect(snapshot).toContain("APPROVAL_TIMEOUT_MS = 3 * 60 * 1000");
+    expect(chat).toContain("APPROVAL_TIMEOUT_MS");
     expect(chat).toContain("resolveBulkApproval: handleBulkApprovalDecision");
     expect(chat).toContain("oneShotApprovalsRef.current.push");
     expect(chat).toContain("fingerprint");

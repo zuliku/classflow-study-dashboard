@@ -133,6 +133,12 @@ import { KiroTurnContextSnapshot } from "@/lib/ai/contextBudget/types";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { buildTurnSourceRegistry, materialSourceId } from "@/lib/ai/citations/sources";
 import { aggregateInspectorSources } from "@/lib/ai/ui/kiroInspector";
+import { getComputerApprovalPresentation } from "@/lib/ai/ui/computerApprovalPresentation";
+import {
+  APPROVAL_TIMEOUT_MS,
+  writePendingApprovalSnapshot,
+  clearPendingApprovalSnapshot,
+} from "@/lib/ai/computer/pendingApprovalSnapshot";
 import { enrichWebSourcePages } from "@/lib/ai/citations/sourceRegistry";
 import { renderPdfPages, selectScannedPdfPages, allocateVisionPages, extractExplicitPages } from "@/lib/ai/attachments/pdfVision";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN, MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN } from "@/lib/ai/attachments/limits";
@@ -1030,9 +1036,8 @@ export function useKiroChat({
   const setPendingQueueLength = useKiroComputerRuntimeStore((s) => s.setPendingQueueLength);
   const setApprovalDeadlineAt = useKiroComputerRuntimeStore((s) => s.setApprovalDeadlineAt);
 
-  // V2.7.2：approval 超时自动取消（默认 3 分钟）——审批挂起不能永久阻塞 Tool Call
+  // V2.7.2：approval 超时自动取消（默认 3 分钟，见 pendingApprovalSnapshot.APPROVAL_TIMEOUT_MS）
   //（用户忽略弹窗 / 页面在后台 / 旧 bundle 死锁等场景下，Kiro 必须最终收到确定结果）。
-  const APPROVAL_TIMEOUT_MS = 3 * 60 * 1000;
   const approvalTimeoutTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const clearApprovalTimeout = useCallback((approvalId: string) => {
@@ -1906,6 +1911,8 @@ export function useKiroChat({
   const advancePendingApproval = useCallback(() => {
     const next = pendingExecutionsRef.current.values().next().value as PendingComputerExecution | undefined;
     setPendingApproval(next ? next.request : null);
+    // S-fix（P0-2）：队列见底 → 快照同步清理（超时 effect 只写不删，此处是唯一的“无展示”收口）
+    if (!next) clearPendingApprovalSnapshot();
     setPendingQueueLength(pendingExecutionsRef.current.size);
   }, [setPendingApproval, setPendingQueueLength]);
 
@@ -2139,6 +2146,8 @@ export function useKiroChat({
       }
       pendingExecutionsRef.current.delete(approvalId);
       clearApprovalTimeout(approvalId);
+      // S-fix（P0-2）：决策已定 → 快照同步清理（后续 advance 只负责展示下一条）
+      clearPendingApprovalSnapshot();
       const { request, toolName, toolCallId, input, frozenSnapshot } = pending;
       const taskId = request.taskId;
 
@@ -2353,10 +2362,24 @@ export function useKiroChat({
   // V2.7.2：approval 超时自动取消（3 分钟）——审批挂起不能永久阻塞 Tool Call
   //（用户忽略弹窗 / 页面后台 / 旧 bundle 死锁等场景，Kiro 必须最终收到确定结果）。
   // S-fix：计时起点同步写入 approvalDeadlineAt，供审批 UI 倒计时（用户回来能看到而非发现已被取消）。
+  // S-fix（P0-2）：同时落审批快照 —— 刷新后开机对账可给 owning 会话补中断说明，不留僵尸等待。
   useEffect(() => {
     if (!pendingApproval) return;
     if (approvalTimeoutTimersRef.current.has(pendingApproval.id)) return;
     setApprovalDeadlineAt(Date.now() + APPROVAL_TIMEOUT_MS);
+    const conversationId = conversationIdRef.current;
+    if (conversationId) {
+      writePendingApprovalSnapshot({
+        version: 1,
+        approvalId: pendingApproval.id,
+        conversationId,
+        taskId: pendingApproval.taskId,
+        toolName:
+          pendingExecutionsRef.current.get(pendingApproval.id)?.toolName ?? pendingApproval.capability,
+        title: getComputerApprovalPresentation(pendingApproval).title,
+        createdAt: Date.now(),
+      });
+    }
     const timer = setTimeout(() => {
       approvalTimeoutTimersRef.current.delete(pendingApproval.id);
       void handleApprovalDecision(pendingApproval.id, "deny", { timedOut: true });
@@ -2520,6 +2543,7 @@ export function useKiroChat({
     return () => {
       pendingExecutionsRef.current.clear();
       setPendingApproval(null);
+      clearPendingApprovalSnapshot();
     };
   }, [setPendingApproval]);
 
@@ -3160,6 +3184,7 @@ export function useKiroChat({
       for (const t of Array.from(approvalTimeoutTimersRef.current.values())) clearTimeout(t);
       approvalTimeoutTimersRef.current.clear();
       setPendingApproval(null);
+      clearPendingApprovalSnapshot();
       activeTaskRef.current = null;
       checkpointsRef.current = new Map();
       tasksRef.current = new Map();
@@ -3479,6 +3504,7 @@ export function useKiroChat({
     for (const t of Array.from(approvalTimeoutTimersRef.current.values())) clearTimeout(t);
     approvalTimeoutTimersRef.current.clear();
     setPendingApproval(null);
+    clearPendingApprovalSnapshot();
     setPendingQueueLength(0);
     // 用户 Stop：该 turn 遗留的 pending tool part 不再视为 in-flight（真 settled）
     const lastMsg = latestChatRef.current.messages[latestChatRef.current.messages.length - 1] as UIMessage | undefined;

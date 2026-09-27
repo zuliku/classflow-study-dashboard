@@ -404,6 +404,27 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   const refreshHistory = useCallback(() => setHistoryVersion((v) => v + 1), []);
 
+  // S-fix（P0-2）：开机对账上次死在等待中的审批 —— 快照仍在说明刷新/崩溃打断了
+  // approval（内存 executable 已失，不可 resume）；给 owning 会话补中断说明并清快照，
+  // 不留“转圈但无框”的僵尸等待。fire-and-forget；幂等（同一 approvalId 只补一次）。
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { reconcileStaleApprovalSnapshot } = await import(
+          "@/lib/ai/computer/pendingApprovalSnapshot"
+        );
+        const reconciled = await reconcileStaleApprovalSnapshot();
+        if (reconciled && !cancelled) refreshHistory();
+      } catch {
+        // 对账失败不阻塞启动
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshHistory]);
+
   /** 保存当前会话到 IndexedDB（稳定点调用；streaming 中不保存半成品） */
   const persistCurrent = useCallback(async () => {
     const id = conversationIdRef.current;
