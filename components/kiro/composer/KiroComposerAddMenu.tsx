@@ -70,29 +70,36 @@ export function KiroComposerAddMenu({
   if (view === "materials") {
     return (
       <div
-      role="menu"
-      aria-label="添加"
-      className="py-1"
-      data-testid="kiro-composer-add-menu"
-      data-kiro-composer-menu="add"
-      onPointerDown={(e) => e.stopPropagation()}
-      onPointerUp={(e) => e.stopPropagation()}
-    >
-        <button
-          type="button"
-          onClick={() => setView("root")}
-          className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg text-left text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+        role="menu"
+        aria-label="添加"
+        className="py-1"
+        data-testid="kiro-composer-add-menu"
+        data-kiro-composer-menu="add"
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => e.stopPropagation()}
+      >
+        {/* drill 进入（root → 课程资料）：keyed view + 右向进入，与 Navigator 同语法 */}
+        <div
+          key="materials"
+          className="ux-kiro-view-enter"
+          style={{ ["--motion-shift-x" as string]: "4px" } as React.CSSProperties}
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
-          课程资料
-        </button>
-        <KiroMaterialPicker
-          onClose={() => setView("root")}
-          onPick={(ref) => {
-            onAddMaterial(ref);
-            onClose();
-          }}
-        />
+          <button
+            type="button"
+            onClick={() => setView("root")}
+            className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg text-left text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            课程资料
+          </button>
+          <KiroMaterialPicker
+            onClose={() => setView("root")}
+            onPick={(ref) => {
+              onAddMaterial(ref);
+              onClose();
+            }}
+          />
+        </div>
       </div>
     );
   }
@@ -105,22 +112,29 @@ export function KiroComposerAddMenu({
         className="py-1 max-h-[min(360px,55vh)] overflow-y-auto"
         data-testid="kiro-composer-add-menu"
       >
-        <button
-          type="button"
-          onClick={() => setView("root")}
-          className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg text-left text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+        {/* drill 进入（root → 上下文）：keyed view + 右向进入，与 Navigator 同语法 */}
+        <div
+          key="context"
+          className="ux-kiro-view-enter"
+          style={{ ["--motion-shift-x" as string]: "4px" } as React.CSSProperties}
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
-          ClassFlow 上下文
-        </button>
-        <div className="px-1 pb-1">
-          <KiroContextListView
-            compact
-            onPick={(ref) => {
-              onAddContext(ref);
-              onClose();
-            }}
-          />
+          <button
+            type="button"
+            onClick={() => setView("root")}
+            className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg text-left text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            ClassFlow 上下文
+          </button>
+          <div className="px-1 pb-1">
+            <KiroContextListView
+              compact
+              onPick={(ref) => {
+                onAddContext(ref);
+                onClose();
+              }}
+            />
+          </div>
         </div>
       </div>
     );
@@ -136,6 +150,12 @@ export function KiroComposerAddMenu({
       onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
     >
+      {/* 返回 root（子视图 → 返回）：keyed view + 左向进入 */}
+      <div
+        key="root"
+        className="ux-kiro-view-enter"
+        style={{ ["--motion-shift-x" as string]: "-4px" } as React.CSSProperties}
+      >
       <button
         type="button"
         role="menuitem"
@@ -204,6 +224,7 @@ export function KiroComposerAddMenu({
 
       <input ref={fileRef} type="file" multiple className="hidden" />
       <input ref={imageRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="hidden" />
+      </div>
     </div>
   );
 }

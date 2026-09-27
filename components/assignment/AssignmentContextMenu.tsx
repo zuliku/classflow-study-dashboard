@@ -275,7 +275,14 @@ export function AssignmentContextMenu({
       )}
       style={pos ? { left: pos.x, top: pos.y } : { left: anchor.anchorX, top: anchor.anchorY }}
     >
-      {view === "priority" ? renderPriority() : view === "ddl" ? renderDdl() : renderMain()}
+      {/* drill 切换（main ↔ priority/ddl）：keyed view + 方向进入（子视图 +4px / 返回 -4px） */}
+      <div
+        key={view}
+        className="ux-kiro-view-enter"
+        style={{ ["--motion-shift-x" as string]: view === "main" ? "-4px" : "4px" } as React.CSSProperties}
+      >
+        {view === "priority" ? renderPriority() : view === "ddl" ? renderDdl() : renderMain()}
+      </div>
     </div>,
     document.body
   );

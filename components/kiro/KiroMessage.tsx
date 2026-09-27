@@ -246,6 +246,13 @@ export function KiroMessage({
                     placement="top-end"
                     className={moreView === "sources" ? "w-[280px]" : undefined}
                   >
+                    {/* 面板内 drill 切换（actions ↔ sources）：keyed view + ux-kiro-view-enter，
+                        进入带方向（来源 +4px / 返回 -4px），与 Navigator/AddMenu 同语法 */}
+                    <div
+                      key={moreView}
+                      className="ux-kiro-view-enter"
+                      style={{ ["--motion-shift-x" as string]: moreView === "sources" ? "4px" : "-4px" } as React.CSSProperties}
+                    >
                       {moreView === "sources" ? (
                         <KiroSourcesMenuView
                           sources={citedWebSources}
@@ -273,6 +280,7 @@ export function KiroMessage({
                           )}
                         </>
                       )}
+                    </div>
                     </KiroMenuPanel>
                 </div>
               </div>
