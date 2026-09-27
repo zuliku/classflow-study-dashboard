@@ -267,7 +267,9 @@ export function Sidebar() {
 
         {/* Navigation Menu（核心学习功能） */}
         <nav ref={navRef} className="relative space-y-0.5">
-          {/* 共享 Navigation Active Plate：MAIN_NAV 唯一 selection surface（surface + 左侧指示条一体移动）。
+          {/* 共享 Navigation Active Plate：MAIN_NAV 唯一 selection surface（Linear/Things 式：
+              soft pill + semibold 文字即选中态，不再附加左侧指示条——指示条有 AI 感，
+              产品化导航靠 surface + 字重表达层级）。
               transform/opacity 动画；用户交互后才启用 transition；首次加载直接定位；reduced 直接跳转；
               Kiro（非 MAIN_NAV）时淡出。 */}
           <div
@@ -284,9 +286,7 @@ export function Sidebar() {
               transform: plate ? `translateY(${plate.y}px)` : "translateY(-40px)",
               height: plate?.h ?? 40,
             }}
-          >
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-charcoal" />
-          </div>
+          />
 
           {MAIN_NAV_ITEMS.map((item) => {
             const Icon = item.icon;

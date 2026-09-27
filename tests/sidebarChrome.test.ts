@@ -279,6 +279,14 @@ describe("Sidebar Productization V2 —— hierarchy & plate", () => {
     expect(block).not.toContain("shadow-subtle");
   });
 
+  it("Active Plate 去指示条：选中态靠 surface + 字重，无左侧小竖条", async () => {
+    const src = await readSrc("components/layout/Sidebar.tsx");
+    const plateIdx = src.indexOf('data-testid="nav-active-plate"');
+    const block = src.slice(plateIdx, src.indexOf("/>", plateIdx));
+    expect(block).not.toContain("w-0.5");
+    expect(block).not.toContain("<span");
+  });
+
   it("divider 收敛：仅 Main→Kiro 与 Footer 顶部两条；Actions 组无独立 border-top", async () => {
     const src = await readSrc("components/layout/Sidebar.tsx");
     // Actions（GLOBAL_NAV_ACTIONS）组不再有 border-t
