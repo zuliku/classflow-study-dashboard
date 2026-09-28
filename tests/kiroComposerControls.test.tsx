@@ -510,3 +510,63 @@ describe("Kiro Composer — 回归", () => {
     expect(handlers.onSend).toHaveBeenCalledWith("你好");
   });
 });
+
+describe("Kiro Composer — @ mention（对标 Slash）", () => {
+  async function typeText(value: string) {
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, value);
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flush();
+  }
+
+  async function pressKey(key: string) {
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    await act(async () => {
+      ta.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    });
+    await flush();
+  }
+
+  it("@ 展开上下文菜单；选中回填文本 + 写入 Manual chip", async () => {
+    await renderComposer();
+    await typeText("帮我看下@中级");
+    expect(q('[data-testid="kiro-mention-menu"]')).toBeTruthy();
+    const item = q('[data-testid="kiro-mention-item-manual-course-c1"]') as HTMLButtonElement;
+    expect(item).toBeTruthy();
+    await act(async () => {
+      item.click();
+    });
+    await flush();
+    expect(handlers.onAddContext).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "manual-course-c1", kind: "course" })
+    );
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    expect(ta.value).toBe("帮我看下@中级计量经济学（王老师） ");
+    // 尾随空格 = 完成态，不再弹出
+    expect(q('[data-testid="kiro-mention-menu"]')).toBeNull();
+  });
+
+  it("无命中关闭；Escape 关闭；键盘导航选中", async () => {
+    await renderComposer();
+    await typeText("@不存在的");
+    expect(q('[data-testid="kiro-mention-menu"]')).toBeNull();
+
+    await typeText("@");
+    expect(q('[data-testid="kiro-mention-menu"]')).toBeTruthy();
+    await pressKey("Escape");
+    expect(q('[data-testid="kiro-mention-menu"]')).toBeNull();
+
+    // 文本变化才重开（设相同值 React 不触发 onChange，属测试约束非业务问题）
+    await typeText("k @");
+    expect(q('[data-testid="kiro-mention-menu"]')).toBeTruthy();
+    await pressKey("ArrowDown");
+    await pressKey("Enter");
+    await flush();
+    // 组序：课程 → 本周 → 下周 → 资料；index 1 = 本周
+    expect(handlers.onAddContext).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "manual-week-current" })
+    );
+  });
+});

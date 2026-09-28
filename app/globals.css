@@ -1460,20 +1460,81 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     }
   }
 
-  /* Slash Skill 菜单：从输入框上方轻微展开（不改变 Composer 高度节奏）；
-     只做 opacity + 2px 位移 + .995 scale，避免与输入区发生视觉重叠 */
+  /* Composer 输入高亮镜像（backdrop 方案）：
+     textarea 文字正常绘制（选择/IME/光标零影响），镜像只画 token 背景 pill；
+     两层字体/行高/宽度严格一致；背景用透明度 + 内描边（box-shadow，不占布局），
+     绝不加 padding/border（否则换行位置与 textarea 错位）。 */
+  .kiro-prompt-mirror {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    color: transparent;
+  }
+  .kiro-prompt-token {
+    border-radius: 4px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  /* / 命令：pastel-mint（与 Slash 菜单 chip 同色系，一眼即指令） */
+  .kiro-prompt-token-slash {
+    background: rgba(227, 230, 224, 0.9);
+    box-shadow: 0 0 0 1px rgba(205, 185, 171, 0.35);
+  }
+  /* @ 上下文：暖纸 alabaster（与 Mention 菜单 group 文案同色系，一眼即引用） */
+  .kiro-prompt-token-mention {
+    background: rgba(240, 235, 225, 0.95);
+    box-shadow: 0 0 0 1px rgba(205, 185, 171, 0.35);
+  }
+  /* 菜单展开时对应 token 加重描边（active 态，不改变布局） */
+  .kiro-prompt-token-active {
+    box-shadow: 0 0 0 1px rgba(164, 143, 130, 0.8);
+  }
+
+  /* Slash（/）菜单：指令弹出——从输入前缘（左下）弹出，
+     位移 6px + scale .98，spring 缓动收尾（与 Mention 的中央柔附着区分） */
   .kiro-slash-enter {
-    animation: kiro-slash-in var(--motion-fast) var(--ease-standard) both;
-    transform-origin: bottom center;
+    animation: kiro-slash-in var(--motion-panel) var(--ease-spring) both;
+    transform-origin: bottom left;
   }
   @keyframes kiro-slash-in {
     from {
       opacity: 0;
-      transform: translateY(2px) scale(0.995);
+      transform: translateY(6px) scale(0.98);
     }
     to {
       opacity: 1;
       transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Mention（@）菜单：上下文附着——从输入区底部中央柔附着，
+     位移 4px + scale .99（比 / 更轻更贴），选项逐行 stagger 跟随 */
+  .kiro-mention-enter {
+    animation: kiro-mention-in var(--motion-fast) var(--ease-standard) both;
+    transform-origin: bottom center;
+  }
+  @keyframes kiro-mention-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.99);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .kiro-mention-item-enter {
+    animation: kiro-mention-item-in var(--motion-fast) var(--ease-standard) both;
+    animation-delay: calc(var(--kiro-mention-index, 0) * 24ms);
+  }
+  @keyframes kiro-mention-item-in {
+    from {
+      opacity: 0;
+      transform: translateX(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
     }
   }
 
@@ -1603,6 +1664,8 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
 html[data-motion-effective="reduced"] .kiro-structure-settle,
 html[data-motion-effective="reduced"] .kiro-reasoning-flow,
 html[data-motion-effective="reduced"] .kiro-slash-enter,
+html[data-motion-effective="reduced"] .kiro-mention-enter,
+html[data-motion-effective="reduced"] .kiro-mention-item-enter,
 html[data-motion-effective="reduced"] .kiro-empty-logo-intro,
 html[data-motion-effective="reduced"] .kiro-empty-title-intro,
 html[data-motion-effective="reduced"] .kiro-empty-subtitle-intro,
@@ -1625,6 +1688,8 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
    animation:none 打断后再恢复会从头部重放（拖动放置时标题/输入框又出现入场动画）。 */
 [data-geometry-interacting] .kiro-structure-settle,
 [data-geometry-interacting] .kiro-slash-enter,
+[data-geometry-interacting] .kiro-mention-enter,
+[data-geometry-interacting] .kiro-mention-item-enter,
 [data-geometry-interacting] .kiro-popover-motion,
 [data-geometry-interacting] .kiro-scroll-control-enter,
 [data-geometry-interacting] .kiro-scroll-control-exit {

@@ -22,12 +22,21 @@ import {
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { AIModelVendor } from "@/lib/ai/providers/types";
+import { useAppStore } from "@/store/useAppStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
 import { PopoverPanel } from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
 import { filterSlashSkills, moveSlashIndex, parseSlashQuery, toSlashSkillOptions } from "@/lib/ai/skills/slashMenu";
+import { tokenizeComposerPrompt } from "@/lib/ai/composer/promptHighlight";
+import {
+  applyMentionPick,
+  buildMentionOptions,
+  moveMentionIndex,
+  parseMentionQuery,
+  type MentionOption,
+} from "@/lib/ai/context/mentionMenu";
 
 /** P3：Composer 只允许一个菜单同时打开（add / access / model） */
 type ComposerMenu = "add" | "access" | "reasoning" | "model" | "contextUsage" | null;
@@ -152,6 +161,10 @@ export function KiroComposer({
   const [slashSkills, setSlashSkills] = useState<{ name: string; description: string }[]>([]);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashActive, setSlashActive] = useState(0);
+  // @ mention：与 Slash 同构的上下文直达入口（选项与 KiroContextListView 同源）
+  const [mentionOptions, setMentionOptions] = useState<MentionOption[]>([]);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionActive, setMentionActive] = useState(0);
   const submittingRef = useRef(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const addRef = useRef<HTMLDivElement | null>(null);
@@ -170,6 +183,10 @@ export function KiroComposer({
   const scannedBlocked = needsScannedVision && !visionEnabled;
   // Task 14：Kiro Search（Workspace / Sidecar 共用同一 store，开关共享）
   const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
+  // @ mention 选项源（与 KiroContextListView 同一 Store 切片；实体变更低频，重渲染可接受）
+  const mentionCourses = useAppStore((s) => s.courses);
+  const mentionAssignments = useAppStore((s) => s.assignments);
+  const mentionGroupProjects = useAppStore((s) => s.groupProjects);
   const setWebSearchEnabled = useKiroPreferencesStore((s) => s.setWebSearchEnabled);
   // Task B V1.1：截图隐私提示改为显式 dismiss（不再自动标记；用户没点「知道了」就下次继续提示）
   const visualPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.visualAttachmentPrivacyNoticeSeen);
@@ -237,12 +254,62 @@ export function KiroComposer({
     setSlashOpen(false);
   }, [currentTurnScopeLocked]);
 
+  const handleMentionSelect = (option: MentionOption) => {
+    // 尾随空格 = mention 已完成：菜单折叠且不会因 text 变化重新弹出（与 slash 同构）；
+    // 同时写入 Manual Context chip（与 Add Menu 上下文入口同一 onAddContext）。
+    setText(applyMentionPick(text, option.label));
+    onAddContext(option.ref);
+    setMentionOpen(false);
+    requestAnimationFrame(() => {
+      taRef.current?.focus();
+      autoGrow();
+    });
+  };
+
+  // @ mention：输入尾部 @query 即展开（与 KiroContextListView 同源；slash 打开时让路）；
+  // Turn scope 锁定时关闭（@ 会改变当前工作范围）。
+  useEffect(() => {
+    if (currentTurnScopeLocked || slashOpen) {
+      setMentionOpen(false);
+      return;
+    }
+    const query = parseMentionQuery(text);
+    if (query === null) {
+      setMentionOpen(false);
+      return;
+    }
+    const options = buildMentionOptions(mentionCourses, mentionAssignments, mentionGroupProjects, query);
+    setMentionOptions(options);
+    setMentionActive(0);
+    setMentionOpen(options.length > 0);
+  }, [text, slashOpen, mentionCourses, mentionAssignments, mentionGroupProjects, currentTurnScopeLocked]);
+
+  // 输入高亮镜像：与 textarea 同步滚动（backdrop 方案：textarea 文字正常绘制，
+  // 镜像只提供 token 背景 pill；背景透过透明 textarea 背景可见，选择/IME/光标不受影响）。
+  const mirrorRef = useRef<HTMLDivElement | null>(null);
+  const syncMirrorScroll = () => {
+    const ta = taRef.current;
+    const mirror = mirrorRef.current;
+    if (ta && mirror) mirror.style.transform = `translateY(${-ta.scrollTop}px)`;
+  };
+
   const autoGrow = () => {
     const el = taRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 156)}px`;
+    syncMirrorScroll();
   };
+
+  // Token 分段（concat 恒等于原文）；mention 展开时尾部 token 视为 active（与菜单同状态）。
+  const promptTokens = React.useMemo(() => tokenizeComposerPrompt(text), [text]);
+  const mentionActiveTailIndex = React.useMemo(() => {
+    if (!mentionOpen) return -1;
+    for (let i = promptTokens.length - 1; i >= 0; i--) {
+      if (promptTokens[i].kind === "mention") return i;
+    }
+    return -1;
+  }, [mentionOpen, promptTokens]);
 
   // V4.6：local submitting 只表达「Composer submit() 正在 await onSend」——由 onSend 的
   // 返回值决定是否清空 prompt；不再用 runtime streaming/status 反向修改 local submit
@@ -302,6 +369,31 @@ export function KiroComposer({
         return;
       }
     }
+    // @ mention 菜单键盘导航（与 slash 同键位；slash 打开时上面的分支已优先 return）
+    if (mentionOpen && mentionOptions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionActive((i) => moveMentionIndex(i, 1, mentionOptions.length));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionActive((i) => moveMentionIndex(i, -1, mentionOptions.length));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const target = mentionOptions[mentionActive] ?? mentionOptions[0];
+        if (target) handleMentionSelect(target);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setMentionOpen(false);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -319,6 +411,7 @@ export function KiroComposer({
         return null;
       });
       setSlashOpen(false);
+      setMentionOpen(false);
     };
     const onPointerDown = (e: PointerEvent) => {
       const t = e.target as Node;
@@ -537,26 +630,114 @@ export function KiroComposer({
             </div>
           )}
 
+          {/* @ mention 菜单：输入尾部 @query 即展开（专用 kiro-mention-enter；
+              与 / 的 kiro-slash-enter 区分：@ 走底部中央柔附着 + 选项 stagger，
+              / 走左下角指令弹出；选中回填 @label + 写入 Manual Context chip） */}
+          {mentionOpen && (
+            <div
+              data-testid="kiro-mention-menu"
+              className={cn(
+                "kiro-mention-enter mx-2.5 mt-2.5 mb-0.5 bg-surface border border-line rounded-xl shadow-subtle overflow-hidden",
+                compact && "mx-2"
+              )}
+            >
+              <div
+                role="listbox"
+                aria-label="上下文"
+                className="max-h-44 overflow-y-auto overscroll-contain py-1"
+              >
+                {mentionOptions.map((option, index) => {
+                  const active = index === mentionActive;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onMouseEnter={() => setMentionActive(index)}
+                      onClick={() => handleMentionSelect(option)}
+                      data-testid={`kiro-mention-item-${option.key}`}
+                      style={{ "--kiro-mention-index": Math.min(index, 5) } as React.CSSProperties}
+                      className={cn(
+                        "kiro-mention-item-enter w-full text-left px-3 py-2 flex items-center gap-2 transition-colors duration-[var(--motion-fast)]",
+                        active ? "bg-alabaster" : "hover:bg-alabaster/60"
+                      )}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-charcoal">
+                        @{option.label}
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold text-sandrift">
+                        {option.group}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Prompt + Toolbar：统一内部 gutter，prompt 区保持最干净 */}
           <div className={cn(compact ? "px-2.5 pt-2 pb-2" : "px-3 pt-2.5 pb-2.5")}>
-            <textarea
-              ref={taRef}
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                autoGrow();
-              }}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              rows={1}
-              placeholder="Ask Kiro…"
-              aria-label="Ask Kiro"
-              className={cn(
-                "w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
-                // Computer Agent ON：输入区稳定最低高度（desktop 64 / compact 44），不随 context strip 压缩
-                computerEnabled && (compact ? "min-h-[44px]" : "min-h-[64px]")
-              )}
-            />
+            {/* 输入区堆叠：backdrop 镜像（token 背景） + textarea（文字/光标/选择）。
+                两层字体/行高/宽度严格一致；镜像 pointer-events-none + aria-hidden，
+                只画背景（文字 transparent），布局零位移（无 padding/border 增量）。 */}
+            <div className="relative">
+              <div
+                ref={mirrorRef}
+                aria-hidden="true"
+                data-testid="kiro-composer-highlight"
+                className={cn(
+                  "kiro-prompt-mirror pointer-events-none absolute inset-0 overflow-hidden text-sm leading-relaxed",
+                  computerEnabled && (compact ? "min-h-[44px]" : "min-h-[64px]")
+                )}
+              >
+                {promptTokens.map((token, i) =>
+                  token.kind === "plain" ? (
+                    <React.Fragment key={i}>{token.text}</React.Fragment>
+                  ) : (
+                    <span
+                      key={i}
+                      data-token={token.kind}
+                      data-active={
+                        (token.kind === "slash" && slashOpen) || i === mentionActiveTailIndex || undefined
+                      }
+                      className={cn(
+                        "kiro-prompt-token",
+                        token.kind === "slash"
+                          ? "kiro-prompt-token-slash"
+                          : "kiro-prompt-token-mention",
+                        (token.kind === "slash" && slashOpen) || i === mentionActiveTailIndex
+                          ? "kiro-prompt-token-active"
+                          : undefined
+                      )}
+                    >
+                      {token.text}
+                    </span>
+                  )
+                )}
+                {/* 尾换行占位（pre-wrap 下末尾 \n 会塌陷，补零宽字符保住镜像高度） */}
+                <span>{"\u200b"}</span>
+              </div>
+              <textarea
+                ref={taRef}
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  autoGrow();
+                }}
+                onScroll={syncMirrorScroll}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                rows={1}
+                placeholder="Ask Kiro…"
+                aria-label="Ask Kiro"
+                className={cn(
+                  "relative w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
+                  // Computer Agent ON：输入区稳定最低高度（desktop 64 / compact 44），不随 context strip 压缩
+                  computerEnabled && (compact ? "min-h-[44px]" : "min-h-[64px]")
+                )}
+              />
+            </div>
 
             <div className="flex items-center justify-between gap-2 pt-1.5">
               {/* 左组：＋（内容与来源）· 访问（Computer 范围 / Agent Mode） */}

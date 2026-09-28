@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Bell, Plus, Trash2, X, PencilLine, Check, Clock, CalendarClock } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
+import { useUIChromeStore } from "@/store/useUIChromeStore";
 import { Reminder } from "@/types";
 import { combineLocalDateTime, parseLocalDDL } from "@/lib/ddl";
 import { formatLocalDateTime } from "@/lib/reminders/reminderDomain";
@@ -67,6 +68,24 @@ export function ReminderCenter() {
   const reminders = useAppStore((s) => s.reminders);
   const isOpen = useReminderCenterStore((s) => s.isOpen);
   const close = useReminderCenterStore((s) => s.close);
+  // 面板左侧呼吸间距：跟随 Sidebar 真实几何（md 强制 rail 64；xl 按折叠偏好 64/224），
+  // 面板边缘不再贴着 Sidebar/内容分界线（此前写死的 md:ml-16 / xl:ml-56 在 xl 折叠态会脱离 172px）。
+  const sidebarCollapsed = useUIChromeStore((s) => s.sidebarCollapsed);
+  const [isXl, setIsXl] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(min-width: 1280px)").matches
+  );
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(min-width: 1280px)");
+    const apply = () => setIsXl(mq.matches);
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  // rail(64)/full(224) + 12px 呼吸间距；mobile 保持 mx-3 居中
+  const panelMlClass = !isXl || sidebarCollapsed ? "md:ml-[76px]" : "md:ml-[76px] xl:ml-[236px]";
   const [editor, setEditor] = useState<{ mode: "create" } | { mode: "edit"; reminder: Reminder } | null>(null);
   const [draft, setDraft] = useState<StandaloneDraft>({ title: "", date: "", time: "23:59", note: "" });
   const [error, setError] = useState("");
@@ -301,8 +320,9 @@ export function ReminderCenter() {
             "pointer-events-auto flex flex-col overflow-hidden bg-surface border border-line shadow-drawer",
             // Mobile：四周 12px 边距、content-responsive、圆角 18px
             "w-[calc(100vw-24px)] mx-3 min-h-[min(360px,calc(100dvh-24px))] max-h-[calc(100dvh-24px)] rounded-[18px]",
-            // Desktop：Sidebar 右侧 400px 浮窗（md icon rail / xl full sidebar），垂直居中
-            "md:w-[400px] md:ml-16 xl:ml-56 md:min-h-[min(420px,calc(100dvh-32px))] md:max-h-[min(720px,calc(100dvh-32px))] md:rounded-2xl",
+            // Desktop：Sidebar 右侧 400px 浮窗（左侧偏移见 panelMlClass：跟随 rail/full 真实几何 + 12px 呼吸）
+            "md:w-[400px] md:min-h-[min(420px,calc(100dvh-32px))] md:max-h-[min(720px,calc(100dvh-32px))] md:rounded-2xl",
+            panelMlClass,
             // Motion（三态非对称）：mobile 轻浮起（translateY）/ desktop 从 Sidebar 展开（translateX）；
             // entering 用 enter 偏移（-6px / 6px, scale .992/.985），exiting 用更轻的 exit 偏移
             // （-4px / 4px, scale .994/.99）；enter ~200ms（standard），exit ~160ms 加速离场（exit）

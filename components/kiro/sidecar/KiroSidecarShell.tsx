@@ -275,12 +275,6 @@ export function KiroSidecarShell({
       moveRafRef.current = 0;
     }
     flushMoveFrame();
-    // 先清零视觉位移，再持久化：React 在 microtask 中用新 committed 几何重绘，
-    // 同一 paint 周期内完成，无旧位置闪回。
-    const el = shellRef.current;
-    if (el) {
-      el.style.transform = "";
-    }
     if (interactionRef.current === "move") {
       let finalPosition = latestDraftPositionRef.current;
       // Motion V3 Fling：果断甩动（采样数 + 末速度 + 整段位移三守卫）→ 沿惯性多滑一段再 clamp；
@@ -299,6 +293,15 @@ export function KiroSidecarShell({
         }
       }
       if (finalPosition) {
+        // 闪回修复：先把终点同步直写 CSS 变量、再清零视觉位移（同一 tick 内完成，
+        // 无“旧位置闪一帧”窗口；随后持久化触发的 React 重绘写入完全相同的值）。
+        // 此前顺序反了（先清 transform、等 React 提交新变量），松手后会瞬间弹回起点。
+        const el = shellRef.current;
+        if (el) {
+          el.style.setProperty("--kiro-sidecar-top", `${finalPosition.top}px`);
+          el.style.setProperty("--kiro-sidecar-right", `${finalPosition.right}px`);
+          el.style.transform = "";
+        }
         setSidecarPosition(finalPosition);
       }
       interactionRef.current = "idle";

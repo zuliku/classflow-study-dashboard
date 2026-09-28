@@ -61,7 +61,8 @@ const PLACEMENT_CLASSES: Record<PopoverPlacement, string> = {
   "top-start": "left-0 bottom-full mb-1.5",
   "top-center": "left-1/2 -translate-x-1/2 bottom-full mb-1.5",
   anchor: "",
-  "right-end": "left-full right-auto bottom-0 ml-2",
+  // right-end：rail 锚定菜单与壳体保留 12px 呼吸间距（此前 ml-2 在圆角边框旁视觉上贴线）
+  "right-end": "left-full right-auto bottom-0 ml-3",
 };
 
 /** 进入前位移方向（surface 从 trigger 方向出现）：bottom 上偏 3px / top 下偏 3px / right 左偏 3px */
