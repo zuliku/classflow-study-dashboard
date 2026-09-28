@@ -90,7 +90,7 @@ export type BuildExecutionPlanResult =
  */
 export function buildExecutionPlan(
   toolInput: unknown,
-  ctx: { conversationId: string; toolCallId: string; now?: string }
+  ctx: { conversationId: string; toolCallId: string; proposingMessageId?: string; now?: string }
 ): BuildExecutionPlanResult {
   const parsed = proposeExecutionPlanSchema.safeParse(toolInput);
   if (!parsed.success) {
@@ -122,6 +122,8 @@ export function buildExecutionPlan(
       status: "proposed",
       steps,
       proposingToolCallId: ctx.toolCallId,
+      // owning message 由 Browser sink 回填（executor 不知道消息 id）
+      proposingMessageId: ctx.proposingMessageId ?? "",
       createdAt: now,
       updatedAt: now,
       deviationCount: 0,

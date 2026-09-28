@@ -53,6 +53,8 @@ export function KiroConversation({
   onStop,
   onReviewComputerTask,
   onUndoComputerTask,
+  onApprovePlan,
+  onCancelPlan,
 }: {
   messages: KiroChatMessageView[];
   error: AIError | null;
@@ -80,6 +82,9 @@ export function KiroConversation({
   /** Computer Agent Part 3：Task 更改审查 / 撤销（仅 live task 提供） */
   onReviewComputerTask?: (taskId: string) => void;
   onUndoComputerTask?: (taskId: string) => void;
+  /** plan-approve：批准 / 取消执行计划（卡片入口） */
+  onApprovePlan?: (planId: string) => void;
+  onCancelPlan?: (planId: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -265,6 +270,8 @@ export function KiroConversation({
                   onStop={onStop}
                   onReviewComputerTask={onReviewComputerTask}
                   onUndoComputerTask={onUndoComputerTask}
+                  onApprovePlan={onApprovePlan}
+                  onCancelPlan={onCancelPlan}
                 />
               </div>
             ))}
@@ -345,6 +352,8 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onStop,
   onReviewComputerTask,
   onUndoComputerTask,
+  onApprovePlan,
+  onCancelPlan,
 }: {
   view: KiroChatMessageView;
   allMessages?: KiroChatMessageView[];
@@ -361,6 +370,9 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onStop?: () => void;
   onReviewComputerTask?: (taskId: string) => void;
   onUndoComputerTask?: (taskId: string) => void;
+  /** plan-approve：批准 / 取消执行计划（卡片入口） */
+  onApprovePlan?: (planId: string) => void;
+  onCancelPlan?: (planId: string) => void;
 }) {
   // Hooks 必须在 assistant 占位由空变为可见内容前后保持同一顺序。
   const actionSummaries = React.useMemo(
@@ -398,12 +410,14 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   // 只要存在任一可见内容（final answer / worklog / action / computer task）就渲染消息行。
   const hasWorklog = (view.assistantTurn?.worklog.length ?? 0) > 0;
   const hasComputerTask = Boolean(view.computerTask || view.historyComputerTask);
+  const hasExecutionPlan = (view.executionPlans?.length ?? 0) > 0;
   if (
     !view.content &&
     !hasWorklog &&
     !view.actions?.length &&
     !view.historyActions?.length &&
-    !hasComputerTask
+    !hasComputerTask &&
+    !hasExecutionPlan
   ) {
     return (
       <KiroAssistantShell testid="kiro-assistant-pending" messageId={view.id}>
@@ -430,6 +444,9 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         computerTask={view.computerTask}
         historyComputerTask={view.historyComputerTask}
         historyTaskCanUndo={view.historyTaskCanUndo}
+        executionPlans={view.executionPlans}
+        onApprovePlan={onApprovePlan}
+        onCancelPlan={onCancelPlan}
         approval={approval}
         turnInFlight={runLive}
         desktopPaused={desktopPaused}
@@ -545,6 +562,8 @@ function isVisibleConversationMessage(message: KiroChatMessageView): boolean {
       message.actions?.length ||
       message.historyActions?.length ||
       message.computerTask ||
-      message.historyComputerTask
+      message.historyComputerTask ||
+      // plan-approve：纯计划消息（模型只调 propose 无正文）同样可见
+      message.executionPlans?.length
   );
 }

@@ -23,6 +23,7 @@ const plan = (over: Partial<PersistedExecutionPlan> = {}): PersistedExecutionPla
     { id: "step-2", title: "写文件", toolName: "create_text_file", path: "docs/a.txt", done: false },
   ],
   proposingToolCallId: "call-1",
+  proposingMessageId: "m-1",
   createdAt: "2026-09-28T00:00:00.000Z",
   updatedAt: "2026-09-28T00:00:00.000Z",
   deviationCount: 0,

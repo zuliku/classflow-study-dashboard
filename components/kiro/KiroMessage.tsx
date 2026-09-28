@@ -6,8 +6,10 @@ import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
 import { KiroStreamingMarkdown } from "@/components/kiro/KiroStreamingMarkdown";
 import { KiroAgentRun, KiroAgentRunApprovalBinding } from "@/components/kiro/run/KiroAgentRun";
 import { KiroAgentRunResult } from "@/components/kiro/run/KiroAgentRunResult";
+import { KiroExecutionPlanCard } from "@/components/kiro/run/KiroExecutionPlanCard";
 import { KiroAgentTask } from "@/lib/ai/computer/task";
 import { PersistedComputerTaskView } from "@/lib/ai/history/types";
+import type { PersistedExecutionPlan } from "@/lib/ai/computer/plans/types";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
 import { KiroSourcesMenuView } from "@/components/kiro/KiroSourcesMenuView";
 import { useToastStore } from "@/store/useToastStore";
@@ -47,12 +49,15 @@ export function KiroMessage({
   computerTask,
   historyComputerTask,
   historyTaskCanUndo,
+  executionPlans,
   approval,
   turnInFlight,
   desktopPaused,
   onStop,
   onReviewComputerTask,
   onUndoComputerTask,
+  onApprovePlan,
+  onCancelPlan,
   onRetry,
 }: {
   content?: string;
@@ -91,6 +96,10 @@ export function KiroMessage({
   onStop?: () => void;
   onReviewComputerTask?: (taskId: string) => void;
   onUndoComputerTask?: (taskId: string) => void;
+  /** plan-approve：本消息拥有的执行计划（proposingMessageId 精确绑定） */
+  executionPlans?: PersistedExecutionPlan[];
+  onApprovePlan?: (planId: string) => void;
+  onCancelPlan?: (planId: string) => void;
   /** 重新生成（由 Conversation 注入稳定 callback，避免每行订阅 Session Context） */
   onRetry?: () => void;
 }) {
@@ -306,6 +315,15 @@ export function KiroMessage({
           onUndo={onUndoComputerTask}
         />
       )}
+      {/* plan-approve：执行计划卡片（Result 区之后；live/恢复统一） */}
+      {executionPlans?.map((plan) => (
+        <KiroExecutionPlanCard
+          key={plan.planId}
+          plan={plan}
+          onApprove={onApprovePlan}
+          onCancel={onCancelPlan}
+        />
+      ))}
       {children}
     </KiroAssistantShell>
   );

@@ -53,6 +53,8 @@ export interface PersistedExecutionPlan {
   status: ExecutionPlanStatus;
   steps: PersistedPlanStep[];
   proposingToolCallId: string;
+  /** 提案时的 owning assistant message（卡片绑定；live/恢复统一，不依赖 parts） */
+  proposingMessageId: string;
   createdAt: string;
   updatedAt: string;
   approvedAt?: string;

@@ -13,6 +13,7 @@ import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
+import { useToastStore } from "@/store/useToastStore";
 import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
 import { useDesktopSessionStore } from "@/store/useDesktopSessionStore";
 import { ComputerApprovalDialog } from "@/components/kiro/computer/ComputerApprovalDialog";
@@ -74,6 +75,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const model = useAISettingsStore((s) => s.model);
   const custom = useAISettingsStore((s) => s.custom);
   const setModel = useAISettingsStore((s) => s.setModel);
+  const pushToast = useToastStore((s) => s.pushToast);
   const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
   const setSettingsTargetSection = useAppStore((s) => s.setSettingsTargetSection);
 
@@ -223,6 +225,15 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
             onReviewComputerTask={setReviewTaskId}
             // S-fix durable undo：live/restored 路由（restored 走 undoRestoredTask）
             onUndoComputerTask={(taskId) => void chat.undoComputerTask(taskId)}
+            // plan-approve：批准 = 单次授权整计划 + 切工作区自动（下一条发送按计划执行；不自动发送）
+            onApprovePlan={(planId) => {
+              void chat.approveExecutionPlan(planId).then((ok) => {
+                if (!ok) return;
+                setAgentMode("workspace-auto");
+                pushToast({ message: "计划已批准并切换到工作区自动，发送下一条消息即按计划执行。" });
+              });
+            }}
+            onCancelPlan={(planId) => void chat.cancelExecutionPlan(planId)}
           />
         )}
       </div>

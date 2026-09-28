@@ -54,6 +54,10 @@ import {
 import { buildClassFlowContextSection } from "@/lib/ai/prompts/classFlowContextSection";
 import { buildKiroMemoryIndexSection } from "@/lib/ai/prompts/memoryIndexSection";
 import { buildDesktopRuntimeCapabilityContext } from "@/lib/ai/computer/desktopCapabilityPrompt";
+import {
+  normalizeApprovedPlanContext,
+  buildApprovedPlanPromptSection,
+} from "@/lib/ai/computer/plans/prompt";
 import { resolveTerminalCapability } from "@/lib/ai/computer/terminalCapability";
 import { resolveDesktopObservationCapability } from "@/lib/ai/computer/desktopObservationCapability";
 import { resolveGuiControlCapability } from "@/lib/ai/computer/gui/capability";
@@ -414,9 +418,15 @@ export async function handleChat(req: Request) {
     desktopRecipeSection = "";
   }
 
+  // plan-approve 模式：已批准计划的冻结范围（浏览器派生用户数据；normalize/bound 后注入；
+  // 只描述边界不授权；无计划 → 空 section）
+  const approvedPlanSection = buildApprovedPlanPromptSection(
+    normalizeApprovedPlanContext((body as Record<string, unknown>).approvedPlanContext)
+  );
+
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
-    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);

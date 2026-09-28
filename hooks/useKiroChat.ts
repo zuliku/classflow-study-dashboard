@@ -272,6 +272,8 @@ export interface KiroChatMessageView {
   computerTask?: KiroAgentTask;
   /** 历史恢复的 Computer Task 展示事实（无 durable checkpoint 时不能 Undo，见 historyTaskCanUndo） */
   historyComputerTask?: PersistedComputerTaskView;
+  /** plan-approve：本消息拥有的执行计划（proposingMessageId 精确绑定；live/恢复统一） */
+  executionPlans?: PersistedExecutionPlan[];
   /**
    * S-fix durable undo：恢复任务附带未使用的 durable checkpoint 时为 true；
    * 驱动历史 Result 区的撤销按钮（用后经 viewCache bust 重算）。
@@ -928,6 +930,9 @@ export function useKiroChat({
       // Task B V1.2：Visual Pending Continuation（澄清链）随 Turn 冻结；
       // server 会重新 normalize/bound 后注入 Prompt section（只提供事实，不授权写入）
       visualPendingContinuation: activeVisualPendingContinuationRef.current,
+      // plan-approve 模式：已批准计划的冻结范围（Send 边界读取 ref；server 重新 normalize/bound；
+      // 只描述边界不授权；无活跃计划 → ""，server 不注入）
+      approvedPlanContext: getApprovedPlanPromptContext(),
     };
   };
 
@@ -2090,6 +2095,10 @@ export function useKiroChat({
       const { plans, ok } = mutate(Array.from(plansRef.current.values()));
       if (!ok) return false;
       plansRef.current = new Map(plans.map((p) => [p.planId, p]));
+      // 视图 bust：受影响计划所在行重算（状态/进度/偏差 badge 实时刷新）
+      for (const p of plans) {
+        if (p.proposingMessageId) viewCacheRef.current.delete(p.proposingMessageId);
+      }
       syncPlansFromRef();
       // 状态写回会话记录（刷新后状态不断；写回失败不影响内存已生效事实）
       try {
@@ -2115,6 +2124,7 @@ export function useKiroChat({
   /**
    * plan-approve 模式：propose_execution_plan 的 Browser sink（executor context 注入）。
    * 归属会话不一致（turn 中途切会话）→ 丢弃（计划只活在提案时的会话）。
+   * owning message 取 sink 时刻最后一条 assistant（卡片绑定；刷新后靠 id 恢复，不依赖 parts）。
    */
   const handlePlanProposed = useCallback(
     (plan: PersistedExecutionPlan) => {
@@ -2122,9 +2132,23 @@ export function useKiroChat({
         console.warn("kiro plan: dropped proposal for inactive conversation");
         return;
       }
-      plansRef.current = new Map(
-        insertProposedPlan(Array.from(plansRef.current.values()), plan).map((p) => [p.planId, p])
-      );
+      const msgs = latestChatRef.current.messages;
+      let ownerId = plan.proposingMessageId;
+      if (!ownerId) {
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if ((msgs[i] as { role?: string }).role === "assistant") {
+            ownerId = (msgs[i] as { id?: string }).id ?? "";
+            break;
+          }
+        }
+      }
+      const stamped = { ...plan, proposingMessageId: ownerId };
+      const next = insertProposedPlan(Array.from(plansRef.current.values()), stamped);
+      plansRef.current = new Map(next.map((p) => [p.planId, p]));
+      // 视图 bust：被 supersede 的旧计划所在行 + 新计划所在行重算（其余行 memo 命中）
+      for (const p of next) {
+        if (p.proposingMessageId) viewCacheRef.current.delete(p.proposingMessageId);
+      }
       syncPlansFromRef();
     },
     [syncPlansFromRef]
@@ -3689,6 +3713,14 @@ export function useKiroChat({
               view = { ...view, historyTaskCanUndo: true };
             }
           }
+          needsAttach = true;
+        }
+        // plan-approve：执行计划卡片（proposingMessageId 精确绑定；live 与历史恢复统一）
+        const ownedPlans = Array.from(plansRef.current.values()).filter(
+          (p) => p.proposingMessageId === m.id
+        );
+        if (ownedPlans.length > 0) {
+          view = { ...view, executionPlans: ownedPlans };
           needsAttach = true;
         }
       }

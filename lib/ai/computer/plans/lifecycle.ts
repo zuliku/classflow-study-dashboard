@@ -72,6 +72,8 @@ function restorePlan(v: unknown): PersistedExecutionPlan | null {
   }
   if (asNonEmptyString(v["proposingToolCallId"]) === null) return null;
   if (asNonEmptyString(v["createdAt"]) === null || asNonEmptyString(v["updatedAt"]) === null) return null;
+  // proposingMessageId 缺省（旧记录）→ 空字符串（卡片不绑定，但计划仍在记录中可见）
+  const proposingMessageId = typeof v["proposingMessageId"] === "string" ? v["proposingMessageId"] : "";
   const deviationCount = v["deviationCount"];
   if (typeof deviationCount !== "number" || !Number.isInteger(deviationCount) || deviationCount < 0) return null;
   return {
@@ -82,6 +84,7 @@ function restorePlan(v: unknown): PersistedExecutionPlan | null {
     status: status as ExecutionPlanStatus,
     steps,
     proposingToolCallId: v["proposingToolCallId"] as string,
+    proposingMessageId,
     createdAt: v["createdAt"] as string,
     updatedAt: v["updatedAt"] as string,
     ...(asOptionalString(v["approvedAt"], 64) !== undefined ? { approvedAt: v["approvedAt"] as string } : {}),
