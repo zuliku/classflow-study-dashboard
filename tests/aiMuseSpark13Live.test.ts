@@ -17,6 +17,7 @@ import { streamText, LanguageModel } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createCanvas } from "@napi-rs/canvas";
 import { AI } from "@/lib/ai/config";
+import { OPENCODE_SESSION_HEADER, resolveOpenCodeGoSessionId } from "@/lib/ai/providers/openCodeGo";
 
 const KEY = process.env.OPENCODE_GO_TEST_API_KEY ?? "";
 const describeGo = KEY ? describe : describe.skip;
@@ -28,6 +29,9 @@ function responsesModel(capture?: { urls: string[]; bodies: Record<string, unkno
     name: "classflow-kiro",
     baseURL: AI.OPENCODE_BASE_URL,
     apiKey: KEY,
+    // 生产 resolver 同源：OpenCode Go 强制 x-opencode-session（缺失 → 400 MissingSessionID）；
+    // 测试无 sessionId 时与生产一致用 apiKey 稳定派生
+    headers: { [OPENCODE_SESSION_HEADER]: resolveOpenCodeGoSessionId({ apiKey: KEY }) },
     fetch: capture
       ? (async (input, init) => {
           capture.urls.push(String(input));
@@ -51,6 +55,21 @@ async function collectText(result: ReturnType<typeof streamText>): Promise<strin
     if (part.type === "text-delta") text += part.text;
   }
   return text;
+}
+
+/**
+ * 空文本重试一次：远端偶发 response.failed/server_error（已验证隔离重跑通过），
+ * 两次皆空才算真失败，避免把 transient 毛刺误判为档位回归。
+ */
+async function collectTextWithTransientRetry(
+  run: () => ReturnType<typeof streamText>,
+  label: string
+): Promise<string> {
+  const first = await collectText(run());
+  if (first.trim().length > 0) return first;
+  const second = await collectText(run());
+  if (second.trim().length > 0) return second;
+  throw new Error(`${label}: 两次请求均返回空文本（非 transient）`);
 }
 
 describeGo("Muse Spark 1.3 vision 状态（responses input_image）", () => {
@@ -91,13 +110,15 @@ describeGo("Muse Spark 1.3 reasoning 档位（responses reasoning.effort）", ()
     it(`Reasoning：effort=${effort} → outbound 回显且有文本`, async () => {
       const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
       const model = responsesModel(capture);
-      const text = await collectText(
-        streamText({
-          model,
-          messages: [{ role: "user", content: "只回复两个字母：OK" }],
-          maxOutputTokens: 1024,
-          providerOptions: { openai: { reasoningEffort: effort, forceReasoning: true } } as never,
-        })
+      const text = await collectTextWithTransientRetry(
+        () =>
+          streamText({
+            model,
+            messages: [{ role: "user", content: "只回复两个字母：OK" }],
+            maxOutputTokens: 1024,
+            providerOptions: { openai: { reasoningEffort: effort, forceReasoning: true } } as never,
+          }),
+        effort
       );
       const reasoning = capture.bodies[0]?.reasoning as { effort?: string } | undefined;
       expect(reasoning?.effort, effort).toBe(effort);
@@ -110,13 +131,15 @@ describeGo("Muse Spark 1.3 reasoning 档位（responses reasoning.effort）", ()
     it(`Reasoning：effort=${effort}（hungry，4096 配额）→ outbound 回显且有文本`, async () => {
       const capture = { urls: [] as string[], bodies: [] as Record<string, unknown>[] };
       const model = responsesModel(capture);
-      const text = await collectText(
-        streamText({
-          model,
-          messages: [{ role: "user", content: "只回复两个字母：OK" }],
-          maxOutputTokens: 4096,
-          providerOptions: { openai: { reasoningEffort: effort, forceReasoning: true } } as never,
-        })
+      const text = await collectTextWithTransientRetry(
+        () =>
+          streamText({
+            model,
+            messages: [{ role: "user", content: "只回复两个字母：OK" }],
+            maxOutputTokens: 4096,
+            providerOptions: { openai: { reasoningEffort: effort, forceReasoning: true } } as never,
+          }),
+        effort
       );
       const reasoning = capture.bodies[0]?.reasoning as { effort?: string } | undefined;
       expect(reasoning?.effort, effort).toBe(effort);

@@ -88,11 +88,13 @@ gated(`${smokeModel} Terminal Live Smoke（run_terminal_command → 真实 Power
     const toolCalls = round1.toolCalls;
 
     // 第二轮：把含 tool result 的完整 messages 回传模型，生成基于真实结果的 final answer
+    // 配额与生产对齐（2048）：muse 默认重度思考，小配额会被思考吃光 →
+    // finish=length + 空文本（live probe 实测：400 配额 reasoning 占 397）
     let round2 = await generateText({
       model: resolved.model,
       system,
       messages: round1.response.messages,
-      maxOutputTokens: 400,
+      maxOutputTokens: 2048,
     });
     let text = round2.text;
     // Fallback: if second round is empty (Muse Spark sometimes needs explicit follow-up), ask directly
@@ -104,7 +106,7 @@ gated(`${smokeModel} Terminal Live Smoke（run_terminal_command → 真实 Power
           ...(round1.response.messages as unknown as import("ai").ModelMessage[]),
           { role: "user", content: "请基于刚才的终端执行结果，告诉我命令是否成功以及输出内容是什么。输出中应包含 classflow-muse-terminal-ok。" } as unknown as import("ai").ModelMessage,
         ],
-        maxOutputTokens: 400,
+        maxOutputTokens: 2048,
       });
       text = followUp.text;
       // eslint-disable-next-line no-console
