@@ -46,7 +46,7 @@ export const KIRO_MEMORY_TOOL_SCHEMAS = { search_memories: searchMemoriesSchema,
 export const KIRO_MEMORY_TOOLS = {
   search_memories: tool({
     description:
-      "按关键词/分类/范围查找用户的长期学习记忆（偏好、习惯、目标、约束）。" +
+      "按语义相关度查找用户的长期学习记忆（偏好、习惯、目标、约束）：本地召回候选后按语义重排返回。" +
       "安排学习计划、调整 DDL、重新排程或制定长期计划前，如 memoryIndex 存在相关条目应先调用本工具获取完整内容。" +
       "Memory 不代表当前 ClassFlow 业务状态。",
     inputSchema: searchMemoriesSchema,

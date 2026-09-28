@@ -130,8 +130,9 @@ import { executeChangeSet } from "@/lib/ai/transactions/executor";
 import { useKiroMemory } from "@/hooks/useKiroMemory";
 import { apiUrl } from "@/lib/desktop/apiBase";
 import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
+import { searchMemoriesTwoStage } from "@/lib/ai/memory/rerank";
 import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
-import { MAX_MEMORIES } from "@/lib/ai/memory/types";
+import { MAX_MEMORIES, KiroMemory } from "@/lib/ai/memory/types";
 import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta, PersistedComputerTaskView, PersistedVisualProposalView } from "@/lib/ai/history/types";
 import { getConversation, saveConversation } from "@/lib/ai/history/db";
 import {
@@ -2895,9 +2896,10 @@ export function useKiroChat({
       if (toolName === "search_memories") {
         const parsed = KIRO_MEMORY_TOOL_SCHEMAS.search_memories.safeParse(input);
         if (!parsed.success) return { ok: false, code: "INVALID_INPUT" as never, message: "搜索条件不合法。" };
-        const results = await memory.search(parsed.data);
-        return {
-          ok: true,
+        // 两阶段：本地 OR 召回 → 条件 LLM 重排（语料与旧 search 同源：全量 memories）。
+        // 模型信息/apiKey 缺失 → 只召回；重排失败 → 召回序；编排异常 → 旧 keyword 路径兜底。
+        const searchOutput = (results: KiroMemory[]) => ({
+          ok: true as const,
           data: results.map((m) => ({
             id: m.id,
             title: m.title,
@@ -2909,7 +2911,34 @@ export function useKiroChat({
             updatedAt: m.updatedAt,
           })),
           action: { tool: "search_memories", entityType: "memory" as never, entityId: "", title: "学习偏好", operation: "read" as never, canUndo: false },
-        };
+        });
+        try {
+          const snap = (turnSnapshotRef.current ?? bodyRef.current) as Record<string, unknown>;
+          const provider = typeof snap.provider === "string" ? snap.provider : "";
+          const model = typeof snap.model === "string" ? snap.model : "";
+          const apiKey = provider ? getSessionApiKey(provider as Parameters<typeof getSessionApiKey>[0]) : "";
+          const invocationId = typeof snap.invocationId === "string" ? snap.invocationId : "";
+          const results = await searchMemoriesTwoStage({
+            ...(parsed.data.query !== undefined ? { query: parsed.data.query } : {}),
+            ...(parsed.data.category ? { category: parsed.data.category } : {}),
+            ...(parsed.data.scope ? { scope: parsed.data.scope } : {}),
+            ...(parsed.data.limit !== undefined ? { limit: parsed.data.limit } : {}),
+            memories: memory.memories,
+            ...(provider && model && apiKey
+              ? {
+                  provider,
+                  model,
+                  apiKey,
+                  ...(snap.customConfig !== undefined ? { customConfig: snap.customConfig } : {}),
+                  ...(invocationId ? { invocationId } : {}),
+                }
+              : {}),
+          });
+          return searchOutput(results);
+        } catch {
+          const results = await memory.search(parsed.data);
+          return searchOutput(results);
+        }
       }
       if (toolName === "save_memory") {
         const parsed = KIRO_MEMORY_TOOL_SCHEMAS.save_memory.safeParse(input);
