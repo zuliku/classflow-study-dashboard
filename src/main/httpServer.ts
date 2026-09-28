@@ -25,6 +25,7 @@ import { handleWebSearchTest } from "@/app/api/ai/web-search/test/route";
 import { handleWebSearchStatus } from "@/app/api/ai/web-search/status/route";
 import { handleDistill } from "@/app/api/ai/skills/distill/route";
 import { handleReplyDraft } from "@/app/api/ai/reply-draft/route";
+import { handleMemoryRerank } from "@/app/api/ai/memory-rerank/route";
 
 export interface ApiServer {
   port: number;
@@ -44,6 +45,8 @@ const ROUTES: { method: string; path: string; handler: Handler }[] = [
   { method: "GET", path: "/api/ai/web-search/status", handler: handleWebSearchStatus },
   { method: "POST", path: "/api/ai/skills/distill", handler: handleDistill },
   { method: "POST", path: "/api/ai/reply-draft", handler: handleReplyDraft },
+  // 记忆语义重排（两阶段第二阶段；失败 browser 降级，不阻塞 search_memories）
+  { method: "POST", path: "/api/ai/memory-rerank", handler: handleMemoryRerank },
 ];
 
 /**
