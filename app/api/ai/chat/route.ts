@@ -21,6 +21,7 @@ import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import { normalizeProjectTurnContext, buildProjectInstructionsSection } from "@/lib/ai/projects/prompt";
 import { resolveProviderOptionsEnvelope, shouldOmitToolChoice } from "@/lib/ai/reasoning/providerOptions";
+import { resolveMaxOutputTokens } from "@/lib/ai/reasoning/outputTokens";
 import { normalizePromptContextRefs } from "@/lib/ai/context/contextSelection";
 import {
   normalizeWorkspaceInstructionsForPrompt,
@@ -496,8 +497,35 @@ export async function handleChat(req: Request) {
           : systemMessage,
       tools: finalTools,
       toolChoice: finalAnswerStarted && !omitToolChoice ? "none" : undefined,
-      maxOutputTokens: AI.CHAT_MAX_OUTPUT_TOKENS,
+      // fix（思考配额）：高思考档同步放宽单步输出上限，否则思考吃光配额 →
+      // finish=length → 工具成功但终答为空（muse live probe 实测：400 配额 reasoning 占 397）
+      maxOutputTokens: resolveMaxOutputTokens(parsed.reasoningEffort),
       abortSignal: signal,
+      // Dev-only 空终答诊断（生产零行为）：记录每步 finish/text 长度/工具数，
+      // finish=length + 零文本 = 思考吃光配额（muse live probe 实锤类），不记录任何内容
+      ...(process.env.NODE_ENV === "development"
+        ? {
+            onStepEnd: (step: {
+              finishReason?: unknown;
+              text?: unknown;
+              toolCalls?: unknown;
+              usage?: { outputTokens?: unknown };
+            }) => {
+              try {
+                const textLen = typeof step.text === "string" ? step.text.length : -1;
+                const toolCount = Array.isArray(step.toolCalls) ? step.toolCalls.length : -1;
+                const outputTokens =
+                  typeof step.usage?.outputTokens === "number" ? step.usage.outputTokens : -1;
+                console.info(
+                  `[Kiro step] finish=${String(step.finishReason)} textLen=${textLen} ` +
+                    `tools=${toolCount} outputTokens=${outputTokens}`
+                );
+              } catch {
+                // 诊断绝不影响主流程
+              }
+            },
+          }
+        : {}),
       // V2.2：bounded Tool Call Repair —— 无效 create/update Draft 在进入多步历史前由 server 修正一次，
       // 成功后走正常绿色「创建文档」链路，而不是红色「执行操作」+ 模型自述 JSON 错误
       repairToolCall: (() => {
