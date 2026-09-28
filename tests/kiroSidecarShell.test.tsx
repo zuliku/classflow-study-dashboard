@@ -468,7 +468,7 @@ describe("Move handle（Move V1）", () => {
     s.cleanup();
   });
 
-  it("Motion V3 Fling：果断甩动（3+ 采样 + 高速）→ 沿惯性多滑一段再持久化", async () => {
+  it("快速拖动松手 → 精确落位（无投射、无边角吸附；速度再快也不瞬移）", async () => {
     const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]') as HTMLElement;
@@ -478,7 +478,7 @@ describe("Move handle（Move V1）", () => {
       act(() => {
         handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 1000, clientY: 100, pointerId: 1 }));
       });
-      // 3 次 move，每次间隔 20ms：末速度 (-2, +0.5)px/ms，整段位移 ≈124px
+      // 3 次 move，每次间隔 20ms（≈2px/ms 的果断拖动；此前会触发惯性投射拍向边角）
       for (const [x, y] of [[960, 110], [920, 120], [880, 130]] as const) {
         now += 20;
         act(() => {
@@ -491,17 +491,17 @@ describe("Move handle（Move V1）", () => {
     } finally {
       nowSpy.mockRestore();
     }
-    // 手指落位应为 right=144 / top=70；fling 沿惯性多滑（均更大），且 store 与面板一致
-    expect(panelRight(s)).toBeGreaterThan(144);
-    expect(panelTop(s)).toBeGreaterThan(70);
+    // 手指落位 right=144 / top=70（origin top 已 clamp 到 40 +30）；与 store 完全一致
+    expect(panelRight(s)).toBe(144);
+    expect(panelTop(s)).toBe(SIDECAR_VIEWPORT_TOP_MARGIN + 30);
     expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({
-      top: panelTop(s),
-      right: panelRight(s),
+      top: SIDECAR_VIEWPORT_TOP_MARGIN + 30,
+      right: 144,
     });
     s.cleanup();
   });
 
-  it("Motion V3 Fling：慢速长拖（3 采样但低速）→ 无投射，原落位", async () => {
+  it("慢速长拖 → 原落位（与快拖同一精确落位语义）", async () => {
     const s = setup("open", true);
     await s.flush();
     const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]') as HTMLElement;

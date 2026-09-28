@@ -190,7 +190,7 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(read("components/kiro/KiroMessage.tsx")).toMatch(/animate-pulse/);
   });
 
-  it("Motion V3 收尾：Gallery/fps/fling dev 门禁 + token-only（无裸时长旁路）", () => {
+  it("Motion V3 收尾：Gallery/fps dev 门禁 + 松手零投射 + token-only（无裸时长旁路）", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
     // dev-only 门禁（production 永不渲染）
     expect(read("components/motion/MotionGallery.tsx")).toMatch(/isMotionDev/);
@@ -199,11 +199,14 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     // Gallery 只引用 token（时长/easing 经 var() 或 Contract 常量，无 duration-[Nms]）
     expect(read("components/motion/MotionGallery.tsx")).not.toMatch(/duration-\[\d+ms\]/);
     expect(read("components/motion/MotionGallery.tsx")).toMatch(/duration-\[var\(--motion-/);
-    // fling 守卫常量存在且 Shell 接入（采样数 + 速度 + 位移三守卫，单次投射无 timer）
-    expect(read("lib/ai/ui/sidecarFling.ts")).toMatch(/FLING_MIN_SAMPLES/);
+    // 松手零投射（惯性投射已下线：曾按松手速度瞬移 ≤200px 再 clamp，
+    // 普通速度松手即触发、视觉即“边角吸附”；落位 = 手指位置，确定性）。
+    // Shell 不得再引用投射路径；投射模块已删除（死代码不保留）。
     const shell = read("components/kiro/sidecar/KiroSidecarShell.tsx");
-    expect(shell).toMatch(/FLING_MIN_SAMPLES/);
-    expect(shell).toMatch(/projectFlingPosition/);
+    expect(shell).not.toMatch(/projectFlingPosition/);
+    expect(shell).not.toMatch(/FLING_MIN_SAMPLES/);
+    expect(shell).not.toMatch(/sidecarFling/);
+    expect(fs.existsSync(path.join(process.cwd(), "lib/ai/ui/sidecarFling.ts"))).toBe(false);
     expect(shell).not.toMatch(/setTimeout\(.*fling/i);
   });
 

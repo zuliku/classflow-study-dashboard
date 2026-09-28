@@ -15,14 +15,6 @@ import {
 } from "@/lib/ai/ui/sidecarPosition";
 import { KiroSidecarResizeHandle } from "@/components/kiro/sidecar/KiroSidecarResizeHandle";
 import { KiroSidecarMoveHandle } from "@/components/kiro/sidecar/KiroSidecarMoveHandle";
-import {
-  computeFlingVelocity,
-  gestureDistance,
-  projectFlingPosition,
-  FLING_MIN_DISTANCE_PX,
-  FLING_MIN_SAMPLES,
-  type FlingSample,
-} from "@/lib/ai/ui/sidecarFling";
 import { cn } from "@/lib/utils";
 
 /**
@@ -123,13 +115,6 @@ export function KiroSidecarShell({
   const pendingMoveRef = useRef<{ deltaX: number; deltaY: number } | null>(null);
   const resizeRafRef = useRef(0);
   const pendingResizeRef = useRef<{ deltaWidth: number; deltaHeight: number } | null>(null);
-  // Motion V3 Fling：move 采样（首采样 + 末两采样 + 总数），commit 时算末速度；
-  // count/首末结构保证点按（1）/存量同步测试（≤2）天然豁免，内存常量。
-  const moveSamplesRef = useRef<{ first: FlingSample | null; tail: FlingSample[]; count: number }>({
-    first: null,
-    tail: [],
-    count: 0,
-  });
 
   // unmount：取消未执行的帧回调（防 detached node 写 + 引用滞留）
   useEffect(() => {
@@ -224,7 +209,6 @@ export function KiroSidecarShell({
     if (interactionRef.current !== "idle") return;
     interactionRef.current = "move";
     moveOriginRef.current = position;
-    moveSamplesRef.current = { first: null, tail: [], count: 0 };
     setGeometryInteracting(true);
   };
 
@@ -254,14 +238,6 @@ export function KiroSidecarShell({
   const applyMove = (delta: { deltaX: number; deltaY: number }) => {
     if (interactionRef.current !== "move") return;
     pendingMoveRef.current = delta;
-    // Motion V3 Fling 采样（首 + 末两采样 + 总数；performance 缺失环境跳过采样 = 无 fling）
-    if (typeof performance !== "undefined" && typeof performance.now === "function") {
-      const slot = moveSamplesRef.current;
-      const sample: FlingSample = { deltaX: delta.deltaX, deltaY: delta.deltaY, t: performance.now() };
-      slot.count += 1;
-      if (!slot.first) slot.first = sample;
-      slot.tail = [...slot.tail.slice(-1), sample];
-    }
     if (moveRafRef.current) return;
     moveRafRef.current = requestAnimationFrame(() => {
       moveRafRef.current = 0;
@@ -276,22 +252,10 @@ export function KiroSidecarShell({
     }
     flushMoveFrame();
     if (interactionRef.current === "move") {
-      let finalPosition = latestDraftPositionRef.current;
-      // Motion V3 Fling：果断甩动（采样数 + 末速度 + 整段位移三守卫）→ 沿惯性多滑一段再 clamp；
-      // 慢拖/点按/键盘 discrete/存量同步测试（采样不足或 dt≈0）保持原落位，commit 语义不变。
-      const slot = moveSamplesRef.current;
-      if (
-        finalPosition &&
-        slot.count >= FLING_MIN_SAMPLES &&
-        slot.first &&
-        slot.tail.length >= 2 &&
-        gestureDistance([slot.first, slot.tail[slot.tail.length - 1]]) >= FLING_MIN_DISTANCE_PX
-      ) {
-        const velocity = computeFlingVelocity(slot.tail[slot.tail.length - 2], slot.tail[slot.tail.length - 1]);
-        if (velocity) {
-          finalPosition = projectFlingPosition({ position: finalPosition, velocity, size, viewport });
-        }
-      }
+      // 确定性落位：松手位置 = 手指位置（clamped），无投射、无惯性、无边角吸附；
+      // 惯性投射已下线（曾按松手速度瞬移 ≤200px 再 clamp，普通速度松手即触发，
+      // 视觉上就是“被吸到边角”；真惯性需要动画循环 + settle，不在此做）。
+      const finalPosition = latestDraftPositionRef.current;
       if (finalPosition) {
         // 闪回修复：先把终点同步直写 CSS 变量、再清零视觉位移（同一 tick 内完成，
         // 无“旧位置闪一帧”窗口；随后持久化触发的 React 重绘写入完全相同的值）。
@@ -308,7 +272,6 @@ export function KiroSidecarShell({
     }
     moveOriginRef.current = null;
     latestDraftPositionRef.current = null;
-    moveSamplesRef.current = { first: null, tail: [], count: 0 };
     setDraftPosition(null);
     setGeometryInteracting(false);
   };
