@@ -67,9 +67,8 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  *   MiniMax 全系（M3 effort 值仅开关深度，M2.x 常开不可调；官方明确不调节深度）、
  *   mimo 全系（v2.5/pro 仅 thinking 开关，effort 各档效果一致；omni/flash 无档位证据）、
  *   hy3/hy4-preview（adaptive 自适应，档位即默认值，无可调差）、
- *   kimi-k2.7-code（常开且无 effort 参数）、longcat-2.0（无 thinking 证据）、
- *   qwen3.8-max（官方确有 low/medium/xhigh 档，但走 anthropic-messages，
- *   本栈 anthropic-effort mechanism 未实现，声明即静默丢弃 → 等 mechanism 落地再放开）
+ *   kimi-k2.7-code（常开且无 effort 参数）、longcat-2.0（无 thinking 证据）
+ * （qwen3.8-max 见下：档位经 anthropic-effort 放开，不在此列）
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
@@ -246,8 +245,10 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
   { id: "minimax-m2.7", name: "MiniMax M2.7", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false }, contextWindowTokens: 204_800 },
   { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
   { id: "qwen3.8-flash", name: "Qwen3.8 Flash", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
-  // 阿里云百炼官方：qwen3.8-max 同时列于「文本生成」与「图像/视频理解」→ vision 开
-  { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
+  // 阿里云百炼官方：qwen3.8-max 同时列于「文本生成」与「图像/视频理解」→ vision 开；
+  // 千问AI平台官方：reasoning_effort 档位 low/medium/xhigh（默认 xhigh）→ 经
+  // anthropic-effort（thinking budget 上限阶梯，见 providerOptions）放开
+  { id: "qwen3.8-max", name: "Qwen3.8 Max", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "xhigh"], mechanism: "anthropic-effort" } }, contextWindowTokens: 1_000_000 },
 ];
 
 export const OPENCODE_DEFAULT_MODEL = "deepseek-v4.1-flash";

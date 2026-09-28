@@ -122,10 +122,20 @@ describe("选择器精选列表", () => {
     expect(byId.get("hy3")!.capabilities.reasoning).toBeUndefined();
     expect(byId.get("hy4-preview")!.capabilities.reasoning).toBeUndefined();
     expect(byId.get("longcat-2.0")!.capabilities.reasoning).toBeUndefined();
-    // qwen3.8-max：官方确有档位，但 anthropic-effort mechanism 未实现 → 暂不声明
-    for (const id of ["qwen3.8-max", "qwen3.8-flash", "qwen3.7-plus"]) {
+    // qwen3.8-max：官方档位经 anthropic-effort 放开（见下），不再暂缓
+    for (const id of ["qwen3.8-flash", "qwen3.7-plus"]) {
       expect(byId.get(id)!.capabilities.reasoning, id).toBeUndefined();
     }
+  });
+
+  it("思考程度覆盖扩展：qwen3.8-max 官方档位经 anthropic-effort 放开", () => {
+    const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
+    const qwenMax = byId.get("qwen3.8-max")!;
+    expect(qwenMax.capabilities.reasoning).toEqual({
+      adjustable: true,
+      supportedEfforts: ["default", "low", "medium", "xhigh"],
+      mechanism: "anthropic-effort",
+    });
   });
 
   it("远端同步新增：gpt-6-luna（精选首位）/ mimo-v2.6-flash（注册表）官方文档能力", () => {

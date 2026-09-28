@@ -12,11 +12,28 @@ import { AIModelDefinition, AICustomConfig } from "@/lib/ai/providers/types";
  * 保守策略（Part 1 + Reasoning Phase 2）：
  * - DeepSeek official：明确声明 reasoning capability（deepseek-thinking）。
  *   default → thinking disabled（历史稳定行为）；high/max → thinking enabled + reasoning_effort。
- * - OpenCode Go（代理 Provider）：对具体模型的 reasoning/tool calling 兼容行为未逐模型验证前，
- *   capability 一律 fixed（default only），绝不根据模型名推断。
+ * - OpenCode Go（代理 Provider）：未逐模型验证前 capability 一律 fixed（default only），
+ *   绝不根据模型名推断；anthropic-messages 档位经官方文档 + thinking budget 映射放开
+ *   （ANTHROPIC_EFFORT_BUDGET_TOKENS，上限语义，方向正确，不声称等价原生档位）。
  * - Custom OpenAI：仅当 custom.reasoningEffort === true（用户显式声明）才标记可调，
  *   mechanism = "effort"（@ai-sdk/openai-compatible 支持 reasoningEffort 字符串）。
  */
+
+/**
+ * anthropic-effort 档位 → thinking budget 映射（ClassFlow 自选阶梯）。
+ *
+ * 背景：Anthropic 协议没有 effort 档位，只有 thinking budget（token 上限；超限即停
+ * 止思考直接回答）。档位映射只能是“上限阶梯”，保证方向正确（越高越深），不声称
+ * 等价于厂商原生档位。
+ * 取值锚点（阿里云百炼官方）：Model Studio 默认 4000；可用范围 1～32768。
+ * low=4000（官方默认）、medium=8000、xhigh=16000 —— 保守翻倍阶梯，远低于上下文，
+ * 不会因 budget 耗尽截断正常回答（超限只停思考，不停正文）。
+ */
+export const ANTHROPIC_EFFORT_BUDGET_TOKENS: Record<string, number> = {
+  low: 4000,
+  medium: 8000,
+  xhigh: 16000,
+};
 
 /** 从模型定义解析 ReasoningCapability（未声明 → fixed） */
 export function getReasoningCapability(
@@ -87,9 +104,16 @@ export function resolveReasoningProviderOptions(input: {
       // effort 已 normalize（仅 capability 声明的档位到达这里；default 已提前 return）。
       return { reasoningEffort: effort, forceReasoning: true };
     }
-    case "anthropic-effort":
-      // 当前无已验证的 anthropic-messages 可调模型 → 保守不产出
-      return undefined;
+    case "anthropic-effort": {
+      // @ai-sdk/anthropic：providerOptions.<providerKey>.thinking（type + budgetTokens）
+      // → Anthropic thinking block。envelope key 由 resolveProviderOptionsEnvelope 按
+      // transport 选择（anthropic-messages → "classflow-kiro"，适配器按自定义 key 解析）。
+      // thinking budget 是上限语义（超限停思考、不停正文），档位映射见 ANTHROPIC_EFFORT_BUDGET_TOKENS。
+      // default 已提前 return（保持上游默认行为）；未在映射表的档位 → 不产出（不断言未知映射）。
+      const budgetTokens = ANTHROPIC_EFFORT_BUDGET_TOKENS[effort];
+      if (budgetTokens === undefined) return undefined;
+      return { thinking: { type: "enabled", budgetTokens } };
+    }
     case "thinking-budget":
       return undefined;
     case "fixed":

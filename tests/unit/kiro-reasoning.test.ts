@@ -5,6 +5,7 @@ import {
   resolveReasoningProviderOptions,
   resolveProviderOptionsEnvelope,
   shouldOmitToolChoice,
+  ANTHROPIC_EFFORT_BUDGET_TOKENS,
 } from "@/lib/ai/reasoning/providerOptions";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { FIXED_REASONING } from "@/lib/ai/reasoning/types";
@@ -391,5 +392,50 @@ describe("GPT 5.6 Luna / Grok 4.6（openai-responses-effort）", () => {
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.6", requested: "high" })).toBe("high");
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.6", requested: "max" })).toBe("default");
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "deepseek-v4-flash", requested: "high" })).toBe("default");
+  });
+});
+
+describe("Qwen3.8 Max（anthropic-effort：thinking budget 上限阶梯）", () => {
+  const qwenMaxDef = OPENCODE_MODELS.find((m) => m.id === "qwen3.8-max")!;
+
+  it("1. capability：adjustable + 官方档位 + anthropic-effort", () => {
+    const cap = getReasoningCapability(qwenMaxDef);
+    expect(cap.adjustable).toBe(true);
+    expect(cap.mechanism).toBe("anthropic-effort");
+    expect(cap.supportedEfforts).toEqual(["default", "low", "medium", "xhigh"]);
+  });
+
+  it("2. 档位 → thinking budget（上限语义；官方默认 4000 为 low 锚点）", () => {
+    expect(ANTHROPIC_EFFORT_BUDGET_TOKENS).toEqual({ low: 4000, medium: 8000, xhigh: 16000 });
+    expect(resolveReasoningProviderOptions({ definition: qwenMaxDef, effort: "default" })).toBeUndefined();
+    expect(resolveReasoningProviderOptions({ definition: qwenMaxDef, effort: "low" })).toEqual({
+      thinking: { type: "enabled", budgetTokens: 4000 },
+    });
+    expect(resolveReasoningProviderOptions({ definition: qwenMaxDef, effort: "medium" })).toEqual({
+      thinking: { type: "enabled", budgetTokens: 8000 },
+    });
+    expect(resolveReasoningProviderOptions({ definition: qwenMaxDef, effort: "xhigh" })).toEqual({
+      thinking: { type: "enabled", budgetTokens: 16000 },
+    });
+    // 未声明档位（high/max）→ 不产出（不断言未知映射）
+    expect(resolveReasoningProviderOptions({ definition: qwenMaxDef, effort: "high" })).toBeUndefined();
+    expect(resolveReasoningProviderOptions({ definition: qwenMaxDef, effort: "max" })).toBeUndefined();
+  });
+
+  it("3. envelope：messages → { classflow-kiro: { thinking } }（适配器按自定义 key 解析）", () => {
+    expect(resolveProviderOptionsEnvelope({ definition: qwenMaxDef, effort: "medium" })).toEqual({
+      "classflow-kiro": { thinking: { type: "enabled", budgetTokens: 8000 } },
+    });
+    // base 与 reasoning 合并到同一个 envelope
+    expect(
+      resolveProviderOptionsEnvelope({ definition: qwenMaxDef, effort: "low", base: { store: false } })
+    ).toEqual({
+      "classflow-kiro": { store: false, thinking: { type: "enabled", budgetTokens: 4000 } },
+    });
+  });
+
+  it("4. effective：requested 落档保留，出档回 default", () => {
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "qwen3.8-max", requested: "xhigh" })).toBe("xhigh");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "qwen3.8-max", requested: "high" })).toBe("default");
   });
 });
