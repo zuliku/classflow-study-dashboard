@@ -549,12 +549,6 @@ button:disabled {
     transform: translateX(-100%);
     animation: ux-skeleton-sweep var(--skeleton-sweep, 1.6s) var(--ease-standard) infinite;
   }
-
-  /* Motion V3 P1：Detail 共享元素渐进增强（View Transitions API）。
-     不支持的浏览器自动忽略；调用方通过 --shared-name 区分实体（如 task/ddl/course）。 */
-  .ux-shared-detail {
-    view-transition-name: var(--shared-name, detail-panel);
-  }
 }
 
 @keyframes ux-enter {

@@ -94,7 +94,7 @@ export function EntityActivitySection({
       <DisclosureRegion open={open}>
         <div id={`entity-activity-${scope}`} className="pt-1">
           {loading && (
-            <div aria-live="polite" className="space-y-1.5 py-1">
+            <div aria-live="polite" className="ux-skeleton space-y-1.5 py-1">
               <div className="h-3 w-2/3 animate-pulse rounded bg-line-soft" />
               <div className="h-3 w-1/2 animate-pulse rounded bg-line-soft" />
             </div>

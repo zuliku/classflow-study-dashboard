@@ -305,13 +305,13 @@ export function ReminderCenter() {
             "md:w-[400px] md:ml-16 xl:ml-56 md:min-h-[min(420px,calc(100dvh-32px))] md:max-h-[min(720px,calc(100dvh-32px))] md:rounded-2xl",
             // Motion（三态非对称）：mobile 轻浮起（translateY）/ desktop 从 Sidebar 展开（translateX）；
             // entering 用 enter 偏移（-6px / 6px, scale .992/.985），exiting 用更轻的 exit 偏移
-            // （-4px / 4px, scale .994/.99）；enter ~200ms，exit ~160ms（退出略快）
+            // （-4px / 4px, scale .994/.99）；enter ~200ms（standard），exit ~160ms 加速离场（exit）
             "transition-[opacity,transform] ease-[var(--ease-emphasized)]",
             isOpen
               ? visible
                 ? "opacity-100 translate-y-0 scale-100 md:translate-x-0 ![duration:var(--motion-overlay)]"
                 : "opacity-0 translate-y-1.5 scale-[0.985] md:translate-y-0 md:-translate-x-1.5 md:scale-[0.992] ![duration:var(--motion-overlay)]"
-              : "opacity-0 translate-y-1 scale-[0.99] md:translate-y-0 md:-translate-x-1 md:scale-[0.994] ![duration:var(--motion-exit-panel)]"
+              : "opacity-0 translate-y-1 scale-[0.99] md:translate-y-0 md:-translate-x-1 md:scale-[0.994] ![duration:var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
           )}
         >
           {/* Header：Bell + 标题 + 数量 badge | 新建提醒 + 关闭（shrink-0 不滚动） */}
@@ -349,7 +349,7 @@ export function ReminderCenter() {
                 "grid shrink-0 transition-[grid-template-rows,opacity,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
                 composerPresence.visible
                   ? "grid-rows-[1fr] opacity-100 translate-y-0"
-                  : "grid-rows-[0fr] opacity-0 -translate-y-1"
+                  : "grid-rows-[0fr] opacity-0 -translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
               )}
             >
               <div ref={composerInnerRef} className="min-h-0 overflow-hidden">

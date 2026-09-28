@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderDeliveryStore } from "@/store/useReminderDeliveryStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
+import { MOTION_MS } from "@/lib/motion";
 import { Reminder } from "@/types";
 import { formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
@@ -16,6 +17,10 @@ import { cn } from "@/lib/utils";
 const CARD_AUTO_HIDE_MS = 10_000;
 /** 同时最多显示张数（queue 可更多，消失后下一张进入） */
 const MAX_VISIBLE_CARDS = 3;
+/**
+ * Motion Contract：卡片视觉退出走 ux-inline（--motion-fast），
+ * EXIT_MS = MOTION_MS.fast 与之同源——动画结束即移除（对齐 ToastViewport）。
+ */
 
 /**
  * Reminder Viewport（Task 7G-A2）：ChatGPT 风格站内通知。
@@ -33,11 +38,30 @@ export function ReminderViewport() {
     .filter((r): r is Reminder => !!r)
     .slice(0, MAX_VISIBLE_CARDS);
 
+  // 退出 presence：先标记 exiting 播 140ms 淡出，再真正 dismiss（自动隐藏/手动关闭同路径）
+  const [exiting, setExiting] = useState<Set<string>>(new Set());
+  const exitingRef = useRef(exiting);
+  exitingRef.current = exiting;
+  const timersRef = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      timersRef.current.forEach((t) => window.clearTimeout(t));
+      timersRef.current = [];
+    },
+    []
+  );
+
   const handleDismiss = (reminder: Reminder, markRead: boolean) => {
     if (markRead) {
       useAppStore.getState().markReminderRead(reminder.id, formatLocalDateTime(new Date()));
     }
     dismiss(reminder.id);
+  };
+
+  const dismissWithExit = (reminder: Reminder, markRead: boolean) => {
+    if (exitingRef.current.has(reminder.id)) return;
+    setExiting((prev) => new Set(prev).add(reminder.id));
+    timersRef.current.push(window.setTimeout(() => handleDismiss(reminder, markRead), MOTION_MS.fast));
   };
 
   const handleOpen = (reminder: Reminder) => {
@@ -64,8 +88,9 @@ export function ReminderViewport() {
         <ReminderCard
           key={r.id}
           reminder={r}
+          exiting={exiting.has(r.id)}
           onOpen={() => handleOpen(r)}
-          onDismiss={(markRead) => handleDismiss(r, markRead)}
+          onDismiss={(markRead) => dismissWithExit(r, markRead)}
         />
       ))}
     </div>
@@ -74,10 +99,12 @@ export function ReminderViewport() {
 
 function ReminderCard({
   reminder,
+  exiting,
   onOpen,
   onDismiss,
 }: {
   reminder: Reminder;
+  exiting: boolean;
   onOpen: () => void;
   onDismiss: (markRead: boolean) => void;
 }) {
@@ -94,7 +121,14 @@ function ReminderCard({
   return (
     <div
       role="status"
-      className="pointer-events-auto flex items-start gap-3 bg-surface border border-line-strong rounded-[20px] shadow-card px-4 py-3.5 ux-inline"
+      className={cn(
+        "pointer-events-auto flex items-start gap-3 bg-surface border border-line-strong rounded-[20px] shadow-card px-4 py-3.5 ux-inline",
+        // 入场一次性 animation + 出场过渡（与 ToastViewport 同模式）
+        "ux-toast-enter",
+        exiting
+          ? "opacity-0 translate-y-1 !ease-[var(--ease-exit)]"
+          : "opacity-100 translate-y-0"
+      )}
     >
       {/* Kiro Logo Plate */}
       <span className="w-9 h-9 shrink-0 rounded-xl bg-alabaster/70 border border-line-soft flex items-center justify-center">

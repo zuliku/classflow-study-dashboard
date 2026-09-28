@@ -63,7 +63,7 @@ export function KiroContextPicker({
           "md:hidden fixed inset-0 z-40 bg-black/30 transition-opacity ease-[var(--ease-standard)]",
           visible
             ? "duration-[var(--motion-panel)] opacity-100"
-            : "duration-[var(--motion-exit-panel)] opacity-0 pointer-events-none"
+            : "duration-[var(--motion-exit-panel)] opacity-0 pointer-events-none ease-[var(--ease-exit)]"
         )}
         onClick={onClose}
         aria-hidden="true"
@@ -75,10 +75,10 @@ export function KiroContextPicker({
         data-state={open ? "open" : "closed"}
         aria-hidden={!open}
         className={cn(
-          "md:hidden fixed inset-x-0 bottom-0 z-50 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[70dvh] overflow-y-auto transition-[opacity,transform] ease-[var(--ease-standard)]",
+          "md:hidden fixed inset-x-0 bottom-0 z-50 bg-surface border-t border-line rounded-t-2xl shadow-card p-4 pb-5 max-h-[70dvh] overflow-y-auto overflow-x-clip transition-[opacity,transform] ease-[var(--ease-standard)]",
           visible
             ? "duration-[var(--motion-panel)] translate-y-0 opacity-100"
-            : "duration-[var(--motion-exit-panel)] translate-y-2 opacity-0 pointer-events-none"
+            : "duration-[var(--motion-exit-panel)] translate-y-2 opacity-0 pointer-events-none ease-[var(--ease-exit)]"
         )}
       >
         <div className="w-10 h-1 rounded-full bg-line-strong mx-auto mb-3" />
@@ -93,10 +93,10 @@ export function KiroContextPicker({
         data-state={open ? "open" : "closed"}
         aria-hidden={!open}
         className={cn(
-          "hidden md:block absolute bottom-full left-0 mb-2 w-80 max-h-[min(420px,60dvh)] overflow-y-auto bg-surface border border-line-strong rounded-2xl shadow-card p-3 z-40 transition-[opacity,transform] ease-[var(--ease-standard)] origin-bottom-left",
+          "hidden md:block absolute bottom-full left-0 mb-2 w-80 max-h-[min(420px,60dvh)] overflow-y-auto overflow-x-clip bg-surface border border-line-strong rounded-2xl shadow-card p-3 z-40 transition-[opacity,transform] ease-[var(--ease-standard)] origin-bottom-left",
           visible
             ? "duration-[var(--kiro-motion-popover-enter,var(--motion-panel))] translate-y-0 opacity-100 scale-100"
-            : "duration-[var(--kiro-motion-popover-exit,160ms)] translate-y-1 opacity-0 pointer-events-none scale-[0.985]"
+            : "duration-[var(--kiro-motion-popover-exit,160ms)] translate-y-1 opacity-0 pointer-events-none scale-[0.985] ease-[var(--ease-exit)]"
         )}
       >
         {list}

@@ -130,7 +130,7 @@ function KiroCodeBlock({ children, className }: { children?: React.ReactNode; cl
     return (
       <React.Suspense
         fallback={
-          <div className="my-[0.85em] rounded-xl border border-line bg-alabaster p-4 animate-pulse">
+          <div className="ux-skeleton my-[0.85em] rounded-xl border border-line bg-alabaster p-4 animate-pulse">
             <div className="h-3 w-24 rounded bg-surface mb-3" />
             <div className="h-32 rounded bg-surface/70" />
           </div>
@@ -145,7 +145,7 @@ function KiroCodeBlock({ children, className }: { children?: React.ReactNode; cl
     return (
       <React.Suspense
         fallback={
-          <div className="my-[0.85em] rounded-xl border border-line bg-alabaster p-4 animate-pulse">
+          <div className="ux-skeleton my-[0.85em] rounded-xl border border-line bg-alabaster p-4 animate-pulse">
             <div className="h-3 w-20 rounded bg-surface mb-3" />
             <div className="h-[260px] rounded bg-surface/70" />
           </div>
@@ -160,7 +160,7 @@ function KiroCodeBlock({ children, className }: { children?: React.ReactNode; cl
     return (
       <React.Suspense
         fallback={
-          <div className="my-[0.85em] rounded-xl border border-line bg-alabaster p-4 animate-pulse">
+          <div className="ux-skeleton my-[0.85em] rounded-xl border border-line bg-alabaster p-4 animate-pulse">
             <div className="h-3 w-20 rounded bg-surface mb-3" />
             <div className="space-y-2">
               <div className="h-3 w-full rounded bg-surface/70" />

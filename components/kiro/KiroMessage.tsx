@@ -169,7 +169,7 @@ export function KiroMessage({
               <div
                 data-testid="kiro-composing-skeleton"
                 aria-hidden="true"
-                className="space-y-1.5 py-1"
+                className="ux-skeleton space-y-1.5 py-1"
               >
                 <div className="h-3 w-3/4 rounded bg-alabaster animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />
                 <div className="h-3 w-1/2 rounded bg-alabaster/70 animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />

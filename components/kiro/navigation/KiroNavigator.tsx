@@ -333,7 +333,7 @@ export function KiroNavigator() {
               expanded && "absolute inset-y-0 left-0 w-[52px] pointer-events-none",
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
               expanded || !collapsedPresence.visible
-                ? "opacity-0 -translate-x-[3px] duration-[var(--motion-snap)]"
+                ? "opacity-0 -translate-x-[3px] duration-[var(--motion-snap)] ease-[var(--ease-exit)]"
                 : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-3,140ms)]"
             )}
           >
@@ -417,7 +417,7 @@ export function KiroNavigator() {
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
               expanded
                 ? "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)]"
-                : "opacity-0 -translate-x-[3px] pointer-events-none duration-[var(--kiro-motion-popover-exit,120ms)]"
+                : "opacity-0 -translate-x-[3px] pointer-events-none duration-[var(--kiro-motion-popover-exit,120ms)] ease-[var(--ease-exit)]"
             )}
           >
             <div

@@ -123,7 +123,7 @@ export function KiroMermaid({ code }: { code: string }) {
         ) : svg ? (
           <div className="flex justify-center [&_svg]:max-w-full [&_svg]:h-auto" dangerouslySetInnerHTML={{ __html: svg }} />
         ) : (
-          <div className="animate-pulse space-y-2">
+          <div className="ux-skeleton animate-pulse space-y-2">
             <div className="h-3 w-3/4 rounded bg-alabaster" />
             <div className="h-3 w-1/2 rounded bg-alabaster/70" />
             <div className="h-32 rounded bg-alabaster/50" />

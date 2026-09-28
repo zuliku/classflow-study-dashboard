@@ -36,7 +36,8 @@ export function KiroInspector({ open }: { open: boolean }) {
       aria-hidden={!open}
       className={cn(
         "hidden xl:block shrink-0 self-start min-h-0 overflow-hidden",
-        "transition-[width] duration-[var(--kiro-motion-spatial,220ms)] ease-[var(--ease-standard)]",
+        "transition-[width] duration-[var(--kiro-motion-spatial,220ms)]",
+        open ? "ease-[var(--ease-standard)]" : "ease-[var(--ease-exit)]",
         open ? "w-[296px]" : "w-0"
       )}
     >

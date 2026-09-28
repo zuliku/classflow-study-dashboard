@@ -112,7 +112,7 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(read("components/ui/Dialog.tsx")).toMatch(/ease-\[var\(--ease-standard\)\]/);
   });
 
-  it("Motion V3 P1：staged/skeleton/shared 工具 + reduced 守卫", () => {
+  it("Motion V3 P1：staged/skeleton 工具 + reduced 守卫", () => {
     expect(css).toMatch(/\.ux-staged-s0/);
     expect(css).toMatch(/\.ux-staged-s1/);
     expect(css).toMatch(/\.ux-staged-s2/);
@@ -121,7 +121,8 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(css).toMatch(/@keyframes ux-staged-in/);
     expect(css).toMatch(/\.ux-skeleton/);
     expect(css).toMatch(/@keyframes ux-skeleton-sweep/);
-    expect(css).toMatch(/\.ux-shared-detail/);
+    // ux-shared-detail（View Transitions 占位）已删除：零调用，留着是治理剧场
+    expect(css).not.toContain(".ux-shared-detail");
     // reduced-motion 下 staged 延迟清零 + skeleton 扫光关闭（双通道：media + effective）
     expect(css).toMatch(/\.ux-staged-s0,\s*\n?\s*html[^\{]*\.ux-staged-s3\s*\{[^}]*animation-delay:\s*0ms/s);
     expect(css).toMatch(/\.ux-skeleton::after\s*\{[^}]*display:\s*none/s);
@@ -140,6 +141,44 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
 
   it("Motion V3 P2：Sidebar width morph 走 spring（时长不变，仅曲线）", () => {
     expect(css).toMatch(/\.sidebar-shell\s*\{[^}]*transition-timing-function:\s*var\(--ease-spring\)/s);
+  });
+
+  it("P0 一致性收口 D1：Kiro 域退出分支统一加速离场（--ease-exit）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    for (const f of [
+      "components/kiro/sidecar/KiroSidecarShell.tsx",
+      "components/kiro/navigation/KiroNavigator.tsx",
+      "components/kiro/KiroContextPicker.tsx",
+      "components/kiro/KiroHistoryPanel.tsx",
+      "components/kiro/inspector/KiroInspector.tsx",
+      "components/reminders/ReminderCenter.tsx",
+    ]) {
+      expect(read(f)).toMatch(/ease-\[var\(--ease-exit\)\]/);
+    }
+  });
+
+  it("P0 一致性收口 D2：提醒卡片进退场对齐 Toast 模式", () => {
+    const src = fs.readFileSync(
+      path.join(process.cwd(), "components/reminders/ReminderViewport.tsx"),
+      "utf8"
+    );
+    expect(src).toContain("ux-toast-enter");
+    expect(src).toContain("MOTION_MS.fast");
+    expect(src).toMatch(/exiting[\s\S]{0,200}?opacity-0/);
+  });
+
+  it("P0 一致性收口 D3：骨架扫光覆盖全部 pulse 占位（渐进增强，不替换）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    for (const f of [
+      "components/history/EntityActivitySection.tsx",
+      "components/kiro/KiroMarkdown.tsx",
+      "components/kiro/KiroMermaid.tsx",
+      "components/kiro/KiroMessage.tsx",
+    ]) {
+      expect(read(f)).toMatch(/ux-skeleton/);
+    }
+    // pulse 占位语义保留（扫光只是叠加层）
+    expect(read("components/kiro/KiroMessage.tsx")).toMatch(/animate-pulse/);
   });
 
   it("Motion V3 收尾：Gallery/fps/fling dev 门禁 + token-only（无裸时长旁路）", () => {
@@ -221,14 +260,14 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(css).toMatch(/--kiro-ambient-breathe:\s*3\.2s/);
     expect(css).toMatch(/animation:\s*kiro-now-course-breathe\s+var\(--kiro-ambient-breathe/);
     // 每条常驻 infinite 必须引用治理中的 token/时长：ambient-breathe、flow 三档、
-    // computer ring、thinking pulse 2.1s、skeleton sweep —— 新增常驻动画会触发本测试
+    // computer ring、reasoning flow、thinking pulse 2.1s、skeleton sweep —— 新增常驻动画会触发本测试
     const infiniteLines = css
       .split("\n")
       .filter((l) => l.includes("infinite") && l.includes("animation:"));
     expect(infiniteLines.length).toBeGreaterThan(0);
     for (const line of infiniteLines) {
       expect(line).toMatch(
-        /var\(--kiro-(ambient-breathe|flow-ambient|flow-active|flow-working|computer-ring-duration)\)?|kiro-rail-thinking-pulse 2\.1s|var\(--skeleton-sweep/
+        /var\(--kiro-(ambient-breathe|flow-ambient|flow-active|flow-working|computer-ring-duration|reasoning-flow)\)?|kiro-rail-thinking-pulse 2\.1s|var\(--skeleton-sweep/
       );
     }
   });
