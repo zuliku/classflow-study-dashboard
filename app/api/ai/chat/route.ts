@@ -31,7 +31,7 @@ import { validateComputerTurnSnapshot } from "@/lib/ai/computer/snapshot";
 import { COMPUTER_MUTATION_LIMIT_PER_TURN } from "@/lib/ai/computer/executor";
 import { resolveDocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 import { deriveDocumentFailureFuseState } from "@/lib/ai/computer/documents/failureFuse";
-import { KIRO_FINAL_ANSWER_TOOL_NAME, kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl, kiroFinalAnswerBoundarySeenInCurrentTurn } from "@/lib/ai/tools/finalAnswer";
+import { KIRO_FINAL_ANSWER_TOOL_NAME, kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl, kiroFinalAnswerBoundarySeenInCurrentTurn, isKiroFinalAnswerToolName, type KiroFinalAnswerStepLike } from "@/lib/ai/tools/finalAnswer";
 import {
   textOnlySmoothStream,
   KIRO_NATIVE_DELTA_CHARS,
@@ -59,6 +59,7 @@ import {
   normalizeApprovedPlanContext,
   buildApprovedPlanPromptSection,
 } from "@/lib/ai/computer/plans/prompt";
+import { turnHasBusinessToolCalls, resolveTieredActiveTools, isDeferredTool } from "@/lib/ai/tools/tiers";
 import { resolveTerminalCapability } from "@/lib/ai/computer/terminalCapability";
 import { resolveDesktopObservationCapability } from "@/lib/ai/computer/desktopObservationCapability";
 import { resolveGuiControlCapability } from "@/lib/ai/computer/gui/capability";
@@ -425,9 +426,20 @@ export async function handleChat(req: Request) {
     normalizeApprovedPlanContext((body as Record<string, unknown>).approvedPlanContext)
   );
 
+  // 工具两层暴露（上下文 103k → ~60k）：本轮未见业务工具调用 → 首轮只下发 core 集
+  //（deferred 胖子：文档创建/批量变更/桌面操作等）；一旦发起任意业务工具调用，
+  // 同请求内 prepareStep 即升级 + 跨往返靠消息历史判定。终答边界信号不计入解锁。
+  const turnBusinessTools = turnHasBusinessToolCalls(
+    normalizedMessages as { role?: string; parts?: { type?: string }[] }[]
+  );
+  const tierFull = turnBusinessTools;
+  const tierGuidanceSection = tierFull
+    ? ""
+    : "\n\n# 工具暴露（本轮）\n本轮当前仅暴露只读与基础工具；你发起任意业务工具调用后完整工具集自动开放（含文档创建/批量操作/桌面操作）。如需改写操作，先用只读工具确认目标。";
+
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
-    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${tierGuidanceSection}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + tierGuidanceSection + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
@@ -482,6 +494,18 @@ export async function handleChat(req: Request) {
       const { [KIRO_FINAL_ANSWER_TOOL_NAME]: keep, ...rest } = tools;
       return { [KIRO_FINAL_ANSWER_TOOL_NAME]: keep } as typeof tools;
     })();
+
+    // 工具两层暴露：快照与首轮按下发集计量（tierFull=false → core 集；deferred 胖子不计入）。
+    // 执行集恒为全量（prepareStep 内按步升级 activeTools；安全边界仍在 executor）。
+    const snapshotTools = tierFull
+      ? tools
+      : Object.fromEntries(Object.entries(tools).filter(([name]) => !isDeferredTool(name)));
+    if (process.env.NODE_ENV === "development") {
+      console.info(
+        `[Kiro tools] tier=${tierFull ? "full" : "core"} tools=${Object.keys(tools).length} ` +
+          `snapshotTools=${Object.keys(snapshotTools).length}`
+      );
+    }
 
     const result = streamText({
       // V2.2：inputExamples 统一注入描述（不原生支持 inputExamples 的 provider 也生效）
@@ -608,12 +632,23 @@ export async function handleChat(req: Request) {
       // V4.1 prepareStep：历史 step 已出现 begin_final_answer → 下一 step 从协议层关闭全部业务工具
       //（activeTools: [] + toolChoice: "none"），并限制最多再走 1 个 step（Final text）。
       // 不依赖 Client second guard 作为主防线。规则与 Text Eval 共用（lib/ai/tools/finalAnswer.ts）。
+      // 工具两层暴露：tierFull=false 且本请求内未见业务工具 → 首轮只下发 core 集；
+      // 一旦 steps 出现业务工具调用即升级全量（与跨往返的消息历史判定同源）。
       prepareStep: async ({ steps }) => {
         if (kiroFinalAnswerBoundarySeen(steps)) {
           // DeepSeek Thinking Mode：boundary 后只用空 activeTools 关闭工具，不发送 tool_choice
           return kiroFinalAnswerAfterBoundaryControl(!!omitToolChoice);
         }
-        return {};
+        const stepsBusiness = (steps as KiroFinalAnswerStepLike[]).some((s) =>
+          (s.toolCalls ?? []).some((tc) => !isKiroFinalAnswerToolName(tc.toolName))
+        );
+        const activeTools = resolveTieredActiveTools({
+          tiered: !tierFull,
+          unlocked: turnBusinessTools || stepsBusiness,
+          toolNames: Object.keys(finalTools),
+        });
+        if (!activeTools) return {};
+        return { activeTools };
       },
       // Worklog V2 Task 3 + Streaming UX V2 Phase 4 + V4.3 + V4.4：
       // Text-only Adaptive Smoothing——
@@ -639,7 +674,7 @@ export async function handleChat(req: Request) {
       provider: parsed.provider,
       model: parsed.model,
       systemPromptTokens: estimateTokens(trustedBasePrompt),
-      toolSchemaTokens: estimateToolSchemaTokens(tools),
+      toolSchemaTokens: estimateToolSchemaTokens(snapshotTools),
       conversationTokens: plan.budgetReport.estimatedTokens,
       attachmentTokens: plan.attachmentContext.reduce((sum, a) => sum + estimateTokens(a.text ?? ""), 0),
       summaryTokens: estimateTokens(conversationSummary?.text ?? ""),
