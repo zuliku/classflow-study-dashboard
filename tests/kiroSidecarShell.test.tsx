@@ -720,7 +720,15 @@ describe("Drag Perf（手势帧零 reconcile + compositor 位移）", () => {
     move(handle, 960, 120);
     move(handle, 940, 130);
     expect(interacting()).toBe(true);
-    up(handle, 940, 130);
+    // 提交期同步布局读：把“数值落地”与“过渡恢复”隔进两次样式重算，
+    // 否则 transition:none→230ms 与 transform 变更同帧提交会重启动过渡（松手跳）。
+    const layoutSpy = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get");
+    try {
+      up(handle, 940, 130);
+      expect(layoutSpy).toHaveBeenCalled();
+    } finally {
+      layoutSpy.mockRestore();
+    }
     expect(interacting()).toBe(false);
     s.cleanup();
 

@@ -265,6 +265,13 @@ export function KiroSidecarShell({
           el.style.setProperty("--kiro-sidecar-top", `${finalPosition.top}px`);
           el.style.setProperty("--kiro-sidecar-right", `${finalPosition.right}px`);
           el.style.transform = "";
+          // 松手跳修复（时序陷阱）：transition 的启停按“后置样式”判定——
+          // 属性移除（transition:none → 230ms）与上面的数值变更若落在同一次样式重算，
+          // 过渡会照常启动（transform translate→none 跑 230ms spring = 闪一下又回来）。
+          // 此处强制同步重排，把“数值落地”与“过渡恢复”（下面的 setState 重渲染摘掉属性）
+          // 隔进两次样式重算：第一次 transition:none 生效、无过渡；第二次数值已无变化、
+          // 无可过渡。一次手势仅一次同步布局，开销可忽略。
+          void el.offsetWidth;
         }
         setSidecarPosition(finalPosition);
       }
