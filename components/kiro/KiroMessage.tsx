@@ -15,7 +15,7 @@ import { KiroAttachmentView } from "@/lib/ai/attachments/types";
 import { resolveLiveImageSource } from "@/lib/ai/attachments/liveImageRegistry";
 import { KiroImagePreviewDialog } from "@/components/kiro/KiroImagePreviewDialog";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
-import { collectCitedWebSources } from "@/lib/ai/citations/parser";
+import { collectCitedWebSources, citationScanBucket } from "@/lib/ai/citations/parser";
 import { UserMessageEditBlockReason } from "@/lib/ai/history/messageEditing";
 import { KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresentation";
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
@@ -108,11 +108,14 @@ export function KiroMessage({
 
   // V2 二次优化：流式中即时预取引用来源（live citation prefetch），24ms 节流下额外扫描成本可控（8K 正则）
   // settled 后由 citedWebSources 接管 More 菜单，live 仅作轻量 tray 预览
+  // S-fix：按内容长度分桶采样（同桶跳过重扫；超长回答扫描量从每 token 一次降为每 512 字符一次）
+  const liveScanBucket = citationScanBucket(content?.length ?? 0);
   const liveCitedWebSources = React.useMemo(() => {
     if (!content || !sources || sources.length === 0) return [] as KiroSourceMeta[];
     if (!streaming) return [] as KiroSourceMeta[];
     return collectCitedWebSources(content, sources);
-  }, [content, sources, streaming]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveScanBucket, sources, streaming]);
 
   const reducedMotion = useEffectiveReducedMotion();
   // streaming cursor 只在 Final Answer 真正 streaming 时出现（phase === "answering" 且

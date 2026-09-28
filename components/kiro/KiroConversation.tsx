@@ -247,23 +247,26 @@ export function KiroConversation({
               </div>
             )}
             {messages.map((m, idx) => (
-              <KiroConversationRow
-                key={m.id}
-                view={m}
-                allMessages={messages}
-                actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
-                sources={idx === lastAssistantIndex ? sources : undefined}
-                onUndo={onUndo}
-                onRetry={onRetry}
-                onEditUserMessage={onEditUserMessage}
-                // P4：live run 只标记最后一条 assistant 行（其他行保持稳定 props → memo 命中）
-                runLive={idx === lastAssistantIndex && turnInFlight}
-                approval={approvalBinding && m.id === approvalOwnerMessageId ? approvalBinding : undefined}
-                desktopPaused={idx === lastAssistantIndex ? desktopPaused : false}
-                onStop={onStop}
-                onReviewComputerTask={onReviewComputerTask}
-                onUndoComputerTask={onUndoComputerTask}
-              />
+              // S-fix 长会话性能：行级 content-visibility（屏外跳过渲染，DOM 保留）；
+              // wrapper 纯布局层，不干扰 Row memo（props 不变）与 space-y-5 rhythm
+              <div key={m.id} className="kiro-conv-row">
+                <KiroConversationRow
+                  view={m}
+                  allMessages={messages}
+                  actionsReady={idx === lastAssistantIndex ? !turnInFlight : true}
+                  sources={idx === lastAssistantIndex ? sources : undefined}
+                  onUndo={onUndo}
+                  onRetry={onRetry}
+                  onEditUserMessage={onEditUserMessage}
+                  // P4：live run 只标记最后一条 assistant 行（其他行保持稳定 props → memo 命中）
+                  runLive={idx === lastAssistantIndex && turnInFlight}
+                  approval={approvalBinding && m.id === approvalOwnerMessageId ? approvalBinding : undefined}
+                  desktopPaused={idx === lastAssistantIndex ? desktopPaused : false}
+                  onStop={onStop}
+                  onReviewComputerTask={onReviewComputerTask}
+                  onUndoComputerTask={onUndoComputerTask}
+                />
+              </div>
             ))}
 
             {/* 首 token 前：Kiro Logo + 正在处理（Assistant 任一可见 part 出现后自动消失） */}

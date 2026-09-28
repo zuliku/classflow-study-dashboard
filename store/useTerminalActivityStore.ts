@@ -24,6 +24,26 @@ interface TerminalActivityStoreState {
 }
 
 const TERMINAL_ACTIVITY_MAX_ACTIVE = 12;
+/**
+ * S-fix 长会话内存：已终态 activity 上限（行/字符已有 reducer 有界，此处限条数）。
+ * 只丢弃最旧的已终态项，运行中项永不丢弃；阈值宽松（百级），常规会话无感知。
+ */
+const TERMINAL_ACTIVITY_MAX_RETAINED = 100;
+
+/** 丢弃最旧的已终态 activity，直到总量回到上限内（运行中项保留） */
+function trimTerminated(activities: TerminalActivity[]): TerminalActivity[] {
+  if (activities.length <= TERMINAL_ACTIVITY_MAX_RETAINED) return activities;
+  const over = activities.length - TERMINAL_ACTIVITY_MAX_RETAINED;
+  let dropped = 0;
+  return activities.filter((a) => {
+    if (dropped >= over) return true;
+    if (isTerminalActivityTerminal(a.status)) {
+      dropped += 1;
+      return false;
+    }
+    return true;
+  });
+}
 
 let pendingEvents: DesktopTerminalEvent[] = [];
 let flushScheduled = false;
@@ -72,6 +92,8 @@ export const useTerminalActivityStore = create<TerminalActivityStoreState>()((se
       const dropIdx = next.findIndex((a) => !isTerminalActivityTerminal(a.status));
       if (dropIdx !== -1) next = next.filter((_, i) => i !== dropIdx);
     }
+    // S-fix：总量上限（已终态 oldest 优先丢弃，运行中永保留）
+    next = trimTerminated(next);
     set({ activities: next, version: versionCounter });
   },
   pushEvent: (event) => {

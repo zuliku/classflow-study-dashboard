@@ -111,6 +111,18 @@ export function isSafeWebUrl(url: string | undefined): url is string {
 }
 
 /**
+ * S-fix 长会话性能：live 引用扫描节流分桶（字符数）。
+ * streaming 每 token 全文正则太贵；tray 只是预览 chips，按桶采样结果一致
+ * （settled 后由 citedWebSources 精确计算一次接管）。512 字符 ≈ 百倍扫描削减。
+ */
+export const CITATION_SCAN_BUCKET_CHARS = 512;
+
+/** 内容长度 → 扫描桶（同桶跳过重扫；增长跨桶/缩减/换源才重扫） */
+export function citationScanBucket(contentLength: number, step = CITATION_SCAN_BUCKET_CHARS): number {
+  return Math.floor(Math.max(0, contentLength) / Math.max(1, step));
+}
+
+/**
  * Task 17B：收集正文实际引用的 Web Sources（Sources Tray）。
  * 只接受 resolveCitation 通过的真实 Web Source；按首次出现顺序去重；
  * 不校验 page（Web Source 不允许页码）；无引用 → 空数组。

@@ -40,6 +40,24 @@ describe("P4 Approval ownership 接线", () => {
   });
 });
 
+describe("S-fix 长会话行级内容可见性", () => {
+  const conversation = read("components/kiro/KiroConversation.tsx");
+  const css = read("app/globals.css");
+
+  it("消息行包 kiro-conv-row wrapper（纯布局层，Row memo props 不变）", () => {
+    expect(conversation).toContain('className="kiro-conv-row"');
+    // key 上移到 wrapper，Row 本体 props 逐项保留（memo 契约不破）
+    expect(conversation).toContain("view={m}");
+    expect(conversation).toContain("runLive={idx === lastAssistantIndex && turnInFlight}");
+  });
+
+  it("CSS：屏外跳过渲染但保留 DOM（可查找/无障碍/测试）", () => {
+    expect(css).toContain(".kiro-conv-row");
+    expect(css).toMatch(/\.kiro-conv-row\s*\{[^}]*content-visibility:\s*auto/s);
+    expect(css).toMatch(/\.kiro-conv-row\s*\{[^}]*contain-intrinsic-size:\s*auto/s);
+  });
+});
+
 describe("P4 性能边界：Worklog canonical timeline + memo 契约", () => {
   const worklog = read("components/kiro/KiroWorklog.tsx");
   const message = read("components/kiro/KiroMessage.tsx");

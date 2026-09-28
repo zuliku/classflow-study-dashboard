@@ -7,6 +7,8 @@ import {
 import {
   collectCitedWebSources,
   isSafeWebUrl,
+  citationScanBucket,
+  CITATION_SCAN_BUCKET_CHARS,
 } from "@/lib/ai/citations/parser";
 import { KiroSourceMeta } from "@/lib/ai/citations/types";
 
@@ -244,5 +246,25 @@ describe("collectCitedWebSources", () => {
     expect(isSafeWebUrl("data:text/html,x")).toBe(false);
     expect(isSafeWebUrl(undefined)).toBe(false);
     expect(isSafeWebUrl("not a url")).toBe(false);
+  });
+});
+
+describe("S-fix live 引用扫描分桶", () => {
+  it("桶边界：同桶稳定，跨桶递增，负值/零 clamp", () => {
+    expect(CITATION_SCAN_BUCKET_CHARS).toBe(512);
+    expect(citationScanBucket(0)).toBe(0);
+    expect(citationScanBucket(511)).toBe(0);
+    expect(citationScanBucket(512)).toBe(1);
+    expect(citationScanBucket(1023)).toBe(1);
+    expect(citationScanBucket(1024)).toBe(2);
+    expect(citationScanBucket(-5)).toBe(0);
+  });
+
+  it("KiroMessage live memo 以桶为依赖（同桶不重扫）", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const src = fs.readFileSync(path.join(process.cwd(), "components/kiro/KiroMessage.tsx"), "utf8");
+    expect(src).toContain("citationScanBucket(content?.length ?? 0)");
+    expect(src).toMatch(/\[\s*liveScanBucket,\s*sources,\s*streaming\s*\]/);
   });
 });
