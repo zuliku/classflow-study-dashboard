@@ -13,6 +13,7 @@ import {
   BookOpen,
   X,
   CalendarPlus,
+  Sparkles,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -631,6 +632,28 @@ export function AssignmentTable({
           </div>
 
           {/* workspace：操作按钮 hover 可见（键盘 highlight 后用 Context Menu / 快捷键） */}
+          {/* Kiro 拆解：高亮行常显，其余 hover 显现（Header Action Contract：AI 上下文操作归行内） */}
+          {isWorkspace && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handoff.handoffAssignmentPrompt(
+                  task.id,
+                  "帮我拆解这个任务，拆成 2–8 个可执行的步骤，并估算每步和总耗时。"
+                );
+              }}
+              className={cn(
+                "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
+                isHighlighted
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+              )}
+              title="Kiro 拆解为步骤"
+              aria-label={`Kiro 拆解 ${task.title}`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             onClick={(e) => handleEditClick(e, task.id)}
             className={cn(

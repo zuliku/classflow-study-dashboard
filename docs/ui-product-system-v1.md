@@ -72,3 +72,18 @@
 - Kiro Sidebar Featured Entry：`.kiro-ring` / `.kiro-featured-flow` / conic-gradient /
   `flow-angle-spin` 流动彩边。正常 motion 持续流动；reduced-motion 静态彩边。
 - Now indicator、Sidebar shared active plate、DDL drag feedback、panel presence。
+
+## 6. Header Action Contract（顶栏三层槽位）
+
+> 顶栏右侧只允许三层：**L1 状态 → L2 操作（页面次要｜AI｜页面主要）→ 全局**。
+> 分组用间距（组内默认 gap，组间 +4px），**禁止发丝分隔线**；ghost 图标 ≤2 个；primary 恰好 0–1 个。
+
+- **L1 状态层**：瞬时、非操作（如专注 chip）。用 `quiet` 安静形态（圆点 + 文字、无边框 pill，
+  宽 ≤180px 截断），永远排在操作组左侧；只有存在时才渲染，不占位。
+- **L2-AI**：`KiroFlowButton` 流光形态全页保留（与侧栏品牌呼应），位置固定在页面主要操作之前。
+- **L2-主要**：形态各页自定但全页须有一致主次（时间表保持图标方块、任务/课程用文字按钮——
+  确认结论，不强制统一形态，只统一层级位置）。
+- **全局**：搜索（`WorkspaceSearchButton`）永远最后。
+- **条件 AI 操作不进顶栏**：如“拆解高亮任务”归任务行内 hover/高亮入口（`AssignmentTable` 行操作簇），
+  不在顶栏条件增删按钮（避免行数跳动 + 层级污染）。
+- **窄屏折叠顺序**：L1 先隐藏 → AI 只留图标 → 搜索只留图标（各组件既有响应式类即契约实现）。

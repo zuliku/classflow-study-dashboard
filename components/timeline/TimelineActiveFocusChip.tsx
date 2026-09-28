@@ -17,8 +17,10 @@ import { cn } from "@/lib/utils";
  *   的 AssignmentFocusControl，避免复制 Focus Controller）
  * - 点击路由：有效 assignmentId → Global Assignment Drawer（activeTab 保持 timetable）；
  *   任务已删但课程有效 → Course Drawer；都不存在 → 只读状态
+ * - quiet（Header L1 状态层）：去边框 pill，收敛为“圆点 + 文字”安静状态，
+ *   不再长得像操作控件；presence/退出快照逻辑与默认形态一致
  */
-export function TimelineActiveFocusChip() {
+export function TimelineActiveFocusChip({ quiet = false }: { quiet?: boolean }) {
   const active =
     useAppStore(
       (s) => s.focusSessions.find((f) => f.status === "running" || f.status === "paused") ?? null
@@ -93,15 +95,20 @@ export function TimelineActiveFocusChip() {
       title={`当前专注 · ${targetLabel}`}
       className={cn(
         // h-8 与 Header 右区其他按钮同高同基线；标题收紧，避免最宽元素挤压
-        "flex h-8 max-w-[220px] items-center gap-1.5 rounded-full border px-2.5 text-left",
+        "flex h-8 items-center gap-1.5 text-left",
+        quiet
+          // L1 状态层：无边框 pill（max 180px 截断），只做状态表达
+          ? "max-w-[180px] px-1"
+          : "max-w-[220px] rounded-full border px-2.5",
         // 进退场：opacity + 轻 scale（fast 进入 / exit 加速离场）
         "transition-[color,background-color,border-color,opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
         visible
           ? "opacity-100 scale-100"
           : "opacity-0 scale-95 pointer-events-none !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]",
-        running
-          ? "border-pastel-mint bg-pastel-mint/25 hover:bg-pastel-mint/40"
-          : "border-line bg-alabaster/70 hover:bg-alabaster"
+        !quiet &&
+          (running
+            ? "border-pastel-mint bg-pastel-mint/25 hover:bg-pastel-mint/40"
+            : "border-line bg-alabaster/70 hover:bg-alabaster")
       )}
     >
       {running ? (

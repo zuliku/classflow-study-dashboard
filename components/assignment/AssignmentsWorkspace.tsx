@@ -42,21 +42,7 @@ export function AssignmentsWorkspace() {
             : handoff.openForWeek(currentSemesterWeek)
         }
       />
-      {highlightedAssignmentId ? (
-        <button
-          type="button"
-          onClick={() => {
-            handoff.handoffAssignmentPrompt(
-              highlightedAssignmentId,
-              "帮我拆解这个任务，拆成 2–8 个可执行的步骤，并估算每步和总耗时。"
-            );
-          }}
-          title="Kiro 拆解当前高亮任务"
-          className="ux-press hidden h-8 rounded-lg border border-line bg-alabaster px-2.5 text-[11px] font-bold text-charcoal transition-colors hover:bg-line-soft lg:inline-flex lg:items-center"
-        >
-          帮我拆解当前任务
-        </button>
-      ) : null}
+      {/* Header Action Contract：条件 AI 操作不进顶栏——“拆解高亮任务”已归任务行内 hover/高亮入口 */}
     </>
   );
 

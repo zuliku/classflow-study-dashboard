@@ -169,9 +169,9 @@ describe("Active Focus static contract", () => {
     expect(chip).toContain("useFocusClock");
   });
 
-  it("Header placement：chip 位于 WorkspaceHeader.actions（Ask Kiro 之前）", () => {
+  it("Header placement：quiet chip 位于 WorkspaceHeader.actions（Ask Kiro 之前）", () => {
     const ws = read("components/timeline/TimelineWorkspace.tsx");
-    const chipIdx = ws.indexOf("<TimelineActiveFocusChip />");
+    const chipIdx = ws.indexOf("<TimelineActiveFocusChip quiet />");
     expect(chipIdx).toBeGreaterThan(-1);
     const headerActionsIdx = ws.indexOf("const headerActions");
     const kiroIdx = ws.indexOf("<KiroFlowButton");

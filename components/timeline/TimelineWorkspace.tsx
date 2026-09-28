@@ -1187,20 +1187,23 @@ export function TimelineWorkspace() {
   const isToday = (dateStr: string) => dateStr === todayStr;
 
   // ---- App Chrome V2.2：WorkspaceHeader actions（Active Focus / Ask Kiro / More）+ primaryAction（新建） ----
+  // Header Action Contract：L1 状态（quiet chip）与 L2 操作组之间 12px（ml-1 补足 Header gap-2），
+  // 组内保持默认 gap；不再用发丝分隔线做分组（间距即分组）。
   const headerActions = (
     <>
-      {/* Workflow UX V10：Active Focus Awareness（idle 不渲染；1s tick 在子组件内） */}
-      <TimelineActiveFocusChip />
+      {/* Workflow UX V10：Active Focus Awareness（idle 不渲染；1s tick 在子组件内；
+          Header L1 状态层用 quiet 形态，不再是边框 pill 控件感） */}
+      <TimelineActiveFocusChip quiet />
       <KiroFlowButton
         icon={KIRO_ICON}
         label="Ask Kiro"
         size="sm"
-        className="h-8"
+        className="ml-1 h-8"
         labelClassName="hidden md:inline"
         onClick={() => handoff.openForWeek(currentSemesterWeek)}
       />
       {/* More → DropdownMenu（导入课表 / 全屏 / 时间表设置） */}
-      <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+      <Popover open={moreOpen} onOpenChange={setMoreOpen} className="mr-1">
         <IconButton
           variant="ghost"
           size="sm"
@@ -1238,11 +1241,10 @@ export function TimelineWorkspace() {
   );
 
   // ---- App Chrome V2.2：新建（primaryAction；菜单沿用原有 handlers，不复制 create menu） ----
-  // 视觉分组：分隔线把「更多操作」与「新建」分成两组，避免两 32px 方块暧昧并置
+  // 形态保持图标方块（确认结论）；与搜索全局入口之间 12px（mr-1 补足 Header gap-2）
   const primaryAction = (
     <>
-      <span aria-hidden="true" className="mx-0.5 h-4 w-px shrink-0 bg-line" />
-      <Popover open={quickOpen} onOpenChange={setQuickOpen}>
+      <Popover open={quickOpen} onOpenChange={setQuickOpen} className="mr-1">
       <IconButton
         variant="primary"
         size="sm"
