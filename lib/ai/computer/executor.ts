@@ -78,6 +78,8 @@ import {
 } from "@/lib/ai/computer/knowledge/types";
 import { KiroComputerChange } from "@/lib/ai/computer/task";
 import { ComputerInverseOperation } from "@/lib/ai/computer/checkpoints";
+import { PROPOSE_EXECUTION_PLAN_TOOL_NAME, runProposeExecutionPlanTool } from "@/lib/ai/computer/plans/propose";
+import type { PersistedExecutionPlan } from "@/lib/ai/computer/plans/types";
 
 export const COMPUTER_READ_LIMIT_PER_TURN = 12;
 // V2.7.2：6 → 10（一次真实任务如「整理工作区/删除多个旧文件」常需连续写操作；
@@ -107,6 +109,14 @@ export interface ComputerExecutorContext {
   livePermissionRules: ComputerPermissionRule[];
   /** Part 3：Approval Request 携带的 Task 标识（useKiroChat 传入） */
   taskId?: string;
+  /**
+   * plan-approve 模式：计划接收器（useKiroChat 注入 → plansRef + 会话落盘）。
+   * propose_execution_plan 为零 IO 工具：不计数、不走 policy/approval、不产生 checkpoint；
+   * sink 缺失 → PLAN_SINK_UNAVAILABLE（fail-closed）。
+   */
+  onPlanProposed?: (plan: PersistedExecutionPlan) => void;
+  /** plan-approve 模式：计划归属会话（useKiroChat 传入；缺失 → PLAN_NO_CONVERSATION） */
+  planConversationId?: string;
   /** Computer Use Phase 2：Emergency Stop（Stop 后 GUI 动作拒绝执行） */
   isCancelled?: () => boolean;
   /** Computer Use Phase 3：Vision fallback 配置（UIA 空 / 显式请求时使用） */
@@ -181,6 +191,16 @@ export async function executeKiroComputerTool(request: {
 }): Promise<ComputerExecutionAttempt> {
   const { toolName, toolCallId, toolInput, context, counters, oneShotApprovals } = request;
   const { turnSnapshot, liveWorkspaces, livePermissionRules } = context;
+
+  // plan-approve 模式：propose_execution_plan（零 IO 计划提交；不计数/不走 policy/不进 pipeline）。
+  if (toolName === PROPOSE_EXECUTION_PLAN_TOOL_NAME) {
+    return runProposeExecutionPlanTool({
+      toolCallId,
+      toolInput,
+      conversationId: context.planConversationId ?? "",
+      sink: context.onPlanProposed,
+    });
+  }
 
   const definition = COMPUTER_TOOLS.find((t) => t.name === toolName);
   if (!definition) {

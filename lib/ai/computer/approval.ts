@@ -96,6 +96,9 @@ export function riskOfCapability(capability: ComputerCapability): ComputerRisk {
     // Desktop Action：GUI 操作属于 execute 风险（具体风险由 GUI Risk Gate 进一步分级）
     case "ui.interact":
       return "execute";
+    // plan-approve：提交计划是零 IO 的只读级操作
+    case "plan.propose":
+      return "read";
     case "network.access":
       return "external";
   }

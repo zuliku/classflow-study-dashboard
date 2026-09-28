@@ -202,6 +202,47 @@ export const updateDocumentRuntimeSchema = z.object({
 export const createDocumentSchema = createDocumentRuntimeSchema;
 export const updateDocumentSchema = updateDocumentRuntimeSchema;
 
+/** plan-approve 模式：propose_execution_plan —— Plan 模式只读调研结束后提交结构化执行计划。
+ * 零 IO（不触碰任何文件/应用/终端）；计划经用户批准后才可执行，执行中超计划 mutation 强制回审批。
+ * 步骤数 1–20；mutation 类步骤必须带 scope 锚点（path/pathPrefix/commandPrefix/artifactId/action），
+ * 否则计划被拒绝并要求修正（偏离门无法匹配无锚点步骤）。 */
+export const PLAN_STEP_CAPABILITIES = [
+  "fs.create",
+  "fs.modify",
+  "fs.move",
+  "fs.delete",
+  "document.create",
+  "document.modify",
+  "shell.execute",
+  "ui.interact",
+  "app.open",
+  "app.activate",
+] as const;
+
+export const planStepInputSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  detail: z.string().trim().max(500).optional(),
+  toolName: z.string().trim().min(1).max(64).optional(),
+  capability: z.enum(PLAN_STEP_CAPABILITIES).optional(),
+  rootId: z.string().trim().min(1).max(120).optional(),
+  /** 文件/文档目标相对路径（move 步骤填源路径） */
+  path: z.string().trim().min(1).max(512).optional(),
+  /** 路径前缀（批量/目录级步骤） */
+  pathPrefix: z.string().trim().min(1).max(512).optional(),
+  /** 终端命令前缀（shell 步骤必填） */
+  commandPrefix: z.string().trim().min(1).max(1024).optional(),
+  /** 文档更新目标 artifact */
+  artifactId: z.string().trim().min(1).max(160).optional(),
+  /** desktop_action 动作名（GUI 步骤必填） */
+  action: z.string().trim().min(1).max(32).optional(),
+});
+
+export const proposeExecutionPlanSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  goal: z.string().trim().max(500).optional(),
+  steps: z.array(planStepInputSchema).min(1).max(20),
+});
+
 /** V2：rename_file —— newName 只能是 basename（/ \\ . .. NUL/control/Windows reserved 由运行时拒绝） */
 export const renameFileSchema = z.object({
   rootId: z.string().trim().min(1).max(120),

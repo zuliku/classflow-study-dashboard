@@ -26,6 +26,8 @@ import {
  * - Computer Use Phase 2（Desktop Action）：ui.interact 是 GUI 副作用能力——
  *   Plan deny（只能观察）/ Guided ask / Workspace Auto allow（高风险动作由 GUI Risk Gate
  *   强制 ask；blocked 直接 deny，见 lib/ai/computer/gui/risk.ts）。
+ * - plan-approve 模式：plan.propose 提交执行计划是零 IO 纯对象操作，三模式默认 allow；
+ *   模型侧仅 plan 模式暴露该工具（getComputerToolsForMode），执行侧由偏离门约束。
  * 显式 deny 规则与 read-only root 仍优先于 mode default（policy pipeline 保证）。
  */
 export const AGENT_MODE_DEFAULTS: Record<
@@ -53,6 +55,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     "ui.inspect": "allow",
     // Desktop Action：Plan 绝不执行 GUI 操作
     "ui.interact": "deny",
+    // plan-approve：提交执行计划（零 IO）
+    "plan.propose": "allow",
   },
   guided: {
     "workspace.list": "allow",
@@ -75,6 +79,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     "ui.inspect": "allow",
     // Desktop Action：Guided 下每次 GUI 操作都请求确认（GUI Risk Gate 可升级为 allow-once only）
     "ui.interact": "ask",
+    // plan-approve：提交执行计划（零 IO）
+    "plan.propose": "allow",
   },
   "workspace-auto": {
     "workspace.list": "allow",
@@ -100,6 +106,8 @@ export const AGENT_MODE_DEFAULTS: Record<
     "ui.inspect": "allow",
     // Desktop Action：普通 GUI 操作可自动执行；高风险动作由 GUI Risk Gate 强制 ask
     "ui.interact": "allow",
+    // plan-approve：提交执行计划（零 IO）
+    "plan.propose": "allow",
   },
 };
 

@@ -31,7 +31,9 @@ export type ComputerCapability =
   | "screen.observe"
   | "ui.inspect"
   // Computer Use Phase 2（Desktop Action）：在明确授权下操作 GUI（click/type/key/scroll/focus）
-  | "ui.interact";
+  | "ui.interact"
+  // plan-approve 模式：提交执行计划（零 IO 纯计划对象；plan 模式暴露，执行由偏离门约束）
+  | "plan.propose";
 
 export type ComputerRisk = "read" | "create" | "modify" | "destructive" | "execute" | "external";
 

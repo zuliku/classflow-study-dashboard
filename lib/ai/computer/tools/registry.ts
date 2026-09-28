@@ -39,6 +39,7 @@ import {
   runTerminalSessionCommandSchema,
   writeTerminalSessionInputSchema,
   closeTerminalSessionSchema,
+  proposeExecutionPlanSchema,
 } from "@/lib/ai/computer/tools/schemas";
 
 export interface ComputerToolModelContract {
@@ -545,9 +546,25 @@ export const COMPUTER_MUTATION_TOOLS: ComputerToolDefinition[] = [
   },
 ];
 
+/**
+ * 计划工具（plan-approve 模式；零 IO，不计 mutation）：
+ * - plan：只读调研结束后提交结构化执行计划 → 用户批准 → 切执行模式按计划执行
+ */
+export const COMPUTER_PLAN_TOOLS: ComputerToolDefinition[] = [
+  {
+    name: "propose_execution_plan",
+    description:
+      "只读调研结束时提交结构化执行计划（Plan 模式专用；零 IO，不触碰任何文件/应用/终端）。何时调用：已用只读工具查清现状、用户任务需要改写操作时，把后续要做的每一步写成 steps（1–20 步）一次提交，不要分多次提交、不要在正文里另写一份计划。步骤写法：title 简述做什么；toolName 用真实 Computer 工具名（如 create_text_file / patch_text_file / run_terminal_command / desktop_action）；文件/文档步骤必须给 path（move 填源路径）或 pathPrefix 或 artifactId；终端步骤必须给 commandPrefix（待执行命令原文开头）；desktop_action 步骤必须给 action（click/type/key 等）+ detail。提交后等待用户在计划卡片上批准；用户批准前绝不假设会被执行；用户要求修改时按新要求重新提交完整计划（覆盖旧计划）。",
+    schema: proposeExecutionPlanSchema,
+    capability: "plan.propose",
+    mutation: false,
+  },
+];
+
 export const COMPUTER_TOOLS: ComputerToolDefinition[] = [
   ...COMPUTER_READ_TOOLS,
   ...COMPUTER_MUTATION_TOOLS,
+  ...COMPUTER_PLAN_TOOLS,
 ];
 
 export const COMPUTER_TOOL_NAMES = new Set(COMPUTER_TOOLS.map((t) => t.name));
@@ -557,10 +574,10 @@ export const COMPUTER_MUTATION_TOOL_NAMES = new Set(COMPUTER_MUTATION_TOOLS.map(
 
 /**
  * 按 Agent Mode 暴露工具（server 过滤；不是安全边界——executor 仍独立 policy 求值）：
- * - plan：只读工具
- * - guided / workspace-auto：read + mutation
+ * - plan：只读工具 + 计划提交
+ * - guided / workspace-auto：read + mutation（计划工具不暴露，需要改计划时切回 plan 模式重提）
  */
 export function getComputerToolsForMode(mode: KiroAgentMode): ComputerToolDefinition[] {
-  if (mode === "plan") return COMPUTER_READ_TOOLS;
-  return COMPUTER_TOOLS;
+  if (mode === "plan") return [...COMPUTER_READ_TOOLS, ...COMPUTER_PLAN_TOOLS];
+  return [...COMPUTER_READ_TOOLS, ...COMPUTER_MUTATION_TOOLS];
 }

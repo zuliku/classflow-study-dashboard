@@ -113,7 +113,14 @@ describe("tool exposure", () => {
     expect(names).toContain("search_workspace_knowledge");
     expect(names).toContain("retrieve_workspace_context");
     // Model schema 绝不能加入权限相关参数
-    expect(names.length).toBe(17);
+    expect(names.length).toBe(18);
+    // plan-approve 模式：propose_execution_plan 是零 IO 计划工具（plan 模式专用暴露）
+    expect(names).toContain("propose_execution_plan");
+    expect(COMPUTER_TOOLS.find((t) => t.name === "propose_execution_plan")?.mutation).toBe(false);
+    expect(COMPUTER_TOOLS.find((t) => t.name === "propose_execution_plan")?.capability).toBe("plan.propose");
+    expect(getComputerToolsForMode("plan").some((t) => t.name === "propose_execution_plan")).toBe(true);
+    expect(getComputerToolsForMode("guided").some((t) => t.name === "propose_execution_plan")).toBe(false);
+    expect(getComputerToolsForMode("workspace-auto").some((t) => t.name === "propose_execution_plan")).toBe(false);
   });
 
   it("update_document 权限模式：Plan 不暴露 / Guided ask / Workspace Auto allow", () => {
