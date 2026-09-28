@@ -113,9 +113,7 @@ export function KiroNavigatorHome({
                   </button>
                 }
               />
-              {projects.length === 0 ? (
-                <p className="px-1.5 pb-1 text-[10px] text-sandrift">还没有项目</p>
-              ) : (
+              {projects.length === 0 ? null : (
                 <div className="space-y-0.5">
                   {projects.map((project) => (
                     <KiroNavigatorProjectRow
@@ -130,10 +128,11 @@ export function KiroNavigatorHome({
                   ))}
                 </div>
               )}
+              {/* 空项目态即 CTA 本身（不再另起“还没有项目”说明行，与标题栏＋入口三重重复） */}
               <KiroNavigatorCreateProjectRow onClick={onCreateProject} />
             </section>
 
-            <section aria-label="最近对话" className="mt-1">
+            <section aria-label="最近对话" className="mt-2">
               <KiroNavigatorSectionHeader label="最近" />
               {visibleThreads.length === 0 ? (
                 <p className="px-1.5 py-4 text-center text-[11px] text-sandrift">暂无历史对话</p>

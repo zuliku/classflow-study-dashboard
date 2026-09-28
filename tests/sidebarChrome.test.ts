@@ -111,7 +111,7 @@ describe("Sidebar motion decoupling — Task 16B T/U/V/W", () => {
     expect(src).toMatch(/第一帧|立即.*visual|不.*persist/i);
   });
 
-  it("减少 layout-property tween：Shell 仅 width，Label 仅 opacity/transform，padding/gap 瞬时", async () => {
+  it("减少 layout-property tween：Shell 仅 width，Label 仅 opacity（无位移防抖动），padding/gap 瞬时", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
     const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf-8");
@@ -120,8 +120,10 @@ describe("Sidebar motion decoupling — Task 16B T/U/V/W", () => {
     expect(navRowBlock).not.toContain("transition-property: padding");
     // nav row should not transition gap via transition-property (gap itself is okay as static)
     expect(navRowBlock).not.toMatch(/transition-property:[^;]*gap/);
-    // Label 仅 opacity/transform，不含 max-width 持续 tween
-    expect(css).toContain("transition-property: opacity, transform;");
+    // Label 仅 opacity（位移会产生文字重 raster 抖动），不含 max-width / transform 持续 tween
+    const labelBlock = css.slice(css.indexOf(".sidebar-label,"), css.indexOf('[data-collapsed="true"] .sidebar-label'));
+    expect(labelBlock).toMatch(/transition-property:\s*opacity;/);
+    expect(labelBlock).not.toContain("translateX");
     // Shell 仍保留 width transition
     expect(css).toContain(".sidebar-shell");
     expect(css).toMatch(/transition-property:\s*width/);
@@ -368,6 +370,21 @@ describe("Sidebar Productization V2.1 —— Profile Card restoration", () => {
     const css = await readSrc("app/globals.css");
     expect(css).toMatch(/\.sidebar-profile-surface \{[^}]*padding: 10px;[^}]*border-color/s);
     expect(css).toMatch(/\[data-collapsed="true"\] \.sidebar-profile-surface \{[^}]*padding: 6px 2px;/s);
+  });
+
+  it("Morph 平滑：Label/Logo 纯透明度（无位移，避免文字重 raster 抖动）", async () => {
+    const css = await readSrc("app/globals.css");
+    const labelBlock = css.slice(css.indexOf(".sidebar-label,"), css.indexOf('[data-collapsed="true"] .sidebar-label'));
+    expect(labelBlock).toMatch(/transition-property:\s*opacity;/);
+    expect(labelBlock).not.toContain("translateX");
+    expect(css).not.toMatch(/\[data-collapsed="true"\] \.sidebar-logo-full \{[^}]*translateX/s);
+  });
+
+  it("Morph 对齐：Profile padding 与 Shell 同档（panel），背景/边框仍 fast", async () => {
+    const css = await readSrc("app/globals.css");
+    expect(css).toMatch(
+      /\.sidebar-profile-surface \{[^}]*transition-duration:\s*var\(--motion-panel\),\s*var\(--motion-fast\),\s*var\(--motion-fast\)/s
+    );
   });
 
   it("Profile 点击仍打开 Settings → profile section", async () => {

@@ -5,6 +5,7 @@ import { Image as ImageIcon, Plus, Trash2 } from "lucide-react";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
+import { KiroNavigatorSectionHeader } from "@/components/kiro/navigation/KiroNavigatorProjects";
 import { KiroProjectFileRecord, MAX_PROJECT_FILES_PER_PROJECT } from "@/lib/ai/projects/files/types";
 import { listProjectFiles, createProjectFile, deleteProjectFile } from "@/lib/ai/projects/files/db";
 import { routeAttachment } from "@/lib/ai/attachments/router";
@@ -141,44 +142,46 @@ export function KiroNavigatorProjectFiles({
   };
 
   return (
-    <div className="px-1.5 pb-1" data-testid="kiro-navigator-project-files">
-      <div className="flex items-center justify-between gap-1">
-        <p className="text-[10px] font-semibold text-sandrift">资料 · {files.length}</p>
-        {uploading && uploadProgress ? (
-          <span className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
-            <span
-              className="w-3 h-3 border border-sandrift/30 border-t-sandrift rounded-full animate-spin"
-              aria-hidden="true"
-            />
-            上传中 {uploadProgress.done}/{uploadProgress.total}
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading || files.length >= MAX_PROJECT_FILES_PER_PROJECT}
-            aria-label="添加项目资料"
-            className="flex items-center gap-0.5 px-1.5 h-5 rounded-md text-[10px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Plus className="w-3 h-3" />
-            添加资料
-          </button>
-        )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".pdf,.docx,.xlsx,.xls,.pptx,.csv,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp"
-          aria-label="上传项目资料"
-          className="hidden"
-          onChange={(e) => {
-            void handleUploadFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-      </div>
+    <div className="pb-1" data-testid="kiro-navigator-project-files">
+      <KiroNavigatorSectionHeader
+        label={`资料 · ${files.length}`}
+        action={
+          uploading && uploadProgress ? (
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
+              <span
+                className="w-3 h-3 border border-sandrift/30 border-t-sandrift rounded-full animate-spin"
+                aria-hidden="true"
+              />
+              上传中 {uploadProgress.done}/{uploadProgress.total}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || files.length >= MAX_PROJECT_FILES_PER_PROJECT}
+              aria-label="添加项目资料"
+              className="flex items-center gap-0.5 px-1.5 h-5 rounded-md text-[10px] font-semibold text-satin-grey bg-alabaster hover:bg-pastel-mint hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus className="w-3 h-3" />
+              添加资料
+            </button>
+          )
+        }
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.docx,.xlsx,.xls,.pptx,.csv,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp"
+        aria-label="上传项目资料"
+        className="hidden"
+        onChange={(e) => {
+          void handleUploadFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
       {files.length === 0 ? (
-        <p className="text-[10px] text-sandrift mt-0.5">暂无项目资料</p>
+        <p className="px-1.5 text-[10px] text-sandrift mt-0.5">暂无项目资料</p>
       ) : (
         <div className="mt-0.5 space-y-0.5">
           {files.map((file) => (

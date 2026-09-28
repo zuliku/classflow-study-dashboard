@@ -125,25 +125,27 @@ export function KiroNavigatorProjectDetail({
           <p className="text-[11px] text-satin-grey px-1.5 leading-relaxed">{project.description}</p>
         ) : null}
 
-        {/* 项目指令（V1.2）：紧凑展示 + 可编辑 */}
-        <div className="px-1.5 pb-1">
-          <div className="flex items-center justify-between gap-1">
-            <p className="text-[10px] font-semibold text-sandrift">项目指令</p>
-            <button
-              type="button"
-              onClick={() => onEdit(project)}
-              aria-label={project.instructions ? "编辑项目指令" : "添加项目指令"}
-              className="text-[10px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint rounded-md px-1.5 h-5 transition-colors"
-            >
-              {project.instructions ? "编辑" : "添加"}
-            </button>
-          </div>
+        {/* 项目指令（V1.2）：紧凑展示 + 可编辑（与其他区块同一 header/action 语言） */}
+        <div className="pb-1">
+          <KiroNavigatorSectionHeader
+            label="项目指令"
+            action={
+              <button
+                type="button"
+                onClick={() => onEdit(project)}
+                aria-label={project.instructions ? "编辑项目指令" : "添加项目指令"}
+                className="px-1.5 h-5 rounded-md text-[10px] font-semibold text-satin-grey bg-alabaster hover:bg-pastel-mint hover:text-charcoal transition-colors"
+              >
+                {project.instructions ? "编辑" : "添加"}
+              </button>
+            }
+          />
           {project.instructions ? (
-            <p className="text-[10px] text-satin-grey leading-relaxed mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-alabaster/60 px-2 py-1.5">
+            <p className="mx-1.5 text-[10px] text-satin-grey leading-relaxed mt-0.5 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-alabaster/60 px-2 py-1.5">
               {project.instructions}
             </p>
           ) : (
-            <p className="text-[10px] text-sandrift mt-0.5">未设置项目指令</p>
+            <p className="px-1.5 text-[10px] text-sandrift mt-0.5">未设置项目指令</p>
           )}
         </div>
 

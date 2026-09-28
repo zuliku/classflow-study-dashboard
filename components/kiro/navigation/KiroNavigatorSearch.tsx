@@ -53,7 +53,7 @@ export function KiroNavigatorSearch({
     <div className="space-y-1" data-testid="kiro-navigator-search-results">
       {matchedProjects.length > 0 && (
         <section aria-label="项目搜索结果">
-          <p className="text-[10px] font-semibold text-sandrift px-1.5 pt-1 pb-1">项目</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift px-1.5 pt-1 pb-1">项目</p>
           <div className="space-y-0.5">
             {matchedProjects.slice(0, MAX_PROJECT_RESULTS).map((project) => (
               <button
@@ -87,7 +87,7 @@ export function KiroNavigatorSearch({
 
       {matchedThreads.length > 0 && (
         <section aria-label="对话搜索结果">
-          <p className="text-[10px] font-semibold text-sandrift px-1.5 pt-1 pb-1">对话</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift px-1.5 pt-1 pb-1">对话</p>
           <div className="space-y-0.5">
             {matchedThreads.slice(0, MAX_THREAD_RESULTS).map((thread) => (
               <button
@@ -100,12 +100,12 @@ export function KiroNavigatorSearch({
                 disabled={disabled}
                 aria-label={`打开对话 ${thread.title}`}
                 className={cn(
-                  "w-full px-2 h-9 rounded-lg text-left hover:bg-alabaster/70 transition-colors",
+                  "w-full flex items-center gap-1.5 px-2 h-9 rounded-lg text-left hover:bg-alabaster/70 transition-colors",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
-                <span className="block text-xs font-semibold text-charcoal truncate">{thread.title}</span>
-                <span className="block text-[10px] text-sandrift">{formatHistoryTime(thread.updatedAt)}</span>
+                <span className="min-w-0 flex-1 block text-xs font-semibold text-charcoal truncate">{thread.title}</span>
+                <span className="shrink-0 text-[10px] text-sandrift tabular-nums">{formatHistoryTime(thread.updatedAt)}</span>
               </button>
             ))}
           </div>

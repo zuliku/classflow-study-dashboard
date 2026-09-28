@@ -88,7 +88,7 @@ export function KiroNavigatorProjectRow({
   );
 }
 
-/** 区块标题（项目 / 最近）：低权重小字 + 可选 ＋ 动作 */
+/** 区块标题（项目 / 最近）：大写微标题（uppercase + tracking），与内容字重/颜色拉开层级 */
 export function KiroNavigatorSectionHeader({
   label,
   action,
@@ -98,7 +98,7 @@ export function KiroNavigatorSectionHeader({
 }) {
   return (
     <div className="flex items-center justify-between gap-1 px-1.5 pt-1 pb-1">
-      <p className="text-[10px] font-semibold text-sandrift">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift">{label}</p>
       {action}
     </div>
   );

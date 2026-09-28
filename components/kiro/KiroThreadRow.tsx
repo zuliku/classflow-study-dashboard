@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Kiro Thread Row（Thread Rail 与 History Panel 共用）：
+ * 单行结构（标题 + 右侧时间 + 当前徽标 + hover 菜单），时间不再独占第二行造成整列重复噪音；
  * 标题 + 更新时间 + 当前 Thread active + hover 菜单（重命名 / 删除）+ 行内重命名。
  */
 export function KiroThreadRow({
@@ -87,7 +88,7 @@ export function KiroThreadRow({
         if (e.key === "Enter") onOpen(record.id);
       }}
       className={cn(
-        "group flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors",
+        "group flex items-center gap-1.5 px-2 h-9 rounded-lg transition-colors",
         disabled
           ? "opacity-50 cursor-not-allowed"
           : isCurrent
@@ -95,15 +96,17 @@ export function KiroThreadRow({
             : "hover:bg-alabaster/70 cursor-pointer"
       )}
     >
-      <div className="min-w-0 flex-1">
-        <p className={cn("text-xs font-semibold truncate", isCurrent ? "text-charcoal" : "text-satin-grey group-hover:text-charcoal")}>
-          {record.title}
-        </p>
-        <p className="text-[10px] text-sandrift mt-0.5">
-          {transitioning ? "正在切换" : formatHistoryTime(record.updatedAt)}
-          {isCurrent && <span className="ml-1.5 font-bold text-success">当前</span>}
-        </p>
-      </div>
+      <p className={cn("min-w-0 flex-1 truncate text-xs font-semibold", isCurrent ? "text-charcoal" : "text-satin-grey group-hover:text-charcoal")}>
+        {record.title}
+      </p>
+      <span className="shrink-0 text-[10px] text-sandrift tabular-nums">
+        {transitioning ? "正在切换" : formatHistoryTime(record.updatedAt)}
+      </span>
+      {isCurrent && (
+        <span className="shrink-0 text-[9px] font-bold text-charcoal bg-pastel-mint/70 rounded-full px-1.5 py-0.5">
+          当前
+        </span>
+      )}
       {transitioning && (
         <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-label="正在切换" />
       )}

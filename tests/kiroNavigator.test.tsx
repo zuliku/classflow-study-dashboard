@@ -657,3 +657,91 @@ describe("Kiro Workspace — 结构契约（source lock）", () => {
     }
   });
 });
+
+describe("Kiro Navigator — Home 层级（产品化）", () => {
+  it("空项目：无“还没有项目”说明行，CTA 即空态", async () => {
+    dbSpies.listKiroProjects.mockResolvedValue([]);
+    dbSpies.listConversations.mockResolvedValue([]);
+    await renderNavigator();
+    await click("展开对话");
+    expect(text()).not.toContain("还没有项目");
+    // 新建入口仍在（标题栏 ＋ 与行 CTA，数量不变）
+    expect(q("新建项目")).toBeTruthy();
+    expect(text()).toContain("新建项目");
+  });
+
+  it("区块标题为大写微标题（uppercase + tracking，与内容拉开层级）", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const projects = readFileSync(
+      join(process.cwd(), "components/kiro/navigation/KiroNavigatorProjects.tsx"),
+      "utf8"
+    );
+    expect(projects).toMatch(/uppercase tracking-wider/);
+    const search = readFileSync(
+      join(process.cwd(), "components/kiro/navigation/KiroNavigatorSearch.tsx"),
+      "utf8"
+    );
+    expect(search).toMatch(/uppercase tracking-wider/);
+  });
+
+  it("Thread 单行结构：标题 + 右侧时间 + 当前徽标（无第二行日期堆叠）", async () => {
+    dbSpies.listKiroProjects.mockResolvedValue([]);
+    await renderNavigator();
+    await click("展开对话");
+    const row = Array.from(container!.querySelectorAll('[role="button"]')).find((el) =>
+      (el.textContent ?? "").includes("查找QQ班助群近期通知")
+    ) as HTMLElement | undefined;
+    expect(row, "thread row").toBeTruthy();
+    // 单行 h-9 + 右侧等宽时间
+    expect(row!.className).toMatch(/h-9/);
+    const time = row!.querySelector("span.tabular-nums");
+    expect(time, "right-aligned time").toBeTruthy();
+  });
+
+  it("当前对话徽标与项目一致（pill 形态，非纯文字）", async () => {
+    metaState.currentConversationId = "c1";
+    dbSpies.listKiroProjects.mockResolvedValue([]);
+    await renderNavigator();
+    await click("展开对话");
+    const row = Array.from(container!.querySelectorAll('[role="button"]')).find((el) =>
+      (el.textContent ?? "").includes("查找QQ班助群近期通知")
+    ) as HTMLElement | undefined;
+    expect(row, "current thread row").toBeTruthy();
+    const badge = Array.from(row!.querySelectorAll("span")).find(
+      (s) => s.textContent === "当前"
+    ) as HTMLElement | undefined;
+    expect(badge, "当前 pill").toBeTruthy();
+    expect(badge!.className).toMatch(/rounded-full/);
+  });
+});
+
+describe("Kiro Navigator — Project Detail 层级（产品化）", () => {
+  it("指令/资料/对话三区块同一 header/action 语言", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const detail = readFileSync(
+      join(process.cwd(), "components/kiro/navigation/KiroNavigatorProjectDetail.tsx"),
+      "utf8"
+    );
+    // 指令区块复用 SectionHeader（不再手写 10px 标题行）
+    expect(detail).toMatch(/<KiroNavigatorSectionHeader[\s\S]{0,200}?label="项目指令"/);
+    // 三个 action pill 同一款式（satin-grey + alabaster）：指令/对话在 Detail，资料在 Files
+    const pills = detail.match(/text-satin-grey bg-alabaster hover:bg-pastel-mint hover:text-charcoal/g) ?? [];
+    expect(pills.length).toBeGreaterThanOrEqual(2);
+    const files = readFileSync(
+      join(process.cwd(), "components/kiro/navigation/KiroNavigatorProjectFiles.tsx"),
+      "utf8"
+    );
+    expect(files).toContain("KiroNavigatorSectionHeader");
+    expect(files).toMatch(/text-satin-grey bg-alabaster hover:bg-pastel-mint hover:text-charcoal/);
+  });
+
+  it("Detail 内打开项目资料区：空态保留，添加入口唯一", async () => {
+    await renderNavigator();
+    await click("展开对话");
+    await click("打开项目 ClassFlow Desktop");
+    expect(text()).toContain("项目指令");
+    expect(text()).toContain("添加资料");
+  });
+});
