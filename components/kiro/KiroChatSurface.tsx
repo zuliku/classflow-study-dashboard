@@ -221,7 +221,8 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
             desktopPaused={desktopSessionPaused}
             onStop={chat.stop}
             onReviewComputerTask={setReviewTaskId}
-            onUndoComputerTask={(taskId) => void chat.undoTask(taskId)}
+            // S-fix durable undo：live/restored 路由（restored 走 undoRestoredTask）
+            onUndoComputerTask={(taskId) => void chat.undoComputerTask(taskId)}
           />
         )}
       </div>

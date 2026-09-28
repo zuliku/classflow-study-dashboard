@@ -13,6 +13,7 @@ import {
   PersistedKiroMessage,
   PersistedVisualProposalView,
 } from "@/lib/ai/history/types";
+import type { PersistedTaskCheckpoint } from "@/lib/ai/computer/checkpoints";
 import { VisualActionProposal } from "@/lib/ai/visual/types";
 import { sanitizeVisualProposalReceipt, VisualProposalReceiptView } from "@/lib/ai/visual/receipt";
 import { KiroContextRef } from "@/lib/ai/context/types";
@@ -160,6 +161,8 @@ export function sanitizeConversation(input: {
   summary?: KiroConversationSummary | null;
   /** Kiro Project 成员关系（V1）：sanitize 重写 Record 时必须保留，否则会被意外抹掉 */
   projectId?: string | null;
+  /** S-fix 可持久 Checkpoint（已由调用方序列化为 durable subset；空不写） */
+  checkpoints?: PersistedTaskCheckpoint[];
   /** Visual Intake V1.4：Runtime receipt 快照（只含展示事实，绝无 undo）；live Proposal 合并用 */
   visualProposalReceipts?: ReadonlyMap<string, VisualProposalReceiptView> | null;
 }): KiroConversationRecord {
@@ -245,6 +248,8 @@ export function sanitizeConversation(input: {
     summary: input.summary ?? undefined,
     // projectId 只在有值时写入（旧记录/未归类保持无字段，语义兼容）
     ...(input.projectId ? { projectId: input.projectId } : {}),
+    // S-fix：durable checkpoints 非空才写入（旧记录/无 Undo 能力保持无字段）
+    ...(input.checkpoints && input.checkpoints.length > 0 ? { checkpoints: input.checkpoints } : {}),
   };
 }
 

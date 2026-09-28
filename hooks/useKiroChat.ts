@@ -36,6 +36,8 @@ import {
   appendInverseToCheckpoint,
   applyInverseToAdapter,
   ComputerInverseOperation,
+  serializeCheckpoints,
+  deserializeCheckpoints,
 } from "@/lib/ai/computer/checkpoints";
 import { sessionRuleForRequest, workspaceRuleForRequest } from "@/lib/ai/computer/approval";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
@@ -118,6 +120,7 @@ import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
 import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
 import { MAX_MEMORIES } from "@/lib/ai/memory/types";
 import { PersistedActionView, PersistedAttachmentView, KiroConversationRecord, KiroConversationSummary, PersistedSourceMeta, PersistedComputerTaskView, PersistedVisualProposalView } from "@/lib/ai/history/types";
+import { getConversation, saveConversation } from "@/lib/ai/history/db";
 import {
   getUserMessageEditBlockReason,
   messageHasMutatingToolCalls,
@@ -256,8 +259,13 @@ export interface KiroChatMessageView {
   assistantTurn?: KiroAssistantTurnPresentation;
   /** Computer Agent 主 Task（live：绑定本 assistant 消息的 toolCallIds；Part 3） */
   computerTask?: KiroAgentTask;
-  /** 历史恢复的 Computer Task 展示事实（无 checkpoint → 不能 Undo） */
+  /** 历史恢复的 Computer Task 展示事实（无 durable checkpoint 时不能 Undo，见 historyTaskCanUndo） */
   historyComputerTask?: PersistedComputerTaskView;
+  /**
+   * S-fix durable undo：恢复任务附带未使用的 durable checkpoint 时为 true；
+   * 驱动历史 Result 区的撤销按钮（用后经 viewCache bust 重算）。
+   */
+  historyTaskCanUndo?: boolean;
   /** 上下文占用快照（Codex-style 指示；来自该 assistant message 的 stream metadata） */
   contextUsage?: ContextUsageSnapshot;
 }
@@ -2438,39 +2446,14 @@ export function useKiroChat({
       updateTasks();
       let outcome: "undone" | "undo_failed" = "undone";
       try {
-        for (const inverse of [...cp.inverses].reverse()) {
-          const ws = useKiroComputerStore
-            .getState()
-            .workspaces.find((w) => w.id === inverse.workspaceId);
-          if (!ws) throw new ComputerError("WORKSPACE_NOT_FOUND", "工作区不存在");
-          // V3 Part 1：inverse 执行一旦开始（即使最后 undo_failed），对应 Workspace best-effort dirty
-          // （部分 Undo 可能已改变文件系统）
-          void markWorkspaceKnowledgeDirty(ws.id).catch(() => undefined);
-          // V2：move-back / restore-document-revision 是特殊 inverse（多 store），单独 orchestration
-          if (inverse.type === "move-back") {
-            await undoMoveBack(ws, inverse);
-            continue;
-          }
-          if (inverse.type === "restore-document-revision") {
-            // V2 Part 2.1：委托给可测试的 runtime helper（事实重读 + 安全补偿）
-            const root = ws.roots.find((r) => r.id === inverse.rootId);
-            if (!root) throw new ComputerError("ROOT_NOT_FOUND", "根目录不存在");
-            const io = getComputerAdapterForAdapterRef(root.adapterRef);
-            await undoDocumentRevisionRuntime({ io, inverse });
-            continue;
-          }
-          const root = ws.roots.find((r) => r.id === inverse.rootId);
-          if (!root) throw new ComputerError("ROOT_NOT_FOUND", "工作区根不存在");
-          const io = getComputerAdapterForAdapterRef(root.adapterRef);
-          await applyInverseToAdapter(io, inverse);
-        }
-      task.status = "undone";
-    } catch {
-      task.status = "undo_failed";
-      outcome = "undo_failed";
-    }
-    updateTasks();
-    setComputerVersion((v) => v + 1);
+        await executeCheckpointInverses(cp.inverses);
+        task.status = "undone";
+      } catch {
+        task.status = "undo_failed";
+        outcome = "undo_failed";
+      }
+      updateTasks();
+      setComputerVersion((v) => v + 1);
       const capability = task.changes.length > 0 ? capabilityForChange(task.changes[0]) : "fs.modify";
       void appendComputerAuditEntry({
         id: `audit-${crypto.randomUUID()}`,
@@ -2491,6 +2474,114 @@ export function useKiroChat({
       });
     },
     [updateTasks]
+  );
+
+  /**
+   * S-fix durable undo：当前 checkpoints 的可持久快照（供 persistCurrent 落盘）。
+   * all-or-nothing 逐个序列化；含不可落盘 inverse 的 checkpoint 直接丢弃
+   * （该 Task 刷新后保持不可 Undo，与今日一致）。
+   */
+  const getDurableCheckpoints = useCallback(() => {
+    return serializeCheckpoints(checkpointsRef.current.values());
+  }, []);
+
+  /**
+   * S-fix durable undo：历史恢复 Task 的撤销（刷新后）。
+   * 前提：loadConversation 已将 durable checkpoint 注回 checkpointsRef。
+   * 流程与 live undo 同核（executeCheckpointInverses + verify），差异仅状态落点：
+   * live 写 tasksRef，restored 写 restoredComputerTasksRef + 会话记录回写
+   * （used 单次语义 + undone/undo_failed 状态持久化，防止刷新后重复撤销）。
+   */
+  const undoRestoredTask = useCallback(
+    async (taskId: string) => {
+      const cp = checkpointsRef.current.get(taskId);
+      if (!cp || cp.used) return;
+      let messageId: string | null = null;
+      let restored: PersistedComputerTaskView | undefined;
+      for (const [mid, view] of restoredComputerTasksRef.current) {
+        if (view.taskId === taskId) {
+          messageId = mid;
+          restored = view;
+          break;
+        }
+      }
+      if (!restored || !messageId) return;
+      // single-use 先行（崩溃 safe：与 live undo 同语义，崩溃后允许按残留状态重试，
+      // 各 inverse 自带 verify，重复执行安全收敛）
+      cp.used = true;
+      let outcome: "undone" | "undo_failed" = "undone";
+      try {
+        await executeCheckpointInverses(cp.inverses);
+      } catch {
+        outcome = "undo_failed";
+      }
+      const nextStatus: "undone" | "undo_failed" = outcome === "undone" ? "undone" : "undo_failed";
+      restoredComputerTasksRef.current.set(messageId, { ...restored, status: nextStatus });
+      // 缓存 bust：该消息 view 重建（canUndo flag 重新计算），其余行保持 memo 命中
+      viewCacheRef.current.delete(messageId);
+      updateTasks();
+      setComputerVersion((v) => v + 1);
+      const changes = restored.changes;
+      const capability = changes.length > 0 ? capabilityForChange(changes[0]) : "fs.modify";
+      // workspace/root 取自已执行的 inverse（恢复视图 changes 项无 id 字段；
+      // move-back 用 from/to root 对，无 rootId 字段，收敛为 undefined）
+      const firstInverse = cp.inverses[0];
+      const auditRootId =
+        firstInverse && "rootId" in firstInverse ? firstInverse.rootId : undefined;
+      void appendComputerAuditEntry({
+        id: `audit-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        taskId,
+        conversationId: conversationIdRef.current,
+        toolCallId: "",
+        toolName: "undo",
+        capability,
+        decision: "none",
+        outcome,
+        workspaceId: firstInverse?.workspaceId ?? "",
+        workspaceLabel: changes[0]?.workspaceLabel ?? "",
+        rootId: auditRootId,
+        rootLabel: changes[0]?.rootLabel,
+        relativePath: changes[0]?.relativePath,
+        verification: outcome === "undone" ? "passed" : "failed",
+      });
+      // used + 状态写回会话记录（刷新后不重复撤销 + 状态可见）
+      try {
+        const conversationId = conversationIdRef.current;
+        if (conversationId) {
+          const record = await getConversation(conversationId);
+          if (record) {
+            const persisted = serializeCheckpoints(checkpointsRef.current.values());
+            const messages = record.messages.map((pm) =>
+              pm.computerTask?.taskId === taskId
+                ? { ...pm, computerTask: { ...pm.computerTask, status: nextStatus } }
+                : pm
+            );
+            await saveConversation({
+              ...record,
+              messages,
+              updatedAt: new Date().toISOString(),
+              checkpoints: persisted,
+            });
+          }
+        }
+      } catch {
+        // 写回失败不影响已执行的撤销事实（状态已在内存生效；下次 persist 补齐）
+      }
+    },
+    [updateTasks]
+  );
+
+  /**
+   * S-fix durable undo：撤销入口路由（live 优先：tasksRef 命中走 undoTask；
+   * 否则走 restored 路径；两者皆无 → 静默返回，与今日一致）。
+   */
+  const undoComputerTask = useCallback(
+    (taskId: string) => {
+      if (tasksRef.current.has(taskId)) return undoTask(taskId);
+      return undoRestoredTask(taskId);
+    },
+    [undoTask, undoRestoredTask]
   );
 
   /** Turn 结束（streaming false）→ 收尾 active task（failed / cancelled / completed） */
@@ -3295,6 +3386,11 @@ export function useKiroChat({
     });
       clearComputerSessionState(true);
       restoredComputerTasksRef.current = computerTasksMap;
+      // S-fix durable undo：durable checkpoint 注回（非法项丢弃；used 状态如实保留）
+      checkpointsRef.current = new Map();
+      for (const cp of deserializeCheckpoints(record.checkpoints)) {
+        checkpointsRef.current.set(cp.taskId, cp);
+      }
       restoredActionsRef.current = actionsMap;
       restoredAttachmentsRef.current = attachmentsMap;
       restoredSourcesRef.current = sourcesMap;
@@ -3480,6 +3576,13 @@ export function useKiroChat({
         const restoredTask = restoredComputerTasksRef.current.get(m.id);
         if (attachedTask || restoredTask) {
           view = { ...view, computerTask: attachedTask, historyComputerTask: restoredTask };
+          // S-fix durable undo：恢复任务附带未使用的 durable checkpoint → 可撤销
+          if (restoredTask) {
+            const restoredCp = checkpointsRef.current.get(restoredTask.taskId);
+            if (restoredCp && !restoredCp.used) {
+              view = { ...view, historyTaskCanUndo: true };
+            }
+          }
           needsAttach = true;
         }
       }
@@ -3630,6 +3733,13 @@ export function useKiroChat({
     resolveApproval: handleApprovalDecision,
     resolveBulkApproval: handleBulkApprovalDecision,
     undoTask,
+    /**
+     * S-fix durable undo：撤销入口路由（live 命中走 undoTask，否则走 restored 路径；
+     * 两者皆无静默返回）。UI 统一调这个，不再直调 undoTask。
+     */
+    undoComputerTask,
+    /** S-fix durable undo：当前 checkpoints 的可持久快照（persistCurrent 落盘用） */
+    getDurableCheckpoints,
     /** Computer Task 状态版本（历史保存 signal：undo/approval 后变化） */
     computerVersion,
     /** Task B V1.2：Visual Pending Continuation 生命周期（「继续处理」建立；新 Proposal / 放弃时清除） */
@@ -3642,6 +3752,42 @@ export function useKiroChat({
     /** 同步 Receipt 快照（只含展示事实，绝无 undo；persist/pagehide 用） */
     getVisualProposalReceiptSnapshot,
   };
+}
+
+/**
+ * Checkpoint inverses 执行核（live undo 与 restored undo 共用；行为完全一致）。
+ * reverse order + 每条 verified；任一步失败抛 ComputerError（调用方定 status）。
+ * workspace/adapter 按 id 现场解析 —— 刷新后重建同样可用（S-fix durable undo）。
+ */
+async function executeCheckpointInverses(
+  inverses: ComputerInverseOperation[]
+): Promise<void> {
+  for (const inverse of [...inverses].reverse()) {
+    const ws = useKiroComputerStore
+      .getState()
+      .workspaces.find((w) => w.id === inverse.workspaceId);
+    if (!ws) throw new ComputerError("WORKSPACE_NOT_FOUND", "工作区不存在");
+    // V3 Part 1：inverse 执行一旦开始（即使最后 undo_failed），对应 Workspace best-effort dirty
+    // （部分 Undo 可能已改变文件系统）
+    void markWorkspaceKnowledgeDirty(ws.id).catch(() => undefined);
+    // V2：move-back / restore-document-revision 是特殊 inverse（多 store），单独 orchestration
+    if (inverse.type === "move-back") {
+      await undoMoveBack(ws, inverse);
+      continue;
+    }
+    if (inverse.type === "restore-document-revision") {
+      // V2 Part 2.1：委托给可测试的 runtime helper（事实重读 + 安全补偿）
+      const root = ws.roots.find((r) => r.id === inverse.rootId);
+      if (!root) throw new ComputerError("ROOT_NOT_FOUND", "根目录不存在");
+      const io = getComputerAdapterForAdapterRef(root.adapterRef);
+      await undoDocumentRevisionRuntime({ io, inverse });
+      continue;
+    }
+    const root = ws.roots.find((r) => r.id === inverse.rootId);
+    if (!root) throw new ComputerError("ROOT_NOT_FOUND", "工作区根不存在");
+    const io = getComputerAdapterForAdapterRef(root.adapterRef);
+    await applyInverseToAdapter(io, inverse);
+  }
 }
 
 /** Computer change 类型 → capability（Audit metadata 用） */

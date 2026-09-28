@@ -46,6 +46,7 @@ export function KiroMessage({
   assistantTurn,
   computerTask,
   historyComputerTask,
+  historyTaskCanUndo,
   approval,
   turnInFlight,
   desktopPaused,
@@ -75,6 +76,11 @@ export function KiroMessage({
   computerTask?: KiroAgentTask;
   /** P4：历史恢复的 Computer Task（display-only） */
   historyComputerTask?: PersistedComputerTaskView;
+  /**
+   * S-fix durable undo：恢复任务附带未使用的 durable checkpoint 时，历史 Result 区可撤销。
+   * 由 view.historyTaskCanUndo 驱动（memo 计算；用后经 viewCache bust 重算）。
+   */
+  historyTaskCanUndo?: boolean;
   /** P4：属于本 Run 的 Inline Approval（taskId 已精确匹配） */
   approval?: KiroAgentRunApprovalBinding | null;
   /** P4：本消息是否为 live run（turn 进行中且为最后一条 assistant） */
@@ -295,6 +301,7 @@ export function KiroMessage({
         <KiroAgentRunResult
           task={computerTask}
           historyTask={historyComputerTask}
+          historyTaskCanUndo={historyTaskCanUndo}
           onReview={onReviewComputerTask}
           onUndo={onUndoComputerTask}
         />

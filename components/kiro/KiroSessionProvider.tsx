@@ -461,6 +461,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         projectId: conversationProjectIdRef.current,
         // Visual Intake V1.4：Runtime receipt 快照（同步 ref 读取；绝无 undo）
         visualProposalReceipts: chatNow.getVisualProposalReceiptSnapshot(),
+        // S-fix durable undo：durable checkpoints 快照随会话落盘（不可落盘的逐个丢弃）
+        checkpoints: chatNow.getDurableCheckpoints(),
       });
       await saveConversation(record);
       refreshHistory();

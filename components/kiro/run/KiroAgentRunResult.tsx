@@ -17,16 +17,21 @@ import { useConfirmStore } from "@/store/useConfirmStore";
  * - 失败 / 取消也展示真实已完成的 changes（不隐藏已验证事实）；
  * - 复用既有 Undo / Review Runtime：canUndo → [查看更改] [撤销]；undoUsed → 撤销消失；
  *   历史恢复（PersistedComputerTaskView）→ display-only（不重建 Undo 能力）；
+ *   S-fix durable undo 例外：恢复任务附带未使用的 durable checkpoint 时
+ *   （historyTaskCanUndo），历史区同样可撤销，走 undoRestoredTask（同核同 verify）；
  * - Artifact hover actions（预览 / 下载 / 删除）继续可用。
  */
 export function KiroAgentRunResult({
   task,
   historyTask,
+  historyTaskCanUndo,
   onReview,
   onUndo,
 }: {
   task?: KiroAgentTask;
   historyTask?: PersistedComputerTaskView;
+  /** S-fix durable undo：恢复任务可撤销（durable checkpoint 未使用） */
+  historyTaskCanUndo?: boolean;
   onReview?: (taskId: string) => void;
   onUndo?: (taskId: string) => void;
 }) {
@@ -54,6 +59,18 @@ export function KiroAgentRunResult({
             changes: historyTask.changes,
           })}
         </p>
+        {historyTask.status === "undone" && (
+          <p className="text-[11px] font-semibold text-success flex items-center gap-1.5">
+            <RotateCcw className="w-3 h-3" aria-hidden="true" />
+            已撤销本次更改
+          </p>
+        )}
+        {historyTask.status === "undo_failed" && (
+          <p className="text-[11px] font-semibold text-danger flex items-center gap-1.5">
+            <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+            撤销未完成（部分恢复失败）
+          </p>
+        )}
         {historyTask.changes.length > 0 && (
           <ChangeList
             changes={historyTask.changes}
@@ -61,6 +78,18 @@ export function KiroAgentRunResult({
             onDownload={downloadArtifact}
             onDelete={requestDelete}
           />
+        )}
+        {historyTaskCanUndo && historyTask.status === "completed" && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <button
+              data-testid="kiro-task-undo"
+              onClick={() => onUndo?.(historyTask.taskId)}
+              className="flex items-center gap-1 px-2.5 h-7 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" aria-hidden="true" />
+              撤销
+            </button>
+          </div>
         )}
         <p className="text-[10px] text-sandrift">历史记录</p>
       </div>

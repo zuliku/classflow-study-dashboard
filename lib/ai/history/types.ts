@@ -8,6 +8,8 @@ export type PersistedRole = "user" | "assistant";
 
 /** Visual Action kind（display union；type-only import 不产生 runtime cycle） */
 import type { VisualActionKind } from "@/lib/ai/visual/types";
+/** Durable checkpoint（type-only import 不产生 runtime cycle） */
+import type { PersistedTaskCheckpoint } from "@/lib/ai/computer/checkpoints";
 
 export interface PersistedContextRef {
   kind: "course" | "assignment" | "group-project" | "material" | "week";
@@ -178,4 +180,9 @@ export interface KiroConversationRecord {
    * 旧记录没有此字段（= 未归类），必须正常工作。
    */
   projectId?: string;
+  /**
+   * S-fix 可持久 Checkpoint（durable subset；旧记录没有 = 不可 Undo，保持现状）。
+   * 生命周期与会话记录一致（删会话即删）；单次语义由 used 保证。
+   */
+  checkpoints?: PersistedTaskCheckpoint[];
 }

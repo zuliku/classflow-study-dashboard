@@ -429,6 +429,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         assistantTurn={view.assistantTurn}
         computerTask={view.computerTask}
         historyComputerTask={view.historyComputerTask}
+        historyTaskCanUndo={view.historyTaskCanUndo}
         approval={approval}
         turnInFlight={runLive}
         desktopPaused={desktopPaused}
