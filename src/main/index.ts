@@ -14,6 +14,7 @@ import { registerSkillIpc } from "./skills/skillIpc";
 import { registerMcpIpc } from "./mcp/ipc";
 import { registerInvocationIpc } from "./security/invocationIpc";
 import { registerChannelIpc } from "./channels/ipc";
+import { isMiniWebContents, registerMiniChatIpc } from "./miniChat";
 import { installLocalApiCapabilityInjector } from "./security/localApiCapability";
 import { isTrustedRendererUrl, isValidAppBundleRequestUrl } from "@/lib/security/rendererOrigin";
 import { configureRuntimeProfile, getRuntimeProfileDiagnostic } from "./runtimeProfile";
@@ -164,9 +165,10 @@ function createWindow(apiBase: string, apiCapability: string): void {
 }
 
 function isTrustedSender(sender: Electron.WebContents): boolean {
-  if (!mainWindow) return false;
   if (sender.isDestroyed()) return false;
-  return sender.id === mainWindow.webContents.id;
+  if (mainWindow && sender.id === mainWindow.webContents.id) return true;
+  // Kiro Mini 窗：同一 launch 的可信窗口（与主窗口同 session/同 bundle；Local API 仍走主窗口执行）
+  return isMiniWebContents(sender.id);
 }
 
 function validateWindowSender(channel: string, sender: Electron.WebContents, apiBase: string): boolean {
@@ -290,6 +292,16 @@ app.whenReady().then(async () => {
   // Channels — QQ Bot (WebSocket Gateway, Transport-independent)
   registerChannelIpc({
     validateSender: (channel, event) => validateWindowSender(channel, event.sender, apiBase),
+  });
+
+  // Kiro Mini 常驻窗（独立 BrowserWindow + 主进程中继；单运行时不分裂）
+  registerMiniChatIpc({
+    getMainWindow: () => mainWindow,
+    getSession: () => mainWindow?.webContents.session ?? null,
+    getPreloadPath: () => join(__dirname, "../preload/index.cjs"),
+    getApiBase: () => apiBase,
+    getApiCapability: () => apiCapability,
+    isTrustedSender,
   });
 
   // Inbox publisher (Main → Renderer raw payload with deliveryId, reliable queue)

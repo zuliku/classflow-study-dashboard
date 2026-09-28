@@ -223,3 +223,37 @@ export function getClassFlowDesktopInboxBridge(): import("@/lib/desktop/types").
   if (typeof (inbox as Record<string, unknown>).subscribeExternalItem !== "function") return null;
   return inbox as import("@/lib/desktop/types").ClassFlowDesktopInboxBridge;
 }
+
+/**
+ * Kiro Mini 常驻窗桥（optional capability；渐进能力检测）。
+ * 要求完整双向表面（show/toggle/sendRemote/onRemoteSend/publishState/getState/onState…）；
+ * 缺失 → null（调用方隐藏 mini 入口，绝不使整个 Bridge invalid）。
+ */
+export function getClassFlowDesktopMiniBridge(): import("@/lib/desktop/types").ClassFlowDesktopMiniBridge | null {
+  const bridge = getClassFlowDesktopBridge();
+  if (!bridge) return null;
+  const mini = (bridge as unknown as { mini?: unknown }).mini;
+  if (!mini || typeof mini !== "object") return null;
+  const required = [
+    "show",
+    "hide",
+    "toggle",
+    "setAlwaysOnTop",
+    "isAlwaysOnTop",
+    "sendRemote",
+    "stopRemote",
+    "publishState",
+    "getState",
+    "onState",
+    "onRemoteSend",
+    "completeRemoteSend",
+    "onRemoteStop",
+  ] as const;
+  if (!required.every((m) => typeof (mini as Record<string, unknown>)[m] === "function")) return null;
+  return mini as import("@/lib/desktop/types").ClassFlowDesktopMiniBridge;
+}
+
+/** Kiro Mini 常驻窗是否可用（桌面端 + 新 Runtime） */
+export function hasClassFlowDesktopMini(): boolean {
+  return getClassFlowDesktopMiniBridge() !== null;
+}

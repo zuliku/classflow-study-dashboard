@@ -189,6 +189,40 @@ const inboxBridge = {
   ack: (deliveryId: string) => invokeBridge("bridge:inbox:ack", { deliveryId }),
 };
 
+/**
+ * Kiro Mini 常驻窗桥（thin relay；聊天真相在主窗口，Mini 只做快照展示 + 发送意图）。
+ * - 主窗口侧：show/hide/toggle + onRemoteSend/completeRemoteSend/onRemoteStop + publishState
+ * - Mini 窗侧：sendRemote/stopRemote + getState/onState/isAlwaysOnTop/setAlwaysOnTop/hide
+ * 同一 bridge 双向复用（sender 角色由 Main 校验，preload 不做信任判定）。
+ */
+const miniBridge = {
+  show: () => ipcRenderer.send("mini:show"),
+  hide: () => ipcRenderer.send("mini:hide"),
+  toggle: () => ipcRenderer.send("mini:toggle"),
+  setAlwaysOnTop: (onTop: boolean) => ipcRenderer.send("mini:set-always-on-top", { onTop }),
+  isAlwaysOnTop: (): Promise<{ onTop: boolean }> => ipcRenderer.invoke("mini:is-always-on-top"),
+  sendRemote: (payload: unknown) => invokeBridge("mini:send", payload),
+  stopRemote: () => ipcRenderer.send("mini:stop"),
+  publishState: (snapshot: unknown) => ipcRenderer.send("mini:publish-state", snapshot),
+  getState: (): Promise<unknown> => ipcRenderer.invoke("mini:get-state"),
+  onState: (callback: (snapshot: unknown) => void): (() => void) => {
+    const handler = (_e: unknown, snapshot: unknown) => callback(snapshot);
+    ipcRenderer.on("mini:state", handler);
+    return () => ipcRenderer.removeListener("mini:state", handler);
+  },
+  onRemoteSend: (callback: (payload: unknown) => void): (() => void) => {
+    const handler = (_e: unknown, payload: unknown) => callback(payload);
+    ipcRenderer.on("mini:remote-send", handler);
+    return () => ipcRenderer.removeListener("mini:remote-send", handler);
+  },
+  completeRemoteSend: (result: unknown) => ipcRenderer.send("mini:remote-send:done", result),
+  onRemoteStop: (callback: () => void): (() => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("mini:remote-stop", handler);
+    return () => ipcRenderer.removeListener("mini:remote-stop", handler);
+  },
+};
+
 contextBridge.exposeInMainWorld("classflowDesktop", {
   version: 1,
   platform: "windows",
@@ -213,6 +247,7 @@ contextBridge.exposeInMainWorld("classflowDesktop", {
   invocation: invocationBridge,
   channels: channelsBridge,
   inbox: inboxBridge,
+  mini: miniBridge,
   api: {
     request: async (path: string, init?: RequestInit): Promise<Response> => {
       const base = resolveApiBase();

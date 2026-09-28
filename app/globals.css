@@ -1490,6 +1490,14 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     box-shadow: 0 0 0 1px rgba(164, 143, 130, 0.8);
   }
 
+  /* Kiro Mini 常驻窗（frameless）：头部原生拖动区；可交互子元素必须 no-drag */
+  .mini-drag-region {
+    -webkit-app-region: drag;
+  }
+  .mini-no-drag {
+    -webkit-app-region: no-drag;
+  }
+
   /* Slash（/）菜单：指令弹出——从输入前缘（左下）弹出，
      位移 6px + scale .98，spring 缓动收尾（与 Mention 的中央柔附着区分） */
   .kiro-slash-enter {

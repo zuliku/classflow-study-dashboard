@@ -118,6 +118,28 @@ export interface ClassFlowDesktopInboxBridge {
   ack: (deliveryId: string) => Promise<{ ok: boolean }>;
 }
 
+/**
+ * Kiro Mini 常驻窗桥（optional capability；thin relay）。
+ * - 主窗口侧用 show/toggle + onRemoteSend/completeRemoteSend/onRemoteStop + publishState；
+ * - Mini 窗侧用 sendRemote/stopRemote + getState/onState + 置顶/隐藏。
+ * 缺失 → 非桌面端或旧 Runtime，调用方隐藏 mini 入口（绝不使整个 Bridge invalid）。
+ */
+export interface ClassFlowDesktopMiniBridge {
+  show: () => void;
+  hide: () => void;
+  toggle: () => void;
+  setAlwaysOnTop: (onTop: boolean) => void;
+  isAlwaysOnTop: () => Promise<{ onTop: boolean }>;
+  sendRemote: (payload: unknown) => Promise<unknown>;
+  stopRemote: () => void;
+  publishState: (snapshot: unknown) => void;
+  getState: () => Promise<unknown>;
+  onState: (callback: (snapshot: unknown) => void) => () => void;
+  onRemoteSend: (callback: (payload: unknown) => void) => () => void;
+  completeRemoteSend: (result: unknown) => void;
+  onRemoteStop: (callback: () => void) => () => void;
+}
+
 export interface ClassFlowDesktopBridgeV1 {
   version: typeof CLASSFLOW_DESKTOP_BRIDGE_VERSION;
   platform: ClassFlowDesktopPlatform;
@@ -137,6 +159,7 @@ export interface ClassFlowDesktopBridgeV1 {
   computer?: ClassFlowDesktopComputerBridge;
   channels?: ClassFlowDesktopChannelsBridge;
   inbox?: ClassFlowDesktopInboxBridge;
+  mini?: ClassFlowDesktopMiniBridge;
   credentials?: {
     create: (input: unknown) => Promise<{ credentialRef: string }>;
     replace: (input: unknown) => Promise<unknown>;

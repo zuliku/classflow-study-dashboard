@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import "@/app/globals.css";
 import App from "@/app/page";
 import { TitleBar } from "@/src/renderer/components/TitleBar";
+import { MiniChatApp } from "@/components/kiro/mini/MiniChatApp";
+import { isMiniModeSearch } from "@/lib/ai/miniChat/protocol";
 
 class RendererErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -44,17 +46,25 @@ class RendererErrorBoundary extends React.Component<
 const container = document.getElementById("root");
 if (!container) throw new Error("root 容器不存在");
 
+// Kiro Mini 常驻窗：同一包按 `?mini=1` 渲染瘦客户端（无 TitleBar/App，无聊天运行时；
+// 真相在主窗口，中继见 MiniChatRelayHost + src/main/miniChat.ts）。
+const miniMode = typeof window !== "undefined" && isMiniModeSearch(window.location.search);
+
 createRoot(container).render(
   <React.StrictMode>
     <RendererErrorBoundary>
-      {/* 桌面版窗口结构：自绘标题栏 + 应用内容（TitleBar 固定在视口顶部）。
-          只有此处允许 h-screen（viewport 高度 owner）；TitleBar 以下全部用 flex-1/min-h-0 继承剩余高度 */}
-      <div className="h-screen flex flex-col overflow-hidden">
-        <TitleBar />
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <App />
+      {miniMode ? (
+        <div className="h-screen flex flex-col overflow-hidden">
+          <MiniChatApp />
         </div>
-      </div>
+      ) : (
+        <div className="h-screen flex flex-col overflow-hidden">
+          <TitleBar />
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <App />
+          </div>
+        </div>
+      )}
     </RendererErrorBoundary>
   </React.StrictMode>
 );

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X, Minus } from "lucide-react";
+import { X, Minus, PictureInPicture2 } from "lucide-react";
 import { useKiroSessionActions, type KiroSidecarMode } from "@/components/kiro/KiroSessionProvider";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
@@ -382,6 +382,39 @@ export function KiroSidecarShell({
   );
 }
 
+function MiniPopoutButton() {
+  // window.classflowDesktop 只经 lib/desktop/bridge.ts 访问（本模块不直触 global）
+  const [showMini, setShowMini] = useState<(() => void) | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    import("@/lib/desktop/bridge").then(({ getClassFlowDesktopMiniBridge }) => {
+      if (cancelled) return;
+      const mini = getClassFlowDesktopMiniBridge();
+      if (mini) setShowMini(() => () => mini.show());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!showMini) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        try {
+          showMini();
+        } catch {}
+      }}
+      aria-label="弹出迷你聊天窗"
+      title="弹出迷你聊天窗（系统桌面常驻）"
+      className="hidden md:flex w-8 h-8 items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+      data-testid="kiro-sidecar-mini-popout"
+    >
+      <PictureInPicture2 className="w-4 h-4" />
+    </button>
+  );
+}
+
 function KiroSidecarHeader({ onMinimize, onExpand, onClose }: { onMinimize: () => void; onExpand: () => void; onClose: () => void }) {
   return (
     <div
@@ -398,6 +431,8 @@ function KiroSidecarHeader({ onMinimize, onExpand, onClose }: { onMinimize: () =
           独立 Expand 按钮与 More 菜单重复，已移除 */}
       <div className="flex items-center gap-1 shrink-0">
         <KiroSessionActions variant="sidecar" onExpand={onExpand} />
+        {/* Kiro Mini 常驻窗（桌面端）：独立置顶小窗（可拖动/调尺寸/文件拖入）；非桌面端不渲染 */}
+        <MiniPopoutButton />
         <button
           onClick={onMinimize}
           aria-label="最小化 Kiro"

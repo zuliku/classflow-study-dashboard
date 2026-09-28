@@ -24,6 +24,7 @@ import type { KiroSourceMeta } from "@/lib/ai/citations/types";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroSidecar } from "@/components/kiro/KiroSidecar";
 import { KiroComputerSessionHost } from "@/components/kiro/computer/KiroComputerSessionHost";
+import { MiniChatRelayHost } from "@/components/kiro/mini/MiniChatRelayHost";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import {
   sanitizeConversation,
@@ -1361,6 +1362,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
               {children}
               {/* P5：Desktop Session 唯一 subscription ownership（Provider 持久根部；不渲染 UI） */}
               <KiroComputerSessionHost />
+              {/* Kiro Mini 常驻窗中继（Provider 持久根部单挂载；无 UI；快照 publish + 远端发送执行） */}
+              <MiniChatRelayHost />
               {/* Sidecar 与 Workspace 互斥；保留组件到 exit presence 完成。 */}
               <KiroSidecar mode={effectiveSidecarMode} />
               {/* V2 Part 3：全局唯一 Artifact Preview Host（Workspace/Sidecar 共用） */}
