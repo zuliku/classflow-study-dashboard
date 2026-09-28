@@ -49,6 +49,8 @@ import {
   recordPlanDeviation,
   restoreExecutionPlans,
 } from "@/lib/ai/computer/plans/lifecycle";
+import { extractPlanCallFacts, matchPlanStep } from "@/lib/ai/computer/plans/match";
+import { buildDeviationApprovalRequest } from "@/lib/ai/computer/plans/gate";
 import type { PersistedExecutionPlan } from "@/lib/ai/computer/plans/types";
 import { sessionRuleForRequest, workspaceRuleForRequest } from "@/lib/ai/computer/approval";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
@@ -1088,6 +1090,8 @@ export function useKiroChat({
   const plansRef = useRef<Map<string, PersistedExecutionPlan>>(new Map());
   const [executionPlans, setExecutionPlans] = useState<PersistedExecutionPlan[]>([]);
   const pendingExecutionsRef = useRef<Map<string, PendingComputerExecution>>(new Map());
+  // plan-approve 偏离门：deviation 审批 id → planId（放行即记一次偏离；deny/超时不记）
+  const pendingDeviationApprovalsRef = useRef<Map<string, { planId: string }>>(new Map());
   const oneShotApprovalsRef = useRef<ComputerOneShotApproval[]>([]);
   // Task 状态版本（undo/approval 后递增）：历史保存 snapshot 需要感知（任务状态变化也落盘）
   const [computerVersion, setComputerVersion] = useState(0);
@@ -2154,6 +2158,27 @@ export function useKiroChat({
     [syncPlansFromRef]
   );
 
+  /**
+   * plan-approve 偏离门 — 成功后记账（执行入口 + approval resume 共用）：
+   * 按本次调用重新匹配活跃计划（ref 现读）；命中未完成步骤 → 标记 done（全 done 即 completed）。
+   * 偏离放行（无匹配）不记账——偏离由审批决策处 recordPlanDeviation 记录。
+   */
+  const maybeMarkPlanStepDone = useCallback(
+    (toolName: string, input: unknown) => {
+      const activePlan = getActivePlan(Array.from(plansRef.current.values()));
+      if (!activePlan) return;
+      const facts = extractPlanCallFacts(toolName, input);
+      if (!facts) return;
+      const { matchedStepId } = matchPlanStep(activePlan, facts);
+      if (!matchedStepId) return;
+      void persistPlanMutation((plans) => {
+        const r = markPlanStepDone(plans, activePlan.planId, matchedStepId);
+        return { plans: r.plans, ok: r.ok };
+      });
+    },
+    [persistPlanMutation]
+  );
+
   /** 执行 Computer Tool Call（onToolCall / approval resume 共用入口） */
   const runComputerToolCall = useCallback(
     async (toolName: string, toolCallId: string, input: unknown) => {
@@ -2216,6 +2241,39 @@ export function useKiroChat({
         }
       }
 
+      // plan-approve 偏离门（活跃计划执行中；只约束 mutation 调用）：
+      // 命中未完成步骤 → 放行（成功后 maybeMarkPlanStepDone 记账）；
+      // 未命中 → 合成 deviation 审批（allowedDecisions 仅 deny/allow-once），绝不执行。
+      // resume 路径直调 executor（不经过本门）→ 无自循环；fail-open 仅限 schema 非法输入
+      //（executor 照常拒绝，无 IO）。
+      {
+        const activePlan = getActivePlan(Array.from(plansRef.current.values()));
+        const facts = activePlan ? extractPlanCallFacts(toolName, input) : null;
+        if (activePlan && facts) {
+          const { matchedStepId } = matchPlanStep(activePlan, facts);
+          if (!matchedStepId) {
+            const ws = useKiroComputerStore.getState().workspaces.find(
+              (w) => w.id === frozenSnapshot.workspaceId
+            );
+            const deviationRequest = buildDeviationApprovalRequest({
+              plan: activePlan,
+              facts,
+              toolName,
+              toolCallId,
+              taskId,
+              workspaceId: frozenSnapshot.workspaceId ?? "",
+              workspaceLabel: ws?.name ?? frozenSnapshot.workspaceId ?? "",
+              ...(facts.rootId
+                ? { rootLabel: ws?.roots.find((r) => r.id === facts.rootId)?.label }
+                : {}),
+            });
+            pendingDeviationApprovalsRef.current.set(deviationRequest.id, { planId: activePlan.planId });
+            handleApprovalRequired(deviationRequest, toolName, toolCallId, input, frozenSnapshot);
+            return;
+          }
+        }
+      }
+
       const attempt = await executeKiroComputerTool({
         toolName,
         toolCallId,
@@ -2259,9 +2317,13 @@ export function useKiroChat({
           advanceDocumentFailureFuse(documentToolFailureRef.current, attempt.output);
         }
       }
+      // plan-approve：命中步骤的调用成功 → 记账（失败/审批不记）
+      if (attempt.kind === "completed" && attempt.output.ok === true) {
+        maybeMarkPlanStepDone(toolName, input);
+      }
       applyCompletedAttempt(attempt, toolName, toolCallId, taskId);
     },
-    [buildComputerSnapshot, ensureActiveTask, handleApprovalRequired, applyCompletedAttempt, handlePlanProposed]
+    [buildComputerSnapshot, ensureActiveTask, handleApprovalRequired, applyCompletedAttempt, handlePlanProposed, maybeMarkPlanStepDone]
   );
 
   /**
@@ -2289,6 +2351,9 @@ export function useKiroChat({
       clearApprovalTimeout(approvalId);
       // S-fix（P0-2）：决策已定 → 快照同步清理（后续 advance 只负责展示下一条）
       clearPendingApprovalSnapshot();
+      // plan-approve 偏离门：消费 deviation 标记（deny/超时不记；任一 allow 即记一次偏离）
+      const deviation = pendingDeviationApprovalsRef.current.get(approvalId);
+      pendingDeviationApprovalsRef.current.delete(approvalId);
       const { request, toolName, toolCallId, input, frozenSnapshot } = pending;
       const taskId = request.taskId;
 
@@ -2332,6 +2397,11 @@ export function useKiroChat({
           message: opts?.timedOut ? "审批超时未响应，操作已自动取消。" : "用户拒绝了此操作。",
         } as ToolOutput);
         return;
+      }
+
+      // plan-approve 偏离门：超计划放行（任一 allow 决策）→ 计划记一次偏离（执行成败不影响偏离事实）
+      if (deviation) {
+        void persistPlanMutation((plans) => recordPlanDeviation(plans, deviation.planId));
       }
 
       if (decision === "allow-once") {
@@ -2445,6 +2515,10 @@ export function useKiroChat({
           relativePath: request.relativePath,
           verification: "passed",
         });
+        // plan-approve：resume 成功的计划内调用同样记账（偏离放行无匹配 → 不记）
+        if (attempt.kind === "completed" && attempt.output.ok === true) {
+          maybeMarkPlanStepDone(toolName, input);
+        }
         applyCompletedAttempt(attempt, toolName, toolCallId, taskId);
       } catch (error) {
         // V2.7：resume 异常 → 归一化为 Tool Output ok:false（绝不 Unhandled Rejection / 卡 Dialog）
@@ -2484,7 +2558,7 @@ export function useKiroChat({
         advancePendingApproval();
       }
     },
-    [advancePendingApproval, applyCompletedAttempt, handleApprovalRequired, failTaskStep, updateTasks, emitToolOutput, clearApprovalTimeout]
+    [advancePendingApproval, applyCompletedAttempt, handleApprovalRequired, failTaskStep, updateTasks, emitToolOutput, clearApprovalTimeout, persistPlanMutation, maybeMarkPlanStepDone]
   );
 
   const handleBulkApprovalDecision = useCallback(
@@ -3427,6 +3501,8 @@ export function useKiroChat({
   const clearComputerSessionState = useCallback(
     (keepRestored: boolean) => {
       pendingExecutionsRef.current.clear();
+      // plan-approve 偏离门：会话清理时未决策的 deviation 标记一并清除（绝不跨会话记偏离）
+      pendingDeviationApprovalsRef.current.clear();
       oneShotApprovalsRef.current = [];
       for (const t of Array.from(approvalTimeoutTimersRef.current.values())) clearTimeout(t);
       approvalTimeoutTimersRef.current.clear();
@@ -3780,6 +3856,8 @@ export function useKiroChat({
    *  Desktop Terminal V1：立即 cancel 所有活跃 terminal process tree（bridge.cancel；每个 execution 一次） */
   const handleStop = useCallback(() => {
     pendingExecutionsRef.current.clear();
+    // plan-approve 偏离门：Stop 遗弃未决策 deviation 标记（不记偏离）
+    pendingDeviationApprovalsRef.current.clear();
     oneShotApprovalsRef.current = [];
     for (const t of Array.from(approvalTimeoutTimersRef.current.values())) clearTimeout(t);
     approvalTimeoutTimersRef.current.clear();

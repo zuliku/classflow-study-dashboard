@@ -18,6 +18,7 @@ import {
   matchPlanStep,
   normalizePlanPath,
 } from "@/lib/ai/computer/plans/match";
+import { buildDeviationApprovalRequest } from "@/lib/ai/computer/plans/gate";
 import type { PersistedExecutionPlan } from "@/lib/ai/computer/plans/types";
 
 const CTX = { conversationId: "conv-1", toolCallId: "call-1" };
@@ -174,6 +175,45 @@ describe("runProposeExecutionPlanTool（executor 接入）", () => {
   });
 });
 
+describe("buildDeviationApprovalRequest", () => {
+  const plan = { ...approvedPlan(), title: "整理" };
+  it("仅 deny/allow-once；描述携带计划标题与调用事实", () => {
+    const facts = extractPlanCallFacts("create_text_file", { path: "other/b.txt", content: "x" });
+    expect(facts).not.toBeNull();
+    const req = buildDeviationApprovalRequest({
+      plan,
+      facts: facts!,
+      toolName: "create_text_file",
+      toolCallId: "call-x",
+      taskId: "task-x",
+      workspaceId: "ws",
+      workspaceLabel: "工作区",
+      rootLabel: "输出",
+    });
+    expect(req.allowedDecisions).toEqual(["deny", "allow-once"]);
+    expect(req.toolCallId).toBe("call-x");
+    expect(req.taskId).toBe("task-x");
+    expect(req.capability).toBe("fs.create");
+    expect(req.relativePath).toBe("other/b.txt");
+    expect(req.description).toContain("整理");
+    expect(req.description).toContain("create_text_file");
+    expect(req.id.startsWith("approval-")).toBe(true);
+  });
+  it("终端调用 resourceLabel 取命令；无路径时回退 toolName", () => {
+    const facts = extractPlanCallFacts("run_terminal_command", { shell: "powershell", command: "rm -rf x" });
+    const req = buildDeviationApprovalRequest({
+      plan,
+      facts: facts!,
+      toolName: "run_terminal_command",
+      toolCallId: "c",
+      taskId: "t",
+      workspaceId: "ws",
+      workspaceLabel: "工作区",
+    });
+    expect(req.resourceLabel).toBe("rm -rf x");
+    expect(req.rootId).toBeUndefined();
+  });
+});
 describe("extractPlanCallFacts", () => {
   it("文件/移动/终端/GUI 输入抽取事实", () => {
     expect(extractPlanCallFacts("create_text_file", { path: "docs/a.txt", content: "x" })).toMatchObject({
