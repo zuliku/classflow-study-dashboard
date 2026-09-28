@@ -320,7 +320,8 @@ export function KiroNavigator() {
           moreOpen ? "overflow-visible" : "overflow-hidden",
           "w-[52px] data-[state=expanded]:w-[288px] lg:data-[state=expanded]:w-[304px]",
           "data-[state=expanded]:max-h-[calc(100dvh-120px)]",
-          "transition-[width] duration-[var(--kiro-motion-spatial,220ms)] ease-[var(--ease-standard)]"
+          // 空间位移走 spring（M3 expressive 方向；时长仍是 spatial 档，仅换曲线 → 自然 settle）
+          "transition-[width] duration-[var(--kiro-motion-spatial,220ms)] ease-[var(--ease-spring)]"
         )}
       >
         {/* Collapsed layer：52px（expand 时 absolute 脱离流，不撑高 shell） */}

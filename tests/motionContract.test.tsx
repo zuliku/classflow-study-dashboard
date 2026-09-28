@@ -143,6 +143,15 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(css).toMatch(/\.sidebar-shell\s*\{[^}]*transition-timing-function:\s*var\(--ease-spring\)/s);
   });
 
+  it("P1 空间位移 spring 化：Navigator shell + Sidecar 进入走 spring，退出仍加速", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    const navigator = read("components/kiro/navigation/KiroNavigator.tsx");
+    expect(navigator).toMatch(/transition-\[width\][\s\S]{0,120}?ease-\[var\(--ease-spring\)\]/);
+    const sidecar = read("components/kiro/sidecar/KiroSidecarShell.tsx");
+    expect(sidecar).toMatch(/duration-\[var\(--motion-panel\)\] ease-\[var\(--ease-spring\)\]/);
+    expect(sidecar).toMatch(/duration-\[var\(--motion-exit-panel\)\] ease-\[var\(--ease-exit\)\]/);
+  });
+
   it("P0 一致性收口 D1：Kiro 域退出分支统一加速离场（--ease-exit）", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
     for (const f of [

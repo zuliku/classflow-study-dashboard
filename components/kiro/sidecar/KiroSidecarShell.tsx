@@ -330,7 +330,8 @@ export function KiroSidecarShell({
           ? "opacity-100 scale-100 translate-x-0 translate-y-0 pointer-events-auto"
           : "opacity-0 scale-[0.985] pointer-events-none -translate-y-1 md:translate-x-1",
         fullVisible
-          ? "transition-[opacity,transform] duration-[var(--motion-panel)] ease-[var(--ease-standard)]"
+          // 进入走 spring（空间位移自然 settle；退出仍加速离场）
+          ? "transition-[opacity,transform] duration-[var(--motion-panel)] ease-[var(--ease-spring)]"
           : "transition-[opacity,transform] duration-[var(--motion-exit-panel)] ease-[var(--ease-exit)]"
       )}
       style={
