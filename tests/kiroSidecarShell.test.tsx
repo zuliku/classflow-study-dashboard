@@ -9,6 +9,8 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import fs from "node:fs";
+import path from "node:path";
 import { KiroSidecarShell } from "@/components/kiro/sidecar/KiroSidecarShell";
 import {
   SIDECAR_DEFAULT_SIZE,
@@ -702,6 +704,34 @@ describe("Drag Perf（手势帧零 reconcile + compositor 位移）", () => {
       right: 84,
     });
     s.cleanup();
+  });
+
+  it("geometry 交互期间根 transition 关闭（松手跳回归）：属性挂载/卸载 + CSS kill 规则", async () => {
+    // 根节点常年带 transition-[opacity,transform]（进/退场用）；拖动逐帧直写 transform 时
+    // 若 230ms spring 介入插值 → 渲染滞后光标，松手残余一次性结算 = 松手跳。
+    // 交互期间根自身 transition 必须关闭（内部元素降权只覆盖后代，够不到自身）。
+    const s = setup("open", true);
+    await s.flush();
+    const handle = s.container.querySelector('[data-testid="kiro-sidecar-move-handle"]')!;
+    const interacting = () => s.panel()!.hasAttribute("data-geometry-interacting");
+    expect(interacting()).toBe(false);
+    down(handle, 1000, 100);
+    expect(interacting()).toBe(true);
+    move(handle, 960, 120);
+    move(handle, 940, 130);
+    expect(interacting()).toBe(true);
+    up(handle, 940, 130);
+    expect(interacting()).toBe(false);
+    s.cleanup();
+
+    const css = fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+    expect(css).toContain(".kiro-sidecar-shell[data-geometry-interacting]");
+    expect(css).toMatch(/\.kiro-sidecar-shell\[data-geometry-interacting\]\s*\{\s*transition:\s*none/);
+    const shellSrc = fs.readFileSync(
+      path.join(process.cwd(), "components/kiro/sidecar/KiroSidecarShell.tsx"),
+      "utf8"
+    );
+    expect(shellSrc).toContain("kiro-sidecar-shell");
   });
 
   it("resize 手势帧：CSS 变量直写 + 内容零重渲染，store 只在松手持久化", async () => {

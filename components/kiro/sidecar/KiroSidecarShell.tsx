@@ -288,7 +288,9 @@ export function KiroSidecarShell({
       aria-hidden={!fullInteractive}
       {...(!fullInteractive ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
-        "fixed z-40 flex flex-col bg-surface overflow-hidden",
+        // kiro-sidecar-shell：geometry 交互期间由 CSS 关闭根自身 transition
+        //（拖动逐帧直写 transform；若 230ms spring 介入插值 → 滞后光标，松手残余一次性结算 = 松手跳）
+        "kiro-sidecar-shell fixed z-40 flex flex-col bg-surface overflow-hidden",
         "inset-0 w-full h-full rounded-none pb-[env(safe-area-inset-bottom)]",
         "md:inset-auto md:top-[var(--kiro-sidecar-top)] md:right-[var(--kiro-sidecar-right)]",
         "md:w-[var(--kiro-sidecar-width)] md:h-[var(--kiro-sidecar-height)] md:rounded-[28px] md:border md:border-line md:shadow-card",

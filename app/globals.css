@@ -1705,6 +1705,13 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
   transition-duration: 0.01ms !important;
 }
 
+/* Shell 根节点自身：geometry 交互期间关闭根 transition（拖动逐帧直写 transform；
+   若 230ms spring 介入插值 → 渲染位置滞后光标，松手时残余插值一次性结算 = 松手跳。
+   后代选择器够不到自身，必须单独命中；交互结束属性移除，进/退场过渡自动恢复。） */
+.kiro-sidecar-shell[data-geometry-interacting] {
+  transition: none !important;
+}
+
 /* Drag Perf：手势进行中暂停常转装饰（paused 可恢复，不会像 none 那样重放 intro），
    并去掉小窗大阴影（松手恢复），避免每帧重绘。 */
 [data-geometry-interacting] .kiro-ring {
