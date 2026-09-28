@@ -227,15 +227,15 @@ export function KiroComposerReasoningControl({
               className="absolute inset-y-0 left-0 bg-pastel-mint transition-[width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
               style={{ width: `${fillPercent}%` }}
             />
-            {/* 最高档流动彩条：与底填充同宽同位，opacity crossfade 进出（structure 档，
-                比 width 过渡略慢半拍，变色不生硬）；内层 200% 宽彩带做 translateX 位移
+            {/* 最高档流动彩条：与底填充同宽同位，opacity 500ms 柔光晕染进出
+                （显隐比几何过渡慢半拍以上，变色不生硬）；内层 200% 宽彩带做 translateX 位移
                 （compositor 合成；位移恰为一个色带周期，首尾帧一致，无缝不断档）；
                 reduced-motion 下静止但保留彩色 */}
             <span
               aria-hidden="true"
               data-testid="kiro-composer-reasoning-flow"
               className={cn(
-                "absolute inset-y-0 left-0 overflow-hidden transition-[width,opacity] duration-[var(--kiro-motion-structure,150ms)] ease-[var(--ease-standard)]",
+                "absolute inset-y-0 left-0 overflow-hidden kiro-reasoning-flow-fade",
                 atMax ? "opacity-100" : "opacity-0"
               )}
               style={{ width: `${fillPercent}%` }}
