@@ -10,6 +10,8 @@ export type PersistedRole = "user" | "assistant";
 import type { VisualActionKind } from "@/lib/ai/visual/types";
 /** Durable checkpoint（type-only import 不产生 runtime cycle） */
 import type { PersistedTaskCheckpoint } from "@/lib/ai/computer/checkpoints";
+/** 执行计划（type-only import 不产生 runtime cycle） */
+import type { PersistedExecutionPlan } from "@/lib/ai/computer/plans/types";
 
 export interface PersistedContextRef {
   kind: "course" | "assignment" | "group-project" | "material" | "week";
@@ -185,4 +187,9 @@ export interface KiroConversationRecord {
    * 生命周期与会话记录一致（删会话即删）；单次语义由 used 保证。
    */
   checkpoints?: PersistedTaskCheckpoint[];
+  /**
+   * plan-approve 模式执行计划（旧记录没有 = 无计划，保持现状）。
+   * 生命周期与会话记录一致（删会话即删）；单活跃语义由 status 保证。
+   */
+  executionPlans?: PersistedExecutionPlan[];
 }

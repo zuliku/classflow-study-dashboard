@@ -463,6 +463,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         visualProposalReceipts: chatNow.getVisualProposalReceiptSnapshot(),
         // S-fix durable undo：durable checkpoints 快照随会话落盘（不可落盘的逐个丢弃）
         checkpoints: chatNow.getDurableCheckpoints(),
+        // plan-approve：执行计划快照随会话落盘（非法项过滤）
+        executionPlans: chatNow.getDurablePlans(),
       });
       await saveConversation(record);
       refreshHistory();

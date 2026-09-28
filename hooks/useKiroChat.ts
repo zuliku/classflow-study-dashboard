@@ -39,6 +39,17 @@ import {
   serializeCheckpoints,
   deserializeCheckpoints,
 } from "@/lib/ai/computer/checkpoints";
+import {
+  approvePlan,
+  buildApprovedPlanPromptContext,
+  cancelPlan,
+  getActivePlan,
+  insertProposedPlan,
+  markPlanStepDone,
+  recordPlanDeviation,
+  restoreExecutionPlans,
+} from "@/lib/ai/computer/plans/lifecycle";
+import type { PersistedExecutionPlan } from "@/lib/ai/computer/plans/types";
 import { sessionRuleForRequest, workspaceRuleForRequest } from "@/lib/ai/computer/approval";
 import { appendComputerAuditEntry } from "@/lib/ai/computer/audit";
 import { relocateFile } from "@/lib/ai/computer/filesystem/relocate";
@@ -1068,6 +1079,9 @@ export function useKiroChat({
   const tasksRef = useRef<Map<string, KiroAgentTask>>(new Map());
   const activeTaskRef = useRef<KiroAgentTask | null>(null);
   const checkpointsRef = useRef<Map<string, ComputerTaskCheckpoint>>(new Map());
+  // plan-approve 模式：执行计划 Runtime（ref 真源 + state 镜像供 UI 订阅；落盘随会话记录）
+  const plansRef = useRef<Map<string, PersistedExecutionPlan>>(new Map());
+  const [executionPlans, setExecutionPlans] = useState<PersistedExecutionPlan[]>([]);
   const pendingExecutionsRef = useRef<Map<string, PendingComputerExecution>>(new Map());
   const oneShotApprovalsRef = useRef<ComputerOneShotApproval[]>([]);
   // Task 状态版本（undo/approval 后递增）：历史保存 snapshot 需要感知（任务状态变化也落盘）
@@ -2059,6 +2073,63 @@ export function useKiroChat({
     [updateTasks, emitToolOutput]
   );
 
+  /**
+   * plan-approve 模式：计划状态机接线（ref 真源 + state 镜像 + 会话记录回写）。
+   * persistPlanMutation 是唯一写入口：纯函数算新态 → ref/state 同步 → 记录回写。
+   * （置于 runComputerToolCall 之前：执行入口的 executor context 依赖 handlePlanProposed。）
+   */
+  const syncPlansFromRef = useCallback(() => {
+    setExecutionPlans(Array.from(plansRef.current.values()));
+    setComputerVersion((v) => v + 1);
+  }, []);
+
+  const persistPlanMutation = useCallback(
+    async (
+      mutate: (plans: PersistedExecutionPlan[]) => { plans: PersistedExecutionPlan[]; ok: boolean }
+    ): Promise<boolean> => {
+      const { plans, ok } = mutate(Array.from(plansRef.current.values()));
+      if (!ok) return false;
+      plansRef.current = new Map(plans.map((p) => [p.planId, p]));
+      syncPlansFromRef();
+      // 状态写回会话记录（刷新后状态不断；写回失败不影响内存已生效事实）
+      try {
+        const conversationId = conversationIdRef.current;
+        if (conversationId) {
+          const record = await getConversation(conversationId);
+          if (record) {
+            await saveConversation({
+              ...record,
+              executionPlans: restoreExecutionPlans(plans),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        }
+      } catch {
+        // 下次 persistCurrent 补齐
+      }
+      return true;
+    },
+    [syncPlansFromRef]
+  );
+
+  /**
+   * plan-approve 模式：propose_execution_plan 的 Browser sink（executor context 注入）。
+   * 归属会话不一致（turn 中途切会话）→ 丢弃（计划只活在提案时的会话）。
+   */
+  const handlePlanProposed = useCallback(
+    (plan: PersistedExecutionPlan) => {
+      if (!plan || conversationIdRef.current !== plan.conversationId) {
+        console.warn("kiro plan: dropped proposal for inactive conversation");
+        return;
+      }
+      plansRef.current = new Map(
+        insertProposedPlan(Array.from(plansRef.current.values()), plan).map((p) => [p.planId, p])
+      );
+      syncPlansFromRef();
+    },
+    [syncPlansFromRef]
+  );
+
   /** 执行 Computer Tool Call（onToolCall / approval resume 共用入口） */
   const runComputerToolCall = useCallback(
     async (toolName: string, toolCallId: string, input: unknown) => {
@@ -2132,6 +2203,9 @@ export function useKiroChat({
           liveWorkspaces: useKiroComputerStore.getState().workspaces,
           livePermissionRules: useKiroComputerStore.getState().permissionRules,
           taskId,
+          // plan-approve 模式：propose_execution_plan 的 Browser sink + 归属会话
+          onPlanProposed: handlePlanProposed,
+          planConversationId: conversationIdRef.current ?? "",
           // Computer Use Phase 2：Stop 后 GUI action / observe 一律拒绝执行（Emergency Stop）
           isCancelled: () => stoppedTurnMessageIdRef.current !== null,
           // P5：真实观察截图 → 「最近画面」（UI-only；绝不进入 Tool Output / 模型）
@@ -2163,7 +2237,7 @@ export function useKiroChat({
       }
       applyCompletedAttempt(attempt, toolName, toolCallId, taskId);
     },
-    [buildComputerSnapshot, ensureActiveTask, handleApprovalRequired, applyCompletedAttempt]
+    [buildComputerSnapshot, ensureActiveTask, handleApprovalRequired, applyCompletedAttempt, handlePlanProposed]
   );
 
   /**
@@ -2483,6 +2557,29 @@ export function useKiroChat({
    */
   const getDurableCheckpoints = useCallback(() => {
     return serializeCheckpoints(checkpointsRef.current.values());
+  }, []);
+
+  /** plan-approve：批准计划（UI 入口；A3 负责同步切执行模式 + 冻结范围注入） */
+  const approveExecutionPlan = useCallback(
+    (planId: string) => persistPlanMutation((plans) => approvePlan(plans, planId)),
+    [persistPlanMutation]
+  );
+
+  /** plan-approve：取消计划（proposed/approved/deviated → cancelled） */
+  const cancelExecutionPlan = useCallback(
+    (planId: string) => persistPlanMutation((plans) => cancelPlan(plans, planId)),
+    [persistPlanMutation]
+  );
+
+  /** plan-approve：当前计划的可持久快照（persistCurrent 落盘用；非法项过滤） */
+  const getDurablePlans = useCallback(() => {
+    return restoreExecutionPlans(Array.from(plansRef.current.values()));
+  }, []);
+
+  /** plan-approve：已批准计划的冻结范围文本（A3 发送时注入 prompt；无活跃计划 → ""） */
+  const getApprovedPlanPromptContext = useCallback(() => {
+    const active = getActivePlan(Array.from(plansRef.current.values()));
+    return active ? buildApprovedPlanPromptContext(active) : "";
   }, []);
 
   /**
@@ -3313,6 +3410,9 @@ export function useKiroChat({
       clearPendingApprovalSnapshot();
       activeTaskRef.current = null;
       checkpointsRef.current = new Map();
+      // plan-approve：会话切换/新建时计划 runtime 清空（计划本身随各会话记录持久化）
+      plansRef.current = new Map();
+      setExecutionPlans([]);
       tasksRef.current = new Map();
       setTasksState(new Map());
       computerCountersRef.current = { readCount: 0, mutationCount: 0, terminalCount: 0 };
@@ -3391,6 +3491,12 @@ export function useKiroChat({
       for (const cp of deserializeCheckpoints(record.checkpoints)) {
         checkpointsRef.current.set(cp.taskId, cp);
       }
+      // plan-approve：执行计划注回（严格校验；仅收归属本会话的计划）
+      plansRef.current = new Map();
+      for (const plan of restoreExecutionPlans(record.executionPlans)) {
+        if (plan.conversationId === record.id) plansRef.current.set(plan.planId, plan);
+      }
+      setExecutionPlans(Array.from(plansRef.current.values()));
       restoredActionsRef.current = actionsMap;
       restoredAttachmentsRef.current = attachmentsMap;
       restoredSourcesRef.current = sourcesMap;
@@ -3740,6 +3846,15 @@ export function useKiroChat({
     undoComputerTask,
     /** S-fix durable undo：当前 checkpoints 的可持久快照（persistCurrent 落盘用） */
     getDurableCheckpoints,
+    /** plan-approve：执行计划列表（ref 镜像；卡片/偏离门消费） */
+    executionPlans,
+    /** plan-approve：批准/取消计划（UI 入口） */
+    approveExecutionPlan,
+    cancelExecutionPlan,
+    /** plan-approve：当前计划的可持久快照（persistCurrent 落盘用） */
+    getDurablePlans,
+    /** plan-approve：已批准计划的冻结范围文本（发送时注入 prompt） */
+    getApprovedPlanPromptContext,
     /** Computer Task 状态版本（历史保存 signal：undo/approval 后变化） */
     computerVersion,
     /** Task B V1.2：Visual Pending Continuation 生命周期（「继续处理」建立；新 Proposal / 放弃时清除） */

@@ -14,6 +14,7 @@ import {
   PersistedVisualProposalView,
 } from "@/lib/ai/history/types";
 import type { PersistedTaskCheckpoint } from "@/lib/ai/computer/checkpoints";
+import type { PersistedExecutionPlan } from "@/lib/ai/computer/plans/types";
 import { VisualActionProposal } from "@/lib/ai/visual/types";
 import { sanitizeVisualProposalReceipt, VisualProposalReceiptView } from "@/lib/ai/visual/receipt";
 import { KiroContextRef } from "@/lib/ai/context/types";
@@ -163,6 +164,8 @@ export function sanitizeConversation(input: {
   projectId?: string | null;
   /** S-fix 可持久 Checkpoint（已由调用方序列化为 durable subset；空不写） */
   checkpoints?: PersistedTaskCheckpoint[];
+  /** plan-approve 模式执行计划（调用方已做生命周期维护；空不写） */
+  executionPlans?: PersistedExecutionPlan[];
   /** Visual Intake V1.4：Runtime receipt 快照（只含展示事实，绝无 undo）；live Proposal 合并用 */
   visualProposalReceipts?: ReadonlyMap<string, VisualProposalReceiptView> | null;
 }): KiroConversationRecord {
@@ -250,6 +253,8 @@ export function sanitizeConversation(input: {
     ...(input.projectId ? { projectId: input.projectId } : {}),
     // S-fix：durable checkpoints 非空才写入（旧记录/无 Undo 能力保持无字段）
     ...(input.checkpoints && input.checkpoints.length > 0 ? { checkpoints: input.checkpoints } : {}),
+    // plan-approve：执行计划非空才写入（旧记录/无计划保持无字段）
+    ...(input.executionPlans && input.executionPlans.length > 0 ? { executionPlans: input.executionPlans } : {}),
   };
 }
 
