@@ -55,6 +55,8 @@ export function KiroConversation({
   onUndoComputerTask,
   onApprovePlan,
   onCancelPlan,
+  emptyAnswerIds,
+  onRegenerateAnswer,
 }: {
   messages: KiroChatMessageView[];
   error: AIError | null;
@@ -85,6 +87,10 @@ export function KiroConversation({
   /** plan-approve：批准 / 取消执行计划（卡片入口） */
   onApprovePlan?: (planId: string) => void;
   onCancelPlan?: (planId: string) => void;
+  /** 空终答安全网：已结算业务工具 + 零正文的消息 id（Row 取布尔，memo 安全） */
+  emptyAnswerIds?: ReadonlySet<string>;
+  /** 空终答追答（纯文本重跑；零工具） */
+  onRegenerateAnswer?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -272,6 +278,11 @@ export function KiroConversation({
                   onUndoComputerTask={onUndoComputerTask}
                   onApprovePlan={onApprovePlan}
                   onCancelPlan={onCancelPlan}
+                  // 空终答追答只出现在 settled 的最后一条 assistant 行
+                  showRegenerateAnswer={
+                    !!emptyAnswerIds?.has(m.id) && idx === lastAssistantIndex && !turnInFlight
+                  }
+                  onRegenerateAnswer={onRegenerateAnswer}
                 />
               </div>
             ))}
@@ -354,6 +365,8 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onUndoComputerTask,
   onApprovePlan,
   onCancelPlan,
+  showRegenerateAnswer,
+  onRegenerateAnswer,
 }: {
   view: KiroChatMessageView;
   allMessages?: KiroChatMessageView[];
@@ -373,6 +386,10 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   /** plan-approve：批准 / 取消执行计划（卡片入口） */
   onApprovePlan?: (planId: string) => void;
   onCancelPlan?: (planId: string) => void;
+  /** 空终答追答按钮显隐（父行已按 settled 末条 + 空终答判定，仅布尔保 memo） */
+  showRegenerateAnswer?: boolean;
+  /** 空终答追答（纯文本重跑；零工具） */
+  onRegenerateAnswer?: () => void;
 }) {
   // Hooks 必须在 assistant 占位由空变为可见内容前后保持同一顺序。
   const actionSummaries = React.useMemo(
@@ -447,6 +464,8 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         executionPlans={view.executionPlans}
         onApprovePlan={onApprovePlan}
         onCancelPlan={onCancelPlan}
+        showRegenerateAnswer={showRegenerateAnswer}
+        onRegenerateAnswer={onRegenerateAnswer}
         approval={approval}
         turnInFlight={runLive}
         desktopPaused={desktopPaused}

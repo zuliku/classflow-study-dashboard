@@ -9,6 +9,7 @@
  */
 
 import { KIRO_MUTATING_TOOL_NAMES } from "@/lib/ai/tools/mutating";
+import { isKiroFinalAnswerToolName } from "@/lib/ai/tools/finalAnswer";
 
 export type UserMessageEditBlockReason =
   | "turn-in-flight"
@@ -24,6 +25,32 @@ export function messageHasMutatingToolCalls(m: { parts?: unknown[] }): boolean {
     const name = p.type.slice("tool-".length);
     return (KIRO_MUTATING_TOOL_NAMES as string[]).includes(name);
   });
+}
+
+/**
+ * 空终答检测（fix：思考吃光配额 → finish=length → 工具成功但零正文）：
+ * assistant 消息含 ≥1 个已结算的业务工具调用（终答边界信号除外）但正文为空。
+ * 只看 parts 事实（streaming 中不判定，由调用方保证 settled 后再调）。
+ */
+export function messageNeedsAnswerRetry(m: { role?: string; parts?: unknown[] }): boolean {
+  if (m.role !== "assistant") return false;
+  const parts = (m.parts ?? []) as { type?: string; text?: string; state?: string }[];
+  let hasSettledBusinessTool = false;
+  let textLen = 0;
+  for (const p of parts) {
+    if (typeof p?.type !== "string") continue;
+    if (p.type === "text") {
+      textLen += p.text?.length ?? 0;
+      continue;
+    }
+    if (!p.type.startsWith("tool-")) continue;
+    if (isKiroFinalAnswerToolName(p.type.slice("tool-".length))) continue;
+    // 已结算输出（output-available / output-error）才算；input 中不算（turn 未结束）
+    if (p.state === "output-available" || p.state === "output-error") {
+      hasSettledBusinessTool = true;
+    }
+  }
+  return hasSettledBusinessTool && textLen === 0;
 }
 
 /**

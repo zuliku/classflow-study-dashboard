@@ -58,6 +58,8 @@ export function KiroMessage({
   onUndoComputerTask,
   onApprovePlan,
   onCancelPlan,
+  showRegenerateAnswer,
+  onRegenerateAnswer,
   onRetry,
 }: {
   content?: string;
@@ -100,6 +102,10 @@ export function KiroMessage({
   executionPlans?: PersistedExecutionPlan[];
   onApprovePlan?: (planId: string) => void;
   onCancelPlan?: (planId: string) => void;
+  /** 空终答追答按钮显隐（父行已判定 settled 末条 + 空终答） */
+  showRegenerateAnswer?: boolean;
+  /** 空终答追答（纯文本重跑；零工具） */
+  onRegenerateAnswer?: () => void;
   /** 重新生成（由 Conversation 注入稳定 callback，避免每行订阅 Session Context） */
   onRetry?: () => void;
 }) {
@@ -324,6 +330,20 @@ export function KiroMessage({
           onCancel={onCancelPlan}
         />
       ))}
+      {/* 空终答安全网：已结算业务工具 + 零正文 → 纯文本追答（零工具重跑） */}
+      {showRegenerateAnswer && onRegenerateAnswer && (
+        <div className="flex items-center gap-2 pt-1">
+          <span className="text-[10px] text-sandrift">模型未返回正文</span>
+          <button
+            data-testid="kiro-regenerate-answer"
+            onClick={onRegenerateAnswer}
+            className="flex items-center gap-1 px-2.5 h-7 rounded-lg text-[11px] font-bold text-charcoal bg-alabaster hover:bg-alba transition-colors"
+          >
+            <RefreshCw className="w-3 h-3" aria-hidden="true" />
+            重新生成回答
+          </button>
+        </div>
+      )}
       {children}
     </KiroAssistantShell>
   );

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   getUserMessageEditBlockReason,
   messageHasMutatingToolCalls,
+  messageNeedsAnswerRetry,
   truncateBeforeEditedUserMessage,
 } from "@/lib/ai/history/messageEditing";
 
@@ -29,6 +30,32 @@ describe("messageHasMutatingToolCalls", () => {
   });
 });
 
+describe("messageNeedsAnswerRetry（空终答检测）", () => {
+  const tool = (name: string, state = "output-available") => ({ type: `tool-${name}`, state });
+  const text = (t: string) => ({ type: "text", text });
+  it("已结算业务工具 + 零正文 → true（读工具也算，同属无回答 bug 类）", () => {
+    expect(
+      messageNeedsAnswerRetry({ role: "assistant", parts: [tool("search_assignments")] })
+    ).toBe(true);
+    expect(
+      messageNeedsAnswerRetry({ role: "assistant", parts: [tool("create_text_file", "output-error")] })
+    ).toBe(true);
+  });
+  it("有正文 / 无工具 / 工具未结算 / 终答边界 / 非 assistant → false", () => {
+    expect(
+      messageNeedsAnswerRetry({ role: "assistant", parts: [tool("search_assignments"), text("今天有 3 个任务")] })
+    ).toBe(false);
+    expect(messageNeedsAnswerRetry({ role: "assistant", parts: [text("hi")] })).toBe(false);
+    expect(messageNeedsAnswerRetry({ role: "assistant", parts: [] })).toBe(false);
+    expect(
+      messageNeedsAnswerRetry({ role: "assistant", parts: [{ type: "tool-search_assignments", state: "input-streaming" }] })
+    ).toBe(false);
+    expect(
+      messageNeedsAnswerRetry({ role: "assistant", parts: [{ type: "tool-begin_final_answer", state: "output-available" }] })
+    ).toBe(false);
+    expect(messageNeedsAnswerRetry({ role: "user", parts: [tool("search_assignments")] })).toBe(false);
+  });
+});
 describe("getUserMessageEditBlockReason", () => {
   const check = (patch: Partial<Parameters<typeof getUserMessageEditBlockReason>[0]>) =>
     getUserMessageEditBlockReason({

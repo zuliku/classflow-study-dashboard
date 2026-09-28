@@ -138,6 +138,7 @@ import { getConversation, saveConversation } from "@/lib/ai/history/db";
 import {
   getUserMessageEditBlockReason,
   messageHasMutatingToolCalls,
+  messageNeedsAnswerRetry,
   truncateBeforeEditedUserMessage,
   UserMessageEditBlockReason,
   classifyTurnToolScope,
@@ -3526,6 +3527,40 @@ export function useKiroChat({
     })();
   }, [enabled, pushToast]);
 
+  /**
+   * 空终答追答（fix：思考吃光配额 → 工具成功但零正文）：
+   * 仅当最后一条 assistant 经纯函数判定为“有已结算业务工具 + 零正文”时允许；
+   * server 以 textOnlyAnswer 零工具重跑，写工具不可能被重执行（含 Write 的轮次同样安全）。
+   * Defense in depth：UI 误调用（非空终答）直接 toast 拒绝，不发送请求。
+   */
+  const regenerateAnswer = useCallback(() => {
+    if (!enabled) return;
+    const c = latestChatRef.current;
+    const lastAssistant = [...c.messages].reverse().find((m) => m.role === "assistant");
+    if (!lastAssistant || !messageNeedsAnswerRetry(lastAssistant)) {
+      pushToast({ message: "当前无需重新生成回答。", type: "info" });
+      return;
+    }
+    readCounterRef.current = 0;
+    documentReadCounterRef.current = 0;
+    writeCounterRef.current = 0;
+    limitReachedRef.current = false;
+    resetDocumentFailureFuse();
+    // 追答同样重新铸造 invocation（route 强制 INVOCATION_REQUIRED；旧 turn 的已清空/过期）
+    void (async () => {
+      try {
+        const invBridge = (window as unknown as { classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } } }).classflowDesktop?.invocation;
+        if (invBridge) {
+          const { invocationId } = (await invBridge.beginLocal()) as { invocationId: string };
+          activeInvocationIdRef.current = invocationId ?? null;
+        }
+      } catch {
+        activeInvocationIdRef.current = null;
+      }
+      void latestChatRef.current.regenerate({ body: { ...requestBody(), textOnlyAnswer: true } });
+    })();
+  }, [enabled, pushToast]);
+
   /** stale approval / 本会话 task 状态清理（newChat / loadConversation 共用；不清理已完成任务展示？） */
   const clearComputerSessionState = useCallback(
     (keepRestored: boolean) => {
@@ -3967,6 +4002,8 @@ export function useKiroChat({
     turnIntentFrozen,
     send,
     retry,
+    /** 空终答追答（纯文本重跑；零工具，写轮次同样安全） */
+    regenerateAnswer,
     stop: handleStop,
     newChat,
     loadConversation,

@@ -437,14 +437,24 @@ export async function handleChat(req: Request) {
     ? ""
     : "\n\n# 工具暴露（本轮）\n本轮当前仅暴露只读与基础工具；你发起任意业务工具调用后完整工具集自动开放（含文档创建/批量操作/桌面操作）。如需改写操作，先用只读工具确认目标。";
 
+  // 空终答安全网：纯文本追答（客户端 regenerateAnswer）：零工具 + 追答指引；
+  // 历史工具结果仍在消息中，模型只作答不执行。body 标记必须严格 === true。
+  const textOnlyAnswer = (body as Record<string, unknown>).textOnlyAnswer === true;
+  const textOnlySuffix = textOnlyAnswer
+    ? "\n\n# 纯文本追答\n本轮工具调用已全部完成，只根据对话历史中的已有工具结果作答，不要调用任何工具。"
+    : "";
+
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${tierGuidanceSection}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
-    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + tierGuidanceSection + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${tierGuidanceSection}${textOnlySuffix}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + tierGuidanceSection + textOnlySuffix + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
       // Task 14：Server-side web_search（enabled 时追加；Server Key 不下发 Browser）
-      const assembledTools = assembleKiroToolsForRequest({
+      // 空终答追答：一律零工具（安全：写工具不可能被重执行）
+      const assembledTools = textOnlyAnswer
+        ? {}
+        : assembleKiroToolsForRequest({
         webSearchEnabled: parsed.webSearchConfig?.enabled ?? false,
         credential: {
           mode: parsed.webSearchConfig?.credentialMode ?? "server",
