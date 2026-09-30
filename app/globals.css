@@ -1474,6 +1474,8 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     border-radius: 4px;
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
+    /* P2：菜单展开时对应 token 描边加重走 control 档过渡（不改变布局） */
+    transition: box-shadow var(--kiro-motion-control, var(--motion-fast)) var(--ease-standard);
   }
   /* / 命令：pastel-mint（与 Slash 菜单 chip 同色系，一眼即指令） */
   .kiro-prompt-token-slash {

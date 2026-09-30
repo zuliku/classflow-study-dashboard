@@ -27,6 +27,10 @@ import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { KiroAgentMode, KiroWorkspaceMeta } from "@/lib/ai/computer/types";
 import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
 import { PopoverPanel } from "@/components/ui/Popover";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 import { filterSlashSkills, moveSlashIndex, parseSlashQuery, toSlashSkillOptions } from "@/lib/ai/skills/slashMenu";
 import { tokenizeComposerPrompt } from "@/lib/ai/composer/promptHighlight";
@@ -165,6 +169,51 @@ export function KiroComposer({
   const [mentionOptions, setMentionOptions] = useState<MentionOption[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionActive, setMentionActive] = useState(0);
+  // P1 对称进退：enter 走既有 keyframe（slash/mention/shelf），exit 走 transition +
+  // usePresence 延迟卸载；时长全部引用 Motion Contract 常量（测试有源码护栏）。
+  const slashPresence = usePresence(slashOpen, MOTION_EXIT_MS.fast);
+  const mentionPresence = usePresence(mentionOpen, MOTION_EXIT_MS.fast);
+  const dragPresence = usePresence(dragOver, MOTION_EXIT_MS.fast);
+  // 附件 chip 原位退出：点击 × 先 collapse（160ms），再真正删除；
+  // 发送清空走父级即时过滤（不保留退出快照），顺序天然保留。
+  const reducedMotion = useEffectiveReducedMotion();
+  const [leavingAttachmentIds, setLeavingAttachmentIds] = useState<ReadonlySet<string>>(new Set());
+  const leavingTimersRef = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      leavingTimersRef.current.forEach((t) => window.clearTimeout(t));
+      leavingTimersRef.current = [];
+    },
+    []
+  );
+  const handleRemoveAttachment = (id: string) => {
+    if (leavingAttachmentIds.has(id)) return;
+    if (reducedMotion) {
+      onRemoveAttachment(id);
+      return;
+    }
+    setLeavingAttachmentIds((prev) => new Set(prev).add(id));
+    const timer = window.setTimeout(() => {
+      leavingTimersRef.current = leavingTimersRef.current.filter((t) => t !== timer);
+      setLeavingAttachmentIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      onRemoveAttachment(id);
+    }, MOTION_EXIT_MS.panel);
+    leavingTimersRef.current.push(timer);
+  };
+  // 附件架： chips 全走光且退出播完才卸载（避免截断 chip collapse）。
+  const shelfPresence = usePresence(attachments.length > 0, MOTION_EXIT_MS.base);
+  const [commitPulse, setCommitPulse] = useState(false);
+  const commitTimerRef = useRef(0);
+  useEffect(
+    () => () => {
+      window.clearTimeout(commitTimerRef.current);
+    },
+    []
+  );
   const submittingRef = useRef(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const addRef = useRef<HTMLDivElement | null>(null);
@@ -246,6 +295,15 @@ export function KiroComposer({
   //   local submitting 不参与该锁（preparingSend 已覆盖同一窗口；intent 冻结后立即解锁）
   const currentTurnScopeLocked = turnInFlight || submitting || !!preparingSend;
   const nextTurnPreferencesLocked = !!preparingSend && !turnIntentFrozen;
+  // 提示条对称进退（intent 建议 / 隐私提示常被逐字输入触发开关，必须有 exit）。
+  const intentRowOpen =
+    hasReadyImages && visionEnabled && !hasProcessing && !currentTurnScopeLocked && text.trim().length === 0;
+  const intentPresence = usePresence(intentRowOpen, MOTION_EXIT_MS.fast);
+  const visionWarningOpen = (hasImages && !visionEnabled) || scannedBlocked;
+  const warningPresence = usePresence(visionWarningOpen, MOTION_EXIT_MS.fast);
+  const preparingPresence = usePresence(!!preparingVision, MOTION_EXIT_MS.fast);
+  const privacyOpen = hasImages && !visualPrivacyNoticeSeen;
+  const privacyPresence = usePresence(privacyOpen, MOTION_EXIT_MS.fast);
 
   // Turn scope 锁定期间：scope 类条目在 Add Menu 内部禁用（不整单锁定——联网搜索是下一 Turn preference）；
   // slash 菜单属于当前输入，同样关闭。Access / Model 菜单是 preference 或状态摘要，保持可用。
@@ -327,6 +385,10 @@ export function KiroComposer({
         return;
       }
       setText("");
+      // P3 发送时刻：surface 轻 press（snap 档）衔接内容清空，发送有“落点”而不只是消失。
+      setCommitPulse(true);
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = window.setTimeout(() => setCommitPulse(false), MOTION_MS.snap);
       requestAnimationFrame(() => {
         if (taRef.current) {
           taRef.current.style.height = "auto";
@@ -491,9 +553,16 @@ export function KiroComposer({
       className={cn("shrink-0 relative z-20", compact && "px-3 pb-3")}
       data-testid="kiro-composer"
     >
-      {/* 拖拽提示：覆盖 Composer Surface（不覆盖整个 Workspace），轻量 */}
-      {dragOver && (
-        <div className="absolute inset-0 z-40 rounded-2xl border-2 border-dashed border-line-strong bg-surface/90 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+      {/* 拖拽提示：覆盖 Composer Surface（不覆盖整个 Workspace），对称淡入淡出 */}
+      {dragPresence.mounted && (
+        <div
+          className={cn(
+            "absolute inset-0 z-40 rounded-2xl border-2 border-dashed border-line-strong bg-surface/90 backdrop-blur-[1px] flex items-center justify-center pointer-events-none transition-[opacity,transform]",
+            dragPresence.visible
+              ? "opacity-100 scale-100 duration-[var(--motion-fast)]"
+              : "opacity-0 scale-[0.98] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+          )}
+        >
           <span className="text-xs font-bold text-charcoal">释放以添加到 Kiro</span>
         </div>
       )}
@@ -514,16 +583,21 @@ export function KiroComposer({
           className={cn(
             "bg-surface border border-line-strong rounded-2xl shadow-subtle",
             "focus-within:border-sandrift",
-            "transition-[border-color] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+            "transition-[border-color,transform] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+            // P3 发送时刻轻 press（只响应提交瞬间，不随输入改变形状）
+            commitPulse && "scale-[0.995]",
             introActive && "kiro-composer-intro"
           )}
         >
-          {/* Attachment Shelf：无附件时完全不存在（BUG-G8：入场 structure-settle） */}
-          {attachments.length > 0 && (
+          {/* Attachment Shelf：对称进退（入场 structure-settle，退场 fade + 上收） */}
+          {shelfPresence.mounted && (
             <div
               className={cn(
-                "kiro-structure-settle bg-alabaster/40 border-b border-line-soft rounded-t-2xl",
-                compact ? "px-2.5 py-1.5" : "px-3 py-2"
+                "bg-alabaster/40 border-b border-line-soft rounded-t-2xl",
+                compact ? "px-2.5 py-1.5" : "px-3 py-2",
+                shelfPresence.visible
+                  ? "kiro-structure-settle"
+                  : "opacity-0 -translate-y-[2px] pointer-events-none transition-[opacity,transform] duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]"
               )}
             >
               {/* Tray：单行横向滚动，附件再多也不撑高 Composer */}
@@ -532,17 +606,29 @@ export function KiroComposer({
                 data-testid="kiro-attachments"
               >
                 {attachments.map((a) => (
-                  <KiroAttachmentChip
+                  <ExitCollapse
                     key={a.id}
-                    attachment={a}
-                    onRemove={onRemoveAttachment}
-                    onRetry={onRetryAttachment}
-                    onSaveToCourse={onSaveAttachmentToCourse}
-                    disabled={currentTurnScopeLocked}
-                  />
+                    axis="horizontal"
+                    exiting={leavingAttachmentIds.has(a.id)}
+                  >
+                    <KiroAttachmentChip
+                      attachment={a}
+                      onRemove={handleRemoveAttachment}
+                      onRetry={onRetryAttachment}
+                      onSaveToCourse={onSaveAttachmentToCourse}
+                      disabled={currentTurnScopeLocked}
+                    />
+                  </ExitCollapse>
                 ))}
-                {(hasImages && !visionEnabled) || scannedBlocked ? (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-1.5 whitespace-nowrap">
+                {warningPresence.mounted && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-1.5 whitespace-nowrap transition-[opacity,transform]",
+                      warningPresence.visible
+                        ? "opacity-100 duration-[var(--motion-fast)]"
+                        : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+                    )}
+                  >
                     {scannedBlocked ? "扫描型 PDF 需要支持图片理解的模型" : "当前模型不支持图片理解"}
                     <button
                       onClick={() => setOpenMenu("model")}
@@ -551,18 +637,33 @@ export function KiroComposer({
                       切换模型
                     </button>
                   </span>
-                ) : null}
-                {preparingVision && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-sandrift px-1.5 whitespace-nowrap">
+                )}
+                {preparingPresence.mounted && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 text-[11px] font-semibold text-sandrift px-1.5 whitespace-nowrap transition-[opacity,transform]",
+                      preparingPresence.visible
+                        ? "opacity-100 duration-[var(--motion-fast)]"
+                        : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+                    )}
+                  >
                     <Loader2 className="w-3 h-3 animate-spin" />
                     正在准备扫描 PDF…
                   </span>
                 )}
               </div>
               {/* Task B V1.1：截图就绪（ready + vision + 无 processing）+ 输入为空时显示 intent chips。
-                  点击只填 prompt（不直接 Send；发送必须走 canonical submit() 的 canSend/vision gate/防重复） */}
-              {hasReadyImages && visionEnabled && !hasProcessing && !currentTurnScopeLocked && text.trim().length === 0 && (
-                <div className="flex items-center gap-1.5 pt-1.5">
+                  点击只填 prompt（不直接 Send；发送必须走 canonical submit() 的 canSend/vision gate/防重复）；
+                  随输入逐字开关，对称淡入淡出 */}
+              {intentPresence.mounted && (
+                <div
+                  className={cn(
+                    "flex items-center gap-1.5 pt-1.5 transition-[opacity,transform]",
+                    intentPresence.visible
+                      ? "opacity-100 duration-[var(--motion-fast)]"
+                      : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+                  )}
+                >
                   {["处理截图通知", "整理任务与 DDL", "识别课程变动"].map((label) => (
                     <button
                       key={label}
@@ -587,13 +688,16 @@ export function KiroComposer({
             </div>
           )}
 
-          {/* Slash Skill Menu：仅「输入中的命令」展开；无演示文案；选中项高亮 + 键盘导航 */}
-          {slashOpen && (
+          {/* Slash Skill Menu：仅「输入中的命令」展开；无演示文案；选中项高亮 + 键盘导航；对称进退 */}
+          {slashPresence.mounted && (
             <div
               data-testid="skill-slash-menu"
               className={cn(
-                "kiro-slash-enter mx-2.5 mt-2.5 mb-0.5 bg-surface border border-line rounded-xl shadow-subtle overflow-hidden",
-                compact && "mx-2"
+                "mx-2.5 mt-2.5 mb-0.5 bg-surface border border-line rounded-xl shadow-subtle overflow-hidden origin-bottom-left",
+                compact && "mx-2",
+                slashPresence.visible
+                  ? "kiro-slash-enter"
+                  : "opacity-0 translate-y-[6px] scale-[0.98] pointer-events-none transition-[opacity,transform] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
               )}
             >
               <div
@@ -633,12 +737,15 @@ export function KiroComposer({
           {/* @ mention 菜单：输入尾部 @query 即展开（专用 kiro-mention-enter；
               与 / 的 kiro-slash-enter 区分：@ 走底部中央柔附着 + 选项 stagger，
               / 走左下角指令弹出；选中回填 @label + 写入 Manual Context chip） */}
-          {mentionOpen && (
+          {mentionPresence.mounted && (
             <div
               data-testid="kiro-mention-menu"
               className={cn(
-                "kiro-mention-enter mx-2.5 mt-2.5 mb-0.5 bg-surface border border-line rounded-xl shadow-subtle overflow-hidden",
-                compact && "mx-2"
+                "mx-2.5 mt-2.5 mb-0.5 bg-surface border border-line rounded-xl shadow-subtle overflow-hidden origin-bottom",
+                compact && "mx-2",
+                mentionPresence.visible
+                  ? "kiro-mention-enter"
+                  : "opacity-0 translate-y-[4px] scale-[0.99] pointer-events-none transition-[opacity,transform] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
               )}
             >
               <div
@@ -733,6 +840,8 @@ export function KiroComposer({
                 aria-label="Ask Kiro"
                 className={cn(
                   "relative w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
+                  // P2：autoGrow 高度 px 跳变走 control 档过渡（输入增高不再硬跳；reduced-motion 全局兜底）
+                  "transition-[height] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
                   // Computer Agent ON：输入区稳定最低高度（desktop 64 / compact 44），不随 context strip 压缩
                   computerEnabled && (compact ? "min-h-[44px]" : "min-h-[64px]")
                 )}
@@ -860,11 +969,16 @@ export function KiroComposer({
           </div>
         ) : attachments.length > 0 ? (
           <div className={cn("mt-1.5 space-y-1", compact ? "px-0" : "px-0.5")}>
-            {/* Task B V1.1：首次添加图片轻提示，显式「知道了」后才不再显示（非 Dialog） */}
-            {hasImages && !visualPrivacyNoticeSeen && (
+            {/* Task B V1.1：首次添加图片轻提示，显式「知道了」后才不再显示（非 Dialog）；对称淡入淡出 */}
+            {privacyPresence.mounted && (
               <p
                 data-testid="visual-privacy-notice"
-                className="flex items-center gap-2 text-[10px] text-sandrift"
+                className={cn(
+                  "flex items-center gap-2 text-[10px] text-sandrift transition-[opacity,transform]",
+                  privacyPresence.visible
+                    ? "opacity-100 duration-[var(--motion-fast)]"
+                    : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+                )}
               >
                 <span>图片仅用于当前 Kiro 对话，不会自动保存到课程资料。</span>
                 <button

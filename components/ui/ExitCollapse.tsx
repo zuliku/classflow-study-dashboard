@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
  * - normal：grid-rows-1fr + opacity-100（首次 render 不播放 entry）。
  * - exiting：grid-rows-0fr + opacity-0 + pointer-events-none + inner inert（不可 Tab 聚焦），
  *   exit = --motion-exit-panel（160ms，与 useExitPresenceList 默认 snapshot 保留时长同源一致）。
+ * - axis="horizontal"：横向折叠（grid-cols-1fr→0fr；附件 tray / chip 行），纵向语义不变。
  * - 只做 exit；enter / presence 由调用方（useEnterOnAdd / useExitPresenceList）负责。
  * - Reduced Motion：全局 data-motion-effective 会把 transition 近即时化（无需组件内额外处理）。
  */
@@ -19,6 +20,8 @@ export interface ExitCollapseProps {
   children: React.ReactNode;
   className?: string;
   innerClassName?: string;
+  /** 折叠方向：vertical（默认，行列表）/ horizontal（chip 行 / tray） */
+  axis?: "vertical" | "horizontal";
 }
 
 export function ExitCollapse({
@@ -26,6 +29,7 @@ export function ExitCollapse({
   children,
   className,
   innerClassName,
+  axis = "vertical",
 }: ExitCollapseProps) {
   const innerRef = useRef<HTMLDivElement | null>(null);
 
@@ -36,18 +40,31 @@ export function ExitCollapse({
     else el.removeAttribute("inert");
   }, [exiting]);
 
+  const horizontal = axis === "horizontal";
+
   return (
     <div
       data-state={exiting ? "exiting" : "present"}
+      data-axis={axis}
       className={cn(
-        "grid transition-[grid-template-rows,opacity] duration-[var(--motion-exit-panel)] ease-[var(--ease-standard)]",
+        "grid ease-[var(--ease-standard)]",
+        horizontal
+          ? "transition-[grid-template-columns,opacity] duration-[var(--motion-exit-panel)]"
+          : "transition-[grid-template-rows,opacity] duration-[var(--motion-exit-panel)]",
         exiting
-          ? "grid-rows-[0fr] opacity-0 pointer-events-none"
-          : "grid-rows-[1fr] opacity-100",
+          ? horizontal
+            ? "grid-cols-[0fr] opacity-0 pointer-events-none"
+            : "grid-rows-[0fr] opacity-0 pointer-events-none"
+          : horizontal
+            ? "grid-cols-[1fr] opacity-100"
+            : "grid-rows-[1fr] opacity-100",
         className
       )}
     >
-      <div ref={innerRef} className={cn("min-h-0 overflow-hidden", innerClassName)}>
+      <div
+        ref={innerRef}
+        className={cn(horizontal ? "min-w-0 overflow-hidden" : "min-h-0 overflow-hidden", innerClassName)}
+      >
         {children}
       </div>
     </div>

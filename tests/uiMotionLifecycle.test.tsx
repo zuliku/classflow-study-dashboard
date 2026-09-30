@@ -236,6 +236,62 @@ describe("useExitPresenceList ↔ ExitCollapse contract", () => {
     const wrappers = container.querySelectorAll<HTMLElement>("div > div");
     expect(Array.from(wrappers).some((d) => d.hasAttribute("inert"))).toBe(true);
   });
+
+  it("ExitCollapse horizontal：chip 行横向折叠（grid-cols + min-w-0）", () => {
+    function HProbe({ exiting }: { exiting: boolean }) {
+      return (
+        <ExitCollapse axis="horizontal" exiting={exiting}>
+          <span>chip</span>
+        </ExitCollapse>
+      );
+    }
+    const { rerender, container } = render(<HProbe exiting={false} />);
+    const root = container.firstElementChild!;
+    expect(root.getAttribute("data-axis")).toBe("horizontal");
+    expect(root.className).toContain("grid-cols-[1fr]");
+    expect(root.className).toContain("duration-[var(--motion-exit-panel)]");
+    rerender(<HProbe exiting />);
+    expect(root.getAttribute("data-state")).toBe("exiting");
+    expect(root.className).toContain("grid-cols-[0fr]");
+    expect(root.className).toContain("opacity-0");
+  });
+
+  it("leaving 态删除：160ms 后才真正 onRemove（顺序天然保留）", () => {
+    const onRemove = vi.fn();
+    function LeavingProbe({ ids }: { ids: string[] }) {
+      const [leaving, setLeaving] = React.useState<ReadonlySet<string>>(new Set());
+      const remove = (id: string) => {
+        if (leaving.has(id)) return;
+        setLeaving((prev) => new Set(prev).add(id));
+        setTimeout(() => onRemove(id), MOTION_EXIT_MS.panel);
+      };
+      return (
+        <ul>
+          {ids.map((id) => (
+            <li key={id}>
+              <ExitCollapse axis="horizontal" exiting={leaving.has(id)}>
+                <button data-testid={`rm-${id}`} onClick={() => remove(id)}>
+                  {id}
+                </button>
+              </ExitCollapse>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    const { container, queryByTestId } = render(<LeavingProbe ids={["a", "b", "c"]} />);
+    act(() => {
+      fireEvent.click(queryByTestId("rm-b")!);
+    });
+    // 原位进入 exiting（a/b/c 顺序不变），onRemove 尚未调用
+    expect(Array.from(container.querySelectorAll("li")).map((li) => li.textContent)).toEqual(["a", "b", "c"]);
+    expect(container.querySelector('[data-state="exiting"]')).not.toBeNull();
+    expect(onRemove).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(MOTION_EXIT_MS.panel);
+    });
+    expect(onRemove).toHaveBeenCalledWith("b");
+  });
 });
 
 describe("UISelect lifecycle（共享 usePresence）", () => {

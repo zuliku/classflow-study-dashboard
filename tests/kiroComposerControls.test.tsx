@@ -509,6 +509,32 @@ describe("Kiro Composer — 回归", () => {
     await flush();
     expect(handlers.onSend).toHaveBeenCalledWith("你好");
   });
+
+  it("附件 chip 移除：先原位 collapse，播完才真正删除（顺序不变）", async () => {
+    const rm = vi.fn();
+    await renderComposer({
+      attachments: [
+        { id: "a1", source: "local", kind: "text", name: "a.txt", status: "ready", size: 10 },
+        { id: "a2", source: "local", kind: "text", name: "b.txt", status: "ready", size: 10 },
+      ],
+      onRemoveAttachment: rm,
+    });
+    const chips = () =>
+      Array.from(container!.querySelectorAll('[data-testid="kiro-attachment-chip"]'));
+    expect(chips()).toHaveLength(2);
+
+    await click('[aria-label="移除附件 a.txt"]');
+    // 未立即删除：chip 原位进入 exiting（顺序不变），onRemove 尚未调用
+    expect(rm).not.toHaveBeenCalled();
+    expect(chips()).toHaveLength(2);
+    expect(chips()[0].textContent).toContain("a.txt");
+    expect(container!.querySelector('[data-state="exiting"]')).not.toBeNull();
+    // 退出播完（panel 160ms，真时钟）才真正删除
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 220));
+    });
+    expect(rm).toHaveBeenCalledWith("a1");
+  });
 });
 
 describe("Kiro Composer — @ mention（对标 Slash）", () => {
@@ -544,7 +570,13 @@ describe("Kiro Composer — @ mention（对标 Slash）", () => {
     );
     const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     expect(ta.value).toBe("帮我看下@中级计量经济学（王老师） ");
-    // 尾随空格 = 完成态，不再弹出
+    // 尾随空格 = 完成态：先播退出过渡（非硬切），再延迟卸载（退出 timer 是真时钟，直接等）
+    const closing = q('[data-testid="kiro-mention-menu"]') as HTMLElement;
+    expect(closing.className).toContain("opacity-0");
+    expect(closing.className).toContain("pointer-events-none");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+    });
     expect(q('[data-testid="kiro-mention-menu"]')).toBeNull();
   });
 
@@ -556,6 +588,11 @@ describe("Kiro Composer — @ mention（对标 Slash）", () => {
     await typeText("@");
     expect(q('[data-testid="kiro-mention-menu"]')).toBeTruthy();
     await pressKey("Escape");
+    // Escape 关闭走退出过渡：先不可点，再延迟卸载（退出 timer 是真时钟，直接等）
+    expect((q('[data-testid="kiro-mention-menu"]') as HTMLElement).className).toContain("opacity-0");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+    });
     expect(q('[data-testid="kiro-mention-menu"]')).toBeNull();
 
     // 文本变化才重开（设相同值 React 不触发 onChange，属测试约束非业务问题）

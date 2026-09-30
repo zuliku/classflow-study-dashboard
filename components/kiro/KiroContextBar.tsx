@@ -9,6 +9,10 @@ import {
   splitKiroContextsForDisplay,
 } from "@/lib/ai/context/presentation";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
+import { usePresence } from "@/lib/usePresence";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { MOTION_EXIT_MS } from "@/lib/motion";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 
 /** Ambient（自动环境）kind 图标：只用 Lucide（week 用弱时间感 Clock 系，不再用 @ / 文字方块） */
@@ -49,6 +53,36 @@ export function KiroContextBar({
   const overflowBtnRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const enteringContextKeys = useEnterOnAdd(contexts.map((context) => context.key));
+  const overflowPresence = usePresence(overflowOpen, MOTION_EXIT_MS.fast);
+  // P2：chip 移除原位 collapse（160ms 后真正删除；外部整单替换直接卸载，不过渡）。
+  const reducedMotion = useEffectiveReducedMotion();
+  const [leavingKeys, setLeavingKeys] = useState<ReadonlySet<string>>(new Set());
+  const leavingTimersRef = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      leavingTimersRef.current.forEach((t) => window.clearTimeout(t));
+      leavingTimersRef.current = [];
+    },
+    []
+  );
+  const handleRemove = (key: string) => {
+    if (locked || leavingKeys.has(key)) return;
+    if (reducedMotion) {
+      onRemove(key);
+      return;
+    }
+    setLeavingKeys((prev) => new Set(prev).add(key));
+    const timer = window.setTimeout(() => {
+      leavingTimersRef.current = leavingTimersRef.current.filter((t) => t !== timer);
+      setLeavingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      onRemove(key);
+    }, MOTION_EXIT_MS.panel);
+    leavingTimersRef.current.push(timer);
+  };
 
   // +N Popover：outside click / Esc 关闭（非 modal，不拦截原事件）
   useEffect(() => {
@@ -77,9 +111,7 @@ export function KiroContextBar({
 
   const removeButton = (c: KiroContextRef, revealOnHover: boolean) => (
     <button
-      onClick={() => {
-        if (!locked) onRemove(c.key);
-      }}
+      onClick={() => handleRemove(c.key)}
       disabled={locked}
       aria-label={`移除上下文：${formatKiroContextDisplayLabel(c)}`}
       title={getKiroContextVisualRole(c) === "ambient" ? "本次对话中不使用此上下文" : "移除"}
@@ -101,36 +133,38 @@ export function KiroContextBar({
     >
       {/* Leading：Workspace / Sandbox 指示（先于 ambient/manual context 渲染） */}
       {leading}
-      {/* Ambient Capsule：系统自动环境（弱图标 + 极浅底，稳定存在） */}
+      {/* Ambient Capsule：系统自动环境（弱图标 + 极浅底，稳定存在）；移除走原位 collapse */}
       {visibleAmbient.map((c) => {
         const Icon = AMBIENT_KIND_ICONS[c.kind];
         return (
-          <span
-            key={c.key}
-            className={cn(
-              "group inline-flex items-center gap-1.5 pl-2 pr-1 h-7 max-w-[220px] rounded-full border border-line-soft bg-pastel-mint/55 text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors shrink-0",
-              enteringContextKeys.has(c.key) && "animate-enter"
-            )}
-          >
-            <Icon className="w-3.5 h-3.5 text-sandrift shrink-0" />
-            <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
-            {removeButton(c, true)}
-          </span>
+          <ExitCollapse key={c.key} axis="horizontal" exiting={leavingKeys.has(c.key)} className="shrink-0">
+            <span
+              className={cn(
+                "group inline-flex items-center gap-1.5 pl-2 pr-1 h-7 max-w-[220px] rounded-full border border-line-soft bg-pastel-mint/55 text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors shrink-0",
+                enteringContextKeys.has(c.key) && "animate-enter"
+              )}
+            >
+              <Icon className="w-3.5 h-3.5 text-sandrift shrink-0" />
+              <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
+              {removeButton(c, true)}
+            </span>
+          </ExitCollapse>
         );
       })}
 
-      {/* Manual Token：用户显式 @ / Ask Kiro 实体入口（无图标，× 清晰） */}
+      {/* Manual Token：用户显式 @ / Ask Kiro 实体入口（无图标，× 清晰）；移除走原位 collapse */}
       {visibleManual.map((c) => (
-        <span
-          key={c.key}
-          className={cn(
-            "inline-flex items-center gap-1 pl-2.5 pr-1 h-7 max-w-[200px] rounded-full bg-alabaster/70 border border-line text-[11px] font-semibold text-charcoal shrink-0",
-            enteringContextKeys.has(c.key) && "animate-enter"
-          )}
-        >
-          <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
-          {removeButton(c, false)}
-        </span>
+        <ExitCollapse key={c.key} axis="horizontal" exiting={leavingKeys.has(c.key)} className="shrink-0">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 pl-2.5 pr-1 h-7 max-w-[200px] rounded-full bg-alabaster/70 border border-line text-[11px] font-semibold text-charcoal shrink-0",
+              enteringContextKeys.has(c.key) && "animate-enter"
+            )}
+          >
+            <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
+            {removeButton(c, false)}
+          </span>
+        </ExitCollapse>
       ))}
 
       {/* +N：唯一「查看剩余 Context」入口 */}
@@ -144,12 +178,17 @@ export function KiroContextBar({
           >
             +{overflow.length}
           </button>
-          {overflowOpen && (
+          {overflowPresence.mounted && (
             <div
               ref={popoverRef}
               role="dialog"
               aria-label="当前上下文"
-              className="absolute left-0 bottom-full mb-1.5 w-[280px] max-h-[min(320px,50vh)] overflow-y-auto overflow-x-clip bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 z-40 ux-inline"
+              className={cn(
+                "absolute left-0 bottom-full mb-1.5 w-[280px] max-h-[min(320px,50vh)] overflow-y-auto overflow-x-clip bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 z-40 ux-inline origin-bottom-left transition-[opacity,transform]",
+                overflowPresence.visible
+                  ? "opacity-100 duration-[var(--motion-fast)]"
+                  : "opacity-0 translate-y-[3px] scale-[0.99] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+              )}
             >
               <p className="px-2.5 pt-1.5 pb-1 text-[10px] font-bold text-sandrift">当前上下文</p>
               {allForPopover.map((c) => {

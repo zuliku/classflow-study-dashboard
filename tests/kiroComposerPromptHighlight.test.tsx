@@ -105,6 +105,15 @@ describe("KiroComposer 输入高亮镜像", () => {
     });
   }
 
+  /** presence 进入需要两帧 rAF（对称进退契约：先挂载隐藏态，再显示播进入 keyframe） */
+  async function pumpEnterFrames() {
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+    });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     useKiroPreferencesStore.setState({ webSearchEnabled: false });
@@ -153,13 +162,19 @@ describe("KiroComposer 输入高亮镜像", () => {
       '[data-testid="kiro-composer-highlight"] [data-token="mention"]'
     );
     expect(mention?.textContent).toBe("@中级");
-    // @ 菜单用专用动效类（不再复用 slash）
+    // @ 菜单用专用动效类（不再复用 slash）；进入 keyframe 在两帧后生效（对称进退）
+    await pumpEnterFrames();
     expect(container!.querySelector('[data-testid="kiro-mention-menu"]')?.className).toContain(
       "kiro-mention-enter"
     );
     expect(container!.querySelector('[data-testid="kiro-mention-menu"]')?.className).not.toContain(
       "kiro-slash-enter"
     );
+    // 关闭走退出过渡（非硬切）：先 opacity-0 + 不可点，再延迟卸载
+    await typeText("帮我看下@中级 ");
+    const closing = container!.querySelector('[data-testid="kiro-mention-menu"]');
+    expect(closing?.className).toContain("opacity-0");
+    expect(closing?.className).toContain("duration-[var(--motion-exit-fast)]");
   });
 
   it("/ token 高亮 + / 菜单保持 kiro-slash-enter（左下弹出）", async () => {
@@ -172,9 +187,15 @@ describe("KiroComposer 输入高亮镜像", () => {
       '[data-testid="kiro-composer-highlight"] [data-token="slash"]'
     );
     expect(slash?.textContent).toBe("/d");
+    await pumpEnterFrames();
     expect(container!.querySelector('[data-testid="skill-slash-menu"]')?.className).toContain(
       "kiro-slash-enter"
     );
+    // 关闭走退出过渡：先 opacity-0 + 不可点（延迟卸载由 usePresence 生命周期测试覆盖）
+    await typeText("你好");
+    const closing = container!.querySelector('[data-testid="skill-slash-menu"]');
+    expect(closing?.className).toContain("opacity-0");
+    expect(closing?.className).toContain("ease-[var(--ease-exit)]");
   });
 });
 

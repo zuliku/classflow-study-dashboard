@@ -143,4 +143,27 @@ describe("硬切深筛源码契约", () => {
     const src = read("components/settings/SettingsView.tsx");
     expect(src).toMatch(/key="search-results"[\s\S]*?ux-fade/);
   });
+
+  it("Composer 菜单/拖拽/附件架：presence 对称进退（非条件硬切）", () => {
+    const src = read("components/kiro/KiroComposer.tsx");
+    expect(src).toContain("usePresence(slashOpen, MOTION_EXIT_MS.fast)");
+    expect(src).toContain("usePresence(mentionOpen, MOTION_EXIT_MS.fast)");
+    expect(src).toContain("usePresence(dragOver, MOTION_EXIT_MS.fast)");
+    expect(src).not.toMatch(/\{slashOpen && \(\s*<div/);
+    expect(src).not.toMatch(/\{mentionOpen && \(\s*<div/);
+    expect(src).not.toMatch(/\{dragOver && \(\s*<div/);
+    expect(src).not.toMatch(/\{attachments\.length > 0 && \(\s*<div/);
+  });
+
+  it("Composer/Context chip：leaving 态 + 横向 collapse（非直接卸载）", () => {
+    const composer = read("components/kiro/KiroComposer.tsx");
+    expect(composer).toContain("leavingAttachmentIds");
+    expect(composer).toContain("MOTION_EXIT_MS.panel");
+    expect(composer).toContain('axis="horizontal"');
+    expect(composer).toContain("onRemove={handleRemoveAttachment}");
+    const bar = read("components/kiro/KiroContextBar.tsx");
+    expect(bar).toContain("leavingKeys");
+    expect(bar).toContain("MOTION_EXIT_MS.panel");
+    expect(bar).toContain('axis="horizontal"');
+  });
 });

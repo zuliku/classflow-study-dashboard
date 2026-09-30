@@ -420,3 +420,53 @@ describe("usePresence lifecycle contract", () => {
     expect(getByTestId("probe").dataset.visible).toBe("true");
   });
 });
+
+describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
+  const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+
+  it("菜单/拖拽/附件架走 usePresence + Contract exit 常量（无魔法数字）", () => {
+    const composer = read("components/kiro/KiroComposer.tsx");
+    for (const snippet of [
+      "usePresence(slashOpen, MOTION_EXIT_MS.fast)",
+      "usePresence(mentionOpen, MOTION_EXIT_MS.fast)",
+      "usePresence(dragOver, MOTION_EXIT_MS.fast)",
+      "MOTION_EXIT_MS.base",
+    ]) {
+      expect(composer).toContain(snippet);
+    }
+    // 退出分支统一加速离场 + exit-fast/base var（进入保持既有 keyframe）
+    for (const snippet of [
+      "duration-[var(--motion-exit-fast)]",
+      "duration-[var(--motion-exit-base)]",
+      "ease-[var(--ease-exit)]",
+    ]) {
+      expect(composer).toContain(snippet);
+    }
+    expect(composer).not.toMatch(/duration-\[\d+ms\]/);
+  });
+
+  it("附件/Context chip 原位退出：leaving 态 + ExitCollapse 横向（无魔法数字）", () => {
+    const composer = read("components/kiro/KiroComposer.tsx");
+    expect(composer).toContain("leavingAttachmentIds");
+    expect(composer).toContain("MOTION_EXIT_MS.panel");
+    expect(composer).toContain('axis="horizontal"');
+    expect(composer).not.toMatch(/setTimeout\(\s*\d/);
+    const bar = read("components/kiro/KiroContextBar.tsx");
+    expect(bar).toContain("leavingKeys");
+    expect(bar).toContain("MOTION_EXIT_MS.panel");
+    expect(bar).toContain('axis="horizontal"');
+    const collapse = read("components/ui/ExitCollapse.tsx");
+    expect(collapse).toContain("grid-cols-[0fr]");
+    expect(collapse).toContain("duration-[var(--motion-exit-panel)]");
+  });
+
+  it("P2/P3：textarea 高度过渡 + 发送 press 均走 token/常量", () => {
+    const composer = read("components/kiro/KiroComposer.tsx");
+    expect(composer).toContain("transition-[height]");
+    expect(composer).toContain("duration-[var(--kiro-motion-control,var(--motion-fast))]");
+    expect(composer).toContain("MOTION_MS.snap");
+    expect(read("app/globals.css")).toContain(
+      "transition: box-shadow var(--kiro-motion-control, var(--motion-fast)) var(--ease-standard)"
+    );
+  });
+});
