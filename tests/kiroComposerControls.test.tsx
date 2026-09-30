@@ -529,6 +529,8 @@ describe("Kiro Composer — 回归", () => {
     expect(chips()).toHaveLength(2);
     expect(chips()[0].textContent).toContain("a.txt");
     expect(container!.querySelector('[data-state="exiting"]')).not.toBeNull();
+    // 退出期间 tray 切 overflow-x-clip（auto 下收缩会闪滚动条，是 collapse 卡顿主因）
+    expect(q('[data-testid="kiro-attachments"]')!.className).toContain("overflow-x-clip");
     // 退出播完（panel 160ms，真时钟）才真正删除
     await act(async () => {
       await new Promise((r) => setTimeout(r, 220));

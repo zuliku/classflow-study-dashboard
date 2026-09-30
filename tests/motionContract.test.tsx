@@ -469,4 +469,12 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
       "transition: box-shadow var(--kiro-motion-control, var(--motion-fast)) var(--ease-standard)"
     );
   });
+
+  it("卡顿点：动画元素无 backdrop-blur；tray 退出期间锁 overflow-x（防滚动条闪烁）", () => {
+    const composer = read("components/kiro/KiroComposer.tsx");
+    // 拖拽遮罩透明度动画 + backdrop-blur = 逐帧重模糊（已知卡顿源，已下线；只查工具类，不含注释）
+    expect(composer).not.toMatch(/backdrop-blur-\[/);
+    expect(composer).toContain("overflow-x-clip");
+    expect(composer).toContain("overflow-x-auto");
+  });
 });

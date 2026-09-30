@@ -553,11 +553,12 @@ export function KiroComposer({
       className={cn("shrink-0 relative z-20", compact && "px-3 pb-3")}
       data-testid="kiro-composer"
     >
-      {/* 拖拽提示：覆盖 Composer Surface（不覆盖整个 Workspace），对称淡入淡出 */}
+      {/* 拖拽提示：覆盖 Composer Surface（不覆盖整个 Workspace），对称淡入淡出；
+          无 backdrop-blur（透明度动画期间逐帧重模糊是已知卡顿源；遮罩盖的是自身 surface，无需模糊） */}
       {dragPresence.mounted && (
         <div
           className={cn(
-            "absolute inset-0 z-40 rounded-2xl border-2 border-dashed border-line-strong bg-surface/90 backdrop-blur-[1px] flex items-center justify-center pointer-events-none transition-[opacity,transform]",
+            "absolute inset-0 z-40 rounded-2xl border-2 border-dashed border-line-strong bg-surface/95 flex items-center justify-center pointer-events-none transition-[opacity,transform]",
             dragPresence.visible
               ? "opacity-100 scale-100 duration-[var(--motion-fast)]"
               : "opacity-0 scale-[0.98] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
@@ -600,9 +601,14 @@ export function KiroComposer({
                   : "opacity-0 -translate-y-[2px] pointer-events-none transition-[opacity,transform] duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]"
               )}
             >
-              {/* Tray：单行横向滚动，附件再多也不撑高 Composer */}
+              {/* Tray：单行横向滚动，附件再多也不撑高 Composer；
+                  chip 退出期间切 overflow-x-clip（auto 下收缩内容会触发滚动条闪烁 + 滚动量重算，
+                  是 collapse 卡顿的主因；播完恢复 auto） */}
               <div
-                className="flex items-center gap-1.5 overflow-x-auto kiro-attachment-tray"
+                className={cn(
+                  "flex items-center gap-1.5 kiro-attachment-tray",
+                  leavingAttachmentIds.size > 0 ? "overflow-x-clip" : "overflow-x-auto"
+                )}
                 data-testid="kiro-attachments"
               >
                 {attachments.map((a) => (
