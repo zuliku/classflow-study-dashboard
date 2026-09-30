@@ -17,6 +17,8 @@ describe("PrintWindow 脚本构建", () => {
     expect(script).toContain("window-minimized");
     expect(script).toContain("[IntPtr][int64]123456");
     expect(script).toContain("image/jpeg");
+    // Windows PowerShell 5.1：Imaging 命名空间必须显式引用程序集，否则编译失败
+    expect(script).toContain("-ReferencedAssemblies System.Drawing");
     expect(script).not.toContain("__HWND__");
     expect(script).not.toContain("__MAXWIDTH__");
     expect(script).not.toContain("__MAXBYTES__");

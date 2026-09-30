@@ -28,7 +28,7 @@ export interface PrintWindowScreenshot {
 }
 
 const SCRIPT = String.raw`
-Add-Type -TypeDefinition @"
+Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @"
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
