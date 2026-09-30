@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { KiroComputerSessionHeader } from "@/components/kiro/computer/session/KiroComputerSessionHeader";
@@ -54,6 +54,8 @@ export function KiroComputerSessionSurface({
   const failureReason = useDesktopSessionStore((s) => s.failureReason);
   const dismissedSessionId = useDesktopSessionStore((s) => s.dismissedSessionId);
   const setDismissedSessionId = useDesktopSessionStore((s) => s.setDismissedSessionId);
+  // 后台静默执行常驻指示（用户看不见实时界面时的唯一 live 信号；terminal 后不展示）
+  const backgroundActive = useDesktopSessionStore((s) => s.backgroundActive);
 
   const { pending, pause, resume, stop } = useKiroComputerSessionActions();
   const skillDraft = useKiroComputerSessionSkillDraft({ sessionId, state });
@@ -120,6 +122,17 @@ export function KiroComputerSessionSurface({
               className="pl-3.5 text-[10px] font-semibold text-warning"
             >
               正在调整策略
+            </p>
+          )}
+
+          {/* 后台静默执行中：界面不可见，仅执行记录可查（terminal 后不再展示） */}
+          {backgroundActive && !terminal && (
+            <p
+              data-testid="computer-session-background"
+              className="pl-3.5 text-[10px] font-semibold text-satin-grey flex items-center gap-1.5"
+            >
+              <EyeOff className="w-3 h-3" aria-hidden="true" />
+              后台执行中（界面不可见）
             </p>
           )}
 

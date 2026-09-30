@@ -48,6 +48,12 @@ export interface ComputerApprovalRequest {
   terminalRisk?: "normal" | "destructive" | "privileged";
   /** Desktop Action（Phase 2）：GUI 展示信息 */
   gui?: ComputerApprovalGuiInfo;
+  /**
+   * 后台静默模式（Background Computer Use）：true = 本次获批后将在非前台窗口执行，
+   * 用户看不到实时界面（仅执行记录/审计可查）。只影响展示与审计，不改变审批语义；
+   * 缺失 / false = 前台既有行为。
+   */
+  background?: boolean;
 }
 
 /** allow-once：exact 匹配（toolCallId + capability + workspace + root + relativePath [+ fingerprint]），一次消费 */
@@ -123,6 +129,7 @@ export function buildApprovalRequest(input: {
   risk?: "normal" | "destructive" | "privileged";
   allowedDecisions?: ComputerApprovalDecision[];
   gui?: ComputerApprovalGuiInfo;
+  background?: boolean;
 }): ComputerApprovalRequest {
   return {
     id: input.id,
@@ -143,6 +150,7 @@ export function buildApprovalRequest(input: {
     ...(input.shell !== undefined ? { shell: input.shell } : {}),
     ...(input.risk !== undefined ? { terminalRisk: input.risk } : {}),
     ...(input.gui !== undefined ? { gui: input.gui } : {}),
+    ...(input.background === true ? { background: true as const } : {}),
   };
 }
 

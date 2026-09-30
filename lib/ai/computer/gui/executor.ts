@@ -38,6 +38,7 @@ import {
   oneShotApprovalMatches,
 } from "@/lib/ai/computer/approval";
 import type { ComputerExecutionAttempt } from "@/lib/ai/computer/result";
+import { useDesktopSessionStore } from "@/store/useDesktopSessionStore";
 
 function denied(message: string, code = "PERMISSION_DENIED"): ComputerExecutionAttempt {
   return { kind: "completed", output: { ok: false, code, message } };
@@ -332,6 +333,8 @@ export async function executeKiroDesktopAction(
           fingerprint,
           ...(allowedDecisions ? { allowedDecisions } : {}),
           gui: buildGuiApprovalInfo(preparation),
+          // 后台静默模式随审批请求透传（展示层警告 + 审计区分；不改变审批语义）
+          ...(bridgeInput.background === true ? { background: true as const } : {}),
         }),
       };
     }
@@ -341,12 +344,18 @@ export async function executeKiroDesktopAction(
   if (request.isCancelled?.()) return cancelled();
 
   // 9. 执行（Main 内部重复完整校验：过期 / 窗口 / 元素 / bounds）
+  // 后台常驻指示：bridge 调用期间置位，结束/异常/取消一律清除（try/finally 语义手写，
+  // 因 audit/return 在同一函数后续，不能简单包 try）
   let result: Awaited<ReturnType<typeof bridge.action>>;
+  const backgroundCall = bridgeInput.background === true;
+  if (backgroundCall) useDesktopSessionStore.getState().setBackgroundActive(true);
   try {
     result = await bridge.action(bridgeInput);
   } catch (err) {
+    if (backgroundCall) useDesktopSessionStore.getState().setBackgroundActive(false);
     return bridgeFailureOutput(err);
   }
+  if (backgroundCall) useDesktopSessionStore.getState().setBackgroundActive(false);
   request.counters.mutationCount += 1;
 
   // 10. Audit（GUI 事实；绝不记录输入文本 / native 标识）

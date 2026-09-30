@@ -251,6 +251,14 @@ describe("Approval Presentation（Inline / fallback Dialog 共用）", () => {
     expect(p.textPreview).toBe("hello");
   });
 
+  it("GUI 后台：warnings 必含不可见警告 + meta 标注；highRisk 分级不变", () => {
+    const p = getComputerApprovalPresentation(guiRequest({ background: true }));
+    expect(p.warnings).toContain("后台执行：窗口不会置顶，你看不到实时过程，请从执行记录确认结果");
+    expect(p.meta).toContain("后台静默执行");
+    expect(p.highRisk).toBe(false);
+    expect(p.title).toBe("Kiro 准备执行");
+  });
+
   it("Terminal：shell / 工作目录 / 命令默认可见；destructive → warning + highRisk", () => {
     const p = getComputerApprovalPresentation({
       id: "approval-2",

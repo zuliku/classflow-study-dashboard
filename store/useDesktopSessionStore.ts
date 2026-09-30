@@ -33,6 +33,13 @@ export interface DesktopSessionUiState {
   failureReason: string | null;
   /** P5：terminal surface 的 UI-only dismiss（不持久化；active session 不可 dismiss） */
   dismissedSessionId: string | null;
+  /**
+   * 后台静默执行指示（Background Computer Use；runtime-only，不持久化）：
+   * lib executor 在后台 bridge.action 调用期间置位，结束/异常一律清除。
+   * Surface 据此展示常驻“后台执行中”徽标（用户看不见实时界面时的唯一 live 信号）。
+   */
+  backgroundActive: boolean;
+  setBackgroundActive: (active: boolean) => void;
   applyEvent: (event: ClassFlowDesktopComputerSessionEvent) => void;
   setDismissedSessionId: (sessionId: string | null) => void;
   clear: () => void;
@@ -54,6 +61,8 @@ export const useDesktopSessionStore = create<DesktopSessionUiState>()((set, get)
   appProfile: null,
   failureReason: null,
   dismissedSessionId: null,
+  backgroundActive: false,
+  setBackgroundActive: (active) => set({ backgroundActive: active }),
   applyEvent: (event) => {
     const previousSessionId = get().sessionId;
     set({
@@ -91,9 +100,10 @@ export const useDesktopSessionStore = create<DesktopSessionUiState>()((set, get)
       stepIndex: 0,
       reflectionRequired: false,
       appProfile: null,
-      failureReason: null,
-      dismissedSessionId: null,
-    }),
+    failureReason: null,
+    dismissedSessionId: null,
+    backgroundActive: false,
+  }),
 }));
 
 /** 非终态（正在进行的 session） */

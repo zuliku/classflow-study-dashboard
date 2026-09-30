@@ -76,6 +76,19 @@ describe("P5 Surface — 显示条件与文案", () => {
     expect(q('[data-testid="kiro-computer-session-surface"]')).toBeNull();
   });
 
+  it("后台执行徽标：backgroundActive → 常驻显示；关闭/clear 后消失", async () => {
+    seedSession("acting");
+    useDesktopSessionStore.getState().setBackgroundActive(true);
+    await renderSurface();
+    expect(q('[data-testid="computer-session-background"]')).toBeTruthy();
+    expect(q('[data-testid="computer-session-background"]')!.textContent).toContain("后台执行中");
+    useDesktopSessionStore.getState().setBackgroundActive(false);
+    await renderSurface();
+    expect(q('[data-testid="computer-session-background"]')).toBeNull();
+    useDesktopSessionStore.getState().clear();
+    expect(useDesktopSessionStore.getState().backgroundActive).toBe(false);
+  });
+
   it("Workspace / Sidecar 两个 variant 渲染同一个 Surface（不重复 mount 两份 UI）", async () => {
     seedSession("observing");
     await renderSurface("workspace");

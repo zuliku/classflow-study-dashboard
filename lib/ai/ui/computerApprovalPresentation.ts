@@ -91,10 +91,18 @@ export function getComputerApprovalPresentation(
     const warnings: string[] = [];
     if (gui.riskLevel !== "normal" && gui.riskReason) warnings.push(gui.riskReason);
     if (gui.coordinateFallback) warnings.push("请确认操作位置");
+    // 后台静默模式：用户看不到实时界面（仅执行记录/审计可查），属监督缺失风险，必警告；
+    // 不改变 highRisk 分级（分级只读 Runtime 定级）。
+    if (request.background === true) {
+      warnings.push("后台执行：窗口不会置顶，你看不到实时过程，请从执行记录确认结果");
+    }
     return {
       title: "Kiro 准备执行",
       primary: `在${app}中${actionLabel}${target}`,
-      meta: [gui.windowTitle ? `${app} · ${gui.windowTitle}` : app],
+      meta: [
+        gui.windowTitle ? `${app} · ${gui.windowTitle}` : app,
+        ...(request.background === true ? ["后台静默执行"] : []),
+      ],
       ...(gui.textPreview ? { textPreview: gui.textPreview } : {}),
       warnings,
       highRisk: isComputerApprovalHighRisk(request),
