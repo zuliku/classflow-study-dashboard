@@ -45,10 +45,15 @@ export type PdfExtractFailureKind = "encrypted" | "invalid" | "unreadable";
 
 export class PdfExtractError extends Error {
   readonly failureKind: PdfExtractFailureKind;
-  constructor(failureKind: PdfExtractFailureKind, message: string) {
+  /** 原始 pdf.js 错误（诊断用；绝不进 UI / Tool Output / Audit） */
+  readonly causeDetail: string;
+  constructor(failureKind: PdfExtractFailureKind, message: string, cause?: unknown) {
     super(message);
     this.name = "PdfExtractError";
     this.failureKind = failureKind;
+    const name = (cause as { name?: unknown })?.name;
+    const msg = (cause as { message?: unknown })?.message;
+    this.causeDetail = `${typeof name === "string" && name ? name : typeof cause} ${typeof msg === "string" ? msg : ""}`.trim().slice(0, 300);
   }
 }
 
@@ -96,7 +101,7 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
   try {
     doc = await loadingTask.promise;
   } catch (err) {
-    throw new PdfExtractError(classifyPdfExtractError(err), "PDF 文档打开失败");
+    throw new PdfExtractError(classifyPdfExtractError(err), "PDF 文档打开失败", err);
   }
   try {
     const pages: { page: number; text: string }[] = [];
@@ -119,7 +124,7 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
       }
     }
     if (pages.length === 0 && failedPages > 0) {
-      throw new PdfExtractError("unreadable", "PDF 页面均无法读取");
+      throw new PdfExtractError("unreadable", `PDF 页面均无法读取（${failedPages}/${doc.numPages} 页失败）`);
     }
     const all = pages.map((p) => `【第 ${p.page} 页】\n${p.text}`).join("\n\n");
     const normalized = normalizeLineEndings(all).trim();

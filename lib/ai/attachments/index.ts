@@ -75,7 +75,7 @@ export async function extractAttachment(
     // 诊断保留在 console（dev 复现用），绝不进入 Tool Output / Audit。
     if (err instanceof PdfExtractError) {
       if (typeof console !== "undefined") {
-        console.warn(`[kiro] pdf extract failed (${err.failureKind}):`, err.message);
+        console.warn(`[kiro] pdf extract failed (${err.failureKind}):`, err.message, "| cause:", err.causeDetail);
       }
       if (err.failureKind === "encrypted") {
         return { ok: false, reason: "unsupported", message: "该 PDF 已加密，请先解密或打印为新 PDF 后重试。" };
