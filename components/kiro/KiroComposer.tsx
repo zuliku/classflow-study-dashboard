@@ -300,12 +300,13 @@ export function KiroComposer({
   // 提示条对称进退（intent 建议 / 隐私提示常被逐字输入触发开关，必须有 exit）。
   const intentRowOpen =
     hasReadyImages && visionEnabled && !hasProcessing && !currentTurnScopeLocked && text.trim().length === 0;
-  const intentPresence = usePresence(intentRowOpen, MOTION_EXIT_MS.fast);
+  // 在流内占位：退场走 ExitCollapse 高度折叠（panel 对齐），否则 30px 整块消失顶 prompt。
+  const intentPresence = usePresence(intentRowOpen, MOTION_EXIT_MS.panel);
   const visionWarningOpen = (hasImages && !visionEnabled) || scannedBlocked;
   const warningPresence = usePresence(visionWarningOpen, MOTION_EXIT_MS.fast);
   const preparingPresence = usePresence(!!preparingVision, MOTION_EXIT_MS.fast);
   const privacyOpen = hasImages && !visualPrivacyNoticeSeen;
-  const privacyPresence = usePresence(privacyOpen, MOTION_EXIT_MS.fast);
+  const privacyPresence = usePresence(privacyOpen, MOTION_EXIT_MS.panel);
 
   // Turn scope 锁定期间：scope 类条目在 Add Menu 内部禁用（不整单锁定——联网搜索是下一 Turn preference）；
   // slash 菜单属于当前输入，同样关闭。Access / Model 菜单是 preference 或状态摘要，保持可用。
@@ -664,14 +665,15 @@ export function KiroComposer({
                   点击只填 prompt（不直接 Send；发送必须走 canonical submit() 的 canSend/vision gate/防重复）；
                   随输入逐字开关，对称淡入淡出 */}
               {intentPresence.mounted && (
-                <div
-                  className={cn(
-                    "flex items-center gap-1.5 pt-1.5 transition-[opacity,transform]",
-                    intentPresence.visible
-                      ? "opacity-100 duration-[var(--motion-fast)]"
-                      : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
-                  )}
-                >
+                <ExitCollapse exiting={!intentPresence.visible}>
+                  <div
+                    className={cn(
+                      "flex items-center gap-1.5 pt-1.5 transition-[opacity,transform]",
+                      intentPresence.visible
+                        ? "opacity-100 duration-[var(--motion-fast)]"
+                        : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+                    )}
+                  >
                   {["处理截图通知", "整理任务与 DDL", "识别课程变动"].map((label) => (
                     <button
                       key={label}
@@ -691,7 +693,8 @@ export function KiroComposer({
                       {label}
                     </button>
                   ))}
-                </div>
+                  </div>
+                </ExitCollapse>
               )}
               </div>
             </ExitCollapse>
@@ -976,19 +979,22 @@ export function KiroComposer({
               配置 AI 服务
             </button>
           </div>
-        ) : attachments.length > 0 ? (
-          <div className={cn("mt-1.5 space-y-1", compact ? "px-0" : "px-0.5")}>
+        ) : (
+          // 包裹常驻（空时零高度）：此前按 attachments.length 条件挂载，删最后一颗 chip 时
+          // mt-1.5（6px）整块卸载，composer 被顶下去一跳；现只有 <p> 走 presence，容器不动。
+          <div className={cn("space-y-1", compact ? "px-0" : "px-0.5")}>
             {/* Task B V1.1：首次添加图片轻提示，显式「知道了」后才不再显示（非 Dialog）；对称淡入淡出 */}
             {privacyPresence.mounted && (
-              <p
-                data-testid="visual-privacy-notice"
-                className={cn(
-                  "flex items-center gap-2 text-[10px] text-sandrift transition-[opacity,transform]",
-                  privacyPresence.visible
-                    ? "opacity-100 duration-[var(--motion-fast)]"
-                    : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
-                )}
-              >
+              <ExitCollapse exiting={!privacyPresence.visible}>
+                <p
+                  data-testid="visual-privacy-notice"
+                  className={cn(
+                    "mt-1.5 flex items-center gap-2 text-[10px] text-sandrift transition-[opacity,transform]",
+                    privacyPresence.visible
+                      ? "opacity-100 duration-[var(--motion-fast)]"
+                      : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+                  )}
+                >
                 <span>图片仅用于当前 Kiro 对话，不会自动保存到课程资料。</span>
                 <button
                   type="button"
@@ -998,10 +1004,11 @@ export function KiroComposer({
                 >
                   知道了
                 </button>
-              </p>
+                </p>
+              </ExitCollapse>
             )}
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
