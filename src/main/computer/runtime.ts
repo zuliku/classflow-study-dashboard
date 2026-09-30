@@ -351,18 +351,37 @@ export class DesktopObservationRuntime {
 
     let screenshot: ClassFlowDesktopComputerScreenshotEvidence | null = null;
     if (input.includeScreenshot) {
-      try {
-        const shot = await this.deps.captureScreenshot({
-          target: input.target,
-          windowTitle: input.target === "screen" ? null : windowTitle || null,
-        });
-        if (shot) {
-          screenshot = { captured: true, ...shot };
-        } else {
+      // Phase 2（遮挡截图闭环）：非前台窗口优先 hwnd 精确 PrintWindow。
+      // desktopCapturer 按标题匹配 source，遮挡窗口匹配失败会降级拍主屏（错误像素
+      // 比没截图更有害）；PrintWindow 走离屏 DC，与 z-order 无关，被遮挡 OK。
+      // 最小化窗口不渲染 → PrintWindow 返回 null，仅记 warning（UIA 复读仍可观察）。
+      const occludedTarget =
+        input.target !== "screen" && record !== null && record.isActive === false;
+      if (occludedTarget && this.deps.captureOccludedWindow) {
+        try {
+          const shot = await this.deps.captureOccludedWindow(record.hwnd);
+          if (shot) {
+            screenshot = { captured: true, ...shot };
+          } else {
+            warnings.push("screenshot-unavailable");
+          }
+        } catch {
           warnings.push("screenshot-unavailable");
         }
-      } catch {
-        warnings.push("screenshot-unavailable");
+      } else {
+        try {
+          const shot = await this.deps.captureScreenshot({
+            target: input.target,
+            windowTitle: input.target === "screen" ? null : windowTitle || null,
+          });
+          if (shot) {
+            screenshot = { captured: true, ...shot };
+          } else {
+            warnings.push("screenshot-unavailable");
+          }
+        } catch {
+          warnings.push("screenshot-unavailable");
+        }
       }
     }
 
