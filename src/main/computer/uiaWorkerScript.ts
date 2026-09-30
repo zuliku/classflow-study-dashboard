@@ -235,7 +235,11 @@ function Invoke-Activate([int64]$hwnd) {
 
 function Invoke-Action($cfg) {
   $hwnd = [int64]$cfg.hwnd
-  if (-not (Ensure-Foreground $hwnd)) { return @{ ok = $false; reason = 'window-not-foreground' } }
+  $background = ($null -ne $cfg.background -and $cfg.background -eq $true)
+  if ($background) {
+    # 后台静默模式：与 guiAction.ts 同语义（绝不前台化；最小化直接失败；仅语义直调）
+    if ([CFInput]::IsIconic([IntPtr]$hwnd)) { return @{ ok = $false; reason = 'window-minimized'; background = $true } }
+  } elseif (-not (Ensure-Foreground $hwnd)) { return @{ ok = $false; reason = 'window-not-foreground' } }
 
   $target = $null
   if ($null -ne $cfg.nativeRef -and "$($cfg.nativeRef)" -ne "") {
@@ -270,6 +274,10 @@ function Invoke-Action($cfg) {
   }
 
   $method = ''
+  # 后台模式只允许语义直调（与 guiAction.ts 同语义；焦点/坐标/光标依赖一律 foreground-required）
+  if ($background -and @('focus','double_click','key','scroll') -contains $action) {
+    return @{ ok = $false; reason = 'foreground-required'; background = $true }
+  }
   if ($action -eq 'focus') {
     $target.SetFocus()
     $method = 'uia-focus'
@@ -306,11 +314,13 @@ function Invoke-Action($cfg) {
   } elseif ($action -eq 'type') {
     if ($null -ne $target) {
       if ($target.Current.IsPassword) { return @{ ok = $false; reason = 'password-field' } }
-      $target.SetFocus()
-      Start-Sleep -Milliseconds 80
+      if (-not $background) {
+        $target.SetFocus()
+        Start-Sleep -Milliseconds 80
+      }
       $done = $false
+      $valuePattern = $null
       try {
-        $valuePattern = $null
         if ($target.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$valuePattern)) {
           $valuePattern.SetValue([string]$cfg.text)
           $method = 'uia-setvalue'
@@ -318,10 +328,18 @@ function Invoke-Action($cfg) {
         }
       } catch { $done = $false }
       if (-not $done) {
+        if ($background) { return @{ ok = $false; reason = 'foreground-required'; background = $true } }
         Send-UnicodeText ([string]$cfg.text)
         $method = 'sendinput-text'
+      } elseif ($background) {
+        # 后台写入回读复核（Phase-1 verify：无截图，用 UIA 回读代替像素验证）
+        try {
+          $readback = $valuePattern.Current.Value
+          if ($readback -ne [string]$cfg.text) { return @{ ok = $false; reason = 'verify-failed'; background = $true } }
+        } catch { return @{ ok = $false; reason = 'verify-failed'; background = $true } }
       }
     } else {
+      if ($background) { return @{ ok = $false; reason = 'foreground-required'; background = $true } }
       Send-UnicodeText ([string]$cfg.text)
       $method = 'sendinput-text'
     }
@@ -349,7 +367,7 @@ function Invoke-Action($cfg) {
   } else {
     return @{ ok = $false; reason = 'unsupported-action' }
   }
-  return @{ ok = $true; method = $method }
+  return @{ ok = $true; method = $method; background = $background }
 }
 
 while ($true) {

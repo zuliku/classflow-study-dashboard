@@ -571,6 +571,12 @@ export interface ClassFlowDesktopComputerActionRequest {
   fileGrant?: { grantId: string; path: string };
   /** V2.1：动作后确定性验证（不满足时模型必须重新观察 / 换策略，不得宣称完成） */
   expect?: ClassFlowDesktopComputerActionExpectation;
+  /**
+   * 后台静默模式（Background Computer Use；renderer 已做 consent + 动作准入判定，
+   * 仅 click/type + 元素目标时为 true；缺失 / false → 前台既有行为）。
+   * Main 侧 fail closed（最小化 / 非语义动作直接失败，绝不自动回退前台）。
+   */
+  background?: boolean;
 }
 
 /**

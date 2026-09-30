@@ -73,6 +73,11 @@ export interface ComputerAuditEntry {
   /** V2.3（可选）：计划步骤索引 / 计划短哈希（不含步骤原文） */
   stepIndex?: number;
   planHash?: string;
+  /**
+   * 后台静默操作（可选）：true = 本次执行未抢焦点（窗口非前台；最小化不可能）。
+   * 与 guiMethod 并存（方法名不变；前台/后台是执行上下文维度）。
+   */
+  background?: boolean;
 }
 
 function openAuditDb(): Promise<IDBDatabase | null> {

@@ -229,6 +229,17 @@ function buildDesktopActionSection(snapshot: KiroComputerTurnSnapshot | null): s
     "- User permission: enabled",
     "- desktop_action（click / double_click / focus / type / key / scroll / wait / hover / right_click / drag）: available",
     "- desktop_action（clipboard_read / clipboard_write / upload_file）: 受独立设置与逐次确认约束（见下方动作覆盖）",
+    ...(snapshot?.backgroundAllowed === true
+      ? [
+          "- 后台静默操作：enabled（用户已在设置中允许）",
+          "",
+          "后台模式（窗口未置顶时不抢焦点操作）：",
+          "1. 先 list_desktop_windows 选目标，再 observe_desktop({ windowId, includeUiTree: true, includeScreenshot: false }) 拿该窗口的元素（不要拍主屏）。",
+          "2. 只对 click（点按钮/选项）与 type（输文本）用 elementId 发起 desktop_action；double_click / focus / key / scroll / hover / right_click / drag 一律需要前台，不要在后台模式尝试。",
+          "3. 后台动作无截图验证：click 靠语义执行结果，type 靠写入回读；仍须用新 observation（UIA 复读）确认，不要假设成功。",
+          "4. 目标窗口被最小化时后台不可能操作（不渲染），如实说明并请用户恢复窗口或关闭后台模式；绝不自行把窗口恢复到前台。",
+        ]
+      : []),
     "",
     "工作流程必须是 Observe → Action → Observe：",
     "1. 先 observe_desktop，从返回元素中选择 elementId（不要猜测坐标）。",

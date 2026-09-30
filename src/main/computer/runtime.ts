@@ -679,6 +679,8 @@ export class DesktopObservationRuntime {
       ...(input.axis !== undefined ? { axis: input.axis } : {}),
       ...(point ? { point } : {}),
       ...(toPoint ? { toPoint } : {}),
+      // 后台静默模式（调用方已做 consent + 动作准入判定；PS 侧 fail closed）
+      ...(input.background === true ? { background: true as const } : {}),
     };
 
     // 最后一道 session 检查（审批 / 校验期间用户可能已 Stop / Pause）
@@ -702,6 +704,28 @@ export class DesktopObservationRuntime {
         throw new DesktopComputerIpcError(
           "STALE_OBSERVATION",
           "界面已变化，请重新 observe_desktop 后再操作。"
+        );
+      }
+      // 后台静默模式 fail loud（绝不 STALE，更不自动回退前台）：
+      // - window-minimized：最小化窗口不渲染，无法静默操作（恢复窗口 = 可见动作，需用户知情）
+      // - foreground-required：坐标/焦点依赖动作，后台不可能完成
+      // - verify-failed：SetValue 回读不一致，未确认生效
+      if (reason === "window-minimized") {
+        throw new DesktopComputerIpcError(
+          "ACTION_FAILED",
+          "目标窗口已最小化，后台模式无法操作（最小化窗口不渲染）。请先恢复窗口，或关闭后台模式改走前台操作。"
+        );
+      }
+      if (reason === "foreground-required") {
+        throw new DesktopComputerIpcError(
+          "ACTION_FAILED",
+          "该操作依赖坐标/焦点，后台模式无法执行。请关闭后台模式改走前台操作，或改用控件级操作（click/type 指定 elementId）。"
+        );
+      }
+      if (reason === "verify-failed") {
+        throw new DesktopComputerIpcError(
+          "ACTION_FAILED",
+          "后台写入后回读不一致，未确认生效。请重新观察后再试。"
         );
       }
       if (reason === "element-disabled" || reason === "password-field") {
@@ -737,8 +761,12 @@ export class DesktopObservationRuntime {
         : null;
 
     const observeOnce = async () => {
+      // 后台模式：复核观察强制去截图——遮挡窗口标题匹配失败时会降级拍主屏
+      // （错误像素比没截图更有害）；UIA 树复读足以支撑 element/title 类 expect。
+      // hwnd 精确捕获由 Phase 2（PrintWindow）补齐。
       const observation = await this.observe({
         ...record.request,
+        ...(input.background === true ? { includeScreenshot: false } : {}),
         ...(record.sessionId ? { sessionId: record.sessionId } : {}),
       });
       return { observation, record: this.store.get(observation.observationId, this.deps.now()) };

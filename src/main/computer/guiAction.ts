@@ -4,6 +4,10 @@
  * 单次 PowerShell 原子步骤：窗口前台确认 → 元素重新解析（按 RuntimeId）→
  * bounds 变化校验 → UIA 语义动作优先 → bounds 点击 → 归一化坐标 fallback。
  *
+ * 后台静默模式（config.background = true）：跳过前台化（绝不抢焦点）；
+ * 最小化 → window-minimized；仅 uia-select / uia-invoke / uia-setvalue（+回读），
+ * 其余一律 foreground-required（绝不回退坐标点击/全局输入，打中错误窗口比不做更糟）。
+ *
  * 输入优先级（契约）：
  *   UIA semantic action（Invoke / Select / SetValue）
  *   → UIA bounds click
@@ -43,6 +47,14 @@ export interface NativeGuiActionConfig {
   nativeRef: string | null;
   /** 观察时记录的 bounds（stale 校验基准） */
   expectedBounds?: NativeGuiActionBounds;
+  /**
+   * 后台静默模式（Background Computer Use；调用方已做 consent + 动作准入判定）：
+   * - 跳过 ShowWindow/SetForegroundWindow（绝不抢焦点/光标）；
+   * - 最小化窗口直接 window-minimized（不渲染，无法静默操作；不自动恢复）；
+   * - 仅语义方法（uia-select/uia-invoke/uia-setvalue+回读）；其余一律
+   *   foreground-required（executor 不自动回退前台，fail loud）。
+   */
+  background?: boolean;
   action: NativeGuiActionType;
   /** type：待输入文本（敏感内容不得到达此处） */
   text?: string;
@@ -62,6 +74,8 @@ export interface NativeGuiActionResult {
   ok: boolean;
   method?: string;
   reason?: string;
+  /** 后台模式回显（audit 区分前台/后台执行；缺失 = 前台） */
+  background?: boolean;
 }
 
 export const GUI_ACTION_SETTLE_MS = 350;
@@ -224,14 +238,21 @@ function In-Window([int]$x, [int]$y, $rect) {
 function Round-Int([double]$value) { return [int][Math]::Round($value) }
 
 $hwnd = [int64]$cfg.hwnd
+$background = ($null -ne $cfg.background -and $cfg.background -eq $true)
 $isForeground = ([int64][CFInput]::GetForegroundWindow() -eq $hwnd)
-if (-not $isForeground) {
-  if ([CFInput]::IsIconic([IntPtr]$hwnd)) { [void][CFInput]::ShowWindow([IntPtr]$hwnd, 9) }
-  [void][CFInput]::SetForegroundWindow([IntPtr]$hwnd)
-  Start-Sleep -Milliseconds 180
-  $isForeground = ([int64][CFInput]::GetForegroundWindow() -eq $hwnd)
+if ($background) {
+  # 后台静默模式：绝不 ShowWindow / SetForegroundWindow（不抢焦点/光标）；
+  # 最小化窗口不渲染，无法静默操作，直接失败（不自动恢复，可见动作需用户知情）
+  if ([CFInput]::IsIconic([IntPtr]$hwnd)) { Emit @{ ok = $false; reason = 'window-minimized'; background = $true }; exit 0 }
+} else {
+  if (-not $isForeground) {
+    if ([CFInput]::IsIconic([IntPtr]$hwnd)) { [void][CFInput]::ShowWindow([IntPtr]$hwnd, 9) }
+    [void][CFInput]::SetForegroundWindow([IntPtr]$hwnd)
+    Start-Sleep -Milliseconds 180
+    $isForeground = ([int64][CFInput]::GetForegroundWindow() -eq $hwnd)
+  }
+  if (-not $isForeground) { Emit @{ ok = $false; reason = 'window-not-foreground' }; exit 0 }
 }
-if (-not $isForeground) { Emit @{ ok = $false; reason = 'window-not-foreground' }; exit 0 }
 
 $target = $null
 if ($null -ne $cfg.nativeRef -and "$($cfg.nativeRef)" -ne "") {
@@ -295,6 +316,12 @@ if ($null -ne $target) {
 
 $action = [string]$cfg.action
 $method = ''
+# 后台模式只允许语义直调（click→uia-select/uia-invoke，type→uia-setvalue+回读）；
+# 焦点/坐标/光标依赖动作一律 foreground-required（executor 不自动回退，fail loud）
+if ($background -and @('focus','hover','right_click','drag','key','scroll','double_click') -contains $action) {
+  Emit @{ ok = $false; reason = 'foreground-required'; background = $true }
+  exit 0
+}
 try {
   if ($action -eq 'focus') {
     $target.SetFocus()
@@ -366,6 +393,7 @@ try {
       }
     }
     if (-not $semantic) {
+      if ($background) { Emit @{ ok = $false; reason = 'foreground-required'; background = $true }; exit 0 }
       $cx = [int]$bounds.x + [int]([Math]::Floor([int]$bounds.width / 2))
       $cy = [int]$bounds.y + [int]([Math]::Floor([int]$bounds.height / 2))
       $count = 1
@@ -376,11 +404,13 @@ try {
   } elseif ($action -eq 'type') {
     if ($null -ne $target) {
       if ($target.Current.IsPassword) { Emit @{ ok = $false; reason = 'password-field' }; exit 0 }
-      $target.SetFocus()
-      Start-Sleep -Milliseconds 80
+      if (-not $background) {
+        $target.SetFocus()
+        Start-Sleep -Milliseconds 80
+      }
       $done = $false
+      $valuePattern = $null
       try {
-        $valuePattern = $null
         if ($target.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$valuePattern)) {
           $valuePattern.SetValue([string]$cfg.text)
           $method = 'uia-setvalue'
@@ -388,10 +418,18 @@ try {
         }
       } catch { $done = $false }
       if (-not $done) {
+        if ($background) { Emit @{ ok = $false; reason = 'foreground-required'; background = $true }; exit 0 }
         Send-UnicodeText ([string]$cfg.text)
         $method = 'sendinput-text'
+      } elseif ($background) {
+        # 后台写入回读复核（Phase-1 verify：无截图，用 UIA 回读代替像素验证）
+        try {
+          $readback = $valuePattern.Current.Value
+          if ($readback -ne [string]$cfg.text) { Emit @{ ok = $false; reason = 'verify-failed'; background = $true }; exit 0 }
+        } catch { Emit @{ ok = $false; reason = 'verify-failed'; background = $true }; exit 0 }
       }
     } else {
+      if ($background) { Emit @{ ok = $false; reason = 'foreground-required'; background = $true }; exit 0 }
       Send-UnicodeText ([string]$cfg.text)
       $method = 'sendinput-text'
     }
@@ -428,7 +466,7 @@ try {
   exit 0
 }
 
-Emit @{ ok = $true; method = $method }
+Emit @{ ok = $true; method = $method; background = $background }
 `.replace("__POS_TOL__", String(GUI_ACTION_BOUNDS_POSITION_TOLERANCE)).replace(
   "__SIZE_TOL__",
   String(GUI_ACTION_BOUNDS_SIZE_TOLERANCE)
@@ -443,15 +481,20 @@ export function buildGuiActionScript(config: NativeGuiActionConfig): string {
 /** 纯解析：脚本 JSON → 结构化结果（malformed → fail closed） */
 export function parseGuiActionResult(raw: unknown): NativeGuiActionResult {
   if (!raw || typeof raw !== "object") return { ok: false, reason: "invalid-result" };
-  const value = raw as { ok?: unknown; method?: unknown; reason?: unknown };
+  const value = raw as { ok?: unknown; method?: unknown; reason?: unknown; background?: unknown };
   if (value.ok === true) {
     const method = typeof value.method === "string" ? value.method.slice(0, 32) : "";
     if (!method) return { ok: false, reason: "invalid-result" };
-    return { ok: true, method };
+    return {
+      ok: true,
+      method,
+      ...(value.background === true ? { background: true as const } : {}),
+    };
   }
   return {
     ok: false,
     reason: typeof value.reason === "string" ? value.reason.slice(0, 64) : "action-failed",
+    ...(value.background === true ? { background: true as const } : {}),
   };
 }
 

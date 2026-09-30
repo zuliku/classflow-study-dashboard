@@ -238,3 +238,39 @@ describe("V2.5 文件对话框识别", () => {
     expect(isSystemFileDialog({ appName: "explorer", windowTitle: "文档.docx - Word" })).toBe(false);
   });
 });
+
+describe("后台静默模式归一化 — background 字段白名单", () => {
+  const OBS = "obs-11111111-2222-3333-4444-555555555555";
+  it("合法 boolean 保留；缺省为 undefined（前台既有行为）", () => {
+    expect(
+      normalizeActionInput({
+        action: "click",
+        observationId: OBS,
+        target: { elementId: "el-1" },
+        background: true,
+      }).background
+    ).toBe(true);
+    expect(
+      normalizeActionInput({ action: "click", observationId: OBS, target: { elementId: "el-1" } })
+        .background
+    ).toBeUndefined();
+  });
+  it("非 boolean → INVALID（fail closed）；未知字段仍拒绝", () => {
+    expect(() =>
+      normalizeActionInput({
+        action: "click",
+        observationId: OBS,
+        target: { elementId: "el-1" },
+        background: "yes",
+      })
+    ).toThrow();
+    expect(() =>
+      normalizeActionInput({
+        action: "click",
+        observationId: OBS,
+        target: { elementId: "el-1" },
+        hwnd: 12345,
+      })
+    ).toThrow();
+  });
+});

@@ -490,6 +490,35 @@ describe("GUI Action 脚本构建 / 结果解析", () => {
       reason: "bounds-changed",
     });
   });
+
+  it("后台模式：config 透传 background；结果回显 background；新 reason 原样透传", () => {
+    const script = buildGuiActionScript({ hwnd: 7, nativeRef: "1.2", action: "click", background: true });
+    const match = script.match(/FromBase64String\('([^']+)'\)/);
+    expect(match).toBeTruthy();
+    const config = JSON.parse(Buffer.from(match![1], "base64").toString("utf8")) as {
+      background?: boolean;
+    };
+    expect(config.background).toBe(true);
+    // 脚本语义：后台跳过前台化、最小化直接失败、非语义动作 foreground-required
+    expect(script).toContain("window-minimized");
+    expect(script).toContain("foreground-required");
+    expect(script).toContain("verify-failed");
+    expect(parseGuiActionResult({ ok: true, method: "uia-setvalue", background: true })).toEqual({
+      ok: true,
+      method: "uia-setvalue",
+      background: true,
+    });
+    // 非布尔 background 不透传（fail closed）
+    expect(parseGuiActionResult({ ok: true, method: "uia-invoke", background: "yes" })).toEqual({
+      ok: true,
+      method: "uia-invoke",
+    });
+    expect(parseGuiActionResult({ ok: false, reason: "foreground-required", background: true })).toEqual({
+      ok: false,
+      reason: "foreground-required",
+      background: true,
+    });
+  });
 });
 
 describe("Main 安全边界 — 无 unrestricted input / clipboard", () => {

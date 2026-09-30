@@ -131,6 +131,12 @@ export interface NormalizedActionInput {
   clipboardAllowed?: boolean;
   /** V2.5：clipboard_write 文本 */
   clipboardText?: string;
+  /**
+   * 后台静默模式（Background Computer Use；renderer 从冻结 snapshot 读取 consent，
+   * executor 按动作准入判定后透传；缺失 / false → 前台既有行为）。
+   * 非布尔值 → INVALID（fail closed，与 clipboardAllowed 同级）。
+   */
+  background?: boolean;
   /** V2.5：upload_file 的工作区文件（grantId + 相对路径） */
   fileGrant?: NormalizedFileGrant;
   /** V2.1：动作后确定性验证 */
@@ -161,6 +167,7 @@ const ACTION_INPUT_KEYS = new Set([
   "clipboardText",
   "fileGrant",
   "expect",
+  "background",
 ]);
 const ACTION_TARGET_KEYS = new Set(["elementId", "normalized"]);
 const ACTION_TYPES: readonly DesktopGuiActionType[] = [
@@ -309,6 +316,12 @@ export function normalizeActionInput(input: unknown): NormalizedActionInput {
     clipboardAllowed = raw.clipboardAllowed;
   }
 
+  let background: boolean | undefined;
+  if (raw.background !== undefined) {
+    if (typeof raw.background !== "boolean") failInvalid("background 必须是布尔值");
+    background = raw.background;
+  }
+
   let clipboardText: string | undefined;
   if (raw.clipboardText !== undefined) {
     if (action !== "clipboard_write") failInvalid("clipboardText 只能用于 clipboard_write 动作");
@@ -436,6 +449,7 @@ export function normalizeActionInput(input: unknown): NormalizedActionInput {
     ...(clipboardAllowed !== undefined ? { clipboardAllowed } : {}),
     ...(clipboardText !== undefined ? { clipboardText } : {}),
     ...(fileGrant ? { fileGrant } : {}),
+    ...(background !== undefined ? { background } : {}),
     ...(raw.expect !== undefined ? { expect: normalizeActionExpectation(raw.expect, action) } : {}),
   };
 }

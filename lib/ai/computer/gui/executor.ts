@@ -22,6 +22,7 @@ import { resolveGuiControlCapability } from "@/lib/ai/computer/gui/capability";
 import { isHighRiskGuiLevel } from "@/lib/ai/computer/gui/risk";
 import { buildGuiApprovalInfo, describeGuiAction } from "@/lib/ai/computer/gui/observation";
 import { hashPlan } from "@/lib/ai/computer/gui/sessionTool";
+import { resolveBackgroundMode } from "@/lib/ai/computer/gui/background";
 import {
   DESKTOP_ACTION_TOOL_NAME,
   type ExecuteDesktopActionRequest,
@@ -211,6 +212,16 @@ export async function executeKiroDesktopAction(
     ...(sessionId ? { sessionId } : {}),
     ...(clipboardAction ? { clipboardAllowed: true } : {}),
     ...(fileGrant ? { fileGrant } : {}),
+    // 后台静默模式（Background Computer Use）：consent（冻结 snapshot）+ 动作准入 +
+    // 元素目标三者满足才透传 background=true；任一不满足走既有前台路径（默认不变）。
+    // Main 侧 fail closed（最小化 / 非语义动作直接失败，绝不自动回退前台）。
+    ...(resolveBackgroundMode({
+      backgroundAllowed: snapshot.backgroundAllowed === true,
+      action: input.action,
+      hasElementTarget: input.target?.elementId !== undefined,
+    }) === "background"
+      ? { background: true as const }
+      : {}),
   };
 
   // 6a. wait：无 target / 无副作用 → 不经过审批与观察强绑定（Main 仅做 session 校验）
@@ -341,7 +352,7 @@ export async function executeKiroDesktopAction(
   // 10. Audit（GUI 事实；绝不记录输入文本 / native 标识）
   void appendComputerAuditEntry({
     id: `audit-${crypto.randomUUID()}`,
-    timestamp: new Date(now()).toISOString(),
+    timestamp: new Date().toISOString(),
     taskId: request.taskId,
     conversationId: null,
     toolCallId: request.toolCallId,
@@ -354,6 +365,7 @@ export async function executeKiroDesktopAction(
     guiAction: preparation.action,
     guiRisk: preparation.risk.level,
     guiMethod: result.actionResult.method,
+    ...(bridgeInput.background === true ? { background: true as const } : {}),
     ...(result.changedWindow !== null ? { changedWindow: result.changedWindow } : {}),
     ...(result.uiChanged !== null ? { uiChanged: result.uiChanged } : {}),
     ...(result.verification !== undefined ? { verificationPassed: result.verification.passed } : {}),
