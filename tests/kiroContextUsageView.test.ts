@@ -78,7 +78,9 @@ describe("接线守卫（源码锁定）", () => {
   it("chat route：算完 plan / tools 后构建快照，并通过 messageMetadata 下发", () => {
     const route = readFileSync(join(process.cwd(), "app/api/ai/chat/route.ts"), "utf8");
     expect(route).toContain("buildContextUsageSnapshot(");
-    expect(route).toContain("estimateToolSchemaTokens(tools)");
+    // 工具两层暴露：快照按实际下发集计量（tierFull 全量 / 首轮 core 集），不用无条件全量
+    expect(route).toContain("estimateToolSchemaTokens(snapshotTools)");
+    expect(route).toContain("const snapshotTools = tierFull");
     expect(route).toContain("messageMetadata:");
     expect(route).toContain('part.type === "start" || part.type === "finish"');
     // 只传数字（不把消息正文 / 附件名放进快照）

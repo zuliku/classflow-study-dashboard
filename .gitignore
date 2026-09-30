@@ -21,6 +21,8 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+# 本地 dev server 常驻日志（opencode 外独立进程，不提交）
+dev-server.log
 
 # local env files
 .env*.local
