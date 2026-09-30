@@ -6,18 +6,21 @@ export type PdfJsModule = typeof import("pdfjs-dist");
 
 export async function loadPdfJs(): Promise<PdfJsModule> {
   if (pdfjsModule) return pdfjsModule;
-  // 统一使用 legacy build：Node 无需 DOM；浏览器把 worker 资源以 blob URL 提供，
-  // 避免 dev 环境下 worker chunk 加载不稳定导致挂起。
+  // 统一使用 legacy build（主库 + worker 同构建，避免消息协议漂移）。
   const mod = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const pdfjs = mod as unknown as PdfJsModule;
-  if (typeof window !== "undefined" && !(pdfjs as { GlobalWorkerOptions?: { workerSrc?: string } }).GlobalWorkerOptions?.workerSrc) {
+  // 每次都重设（幂等同值）：HMR 重载后旧模块实例可能残留 blob: workerSrc，不加“已设置跳过”守卫。
+  if (typeof window !== "undefined") {
+    // workerSrc 必须给同源 URL（dev localhost / prod app:// 均为 CSP 'self'）：
+    // 给 blob: URL 会触发 pdf.js 的跨域 importScripts 包装，与 module worker
+    // 不兼容导致真 worker 起不来；而 fake 回退的动态 import(blob:) 又被
+    // script-src 拦截 → 全部 PDF 打不开（Setting up fake worker failed）。
     try {
-      const worker = await import("pdfjs-dist/build/pdf.worker.mjs?url");
-      const res = await fetch(worker.default as string);
-      const blobUrl = URL.createObjectURL(await res.blob());
-      (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = blobUrl;
+      const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url");
+      (pdfjs as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
+        worker.default as string;
     } catch {
-      /* worker 配置失败时 pdfjs 会走主线程回退 */
+      /* worker 配置失败时 pdfjs 会走主线程回退（同源 URL 同样满足其动态 import） */
     }
   }
   pdfjsModule = pdfjs;
