@@ -55,7 +55,6 @@ export function KiroConversation({
   onUndoComputerTask,
   onApprovePlan,
   onCancelPlan,
-  emptyAnswerIds,
   onRegenerateAnswer,
 }: {
   messages: KiroChatMessageView[];
@@ -87,8 +86,6 @@ export function KiroConversation({
   /** plan-approve：批准 / 取消执行计划（卡片入口） */
   onApprovePlan?: (planId: string) => void;
   onCancelPlan?: (planId: string) => void;
-  /** 空终答安全网：已结算业务工具 + 零正文的消息 id（Row 取布尔，memo 安全） */
-  emptyAnswerIds?: ReadonlySet<string>;
   /** 空终答追答（纯文本重跑；零工具） */
   onRegenerateAnswer?: () => void;
 }) {
@@ -278,9 +275,9 @@ export function KiroConversation({
                   onUndoComputerTask={onUndoComputerTask}
                   onApprovePlan={onApprovePlan}
                   onCancelPlan={onCancelPlan}
-                  // 空终答追答只出现在 settled 的最后一条 assistant 行
+                  // 空终答追答只出现在 settled 的最后一条 assistant 行（显隐由 view 层判定）
                   showRegenerateAnswer={
-                    !!emptyAnswerIds?.has(m.id) && idx === lastAssistantIndex && !turnInFlight
+                    !!m.needsAnswerRetry && idx === lastAssistantIndex && !turnInFlight
                   }
                   onRegenerateAnswer={onRegenerateAnswer}
                 />

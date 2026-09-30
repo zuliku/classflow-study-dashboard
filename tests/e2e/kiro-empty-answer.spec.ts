@@ -37,12 +37,24 @@ function toolCallSSE(): string {
 }
 
 function emptyAnswerSSE(): string {
+  // 保真要点：生产空 step 照样带 messageMetadata（contextUsage 快照，start/finish 各一次），
+  // 它是唯一触发客户端 write() 提交新 step-start 的 part；缺了它 state 永不推进，
+  // sendAutomaticallyWhen 恒真 → 无限续跑（已验证：412 次相同请求）。
+  const usage = {
+    version: 1,
+    at: "2026-09-30T00:00:00.000Z",
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    totalEstimatedTokens: 100,
+    breakdown: { systemPromptTokens: 10, toolSchemaTokens: 80, conversationTokens: 10, attachmentTokens: 0, summaryTokens: 0 },
+    conversationBudget: { max: 100000, used: 10, compactAt: 75000, compacted: false },
+  };
   return sse(
     [
-      JSON.stringify({ type: "start", messageId: "mock-msg-1" }),
+      JSON.stringify({ type: "start", messageId: "mock-msg-1", messageMetadata: { contextUsage: usage } }),
       JSON.stringify({ type: "start-step" }),
       JSON.stringify({ type: "finish-step" }),
-      JSON.stringify({ type: "finish", finishReason: "stop" }),
+      JSON.stringify({ type: "finish", finishReason: "stop", messageMetadata: { contextUsage: usage } }),
     ].join("\n")
   );
 }
@@ -64,6 +76,8 @@ test("空终答：工具成功零正文 → 追答按钮 → textOnly 重跑出�
   const bodies: { textOnlyAnswer?: unknown; messages?: unknown[] }[] = [];
   await page.route("**/api/ai/chat", async (route) => {
     const body = route.request().postDataJSON() as { apiKey?: string; textOnlyAnswer?: unknown; messages?: unknown[] };
+    // eslint-disable-next-line no-console
+    console.log(`[E2E empty-answer] req#${bodies.length + 1} textOnly=${String(body?.textOnlyAnswer)}`);
     if (body?.apiKey !== "sk-test-key") {
       await route.fulfill({
         status: 400,
@@ -108,6 +122,11 @@ test("空终答：工具成功零正文 → 追答按钮 → textOnly 重跑出�
   await page.addInitScript(({ settings, key }) => {
     localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
+    // Task-12 发送门：纯 Chromium 无 Electron preload bridge，此处替身 beginLocal；
+    // server 侧 invocation 校验由本文件的 route mock 整体代替（trust 边界另有单测覆盖）。
+    (window as unknown as { classflowDesktop?: unknown }).classflowDesktop = {
+      invocation: { beginLocal: async () => ({ invocationId: "inv_e2e_empty_answer_1" }) },
+    };
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
   await page.setViewportSize({ width: 1440, height: 900 });

@@ -279,10 +279,15 @@ export interface KiroChatMessageView {
   /** plan-approve：本消息拥有的执行计划（proposingMessageId 精确绑定；live/恢复统一） */
   executionPlans?: PersistedExecutionPlan[];
   /**
-   * S-fix durable undo：恢复任务附带未使用的 durable checkpoint 时为 true；
-   * 驱动历史 Result 区的撤销按钮（用后经 viewCache bust 重算）。
+   * S-fix durable undo：恢复任务附带未使用的 durable checkpoint 时，历史 Result 区可撤销。
+   * 由 view.historyTaskCanUndo 驱动（memo 计算；用后经 viewCache bust 重算）。
    */
   historyTaskCanUndo?: boolean;
+  /**
+   * 空终答追答：已结算业务工具 + 零正文（buildKiroMessageView 纯推导；parts 变化自动重算）。
+   * Row 仅在 settled 末条行使用（in-flight 不打扰）。
+   */
+  needsAnswerRetry?: boolean;
   /** 上下文占用快照（Codex-style 指示；来自该 assistant message 的 stream metadata） */
   contextUsage?: ContextUsageSnapshot;
 }
@@ -513,6 +518,8 @@ export function buildKiroMessageView(
     canRegenerate: (!restored || restoredMessageIsRegenerable(m.metadata as Record<string, unknown> | undefined)) && !messageHasWriteToolCalls(m),
     assistantTurn,
     contextUsage,
+    // 空终答追答：已结算业务工具 + 零正文（live parts 实时判定；恢复消息 parts 已剥离 → 恒 false）
+    ...(messageNeedsAnswerRetry(m) ? { needsAnswerRetry: true as const } : {}),
   };
 }
 

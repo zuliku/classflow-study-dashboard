@@ -99,18 +99,18 @@ describe("空终答追答接线守卫（源码锁定）", () => {
   const hook = read("hooks/useKiroChat.ts");
   const route = read("app/api/ai/chat/route.ts");
 
-  it("Surface 计算空终答集并下发追答入口；hook 暴露 regenerateAnswer", () => {
-    expect(surface).toContain("messageNeedsAnswerRetry(m)");
-    expect(surface).toContain("emptyAnswerIds={emptyAnswerIds}");
-    expect(surface).toContain("chat.regenerateAnswer()");
+  it("Surface 下发追答入口；hook 暴露 regenerateAnswer + view 层判定", () => {
+    expect(surface).toContain("onRegenerateAnswer={() => void chat.regenerateAnswer()}");
     expect(hook).toContain("const regenerateAnswer = useCallback(");
+    // 判定在 view 构建层（parts 可见；Surface 的 chat.messages 是 view，无 parts）
+    expect(hook).toContain("messageNeedsAnswerRetry(m) ? { needsAnswerRetry: true as const } : {}");
     // 可见 nudge 走正常发送链（regenerate 会丢工具结果，禁止用于追答）
     expect(hook).toContain("textOnlyAnswer: true");
     expect(hook).not.toMatch(/regenerateAnswer[\s\S]{0,800}\.regenerate\(/);
   });
 
   it("Conversation 只给 settled 末条行布尔值（Row memo 安全）；Message 渲染 testid 按钮", () => {
-    expect(conversation).toContain("emptyAnswerIds?.has(m.id) && idx === lastAssistantIndex && !turnInFlight");
+    expect(conversation).toContain("m.needsAnswerRetry && idx === lastAssistantIndex && !turnInFlight");
     expect(conversation).toContain("showRegenerateAnswer={showRegenerateAnswer}");
     expect(message).toContain('data-testid="kiro-regenerate-answer"');
   });

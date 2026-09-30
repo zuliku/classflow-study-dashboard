@@ -8,7 +8,6 @@ import { KiroEmptyExperience } from "@/components/kiro/motion/KiroEmptyExperienc
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
 import { getActiveModelName, getActiveModelVendor, getModelContextWindowTokens, getModelsForProvider } from "@/lib/ai/providers/registry";
 import { findApprovalOwnerMessageId } from "@/lib/ai/ui/kiroAgentRun";
-import { messageNeedsAnswerRetry } from "@/lib/ai/history/messageEditing";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
@@ -67,15 +66,6 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
     () => findApprovalOwnerMessageId(chat.messages, pendingApproval?.taskId),
     [pendingApproval?.taskId, chat.messages]
   );
-
-  // 空终答安全网：已结算业务工具 + 零正文的消息 id 集（memo；Row 取布尔值，memo 安全）
-  const emptyAnswerIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const m of chat.messages) {
-      if (messageNeedsAnswerRetry(m)) ids.add(m.id);
-    }
-    return ids;
-  }, [chat.messages]);
 
   // Task 7C：Kiro 输出字号（顶层一次订阅；CSS variable 让所有历史 Message 同步缩放，不逐条订阅）
   const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
@@ -244,8 +234,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
               });
             }}
             onCancelPlan={(planId) => void chat.cancelExecutionPlan(planId)}
-            // 空终答安全网：纯文本追答（零工具重跑）
-            emptyAnswerIds={emptyAnswerIds}
+            // 空终答安全网：纯文本追答（零工具重跑；显隐由 view.needsAnswerRetry 驱动）
             onRegenerateAnswer={() => void chat.regenerateAnswer()}
           />
         )}
