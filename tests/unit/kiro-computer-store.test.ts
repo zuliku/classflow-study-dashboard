@@ -38,6 +38,15 @@ describe("useKiroComputerStore", () => {
     expect(s.permissionRules).toEqual([]);
   });
 
+  it("后台 consent 默认关闭；setter 独立切换（不连带其它开关）", () => {
+    expect(useKiroComputerStore.getState().backgroundEnabled).toBe(false);
+    useKiroComputerStore.getState().setBackgroundEnabled(true);
+    expect(useKiroComputerStore.getState().backgroundEnabled).toBe(true);
+    expect(useKiroComputerStore.getState().desktopActionEnabled).toBe(false);
+    useKiroComputerStore.getState().setBackgroundEnabled(false);
+    expect(useKiroComputerStore.getState().backgroundEnabled).toBe(false);
+  });
+
   it("setComputerEnabled(true) 不自动发明 workspace", () => {
     useKiroComputerStore.getState().setComputerEnabled(true);
     expect(useKiroComputerStore.getState().computerEnabled).toBe(true);

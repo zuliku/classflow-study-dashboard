@@ -1000,6 +1000,8 @@ export function useKiroChat({
       desktopActionAvailable: hasClassFlowDesktopComputerAction(),
       // Computer Use V2.5：剪贴板 preference（默认 false；未开启时动作三层拒绝）
       desktopClipboardEnabled: cs.desktopClipboardEnabled,
+      // 后台静默操作 consent（默认 false；冻结于 Send；server 只认 boolean）
+      backgroundAllowed: cs.backgroundEnabled,
       desktopSessionId: desktopSessionIdRef.current,
     };
   };

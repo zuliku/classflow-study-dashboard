@@ -69,6 +69,8 @@ export function validateComputerTurnSnapshot(value: unknown): KiroComputerTurnSn
     ...(typeof v.desktopActionEnabled === "boolean"
       ? { desktopActionEnabled: v.desktopActionEnabled }
       : {}),
+    // 后台静默操作 consent（只接受 boolean；缺失 = false；非法值 → 视为 false）
+    ...(typeof v.backgroundAllowed === "boolean" ? { backgroundAllowed: v.backgroundAllowed } : {}),
     ...(typeof v.desktopActionAvailable === "boolean"
       ? { desktopActionAvailable: v.desktopActionAvailable }
       : {}),

@@ -79,6 +79,7 @@ export function KiroAgentSettings() {
     desktopControlEnabled,
     desktopActionEnabled,
     desktopClipboardEnabled,
+    backgroundEnabled,
     workspaces,
     setComputerEnabled,
     setActiveWorkspaceId,
@@ -87,6 +88,7 @@ export function KiroAgentSettings() {
     setDesktopControlEnabled,
     setDesktopActionEnabled,
     setDesktopClipboardEnabled,
+    setBackgroundEnabled,
     addWorkspace,
   } = useKiroComputerStore();
 
@@ -227,6 +229,7 @@ export function KiroAgentSettings() {
       setDesktopControlEnabled(false);
       setDesktopActionEnabled(false);
       setDesktopClipboardEnabled(false);
+      setBackgroundEnabled(false);
       return;
     }
     confirmRequest({
@@ -245,6 +248,7 @@ export function KiroAgentSettings() {
     if (!enabled) {
       setDesktopActionEnabled(false);
       setDesktopClipboardEnabled(false);
+      setBackgroundEnabled(false);
       return;
     }
     confirmRequest({
@@ -275,6 +279,24 @@ export function KiroAgentSettings() {
         "Kiro 可在你确认后读取剪贴板（可能含敏感信息）或写入文本（覆盖当前内容）；每次读写都需确认。",
       confirmLabel: "允许剪贴板",
       onConfirm: () => setDesktopClipboardEnabled(true),
+    });
+  };
+
+  /**
+   * 后台静默操作：pattern 可直调的动作可在非前台窗口执行而不抢焦点；
+   * 你只能从执行记录里看到它，看不到实时界面。独立确认，默认关闭。
+   */
+  const handleToggleBackground = (enabled: boolean) => {
+    if (!enabled) {
+      setBackgroundEnabled(false);
+      return;
+    }
+    confirmRequest({
+      title: "允许 Kiro 后台操作电脑？",
+      description:
+        "Kiro 可在窗口未置顶时直接操作界面控件，不抢夺鼠标与焦点；你只能从执行记录与审计里看到它做了什么，看不到实时过程。坐标类操作仍需前台，最小化窗口无法后台操作。",
+      confirmLabel: "允许后台操作",
+      onConfirm: () => setBackgroundEnabled(true),
     });
   };
 
@@ -475,6 +497,25 @@ export function KiroAgentSettings() {
                 checked={desktopClipboardEnabled}
                 onChange={handleToggleDesktopClipboard}
                 label="允许 Kiro 读写剪贴板"
+              />
+            </SettingsRow>
+          )}
+
+          {/* 后台静默操作（默认关闭；独立确认；嵌套于电脑操作之下） */}
+          {desktopActionAvailable && desktopActionEnabled && (
+            <SettingsRow
+              settingId="kiro-background-enabled"
+              title="允许 Kiro 后台操作电脑"
+              description={
+                backgroundEnabled
+                  ? "未置顶窗口直接操作，不抢焦点；仅执行记录可见"
+                  : "窗口未置顶时操作控件，不抢夺鼠标与焦点。"
+              }
+            >
+              <SettingsToggle
+                checked={backgroundEnabled}
+                onChange={handleToggleBackground}
+                label="允许 Kiro 后台操作电脑"
               />
             </SettingsRow>
           )}

@@ -143,6 +143,14 @@ export interface KiroComputerTurnSnapshot {
    * 开启后每次读写仍需 allow-once 确认。
    */
   desktopClipboardEnabled?: boolean;
+  /**
+   * 后台静默操作（Background Computer Use）：用户偏好（默认 false，独立开关，
+   * 嵌套于「允许 Kiro 操作电脑」之下；关闭操作/观察时级联关闭）。
+   * 开启后，pattern 可直调的动作（click→Invoke/Select、type→SetValue）可在
+   * 非前台但未最小化的窗口上执行而不抢焦点；坐标/焦点依赖动作仍走前台；
+   * 最小化窗口后台不可操作（不渲染）。冻结于 Send 边界，server 只认 boolean。
+   */
+  backgroundAllowed?: boolean;
   /** 本 Turn 的 Desktop Control session id（opaque；Emergency Stop 用；绝不含 native 标识） */
   desktopSessionId?: string;
   }

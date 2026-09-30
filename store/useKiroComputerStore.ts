@@ -54,6 +54,14 @@ export interface KiroComputerState {
    */
   desktopClipboardEnabled: boolean;
   setDesktopClipboardEnabled: (enabled: boolean) => void;
+  /**
+   * 后台静默操作（Background Computer Use；默认 false，独立开关）。
+   * 开启 = 允许 pattern 可直调的动作在非前台窗口执行而不抢焦点；
+   * 嵌套于 desktopActionEnabled 之下（关闭操作/观察时级联关闭）。
+   * 与其它 action 偏好一致持久化（localStorage）；默认关闭保证重启后仍需显式开启。
+   */
+  backgroundEnabled: boolean;
+  setBackgroundEnabled: (enabled: boolean) => void;
   addWorkspace: (workspace: KiroWorkspaceMeta) => void;
   updateWorkspace: (id: string, patch: Partial<Omit<KiroWorkspaceMeta, "id">>) => void;
   removeWorkspace: (id: string) => void;
@@ -76,6 +84,7 @@ const DEFAULT_STATE = {
   desktopControlEnabled: false,
   desktopActionEnabled: false,
   desktopClipboardEnabled: false,
+  backgroundEnabled: false,
   workspaces: [] as KiroWorkspaceMeta[],
   permissionRules: [] as ComputerPermissionRule[],
 };
@@ -92,6 +101,7 @@ export const useKiroComputerStore = create<KiroComputerState>()(
       setDesktopControlEnabled: (enabled) => set({ desktopControlEnabled: enabled }),
       setDesktopActionEnabled: (enabled) => set({ desktopActionEnabled: enabled }),
       setDesktopClipboardEnabled: (enabled) => set({ desktopClipboardEnabled: enabled }),
+      setBackgroundEnabled: (enabled) => set({ backgroundEnabled: enabled }),
 
       addWorkspace: (workspace) =>
         set((state) => ({
@@ -212,6 +222,7 @@ export const useKiroComputerStore = create<KiroComputerState>()(
         terminalEnabled: state.terminalEnabled,
         desktopControlEnabled: state.desktopControlEnabled,
         desktopActionEnabled: state.desktopActionEnabled,
+        backgroundEnabled: state.backgroundEnabled,
         workspaces: state.workspaces,
         // 只持久化 persistent rules；session rules 仅内存
         permissionRules: state.permissionRules.filter((r) => r.scope === "persistent"),

@@ -148,6 +148,19 @@ describe("Snapshot validation — Desktop Action facts 白名单化", () => {
     expect(parsed?.desktopSessionId).toBeUndefined();
   });
 
+  it("后台 consent：合法 boolean 保留；非法值视为缺省（false），不拒绝快照", () => {
+    expect(
+      validateComputerTurnSnapshot({ ...validSnapshot, backgroundAllowed: true })?.backgroundAllowed
+    ).toBe(true);
+    expect(
+      validateComputerTurnSnapshot({ ...validSnapshot, backgroundAllowed: false })?.backgroundAllowed
+    ).toBe(false);
+    const bad = validateComputerTurnSnapshot({ ...validSnapshot, backgroundAllowed: "yes" });
+    expect(bad).not.toBeNull();
+    expect(bad?.backgroundAllowed).toBeUndefined();
+    expect(validateComputerTurnSnapshot(validSnapshot)?.backgroundAllowed).toBeUndefined();
+  });
+
   it("client 注入的 native 字段绝不进入快照", () => {
     const parsed = validateComputerTurnSnapshot({
       ...validSnapshot,
