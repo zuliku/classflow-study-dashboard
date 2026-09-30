@@ -128,6 +128,11 @@ export interface DesktopObservationDeps {
   }) => Promise<NativeScreenshotEvidence | null>;
   inspectUiTree: (hwnd: number) => Promise<{ elements: NativeUiElement[]; truncated: boolean }>;
   /**
+   * Phase 2（后台静默）：hwnd 精确遮挡截图（PrintWindow；DWM surface 要求窗口未最小化）。
+   * 缺失 → 后台复核无截图（UIA 复读仍可支撑 element/title 类 expect）。测试可注入 stub。
+   */
+  captureOccludedWindow?: (hwnd: number) => Promise<NativeScreenshotEvidence | null>;
+  /**
    * V2.2：单元素解析（worker 缓存命中；不传则回退全树扫描）。
    * 返回 null = 元素不存在；抛错 = UIA 读取失败。
    */
@@ -169,6 +174,8 @@ async function buildDefaultDeps(): Promise<DesktopObservationDeps> {
   // screenshot.ts 依赖 electron（desktopCapturer / screen）→ 动态加载，
   // 保证 runtime / observation 纯逻辑可在无 electron 的测试环境直接导入。
   const screenshotModule = await import("./screenshot");
+  // Phase 2（后台静默）：PrintWindow hwnd 精确截图（PS Add-Type，无 electron 依赖，可直接导入）
+  const printWindowModule = await import("./printWindow");
   // V2.2：UIA 走常驻 worker（缓存 + 无冷启动）；worker 不可用时各方法内部回退一次性脚本。
   const workerClient = await import("./uiaWorkerClient");
   // V2.5：剪贴板（Electron）与上传路径解析（授权 grant）→ 动态加载，保持可测试。
@@ -179,6 +186,7 @@ async function buildDefaultDeps(): Promise<DesktopObservationDeps> {
     platform: process.platform,
     listWindows: workerClient.workerListNativeWindows,
     captureScreenshot: screenshotModule.captureDesktopScreenshot,
+    captureOccludedWindow: printWindowModule.captureOccludedWindowScreenshot,
     inspectUiTree: workerClient.workerInspectNativeUiTree,
     resolveUiElement: workerClient.workerResolveNativeUiElement,
     probeUiAutomation: () => probeUiAutomation(),
@@ -763,12 +771,23 @@ export class DesktopObservationRuntime {
     const observeOnce = async () => {
       // 后台模式：复核观察强制去截图——遮挡窗口标题匹配失败时会降级拍主屏
       // （错误像素比没截图更有害）；UIA 树复读足以支撑 element/title 类 expect。
-      // hwnd 精确捕获由 Phase 2（PrintWindow）补齐。
+      // Phase 2（PrintWindow）hwnd 精确捕获补齐如下。
       const observation = await this.observe({
         ...record.request,
         ...(input.background === true ? { includeScreenshot: false } : {}),
         ...(record.sessionId ? { sessionId: record.sessionId } : {}),
       });
+      // Phase 2：后台 hwnd 精确截图（遮挡 OK，最小化不行；任何失败 → 无截图证据，
+      // 不抛错：UIA 复读仍是复核主体，截图只是加分证据）。
+      if (input.background === true && !observation.screenshot && this.deps.captureOccludedWindow) {
+        try {
+          const hwnd = this.requireWindowHwnd(record);
+          const shot = await this.deps.captureOccludedWindow(hwnd);
+          if (shot) observation.screenshot = { captured: true, ...shot };
+        } catch {
+          // evidence simply absent（warnings 已有 screenshot-unavailable 语义）
+        }
+      }
       return { observation, record: this.store.get(observation.observationId, this.deps.now()) };
     };
 
