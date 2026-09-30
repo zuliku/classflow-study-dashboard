@@ -430,16 +430,13 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
       "usePresence(slashOpen, MOTION_EXIT_MS.fast)",
       "usePresence(mentionOpen, MOTION_EXIT_MS.fast)",
       "usePresence(dragOver, MOTION_EXIT_MS.fast)",
-      "MOTION_EXIT_MS.base",
+      // 附件架 presence 与 ExitCollapse 纵向折叠同源（panel），卸载不截断；其余提示条走 fast
+      "attachments.length > 0, MOTION_EXIT_MS.panel",
     ]) {
       expect(composer).toContain(snippet);
     }
-    // 退出分支统一加速离场 + exit-fast/base var（进入保持既有 keyframe）
-    for (const snippet of [
-      "duration-[var(--motion-exit-fast)]",
-      "duration-[var(--motion-exit-base)]",
-      "ease-[var(--ease-exit)]",
-    ]) {
+    // 退出分支统一加速离场 + exit-fast var（进入保持既有 keyframe）
+    for (const snippet of ["duration-[var(--motion-exit-fast)]", "ease-[var(--ease-exit)]"]) {
       expect(composer).toContain(snippet);
     }
     expect(composer).not.toMatch(/duration-\[\d+ms\]/);

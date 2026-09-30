@@ -204,8 +204,10 @@ export function KiroComposer({
     }, MOTION_EXIT_MS.panel);
     leavingTimersRef.current.push(timer);
   };
-  // 附件架： chips 全走光且退出播完才卸载（避免截断 chip collapse）。
-  const shelfPresence = usePresence(attachments.length > 0, MOTION_EXIT_MS.base);
+  // 附件架： chips 全走光且退出播完才卸载（避免截断 chip collapse）；
+  // 高度走 ExitCollapse 纵向折叠（toolbar 平滑上收，否则最后 60px 硬跳）。
+  // presence 时长与折叠 CSS 同源（panel 160ms），避免卸载截断动画尾。
+  const shelfPresence = usePresence(attachments.length > 0, MOTION_EXIT_MS.panel);
   const [commitPulse, setCommitPulse] = useState(false);
   const commitTimerRef = useRef(0);
   useEffect(
@@ -590,17 +592,17 @@ export function KiroComposer({
             introActive && "kiro-composer-intro"
           )}
         >
-          {/* Attachment Shelf：对称进退（入场 structure-settle，退场 fade + 上收） */}
+          {/* Attachment Shelf：入场 structure-settle；退场走 ExitCollapse 纵向折叠
+              （fade + 高度，toolbar 平滑上收；presence 卸载与折叠同源 panel，不截断） */}
           {shelfPresence.mounted && (
-            <div
-              className={cn(
-                "bg-alabaster/40 border-b border-line-soft rounded-t-2xl",
-                compact ? "px-2.5 py-1.5" : "px-3 py-2",
-                shelfPresence.visible
-                  ? "kiro-structure-settle"
-                  : "opacity-0 -translate-y-[2px] pointer-events-none transition-[opacity,transform] duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]"
-              )}
-            >
+            <ExitCollapse exiting={!shelfPresence.visible}>
+              <div
+                className={cn(
+                  "bg-alabaster/40 border-b border-line-soft rounded-t-2xl",
+                  compact ? "px-2.5 py-1.5" : "px-3 py-2",
+                  shelfPresence.visible && "kiro-structure-settle"
+                )}
+              >
               {/* Tray：单行横向滚动，附件再多也不撑高 Composer；
                   chip 退出期间切 overflow-x-clip（auto 下收缩内容会触发滚动条闪烁 + 滚动量重算，
                   是 collapse 卡顿的主因；播完恢复 auto） */}
@@ -691,7 +693,8 @@ export function KiroComposer({
                   ))}
                 </div>
               )}
-            </div>
+              </div>
+            </ExitCollapse>
           )}
 
           {/* Slash Skill Menu：仅「输入中的命令」展开；无演示文案；选中项高亮 + 键盘导航；对称进退 */}
