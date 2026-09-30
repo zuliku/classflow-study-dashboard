@@ -102,6 +102,14 @@ describe("文本提取", () => {
     expect(r.pages).toEqual([]);
   });
 
+  it("H. 损坏/伪装 PDF：分类报错（非笼统无法读取）", async () => {
+    const garbage = new Blob(["this is not a pdf, just text"], { type: "application/pdf" });
+    Object.defineProperty(garbage, "name", { value: "实证图2至图4.pdf" });
+    const r = await extractAttachment(garbage as File, { kind: "pdf" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("不是有效的 PDF");
+  });
+
   it("G. System Prompt 不把扫描件当坏文件（UI 文案由附件层给出明确 unsupported 语义）", () => {
     // 文案常量存在于 UI 层；这里只保证 prompt 不包含误导性「损坏」措辞
     expect(KIRO_SYSTEM_PROMPT).not.toContain("文件损坏");

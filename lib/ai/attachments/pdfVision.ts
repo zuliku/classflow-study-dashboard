@@ -50,6 +50,28 @@ export function extractExplicitPages(userText: string): { start: number; end: nu
   return out;
 }
 
+/**
+ * 图表意图检测（纯函数）：用户想看 PDF 里的图（而不仅是文字层）时为 true。
+ * 覆盖：图2 / 图2至图4 / 第2图 / 图表 / 看图 / 图中 / 如图 / figure 2 等；
+ * 刻意不匹配裸“图”（试图 / 地图 / 图书馆误伤）与裸“图片”（多指用户直传图片）。
+ * 发送时文本 PDF 命中则渲染页面图（与扫描件共享 Turn 预算），否则纯文本发送。
+ */
+export function hasFigureIntent(userText: string): boolean {
+  if (!userText) return false;
+  const patterns = [
+    /图\s*\d/, // 图2 / 图 3 / 图2-4
+    /图\s*[至到—–-]\s*\d/, // 图2至图4（宽松；与上一条互补）
+    /第\s*\d+\s*图/, // 第2图
+    /图表|看图|图中|如图|配图|插图|示意图|流程图|柱状图|条形图|折线图|曲线图|直方图|散点图|饼图|箱线图|森林图|核密度/,
+    /\bfigures?\b|\bfig\.?\s*\d/i, // figure 2 / fig.3（词边界，避免 config 误伤）
+    /(pdf|文档|文件|附件).{0,4}(中|里|内)的?(图|图片|图表)/i, // PDF里的图片
+    /图的?(内容|意思|说明|解读)/, // 图的内容（带“的”字格，避开地图/试图）
+    /(图片|图表).{0,6}(内容|意思|说明|是什么|怎么看|解读|解释|描述|分析)/, // 图片内容是什么
+    /(解释|解读|描述|分析|说明|讲讲|看看).{0,6}图/, // 解释一下图2
+  ];
+  return patterns.some((re) => re.test(userText));
+}
+
 /** 单份文档页选择：explicit 优先（合法页 clamp 到 [1,pageCount]），否则默认前 N 页 */
 export function selectScannedPdfPages(input: {
   userText?: string;

@@ -162,7 +162,9 @@ import {
   clearPendingApprovalSnapshot,
 } from "@/lib/ai/computer/pendingApprovalSnapshot";
 import { enrichWebSourcePages } from "@/lib/ai/citations/sourceRegistry";
-import { renderPdfPages, selectScannedPdfPages, allocateVisionPages, extractExplicitPages } from "@/lib/ai/attachments/pdfVision";
+import { renderPdfPages, selectScannedPdfPages, allocateVisionPages, extractExplicitPages, hasFigureIntent } from "@/lib/ai/attachments/pdfVision";
+import { extractAttachment } from "@/lib/ai/attachments";
+import { extractCacheKey } from "@/lib/ai/attachments/cache";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN, MAX_SCANNED_PDF_IMAGE_BYTES_PER_TURN } from "@/lib/ai/attachments/limits";
 import { getFileBlob } from "@/lib/fileStorage";
 import {
@@ -875,7 +877,18 @@ export function useKiroChat({
     const textRegistry = buildTurnSourceRegistry(budgeted).sources;
     // 扫描 PDF Source：sourceId 接在文本文档之后；availablePages 只含实际渲染发送的页面
     const scannedDocs = turnAttachments.filter(isScannedAttachment);
-    const scannedRegistry: KiroSourceMeta[] = scannedDocs.map((a, i) => {
+    // 图表页 figure PDF（文本 PDF 按需渲染）：local 文档复用已有文本 SOURCE id；
+    // 课程资料无文本行，需追加新行（id 与发送时 figureMaterialBase 分配一致）。
+    const renderedAttachmentIds = new Set(visionPagesRef.current.map((vp) => vp.attachmentId));
+    const figureMaterialDocs = turnAttachments.filter(
+      (a) =>
+        a.source === "material" &&
+        a.kind === "pdf" &&
+        a.status === "ready" &&
+        !isScannedAttachment(a) &&
+        renderedAttachmentIds.has(a.id)
+    );
+    const scannedRegistry: KiroSourceMeta[] = [...scannedDocs, ...figureMaterialDocs].map((a, i) => {
       const pages = visionPagesRef.current.filter((vp) => vp.attachmentId === a.id).map((vp) => vp.page);
       return {
         sourceId: `doc-${textRegistry.length + i + 1}`,
@@ -3130,7 +3143,13 @@ export function useKiroChat({
         const pageFiles: File[] = [];
         const preparedImageFiles: File[] = [];
         const renderedPageCountByAttachment = new Map<string, number>();
-        const visionPrepPending = scanned.length > 0 || (visionEnabledForIntent && userImages.length > 0);
+        // 文本 PDF 图表意图（图2/图表/figure…）：文字层看不见森林图/直方图/核密度曲线，
+        // 有视觉模型时把相关页也渲染（与扫描件共享 Turn 预算，扫描件优先）。
+        const figureIntent = visionEnabledForIntent && hasFigureIntent(v);
+        const hasFigurePdf =
+          figureIntent &&
+          turnAttachments.some((a) => a.kind === "pdf" && a.status === "ready" && !isScannedAttachment(a));
+        const visionPrepPending = scanned.length > 0 || hasFigurePdf || (visionEnabledForIntent && userImages.length > 0);
         if (!visionPrepPending) return { pageFiles, preparedImageFiles };
         setPreparingVision(true);
         try {
@@ -3158,6 +3177,8 @@ export function useKiroChat({
           }
 
           // C. 扫描 PDF：在 pdfBudgetBytes 内渲染；每份 scanned PDF 至少 1 页
+          // D（图表页）复用剩余额度，扫描件优先，故预算变量提升到 C/D 共享作用域。
+          let remainingVisionBytes = budget.pdfBudgetBytes;
           if (scanned.length > 0) {
             if (budget.pdfBudgetBytes === 0) {
               // budget exhaustion ≠ 文件损坏：明确区分提示
@@ -3193,7 +3214,6 @@ export function useKiroChat({
                     })
                   );
 
-            let remainingVisionBytes = budget.pdfBudgetBytes;
             for (let i = 0; i < scanned.length; i++) {
               const a = scanned[i];
               const sourceId = `doc-${textCount + i + 1}`;
@@ -3233,6 +3253,84 @@ export function useKiroChat({
               pushToast({ message: "视觉附件过多，部分扫描 PDF 无法加入本次请求，请减少附件或指定更少页数。", type: "error" });
               visionFailed = true;
               return { pageFiles, preparedImageFiles };
+            }
+          }
+
+          // D. 文本 PDF 图表页：用户问图且模型有视觉时渲染相关页（文字层无图表像素）。
+          // 与扫描件共享 Turn 预算（扫描件已优先占用剩余）；文本已发送，失败只降级为
+          // 纯文本作答，绝不阻断 Send。sourceId 复用该文档已有的文本 SOURCE（引用一致）。
+          if (hasFigurePdf && remainingVisionBytes > 0) {
+            const figureDocs = turnAttachments.filter(
+              (a) => a.kind === "pdf" && a.status === "ready" && !isScannedAttachment(a)
+            );
+            if (figureDocs.length > 0) {
+              const figureTextContexts = buildDocumentContexts(turnAttachments);
+              const figureSourceIdByAttachmentId = new Map(
+                figureTextContexts.map((c) => [c.attachmentId, c.sourceId] as const)
+              );
+              let figureSlotsLeft = Math.max(0, MAX_SCANNED_PDF_PAGES_PER_TURN - pageFiles.length);
+              let renderedFigurePages = 0;
+              // 课程资料 figure PDF 无文本 SOURCE 行：接在文本 + 扫描之后分配新 id
+              //（buildTurnSnapshot 用 visionPagesRef 反查，见下方 scannedRegistry 扩展）。
+              const figureMaterialBase = figureTextContexts.length + scanned.length;
+              let figureMaterialSeen = 0;
+              for (const a of figureDocs) {
+                if (figureSlotsLeft <= 0 || remainingVisionBytes <= 0) break;
+                let blob: Blob | null = null;
+                let pageCount = 1;
+                if (a.source === "local") {
+                  blob = a.file;
+                  pageCount = Math.max(1, a.extracted?.pageCount ?? 1);
+                } else {
+                  const material = useAppStore
+                    .getState()
+                    .courses.find((c) => c.id === a.courseId)
+                    ?.materials.find((m) => m.id === a.materialId);
+                  if (material?.storageKey) blob = await getFileBlob(material.storageKey);
+                  if (!blob) continue;
+                  // 课程资料未存 pageCount：走缓存提取（addMaterial inspection 已缓存，命中率高）
+                  try {
+                    const extracted = await extractAttachment(blob as Blob & { name?: string }, {
+                      kind: "pdf",
+                      cacheKey: extractCacheKey({ storageKey: material?.storageKey ?? a.materialId }),
+                    });
+                    if (!extracted.ok) continue;
+                    pageCount = Math.max(1, extracted.extracted.pageCount ?? 1);
+                  } catch {
+                    continue;
+                  }
+                }
+                if (!blob) continue;
+                const sel = selectScannedPdfPages({ userText: v, pageCount, maxPages: figureSlotsLeft });
+                if (sel.pages.length === 0) continue;
+                const sourceId =
+                  figureSourceIdByAttachmentId.get(a.id) ??
+                  `doc-${figureMaterialBase + figureMaterialSeen + 1}`;
+                if (!figureSourceIdByAttachmentId.has(a.id)) figureMaterialSeen += 1;
+                try {
+                  const rendered = await renderPdfPages(blob, sel.pages, sourceId, {
+                    maxBytes: remainingVisionBytes,
+                  });
+                  for (const r of rendered) {
+                    pageFiles.push(r.file);
+                    remainingVisionBytes -= r.size;
+                    figureSlotsLeft -= 1;
+                    renderedFigurePages += 1;
+                    renderedPageCountByAttachment.set(a.id, (renderedPageCountByAttachment.get(a.id) ?? 0) + 1);
+                    visionPagesRef.current.push({
+                      sourceId,
+                      page: r.page,
+                      fileName: r.file.name,
+                      attachmentId: a.id,
+                    });
+                  }
+                } catch {
+                  /* 单份渲染失败：该文档降级纯文本，继续其它文档 */
+                }
+              }
+              if (renderedFigurePages === 0) {
+                pushToast({ message: "PDF 图表页渲染失败，本次仅按文字内容作答。", type: "error" });
+              }
             }
           }
         } finally {
@@ -3332,7 +3430,7 @@ export function useKiroChat({
       };
       turnPerf("turnSnapshotCommitted");
       // V1.3B：Vision Ledger 用「真正进入 FileList」的字节初始化
-      //（user images 优先；scanned attachment pages 从 total/pdf 预算中扣掉；
+      //（user images 优先；scanned / 图表 PDF pages 从 total/pdf 预算中扣掉；
       //  后续 read_project_visual 看到的是本 Turn 真实剩余额度）
       turnVisionBudgetRef.current = createVisionTurnRuntimeBudget({
         initialUserImageBytes: sumVisionBytes(visionPayload.preparedImageFiles),

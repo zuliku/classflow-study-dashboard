@@ -1,7 +1,7 @@
 import { KiroAttachmentKind } from "@/lib/ai/attachments/types";
 import { routeAttachment } from "@/lib/ai/attachments/router";
 import { extractTextFile, ExtractedDocument } from "@/lib/ai/attachments/extractors";
-import { extractPdf } from "@/lib/ai/attachments/pdf";
+import { extractPdf, PdfExtractError } from "@/lib/ai/attachments/pdf";
 import { extractDocx } from "@/lib/ai/attachments/docx";
 import { extractXlsx } from "@/lib/ai/attachments/xlsx";
 import { extractPptx } from "@/lib/ai/attachments/pptx";
@@ -70,7 +70,21 @@ export async function extractAttachment(
       extractorVersion: EXTRACTOR_VERSION,
     });
     return { ok: true, extracted };
-  } catch {
+  } catch (err) {
+    // PDF 分类报错（可操作提示）；其它格式保持笼统文案（不透传 raw error）。
+    // 诊断保留在 console（dev 复现用），绝不进入 Tool Output / Audit。
+    if (err instanceof PdfExtractError) {
+      if (typeof console !== "undefined") {
+        console.warn(`[kiro] pdf extract failed (${err.failureKind}):`, err.message);
+      }
+      if (err.failureKind === "encrypted") {
+        return { ok: false, reason: "unsupported", message: "该 PDF 已加密，请先解密或打印为新 PDF 后重试。" };
+      }
+      if (err.failureKind === "invalid") {
+        return { ok: false, reason: "unsupported", message: "该文件不是有效的 PDF（可能是改了扩展名或已损坏），请确认后重试。" };
+      }
+      return { ok: false, reason: "unsupported", message: "该 PDF 页面无法读取，请尝试打印为新 PDF 后重试。" };
+    }
     return { ok: false, reason: "unsupported", message: "无法读取该文件，请确认格式与内容。" };
   }
 }

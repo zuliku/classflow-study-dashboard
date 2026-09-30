@@ -3,6 +3,7 @@ import {
   extractExplicitPages,
   selectScannedPdfPages,
   allocateVisionPages,
+  hasFigureIntent,
 } from "@/lib/ai/attachments/pdfVision";
 import { MAX_SCANNED_PDF_PAGES_PER_TURN } from "@/lib/ai/attachments/limits";
 
@@ -81,5 +82,41 @@ describe("allocateVisionPages（多文档公平分配）", () => {
   it("单文档 = selectScannedPdfPages 默认行为", () => {
     const r = allocateVisionPages([{ pageCount: 20, explicitPages: [] }], 6);
     expect(r[0].pages).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+describe("hasFigureIntent（文本 PDF 图表页按需渲染）", () => {
+  it("命中：图N / 第N图 / 图表 / figure", () => {
+    for (const t of [
+      "解释一下图2",
+      "图2至图4讲了什么",
+      "看看第3图",
+      "这张图表说明了什么",
+      "看图中的曲线",
+      "如图4所示，解释置换检验",
+      "please explain figure 2",
+      "what does fig.3 show",
+      "PDF里的图片是什么意思",
+      "描述一下图4的内容",
+    ]) {
+      expect(hasFigureIntent(t), t).toBe(true);
+    }
+  });
+
+  it("不命中：裸图误伤与纯文字请求", () => {
+    for (const t of [
+      "",
+      "总结这份PDF的重点",
+      "我试图理解这篇论文",
+      "地图学原理是什么",
+      "图书馆什么时候开门",
+      "翻译第二段",
+    ]) {
+      expect(hasFigureIntent(t), t).toBe(false);
+    }
+  });
+
+  it("不误伤 config 等英文词", () => {
+    expect(hasFigureIntent("config the build")).toBe(false);
   });
 });

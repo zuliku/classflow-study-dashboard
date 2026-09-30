@@ -40,9 +40,46 @@ export function classifyPdfTextLayer(input: {
   return { possiblyScanned, hasUsableTextLayer: !possiblyScanned };
 }
 
+/** PDF 提取失败分类（UI 给出可操作提示，而非笼统“无法读取”） */
+export type PdfExtractFailureKind = "encrypted" | "invalid" | "unreadable";
+
+export class PdfExtractError extends Error {
+  readonly failureKind: PdfExtractFailureKind;
+  constructor(failureKind: PdfExtractFailureKind, message: string) {
+    super(message);
+    this.name = "PdfExtractError";
+    this.failureKind = failureKind;
+  }
+}
+
+/** pdf.js 抛错 → 失败分类（按 name/message 启发式；未知一律 unreadable） */
+export function classifyPdfExtractError(err: unknown): PdfExtractFailureKind {
+  const name = (err as { name?: unknown })?.name;
+  const message = (err as { message?: unknown })?.message;
+  const text = `${typeof name === "string" ? name : ""} ${typeof message === "string" ? message : ""}`.toLowerCase();
+  if (text.includes("password") || text.includes("encrypted")) return "encrypted";
+  if (
+    text.includes("invalid pdf") ||
+    text.includes("invalidpdf") ||
+    text.includes("not a pdf") ||
+    text.includes("malformed") ||
+    text.includes("xref") ||
+    text.includes("trailer")
+  ) {
+    return "invalid";
+  }
+  return "unreadable";
+}
+
 /**
  * PDF 文本提取：只做 text PDF（不做视觉还原 / 多栏 / annotation）。
  * 提取结果接近空 → 判断为扫描件（possiblyScanned，经 canonical classifier）。
+ *
+ * 容错：
+ * - 单页 getPage/getTextContent 失败 → 跳过该页继续（部分厂商 PDF 偶发坏页；
+ *   整份失败比缺一页更糟；缺页不伪造页码，pages 只含成功页）；
+ * - getDocument 失败 → 按分类抛 PdfExtractError（入口负责文案）；
+ * - 全部页都失败 → unreadable（不是扫描件：连页数都不可信，不走 Vision）。
  */
 export async function extractPdf(file: Blob): Promise<ExtractedDocument & { possiblyScanned: boolean }> {
   // 动态加载：Browser 用标准 build；Node（测试）用 legacy build
@@ -54,20 +91,35 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
     typeof window === "undefined"
       ? { standardFontDataUrl: new URL(`${fontDir}`, import.meta.url).toString() }
       : {};
-  const doc = await pdfjs.getDocument({ data, ...nodeInit }).promise;
+  const loadingTask = pdfjs.getDocument({ data, ...nodeInit });
+  let doc: Awaited<typeof loadingTask.promise>;
+  try {
+    doc = await loadingTask.promise;
+  } catch (err) {
+    throw new PdfExtractError(classifyPdfExtractError(err), "PDF 文档打开失败");
+  }
   try {
     const pages: { page: number; text: string }[] = [];
     let nonWhitespaceTextChars = 0;
+    let failedPages = 0;
     for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const pageText = content.items
-        .map((item) => ("str" in item ? (item as { str: string }).str : ""))
-        .join(" ")
-        .replace(/\s+/g, " ");
-      pages.push({ page: i, text: pageText });
-      nonWhitespaceTextChars += pageText.replace(/\s+/g, "").length;
-      page.cleanup();
+      try {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items
+          .map((item) => ("str" in item ? (item as { str: string }).str : ""))
+          .join(" ")
+          .replace(/\s+/g, " ");
+        pages.push({ page: i, text: pageText });
+        nonWhitespaceTextChars += pageText.replace(/\s+/g, "").length;
+        page.cleanup();
+      } catch {
+        // 单页损坏：跳过（缺页不伪造；全部失败见下方 unreadable 判定）
+        failedPages += 1;
+      }
+    }
+    if (pages.length === 0 && failedPages > 0) {
+      throw new PdfExtractError("unreadable", "PDF 页面均无法读取");
     }
     const all = pages.map((p) => `【第 ${p.page} 页】\n${p.text}`).join("\n\n");
     const normalized = normalizeLineEndings(all).trim();

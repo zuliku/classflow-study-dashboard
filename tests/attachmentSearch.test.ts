@@ -302,6 +302,18 @@ describe("searchPdfText（真实多页 PDF；bounded memory）", () => {
   });
 });
 
+describe("classifyPdfExtractError（PDF 失败分类，可操作文案）", () => {
+  it("加密 / 结构损坏 / 未知 → encrypted / invalid / unreadable", async () => {
+    const { classifyPdfExtractError, PdfExtractError } = await import("@/lib/ai/attachments/pdf");
+    expect(classifyPdfExtractError({ name: "PasswordException", message: "Need password" })).toBe("encrypted");
+    expect(classifyPdfExtractError(new Error("Invalid PDF structure"))).toBe("invalid");
+    expect(classifyPdfExtractError(new Error("Malformed xref"))).toBe("invalid");
+    expect(classifyPdfExtractError(new Error("boom"))).toBe("unreadable");
+    expect(classifyPdfExtractError(null)).toBe("unreadable");
+    expect(new PdfExtractError("encrypted", "x").failureKind).toBe("encrypted");
+  });
+});
+
 describe("classifyPdfTextLayer（V1.4.2 canonical）", () => {
   const cases: { pages: number; chars: number; scanned: boolean }[] = [
     { pages: 1, chars: 0, scanned: true },
