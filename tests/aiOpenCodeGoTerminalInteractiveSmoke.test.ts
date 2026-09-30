@@ -128,17 +128,23 @@ gated(`${smokeModel} Interactive Terminal Smoke（start/write/wait）`, () => {
     expect(startCalls.length).toBeGreaterThanOrEqual(1);
     const handle = lastHandle;
     expect(handle).toBeTruthy();
+    // eslint-disable-next-line no-console
+    console.log(`[LIVE:muse-inter] round1 finish=${round1.finishReason} text=${JSON.stringify((round1.text ?? "").slice(0, 160))} usage=${JSON.stringify(round1.usage?.outputTokens ?? null)}`);
 
     // Round 2: write (must be called by model, no harness fallback)
+    // 配额与生产对齐（2048）：muse 默认重度思考，小配额会被思考吃光 →
+    // finish=length + 无调用无文本（live probe 实测：400 配额 reasoning 占 397）
     const round2 = await generateText({
       model: resolved.model,
       system: systemBase,
       messages: round1.response.messages as unknown as import("ai").ModelMessage[],
       tools: { write_terminal_input: writeTool, wait_terminal_command: waitTool },
-      maxOutputTokens: 400,
+      maxOutputTokens: 2048,
     });
     const writeCalls = [...round1.toolCalls, ...round2.toolCalls].filter((c) => c.toolName === "write_terminal_input");
     expect(writeCalls.length).toBeGreaterThanOrEqual(1);
+    // eslint-disable-next-line no-console
+    console.log(`[LIVE:muse-inter] round2 finish=${round2.finishReason} text=${JSON.stringify((round2.text ?? "").slice(0, 160))} usage=${JSON.stringify(round2.usage?.outputTokens ?? null)} tools=${[...round1.toolCalls, ...round2.toolCalls].map((c) => c.toolName).join(",")}`);
     const writeData = (writeCalls[0].input as { data?: string })?.data ?? "";
     expect(writeData.toLowerCase()).toContain("hello");
 
@@ -149,9 +155,11 @@ gated(`${smokeModel} Interactive Terminal Smoke（start/write/wait）`, () => {
       system: systemBase,
       messages: allMessagesForWait,
       tools: { wait_terminal_command: waitTool },
-      maxOutputTokens: 400,
+      maxOutputTokens: 2048,
     });
     const waitCalls = [...round1.toolCalls, ...round2.toolCalls, ...round3.toolCalls].filter((c) => c.toolName === "wait_terminal_command");
+    // eslint-disable-next-line no-console
+    console.log(`[LIVE:muse-inter] round3 finish=${round3.finishReason} text=${JSON.stringify((round3.text ?? "").slice(0, 200))} usage=${JSON.stringify(round3.usage?.outputTokens ?? null)} tools=${[...round1.toolCalls, ...round2.toolCalls, ...round3.toolCalls].map((c) => c.toolName).join(",")}`);
     expect(waitCalls.length).toBeGreaterThanOrEqual(1);
 
     // Verify runtime output via captured wait output (no harness fallback)
@@ -168,7 +176,7 @@ gated(`${smokeModel} Interactive Terminal Smoke（start/write/wait）`, () => {
             ...(round3.response?.messages as unknown as import("ai").ModelMessage[] ?? []),
             { role: "user", content: `终端最终输出：${lastWaitOutput}. 请告诉我是否成功及输出内容。` } as unknown as import("ai").ModelMessage,
           ],
-          maxOutputTokens: 300,
+          maxOutputTokens: 2048,
         });
         expect(round4.text).toContain("received:hello");
       } else {

@@ -3028,7 +3028,7 @@ export function useKiroChat({
   }, []);
 
   const sendWithAttachments = useCallback(
-    async (text: string, turnAttachments: KiroAttachment[]): Promise<boolean> => {
+    async (text: string, turnAttachments: KiroAttachment[], opts?: { textOnlyAnswer?: boolean }): Promise<boolean> => {
       const v = text.trim();
       if (!v || !enabled) return false;
       readCounterRef.current = 0;
@@ -3318,6 +3318,8 @@ export function useKiroChat({
       turnSnapshotRef.current = {
         ...baseTurnSnapshot,
         ...(computerWorkspaceInstructions ? { computerWorkspaceInstructions } : {}),
+        // 空终答追答：零工具重跑标记随 Turn 冻结（server 只认严格 true）
+        ...(opts?.textOnlyAnswer ? { textOnlyAnswer: true } : {}),
       };
       turnPerf("turnSnapshotCommitted");
       // V1.3B：Vision Ledger 用「真正进入 FileList」的字节初始化
@@ -3530,36 +3532,23 @@ export function useKiroChat({
   /**
    * 空终答追答（fix：思考吃光配额 → 工具成功但零正文）：
    * 仅当最后一条 assistant 经纯函数判定为“有已结算业务工具 + 零正文”时允许；
-   * server 以 textOnlyAnswer 零工具重跑，写工具不可能被重执行（含 Write 的轮次同样安全）。
+   * 走正常发送链补一条可见 nudge（历史工具结果保留），textOnlyAnswer 让 server
+   * 零工具重跑——写工具不可能被重执行（含 Write 的轮次同样安全）。
    * Defense in depth：UI 误调用（非空终答）直接 toast 拒绝，不发送请求。
+   * 注意：不能用 chat.regenerate——SDK 会删掉末条 assistant（含工具结果），追答将无事实可依。
    */
   const regenerateAnswer = useCallback(() => {
-    if (!enabled) return;
+    if (!enabled) return Promise.resolve(false);
     const c = latestChatRef.current;
     const lastAssistant = [...c.messages].reverse().find((m) => m.role === "assistant");
     if (!lastAssistant || !messageNeedsAnswerRetry(lastAssistant)) {
       pushToast({ message: "当前无需重新生成回答。", type: "info" });
-      return;
+      return Promise.resolve(false);
     }
-    readCounterRef.current = 0;
-    documentReadCounterRef.current = 0;
-    writeCounterRef.current = 0;
-    limitReachedRef.current = false;
-    resetDocumentFailureFuse();
-    // 追答同样重新铸造 invocation（route 强制 INVOCATION_REQUIRED；旧 turn 的已清空/过期）
-    void (async () => {
-      try {
-        const invBridge = (window as unknown as { classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } } }).classflowDesktop?.invocation;
-        if (invBridge) {
-          const { invocationId } = (await invBridge.beginLocal()) as { invocationId: string };
-          activeInvocationIdRef.current = invocationId ?? null;
-        }
-      } catch {
-        activeInvocationIdRef.current = null;
-      }
-      void latestChatRef.current.regenerate({ body: { ...requestBody(), textOnlyAnswer: true } });
-    })();
-  }, [enabled, pushToast]);
+    return sendWithAttachments("请根据以上工具结果直接给出回答，不要重复调用工具。", [], {
+      textOnlyAnswer: true,
+    });
+  }, [enabled, pushToast, sendWithAttachments]);
 
   /** stale approval / 本会话 task 状态清理（newChat / loadConversation 共用；不清理已完成任务展示？） */
   const clearComputerSessionState = useCallback(
