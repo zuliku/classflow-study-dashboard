@@ -171,6 +171,10 @@ export function KiroComposer({
   const [mentionOptions, setMentionOptions] = useState<MentionOption[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionActive, setMentionActive] = useState(0);
+  // Esc/外部点击读最新菜单状态（listener 只订阅一次，不 stale；关了任一即 stopPropagation，
+  // 否则事件继续冒泡到 Sidecar 的 Esc（topmost 判真，因内层菜单未进栈）造成双关）
+  const menuStateRef = useRef({ openMenu: null as ComposerMenu, slashOpen: false, mentionOpen: false });
+  menuStateRef.current = { openMenu, slashOpen, mentionOpen };
   // P1 对称进退：enter 走既有 keyframe（slash/mention/shelf），exit 走 transition +
   // usePresence 延迟卸载；时长全部引用 Motion Contract 常量（测试有源码护栏）。
   const slashPresence = usePresence(slashOpen, MOTION_EXIT_MS.fast);
@@ -476,17 +480,16 @@ export function KiroComposer({
       submit();
     }
   };
-
   // Esc / 点击外部关闭菜单（P3：单一 openMenu ownership）。
-  // Esc 用 capture 阶段：菜单打开时先关闭菜单并阻止继续传播（不误触发 Navigator / Inspector 的 Esc 行为）。
+  // Esc 用 capture 阶段：任一菜单打开即关闭全部并阻止继续传播（内层菜单未进 overlay 栈，
+  // 不 stop 的话 Sidecar 的 topmost 判真会跟着关闭，造成双关）。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      setOpenMenu((current) => {
-        if (current === null) return current;
-        e.stopPropagation();
-        return null;
-      });
+      const st = menuStateRef.current;
+      if (!st.openMenu && !st.slashOpen && !st.mentionOpen) return;
+      e.stopPropagation();
+      setOpenMenu(null);
       setSlashOpen(false);
       setMentionOpen(false);
     };
@@ -503,6 +506,11 @@ export function KiroComposer({
         (reasoningRef.current?.contains(t) ?? false) ||
         (modelRef.current?.contains(t) ?? false);
       if (!inside) setOpenMenu(null);
+      // 内联 / 与 @ 菜单随文本驱动，Composer 内点击保留；点到 Composer 外才 dismissal
+      if (!dropRef.current?.contains(t)) {
+        setSlashOpen(false);
+        setMentionOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", onPointerDown);

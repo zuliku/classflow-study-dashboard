@@ -23,19 +23,19 @@ export interface SidecarPosition {
   right: number;
 }
 
-export const SIDECAR_DEFAULT_POSITION: SidecarPosition = { top: 24, right: 24 };
+export const SIDECAR_DEFAULT_POSITION: SidecarPosition = { top: SIDECAR_VIEWPORT_TOP_MARGIN, right: 24 };
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(Math.max(n, min), max);
 }
 
-/** 持久化值 hydrate 归一（localStorage 可能为任意值；无 viewport 时只做结构归一，top 仍以 24 为底，展示层 clamp 到 40） */
+/** 持久化值 hydrate 归一（localStorage 可能为任意值；top 按 TitleBar 安全区 ≥40，与展示钳制同口径，杜绝存展分歧） */
 export function normalizeSidecarPosition(value: unknown): SidecarPosition {
   const v = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
   const top = typeof v.top === "number" && Number.isFinite(v.top) ? v.top : SIDECAR_DEFAULT_POSITION.top;
   const right =
     typeof v.right === "number" && Number.isFinite(v.right) ? v.right : SIDECAR_DEFAULT_POSITION.right;
-  return { top: Math.max(SIDECAR_VIEWPORT_MARGIN, top), right: Math.max(SIDECAR_VIEWPORT_MARGIN, right) };
+  return { top: Math.max(SIDECAR_VIEWPORT_TOP_MARGIN, top), right: Math.max(SIDECAR_VIEWPORT_MARGIN, right) };
 }
 
 /** 位置 clamp：左/右/底 ≥24px；顶 ≥40px（TitleBar safe area，viewport resize 时只作 presentation clamp） */

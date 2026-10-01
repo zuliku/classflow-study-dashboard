@@ -225,7 +225,11 @@ export function ReminderCenter() {
           tabIndex={0}
           onClick={() => handleOpenItem(r)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") handleOpenItem(r);
+            if (e.key !== "Enter") return;
+            // 焦点在行内按钮（编辑/删除）上时只执行按钮动作：按钮 click 已 stopPropagation，
+            // 但 keydown 会继续冒泡到行，不判 target 会同时触发打开详情
+            if ((e.target as HTMLElement | null)?.closest?.("button")) return;
+            handleOpenItem(r);
           }}
           className={cn(
             "w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-alabaster/60 transition-colors",

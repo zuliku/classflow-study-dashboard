@@ -141,7 +141,7 @@ function pointerDrag(handle: Element, moves: { x: number; y: number }[]) {
 beforeEach(() => {
   vi.clearAllMocks();
   useKiroPreferencesStore.setState({ sidecarSize: SIDECAR_DEFAULT_SIZE });
-  useKiroPreferencesStore.setState({ sidecarPosition: { top: 24, right: 24 } });
+  useKiroPreferencesStore.setState({ sidecarPosition: { top: SIDECAR_VIEWPORT_TOP_MARGIN, right: 24 } });
 });
 
 describe("Sidecar Shell 状态机", () => {
@@ -691,7 +691,7 @@ describe("Drag Perf（手势帧零 reconcile + compositor 位移）", () => {
     move(handle, 940, 130);
     // 手势帧期间：无 React state 更新 → 内容零重渲染，store 未写
     expect(s.renderCount()).toBe(before);
-    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: 24, right: 24 });
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: SIDECAR_VIEWPORT_TOP_MARGIN, right: 24 });
     // 帧回调执行后：compositor transform 生效（origin top 已 clamp 到 40）
     await s.flushFrame();
     expect(s.panel()!.style.transform).toContain("translate(");

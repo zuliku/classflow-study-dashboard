@@ -28,6 +28,7 @@ npm run security:secrets
 npm run typecheck
 npm test
 npm run build
+npm run verify:preload-artifact
 ```
 
 - `npm ci` 为 clean reproducible gate（`package-lock.json` 必须与 `package.json` 同步，禁止 `--force`/`--legacy-peer-deps`/`npm install` 替代）

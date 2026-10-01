@@ -272,7 +272,12 @@ export function AssignmentDrawer() {
               : `已添加 ${result.succeeded.length} 份任务资料`,
         });
       }
-      if (result.failed.length > 0) {
+      if (result.quotaExceeded) {
+        pushToast({
+          type: "warning",
+          message: "本地存储空间已满，清理课程资料或备份后重试。",
+        });
+      } else if (result.failed.length > 0) {
         pushToast({
           type: "warning",
           message:

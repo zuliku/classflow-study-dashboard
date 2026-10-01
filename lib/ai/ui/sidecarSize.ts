@@ -26,7 +26,11 @@ function clamp(n: number, min: number, max: number): number {
  */
 export function clampSidecarSize(size: SidecarSize, viewport: { width: number; height: number }): SidecarSize {
   const maxWidth = Math.max(SIDECAR_MIN_WIDTH, viewport.width - SIDECAR_VIEWPORT_MARGIN * 2);
-  const maxHeight = Math.max(SIDECAR_MIN_HEIGHT, viewport.height - SIDECAR_VIEWPORT_MARGIN * 2);
+  // 高度上限须留出顶部安全区 + 底部边距（此前只扣 48，与位置钳制 top≥40/bottom≥24 的 64 错位，矮屏可溢出底边）
+  const maxHeight = Math.max(
+    SIDECAR_MIN_HEIGHT,
+    viewport.height - SIDECAR_VIEWPORT_TOP_MARGIN - SIDECAR_VIEWPORT_MARGIN
+  );
   return {
     width: clamp(Math.round(size.width), SIDECAR_MIN_WIDTH, maxWidth),
     height: clamp(Math.round(size.height), SIDECAR_MIN_HEIGHT, maxHeight),

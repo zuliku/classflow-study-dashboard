@@ -38,7 +38,20 @@ export async function saveFileBlob(storageKey: string, blob: Blob): Promise<void
     tx.objectStore(STORE_NAME).put(blob, storageKey);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+    // 配额满单独可识别（调用方给清理空间指引，而非通用“保存失败”）
+    tx.onabort = () => reject(tx.error);
   });
+}
+
+/** 错误是否为 IndexedDB 配额满（Chrome/FF/Safari 名称各异，统一归一） */
+export function isQuotaExceededError(err: unknown): boolean {
+  const name = (err as { name?: unknown })?.name;
+  if (name === "QuotaExceededError" || name === "NS_ERROR_FILE_NO_DEVICE_SPACE") return true;
+  const code = (err as { code?: unknown })?.code;
+  // Legacy DOMException code 22 = QUOTA_EXCEEDED_ERR
+  if (code === 22) return true;
+  const message = String((err as Error)?.message ?? err ?? "");
+  return /quota|配额/i.test(message);
 }
 
 /** 从 IndexedDB 读取 Blob；不存在时返回 null */

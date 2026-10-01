@@ -26,14 +26,14 @@ describe("clampSidecarSize", () => {
     });
   });
 
-  it("超过 viewport 边界（各留 24px）→ 收缩到可显示范围", () => {
+  it("超过 viewport 边界（左右各 24px；顶部 40px + 底部 24px）→ 收缩到可显示范围", () => {
     const big = clampSidecarSize({ width: 3000, height: 3000 }, VIEWPORT);
     expect(big.width).toBe(1440 - 48);
-    expect(big.height).toBe(900 - 48);
+    expect(big.height).toBe(900 - 64);
   });
 
   it("窗口过小：收缩到可显示范围（max 不低于 min，不溢出）", () => {
-    // viewport 500×400：maxWidth = max(420, 500-48=452) = 452；maxHeight = max(560, 400-48=352) = 560
+    // viewport 500×400：maxWidth = max(420, 500-48=452) = 452；maxHeight = max(560, 400-64=336) = 560
     const r = clampSidecarSize({ width: 600, height: 700 }, { width: 500, height: 400 });
     expect(r.width).toBe(452);
     expect(r.height).toBe(560);
@@ -72,7 +72,7 @@ describe("resizeSidecarSize（拖拽增量）", () => {
   it("受 viewport 上限限制：无限放大停在 max", () => {
     const r = resizeSidecarSize(SIDECAR_DEFAULT_SIZE, { deltaWidth: 10000, deltaHeight: 10000 }, VIEWPORT);
     expect(r.width).toBe(1440 - 48);
-    expect(r.height).toBe(900 - 48);
+    expect(r.height).toBe(900 - 64);
   });
 });
 

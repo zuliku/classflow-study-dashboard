@@ -431,16 +431,114 @@ function isValidSemester(v: unknown): v is Semester {
 }
 
 /**
- * 从任意历史/当前持久化载荷中提取白名单字段。
+ * hydrate 归一（courses / schedules / marks / overrides 此前 cast-only，
+ * 脏数据缺 materials 等字段即崩渲染或级联删除）：id 系缺失 → 整条丢弃，
+ * 其余缺失 → 默认值。行为对标 normalizeAssignment / normalizeReminder。
+ */
+function normalizeHydratedCourse(raw: unknown): Course | null {
+  if (!raw || typeof raw !== "object") return null;
+  const c = raw as Record<string, unknown>;
+  if (typeof c.id !== "string" || typeof c.name !== "string") return null;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  return {
+    id: c.id,
+    name: c.name,
+    code: str(c.code),
+    teacher: str(c.teacher),
+    classroom: str(c.classroom),
+    credit: typeof c.credit === "number" && Number.isFinite(c.credit) ? c.credit : 0,
+    bgHex: str(c.bgHex),
+    borderHex: str(c.borderHex),
+    textHex: str(c.textHex),
+    description: str(c.description),
+    materials: Array.isArray(c.materials)
+      ? (c.materials as unknown[]).filter(
+          (m): m is Material =>
+            !!m && typeof m === "object" && typeof (m as Material).id === "string" && typeof (m as Material).title === "string"
+        )
+      : [],
+  };
+}
+
+function normalizeHydratedSchedule(raw: unknown): CourseSchedule | null {
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as Record<string, unknown>;
+  if (typeof s.id !== "string" || typeof s.courseId !== "string") return null;
+  const day = typeof s.dayOfWeek === "number" && Number.isInteger(s.dayOfWeek) ? s.dayOfWeek : 1;
+  const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
+  return {
+    id: s.id,
+    courseId: s.courseId,
+    dayOfWeek: Math.min(7, Math.max(1, day)),
+    startTime: str(s.startTime, "08:00"),
+    endTime: str(s.endTime, "09:40"),
+    location: str(s.location),
+    weeks: str(s.weeks),
+    excludedWeeks: Array.isArray(s.excludedWeeks)
+      ? (s.excludedWeeks as unknown[]).filter((w): w is number => typeof w === "number" && Number.isInteger(w))
+      : undefined,
+  };
+}
+
+function normalizeHydratedMark(raw: unknown): CalendarMark | null {
+  if (!raw || typeof raw !== "object") return null;
+  const m = raw as Record<string, unknown>;
+  if (typeof m.id !== "string" || typeof m.date !== "string" || typeof m.title !== "string") return null;
+  const type = m.type === "course" || m.type === "ddl" || m.type === "exam" || m.type === "activity" ? m.type : "activity";
+  return {
+    id: m.id,
+    date: m.date,
+    type,
+    title: m.title,
+    sourceId: typeof m.sourceId === "string" ? m.sourceId : undefined,
+    startTime: typeof m.startTime === "string" ? m.startTime : undefined,
+    endTime: typeof m.endTime === "string" ? m.endTime : undefined,
+    autoReminderDisabled: m.autoReminderDisabled === true ? true : undefined,
+  };
+}
+
+function normalizeHydratedOverride(raw: unknown): ScheduleOccurrenceOverride | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (
+    typeof o.id !== "string" ||
+    typeof o.courseId !== "string" ||
+    typeof o.week !== "number" ||
+    !Number.isInteger(o.week)
+  )
+    return null;
+  const source = o.source === "manual" || o.source === "kiro" ? o.source : undefined;
+  if (o.kind === "cancel") {
+    if (typeof o.baseScheduleId !== "string") return null;
+    return { id: o.id, kind: "cancel", courseId: o.courseId, baseScheduleId: o.baseScheduleId, week: o.week, ...(source ? { source } : {}) };
+  }
+  // move / extra：时间字段缺失即整条丢弃（缺一半时间的 occurrence 渲染必错位）
+  const day = typeof o.dayOfWeek === "number" && Number.isInteger(o.dayOfWeek) ? Math.min(7, Math.max(1, o.dayOfWeek)) : null;
+  if (
+    typeof o.startTime !== "string" ||
+    typeof o.endTime !== "string" ||
+    typeof o.location !== "string" ||
+    day === null
+  )
+    return null;
+  if (o.kind === "move") {
+    if (typeof o.baseScheduleId !== "string") return null;
+    return { id: o.id, kind: "move", courseId: o.courseId, baseScheduleId: o.baseScheduleId, week: o.week, dayOfWeek: day, startTime: o.startTime, endTime: o.endTime, location: o.location, ...(source ? { source } : {}) };
+  }
+  if (o.kind === "extra") {
+    return { id: o.id, kind: "extra", courseId: o.courseId, week: o.week, dayOfWeek: day, startTime: o.startTime, endTime: o.endTime, location: o.location, ...(source ? { source } : {}) };
+  }
+  return null;
+}
+
+/**
+ * sanitizePersistedState 输入清洗（hydrate 熔断）：
  * 保守策略：业务数组缺失 → []；可选字段非法 → 默认值；UI 瞬时状态一律丢弃。
  */
 function sanitizePersistedState(persisted: unknown): PersistedAppState {
   const legacy = (persisted ?? {}) as LegacyPersistedStateV0;
   const assignments = Array.isArray(legacy.assignments)
     ? (legacy.assignments as Assignment[]).map(normalizeAssignment)
-    : [];
-  const marks = Array.isArray(legacy.calendarMarks)
-    ? (legacy.calendarMarks as CalendarMark[])
     : [];
   const groupProjects = Array.isArray(legacy.groupProjects)
     ? (legacy.groupProjects as GroupProject[]).map(normalizeGroupProject)
@@ -451,11 +549,20 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
         ? (legacy.userProfile as UserProfile)
         : EMPTY_USER_PROFILE,
     semester: isValidSemester(legacy.semester) ? legacy.semester : createDefaultSemester(),
-    courses: Array.isArray(legacy.courses) ? (legacy.courses as Course[]) : [],
-    schedules: Array.isArray(legacy.schedules) ? (legacy.schedules as CourseSchedule[]) : [],
+    courses: Array.isArray(legacy.courses)
+      ? (legacy.courses as unknown[]).map(normalizeHydratedCourse).filter((c): c is Course => c !== null)
+      : [],
+    schedules: Array.isArray(legacy.schedules)
+      ? (legacy.schedules as unknown[]).map(normalizeHydratedSchedule).filter((s): s is CourseSchedule => s !== null)
+      : [],
     assignments,
     // 安全位置自动修复：唯一可确定的 legacy mark 补 sourceId
-    calendarMarks: linkLegacyDDLMarks(assignments, marks),
+    calendarMarks: linkLegacyDDLMarks(
+      assignments,
+      (Array.isArray(legacy.calendarMarks) ? legacy.calendarMarks as unknown[] : [])
+        .map(normalizeHydratedMark)
+        .filter((m): m is CalendarMark => m !== null)
+    ),
     // v1 → v2：legacy 任务按 assigneeName 唯一匹配补 assigneeId，DDL 归一本地格式
     groupProjects,
     assignmentTimeSlice: TIME_SLICES.includes(legacy.assignmentTimeSlice as TimeSliceFilter)
@@ -477,9 +584,11 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
     focusSessions: Array.isArray(legacy.focusSessions)
       ? (legacy.focusSessions as FocusSession[]).map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
       : [],
-    // v7：Schedule Occurrence Override（旧数据缺失 → []；backward compatible，不触碰既有 schedules）
+    // v7：Schedule Occurrence Override（旧数据缺失 → []；非法条目丢弃，不触碰既有 schedules）
     scheduleOccurrenceOverrides: Array.isArray(legacy.scheduleOccurrenceOverrides)
-      ? (legacy.scheduleOccurrenceOverrides as ScheduleOccurrenceOverride[])
+      ? (legacy.scheduleOccurrenceOverrides as unknown[])
+          .map(normalizeHydratedOverride)
+          .filter((o): o is ScheduleOccurrenceOverride => o !== null)
       : [],
     // v8：Bell Schedule（旧数据缺失 → []；非法条目丢弃；active 回落第一个或 null）
     bellSchedules: Array.isArray(legacy.bellSchedules)

@@ -15,7 +15,7 @@ import { extractAttachment } from "@/lib/ai/attachments";
 import { extractCacheKey } from "@/lib/ai/attachments/cache";
 import { MAX_ATTACHMENTS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { createImageThumbnail } from "@/lib/ai/attachments/image";
-import { createStorageKey, saveFileBlob, getFileBlob } from "@/lib/fileStorage";
+import { createStorageKey, saveFileBlob, getFileBlob, isQuotaExceededError } from "@/lib/fileStorage";
 import {
   registerLiveImageSource,
   unregisterLiveImageSource,
@@ -286,8 +286,13 @@ export function useKiroAttachments() {
           storageKey,
         });
         pushToast({ message: `已保存到《${course.name}》课程资料` });
-      } catch {
-        pushToast({ message: "保存失败，请重试。", type: "error" });
+      } catch (err) {
+        pushToast({
+          message: isQuotaExceededError(err)
+            ? "本地存储空间已满，清理课程资料或备份后重试。"
+            : "保存失败，请重试。",
+          type: "error",
+        });
       }
     },
     [attachments, pushToast]

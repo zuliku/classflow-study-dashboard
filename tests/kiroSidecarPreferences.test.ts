@@ -94,9 +94,9 @@ describe("Kiro Preferences — sidecarMinimizedPosition persistence", () => {
     expect(after2.bottom).toBe(24);
   });
 
-  it("sidecarSize / sidecarPosition 行为完全不变", () => {
+  it("sidecarSize / sidecarPosition 行为完全不变（合法值直存；top 按 TitleBar 安全区归一）", () => {
     const size = { width: 500, height: 600 };
-    const pos = { top: 30, right: 30 };
+    const pos = { top: 100, right: 30 };
     useKiroPreferencesStore.getState().setSidecarSize(size);
     useKiroPreferencesStore.getState().setSidecarPosition(pos);
     expect(useKiroPreferencesStore.getState().sidecarSize).toEqual(size);
@@ -105,5 +105,8 @@ describe("Kiro Preferences — sidecarMinimizedPosition persistence", () => {
     useKiroPreferencesStore.getState().setSidecarMinimizedPosition({ right: 200, bottom: 200 });
     expect(useKiroPreferencesStore.getState().sidecarSize).toEqual(size);
     expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual(pos);
+    // 低于顶部安全区（40）的持久化值归一到 40，与展示钳制同口径（存展不再分歧）
+    useKiroPreferencesStore.getState().setSidecarPosition({ top: 30, right: 30 });
+    expect(useKiroPreferencesStore.getState().sidecarPosition).toEqual({ top: 40, right: 30 });
   });
 });

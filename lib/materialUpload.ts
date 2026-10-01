@@ -6,7 +6,7 @@
  */
 
 import { Material } from "@/types";
-import { createStorageKey, saveFileBlob } from "@/lib/fileStorage";
+import { createStorageKey, saveFileBlob, isQuotaExceededError } from "@/lib/fileStorage";
 
 /** 扩展名 → Material type（txt/md 及未知类型继续映射 doc；不重构 Material Type Domain） */
 export function inferMaterialType(fileName: string): Material["type"] {
@@ -33,7 +33,7 @@ export interface UploadCourseMaterialInput {
 
 export type UploadCourseMaterialResult =
   | { ok: true; material: Material }
-  | { ok: false; fileName: string };
+  | { ok: false; fileName: string; quotaExceeded?: boolean };
 
 /**
  * 单文件上传：
@@ -49,8 +49,8 @@ export async function uploadCourseMaterial(
   const storageKey = createStorageKey();
   try {
     await saveBlob(storageKey, file);
-  } catch {
-    return { ok: false, fileName: file.name };
+  } catch (err) {
+    return { ok: false, fileName: file.name, quotaExceeded: isQuotaExceededError(err) };
   }
 
   const sizeStr = file.size > 0 ? (file.size / (1024 * 1024)).toFixed(2) + " MB" : undefined;
@@ -69,9 +69,10 @@ export async function uploadCourseMaterials(input: {
   files: File[];
   addMaterial: AddCourseMaterialFn;
   saveBlob?: (storageKey: string, blob: Blob) => Promise<void>;
-}): Promise<{ succeeded: Material[]; failed: string[] }> {
+}): Promise<{ succeeded: Material[]; failed: string[]; quotaExceeded: boolean }> {
   const succeeded: Material[] = [];
   const failed: string[] = [];
+  let quotaExceeded = false;
   for (const file of input.files) {
     const r = await uploadCourseMaterial({
       courseId: input.courseId,
@@ -80,7 +81,10 @@ export async function uploadCourseMaterials(input: {
       saveBlob: input.saveBlob,
     });
     if (r.ok) succeeded.push(r.material);
-    else failed.push(r.fileName);
+    else {
+      failed.push(r.fileName);
+      if (r.quotaExceeded) quotaExceeded = true;
+    }
   }
-  return { succeeded, failed };
+  return { succeeded, failed, quotaExceeded };
 }

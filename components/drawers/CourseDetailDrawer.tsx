@@ -362,7 +362,7 @@ export function CourseDetailDrawer() {
 
     setUploadingCourseId(targetCourseId);
     try {
-      const { succeeded, failed } = await uploadCourseMaterials({
+      const { succeeded, failed, quotaExceeded } = await uploadCourseMaterials({
         courseId: targetCourseId,
         files: Array.from(files),
         addMaterial: addCourseMaterial,
@@ -370,8 +370,12 @@ export function CourseDetailDrawer() {
       if (succeeded.length > 0) {
         pushToast({ message: succeeded.length === 1 ? "资料已上传" : `${succeeded.length} 份资料已上传` });
       }
-      for (const name of failed) {
-        pushToast({ type: "error", message: `《${name}》保存失败，请重试` });
+      if (quotaExceeded) {
+        pushToast({ type: "error", message: "本地存储空间已满，清理课程资料或备份后重试。" });
+      } else {
+        for (const name of failed) {
+          pushToast({ type: "error", message: `《${name}》保存失败，请重试` });
+        }
       }
     } finally {
       // 只清 input / uploading 状态；不改变 target semantic、不中断 Promise

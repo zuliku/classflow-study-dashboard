@@ -17,21 +17,21 @@ const VIEWPORT = { width: 1440, height: 900 };
 const SIZE = SIDECAR_DEFAULT_SIZE; // 620×760
 
 describe("normalizeSidecarPosition", () => {
-  it("9. 缺失 / 非法持久化值 → 默认 top24/right24", () => {
+  it("9. 缺失 / 非法持久化值 → 默认 top40/right24（与展示钳制同口径）", () => {
     expect(normalizeSidecarPosition(undefined)).toEqual(SIDECAR_DEFAULT_POSITION);
     expect(normalizeSidecarPosition(null)).toEqual(SIDECAR_DEFAULT_POSITION);
     expect(normalizeSidecarPosition("junk")).toEqual(SIDECAR_DEFAULT_POSITION);
-    expect(normalizeSidecarPosition({ top: "x", right: 40 })).toEqual({ top: 24, right: 40 });
-    expect(normalizeSidecarPosition({ top: 10, right: NaN })).toEqual({ top: 24, right: 24 });
+    expect(normalizeSidecarPosition({ top: "x", right: 40 })).toEqual({ top: 40, right: 40 });
+    expect(normalizeSidecarPosition({ top: 10, right: NaN })).toEqual({ top: 40, right: 24 });
   });
 
-  it("1. default = top24 / right24", () => {
-    expect(SIDECAR_DEFAULT_POSITION).toEqual({ top: 24, right: 24 });
+  it("1. default = top40 / right24", () => {
+    expect(SIDECAR_DEFAULT_POSITION).toEqual({ top: 40, right: 24 });
     expect(normalizeSidecarPosition({ top: 120, right: 80 })).toEqual({ top: 120, right: 80 });
   });
 
-  it("负值 / 小于 margin 的值被钳到 margin（24）", () => {
-    expect(normalizeSidecarPosition({ top: -5, right: 0 })).toEqual({ top: 24, right: 24 });
+  it("负值 / 小于安全区的值被钳到 top40/right24", () => {
+    expect(normalizeSidecarPosition({ top: -5, right: 0 })).toEqual({ top: 40, right: 24 });
   });
 });
 
