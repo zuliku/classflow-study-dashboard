@@ -10,6 +10,7 @@ import {
   getExtractCache,
   setExtractCache,
   extractCacheKey,
+  hashBlobFingerprint,
 } from "@/lib/ai/attachments/cache";
 import { truncateWithPages, truncateText } from "@/lib/ai/attachments/extractors";
 import { EXTRACTOR_VERSION, MAX_EXTRACTED_CHARS } from "@/lib/ai/attachments/limits";
@@ -145,6 +146,30 @@ describe("extractAttachment 集成", () => {
     const cached = await getExtractCache(key);
     expect(cached?.truncated).toBe(true);
     expect(cached?.text.length).toBe(MAX_EXTRACTED_CHARS);
+  });
+});
+
+describe("内容指纹（同名同大小同 mtime 不同内容不互串）", () => {
+  it("无 hash 沿用旧形状（兼容既有缓存与调用）", () => {
+    expect(extractCacheKey({ name: "a.txt", size: 5, lastModified: 7 })).toBe(
+      `kiro-extract:local:a.txt:5:7:${EXTRACTOR_VERSION}`
+    );
+  });
+
+  it("同名同大小同 mtime + 不同内容 → 不同 key；同内容 → 同 key", async () => {
+    const a = new Blob(["hello world, version 1"]);
+    const b = new Blob(["hello world, version 2"]);
+    const meta = { name: "notes.txt", size: a.size, lastModified: 1 };
+    // 注意：两 Blob 同长度，确保“仅元数据”旧 key 会碰撞
+    expect(a.size).toBe(b.size);
+    expect(extractCacheKey(meta)).toBe(extractCacheKey({ ...meta }));
+    const ha = await hashBlobFingerprint(a);
+    const hb = await hashBlobFingerprint(b);
+    expect(ha).not.toBe(hb);
+    expect(extractCacheKey({ ...meta, contentHash: ha })).not.toBe(
+      extractCacheKey({ ...meta, contentHash: hb })
+    );
+    expect(await hashBlobFingerprint(a)).toBe(ha);
   });
 });
 

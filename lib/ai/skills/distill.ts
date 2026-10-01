@@ -32,9 +32,3 @@ export function previewSkillDraft(draft: SkillDraft): { md: string; validation: 
   const md = renderSkillDraftToMd(draft);
   return { md, validation };
 }
-
-// 保留旧的 callMuseSparkForDistill 作为兼容，但标记为 deprecated
-/** @deprecated Use Local API */
-export async function callMuseSparkForDistill(): Promise<never> {
-  throw new Error("Deprecated: use Local API");
-}

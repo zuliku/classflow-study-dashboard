@@ -22,9 +22,6 @@ export const MAX_ATTACHMENT_CONTEXT_CHARS = 160_000;
 /** 重型本地文档读取（read_material + read_project_file 共享）单回合上限 */
 export const MAX_DOCUMENT_READS_PER_TURN = 5;
 
-/** @deprecated 兼容别名：重型文档读取统一使用 MAX_DOCUMENT_READS_PER_TURN */
-export const MAX_MATERIAL_READS_PER_TURN = MAX_DOCUMENT_READS_PER_TURN;
-
 /** 提取器版本（缓存失效用）：v5 起支持 spreadsheet / slides 提取 + legacy 旧版 Office 明确拒绝 */
 export const EXTRACTOR_VERSION = 5;
 

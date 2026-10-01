@@ -70,8 +70,6 @@ export interface ChannelAdapter {
   getHealth(): ChannelHealth;
   start(): Promise<void>;
   stop(): Promise<void>;
-  /** @deprecated Use ChannelManager.disconnect+connect (re-resolve secret). Kept for compat but should not be used. */
-  restart?(): Promise<void>;
   sendReply?(target: ChannelReplyTarget, text: string): Promise<{ messageId?: string; timestamp?: string }>;
   syncNow?(): Promise<{ added: number; durationMs: number }>;
   dispose?(): Promise<void>;

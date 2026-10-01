@@ -35,9 +35,37 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export function extractCacheKey(input: { storageKey?: string; name?: string; size?: number; lastModified?: number }): string {
+export function extractCacheKey(input: { storageKey?: string; name?: string; size?: number; lastModified?: number; contentHash?: string }): string {
   if (input.storageKey) return `kiro-extract:${input.storageKey}:${EXTRACTOR_VERSION}`;
-  return `kiro-extract:local:${input.name ?? ""}:${input.size ?? 0}:${input.lastModified ?? 0}:${EXTRACTOR_VERSION}`;
+  // 本地文件：name/size/mtime 相同但内容不同会互串（如覆盖保存后 mtime 精度不足）；
+  // 有 contentHash 时混入（无则沿用旧形状，兼容既有缓存与测试）。
+  const fp = input.contentHash ? `:fp${input.contentHash}` : "";
+  return `kiro-extract:local:${input.name ?? ""}:${input.size ?? 0}:${input.lastModified ?? 0}${fp}:${EXTRACTOR_VERSION}`;
+}
+
+/**
+ * 内容指纹（首 64KB + 尾 64KB + size 的 SHA-256 hex 前 32 位；只读 ≤128KB，
+ * 开销可忽略；subtle 不可用时回退 "na" 即等价旧行为）。
+ */
+export async function hashBlobFingerprint(blob: Blob): Promise<string> {
+  try {
+    const size = blob.size;
+    const head = new Uint8Array(await blob.slice(0, 65536).arrayBuffer());
+    const tail =
+      size > 65536 ? new Uint8Array(await blob.slice(size - 65536).arrayBuffer()) : new Uint8Array(0);
+    const sizeBytes = new TextEncoder().encode(`:${size}:`);
+    const buf = new Uint8Array(head.length + tail.length + sizeBytes.length);
+    buf.set(head, 0);
+    buf.set(tail, head.length);
+    buf.set(sizeBytes, head.length + tail.length);
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 32);
+  } catch {
+    return "na";
+  }
 }
 
 export async function getExtractCache(key: string): Promise<ExtractCacheEntry | null> {

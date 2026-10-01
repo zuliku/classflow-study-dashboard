@@ -12,7 +12,7 @@ import {
 } from "@/lib/ai/attachments/types";
 import { routeAttachment, kindToMaterialType } from "@/lib/ai/attachments/router";
 import { extractAttachment } from "@/lib/ai/attachments";
-import { extractCacheKey } from "@/lib/ai/attachments/cache";
+import { extractCacheKey, hashBlobFingerprint } from "@/lib/ai/attachments/cache";
 import { MAX_ATTACHMENTS_PER_TURN } from "@/lib/ai/attachments/limits";
 import { createImageThumbnail } from "@/lib/ai/attachments/image";
 import { createStorageKey, saveFileBlob, getFileBlob, isQuotaExceededError } from "@/lib/fileStorage";
@@ -132,7 +132,12 @@ export function useKiroAttachments() {
         }
         const result = await extractAttachment(base.file, {
           kind: routed.kind,
-          cacheKey: extractCacheKey({ name: base.file.name, size: base.file.size, lastModified: base.file.lastModified }),
+          cacheKey: extractCacheKey({
+            name: base.file.name,
+            size: base.file.size,
+            lastModified: base.file.lastModified,
+            contentHash: await hashBlobFingerprint(base.file),
+          }),
         });
         if (result.ok) {
           // 扫描型 PDF（Task 12）：不再是 error —— ready + Vision metadata（发送时渲染页面图）

@@ -5,7 +5,7 @@ import { extractPdf, PdfExtractError } from "@/lib/ai/attachments/pdf";
 import { extractDocx } from "@/lib/ai/attachments/docx";
 import { extractXlsx } from "@/lib/ai/attachments/xlsx";
 import { extractPptx } from "@/lib/ai/attachments/pptx";
-import { getExtractCache, setExtractCache, extractCacheKey } from "@/lib/ai/attachments/cache";
+import { getExtractCache, setExtractCache, extractCacheKey, hashBlobFingerprint } from "@/lib/ai/attachments/cache";
 import { EXTRACTOR_VERSION } from "@/lib/ai/attachments/limits";
 
 /**
@@ -28,7 +28,15 @@ export async function extractAttachment(
     return { ok: false, reason: "unsupported", message: "暂不支持这种文件类型。" };
   }
 
-  const cacheKey = options.cacheKey ?? extractCacheKey({ name: file.name, size: file.size, lastModified: file.lastModified });
+  const cacheKey =
+    options.cacheKey ??
+    extractCacheKey({
+      name: file.name,
+      size: file.size,
+      lastModified: file.lastModified,
+      // 调用方未给 key 时现算指纹（图片在下方提前返回，走不到这里，不浪费 IO）
+      contentHash: await hashBlobFingerprint(file),
+    });
 
   if (options.kind === "image") {
     return { ok: true, extracted: { text: "", truncated: false } };
