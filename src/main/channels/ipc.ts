@@ -7,23 +7,24 @@
 import { ipcMain } from "electron";
 import { getChannelManager } from "./manager";
 import { ChannelError, CHANNEL_ERROR_CODES } from "./errors";
+import { sanitizeIpcErrorMessage } from "@/src/main/security/ipcErrors";
 
 function toIpcError(err: unknown): never {
-  if (err instanceof ChannelError) throw new Error(JSON.stringify({ code: err.code, message: err.message }));
+  if (err instanceof ChannelError) throw new Error(JSON.stringify({ code: err.code, message: sanitizeIpcErrorMessage(err.message) }));
   const raw = err instanceof Error ? err.message : String(err);
   let parsed: { code?: string; message?: string } | null = null;
   try {
     parsed = JSON.parse(raw) as { code?: string; message?: string };
   } catch {}
   if (parsed?.code) {
-    throw new Error(JSON.stringify({ code: parsed.code, message: parsed.message ?? raw }));
+    throw new Error(JSON.stringify({ code: parsed.code, message: sanitizeIpcErrorMessage(parsed.message ?? raw) }));
   }
   // Preserve known codes if present in raw string（单一来源：共享契约，不再手抄第二份 union）
   for (const c of CHANNEL_ERROR_CODES) {
-    if (raw.includes(c)) throw new Error(JSON.stringify({ code: c, message: raw.slice(0, 300) }));
+    if (raw.includes(c)) throw new Error(JSON.stringify({ code: c, message: sanitizeIpcErrorMessage(raw).slice(0, 300) }));
   }
   const sanitized = raw.replace(/appSecret|access_token|Authorization|credentialRef|refresh_token|code_verifier|authCode|authorizationCode|password/gi, "[redacted]").slice(0, 300);
-  throw new Error(JSON.stringify({ code: "CHANNEL_RUNTIME_ERROR", message: sanitized }));
+  throw new Error(JSON.stringify({ code: "CHANNEL_RUNTIME_ERROR", message: sanitizeIpcErrorMessage(sanitized) }));
 }
 
 export function registerChannelIpc(opts?: { validateSender?: (channel: string, event: Electron.IpcMainInvokeEvent) => boolean }): void {

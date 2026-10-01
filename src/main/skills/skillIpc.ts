@@ -9,16 +9,11 @@ import { listSkills, getSkill, createSkill, updateSkill, deleteSkill, setSkillEn
 import { activateSkill } from "@/lib/ai/skills/activation";
 import { withBuiltinSkills } from "@/lib/ai/skills/builtin";
 import { listWorkflowSkills } from "@/lib/ai/skills/registry";
+import { toSanitizedIpcError } from "@/src/main/security/ipcErrors";
 
 function toIpcError(err: unknown): never {
-  const e = err as { code?: string; message?: string };
-  const raw = err instanceof Error ? err.message : String(err);
-  try {
-    const parsed = JSON.parse(raw) as { code?: string; message?: string };
-    throw new Error(JSON.stringify({ code: parsed.code ?? e?.code ?? "UNKNOWN", message: parsed.message ?? e?.message ?? raw }));
-  } catch {
-    throw new Error(JSON.stringify({ code: e?.code ?? "UNKNOWN", message: e?.message ?? raw }));
-  }
+  // code 保留（调用方按 code 分支），message 脱敏（路径/用户名不出 Main）
+  return toSanitizedIpcError(err);
 }
 
 export function registerSkillIpc(opts?: {

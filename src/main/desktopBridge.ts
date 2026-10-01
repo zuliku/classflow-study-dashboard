@@ -397,6 +397,8 @@ async function handleWriteText(input: unknown): Promise<void> {
   const target = resolvePathFor(grant, obj?.path);
   if (!target) fail("INVALID_OPERATION");
   if (typeof obj?.content !== "string") fail("INVALID_OPERATION");
+  // 写入与读取同上限（此前写无限制，GB 级 Uint8Array 经 IPC 双份克隆可致 Main OOM）
+  if (Buffer.byteLength(obj.content, "utf8") > MAX_READ_BYTES) fail("INVALID_OPERATION", "文件过大。");
   try {
     await atomicWrite(target, Buffer.from(obj.content, "utf8"));
   } catch (err) {
@@ -413,6 +415,7 @@ async function handleWriteBytes(input: unknown): Promise<void> {
   if (!target) fail("INVALID_OPERATION");
   const content = obj?.content;
   if (!(content instanceof Uint8Array)) fail("INVALID_OPERATION");
+  if (content.byteLength > MAX_READ_BYTES) fail("INVALID_OPERATION", "文件过大。");
   try {
     await atomicWrite(target, Buffer.from(content));
   } catch (err) {
@@ -499,6 +502,13 @@ interface ActiveExecution {
   cancelled: boolean;
   resolve: (result: TerminalResult) => void;
   reject: (err: Error) => void;
+  /** 创建者 webContents.id：跨窗 write/cancel 拒绝（执行 ID 为渲染器自选，可抢占） */
+  ownerId: number;
+}
+
+/** 创建者校验（已知条目 + 发起窗不一致 → 拒绝；未知 id 保持各调用原有语义） */
+function requireExecutionOwner(ownerId: number, senderId: number): void {
+  if (ownerId !== senderId) fail("PERMISSION_DENIED");
 }
 
 interface TerminalResult {
@@ -548,7 +558,7 @@ function collectOutput(child: ChildProcess): { stdout: string; stderr: string; s
   return state;
 }
 
-async function handleTerminalExecute(input: unknown): Promise<TerminalResult> {
+async function handleTerminalExecute(input: unknown, event: Electron.IpcMainInvokeEvent): Promise<TerminalResult> {
   const obj = validateInputObject(input);
   if (!obj) fail("INVALID_OPERATION");
   const executionId = typeof obj.executionId === "string" && obj.executionId.length > 0 && obj.executionId.length <= 128 ? obj.executionId : null;
@@ -608,6 +618,7 @@ async function handleTerminalExecute(input: unknown): Promise<TerminalResult> {
       cancelled: false,
       resolve: finish,
       reject,
+      ownerId: event.sender.id,
     };
     activeExecutions.set(executionId, entry);
 
@@ -644,17 +655,19 @@ async function handleTerminalExecute(input: unknown): Promise<TerminalResult> {
   });
 }
 
-async function handleTerminalCancel(input: unknown): Promise<void> {
+async function handleTerminalCancel(input: unknown, event: Electron.IpcMainInvokeEvent): Promise<void> {
   const obj = validateInputObject(input);
   const executionId = typeof obj?.executionId === "string" ? obj.executionId : "";
   // V2 registry 优先（runtime handle；cancel → runtime reject CANCELLED）
   const v2 = activeV2Executions.get(executionId);
   if (v2) {
-    await v2.cancel();
+    requireExecutionOwner(v2.ownerId, event.sender.id);
+    await v2.handle.cancel();
     return;
   }
   const entry = activeExecutions.get(executionId);
   if (!entry) return; // 已结束：幂等
+  requireExecutionOwner(entry.ownerId, event.sender.id);
   entry.cancelled = true;
   if (entry.timer) clearTimeout(entry.timer);
   activeExecutions.delete(executionId);
@@ -665,13 +678,13 @@ async function handleTerminalCancel(input: unknown): Promise<void> {
 
 /* ---------------- Terminal V2（Streaming / Lifecycle；向后兼容 V1） ---------------- */
 
-/** V2 活跃执行注册表（runtime handle；cancel/清理统一入口） */
-const activeV2Executions = new Map<string, TerminalRuntimeHandle>();
+/** V2 活跃执行注册表（runtime handle + 创建者；cancel/清理统一入口） */
+const activeV2Executions = new Map<string, { handle: TerminalRuntimeHandle; ownerId: number }>();
 
 /** Stop Kiro / App 关闭时终止全部活跃 terminal 进程（V1 + V2；含 process tree） */
 export async function cancelAllTerminalExecutions(): Promise<void> {
   // V2 runtime handles
-  const v2Handles = Array.from(activeV2Executions.values());
+  const v2Entries = Array.from(activeV2Executions.values());
   activeV2Executions.clear();
   // V1 entries
   const v1Entries = Array.from(activeExecutions.values());
@@ -683,14 +696,14 @@ export async function cancelAllTerminalExecutions(): Promise<void> {
     await killProcessTree(entry.child.pid ?? 0);
     entry.reject(failError("CANCELLED"));
   }
-  await Promise.allSettled(v2Handles.map((h) => h.cancel()));
+  await Promise.allSettled(v2Entries.map((e) => e.handle.cancel()));
 }
 
 /** 兼容导出：仅 V2（Stop Kiro 由 Web 侧 cancelAllActiveTerminalExecutions 走 bridge.cancel 处理） */
 export async function cancelAllV2TerminalExecutions(): Promise<void> {
-  const handles = Array.from(activeV2Executions.values());
+  const entries = Array.from(activeV2Executions.values());
   activeV2Executions.clear();
-  await Promise.allSettled(handles.map((h) => h.cancel()));
+  await Promise.allSettled(entries.map((e) => e.handle.cancel()));
 }
 
 async function handleTerminalStart(
@@ -729,7 +742,7 @@ async function handleTerminalStart(
       }
     },
   });
-  activeV2Executions.set(executionId, handle);
+  activeV2Executions.set(executionId, { handle, ownerId: event.sender.id });
   promise.finally(() => {
     activeV2Executions.delete(executionId);
   });
@@ -741,23 +754,27 @@ async function handleTerminalStart(
   });
 }
 
-async function handleTerminalWrite(input: unknown): Promise<void> {
+async function handleTerminalWrite(input: unknown, event: Electron.IpcMainInvokeEvent): Promise<void> {
   const obj = validateInputObject(input);
   if (!obj) fail("INVALID_OPERATION");
   const executionId = typeof obj.executionId === "string" && obj.executionId.length > 0 && obj.executionId.length <= 128 ? obj.executionId : null;
   const data = typeof obj.data === "string" && obj.data.length > 0 ? obj.data : null;
   if (!executionId || !data) fail("INVALID_OPERATION");
 
-  const handle = activeV2Executions.get(executionId);
-  if (!handle) fail("INVALID_OPERATION", "执行不存在或已结束。");
+  const entry = activeV2Executions.get(executionId);
+  if (!entry) fail("INVALID_OPERATION", "执行不存在或已结束。");
+  requireExecutionOwner(entry.ownerId, event.sender.id);
   try {
-    await handle.write(data);
+    await entry.handle.write(data);
   } catch {
     throw failError("INVALID_OPERATION");
   }
 }
 
 /* ---------------- Terminal V2（Phase 4）— Persistent PTY Session ---------------- */
+
+/** PTY 会话创建者绑定（跨窗 write/resize/close 拒绝；事件只回创建窗） */
+const sessionOwners = new Map<string, number>();
 
 /** 会话事件只发给发起 session 的 renderer（事件 data 已 sanitized） */
 async function handleCreateSession(input: unknown, event: Electron.IpcMainInvokeEvent): Promise<{ sessionId: string }> {
@@ -783,15 +800,24 @@ async function handleCreateSession(input: unknown, event: Electron.IpcMainInvoke
       }
     },
   });
+  sessionOwners.set(sessionId, event.sender.id);
   return { sessionId };
 }
 
-async function handleWriteSession(input: unknown): Promise<void> {
+function requireSessionOwner(sessionId: string, senderId: number): void {
+  const ownerId = sessionOwners.get(sessionId);
+  // 未知会话：保持各调用原有语义（write/resize 抛不存在；close 幂等）
+  if (ownerId === undefined) return;
+  requireExecutionOwner(ownerId, senderId);
+}
+
+async function handleWriteSession(input: unknown, event: Electron.IpcMainInvokeEvent): Promise<void> {
   const obj = validateInputObject(input);
   if (!obj) fail("INVALID_OPERATION");
   const sessionId = typeof obj.sessionId === "string" ? obj.sessionId : "";
   const data = typeof obj.data === "string" && obj.data.length > 0 ? obj.data : "";
   if (!sessionId || !data) fail("INVALID_OPERATION");
+  requireSessionOwner(sessionId, event.sender.id);
   try {
     writePtySession(sessionId, data);
   } catch {
@@ -799,13 +825,14 @@ async function handleWriteSession(input: unknown): Promise<void> {
   }
 }
 
-async function handleResizeSession(input: unknown): Promise<void> {
+async function handleResizeSession(input: unknown, event: Electron.IpcMainInvokeEvent): Promise<void> {
   const obj = validateInputObject(input);
   if (!obj) fail("INVALID_OPERATION");
   const sessionId = typeof obj.sessionId === "string" ? obj.sessionId : "";
   const cols = typeof obj.cols === "number" ? obj.cols : 80;
   const rows = typeof obj.rows === "number" ? obj.rows : 24;
   if (!sessionId) fail("INVALID_OPERATION");
+  requireSessionOwner(sessionId, event.sender.id);
   try {
     resizePtySession(sessionId, cols, rows);
   } catch {
@@ -813,10 +840,13 @@ async function handleResizeSession(input: unknown): Promise<void> {
   }
 }
 
-async function handleCloseSession(input: unknown): Promise<void> {
+async function handleCloseSession(input: unknown, event: Electron.IpcMainInvokeEvent): Promise<void> {
   const obj = validateInputObject(input);
   const sessionId = typeof obj?.sessionId === "string" ? obj.sessionId : "";
-  if (sessionId) closePtySession(sessionId);
+  if (!sessionId) return;
+  requireSessionOwner(sessionId, event.sender.id);
+  sessionOwners.delete(sessionId);
+  closePtySession(sessionId);
 }
 
 /* ---------------- IPC 注册（带 Sender Validation） ---------------- */
@@ -883,14 +913,14 @@ export function registerDesktopBridgeIpc(opts?: BridgeIpcOptions): void {
   ipcMain.handle("bridge:fs:remove", wrap("bridge:fs:remove", (_e, input) => handleRemove(input)));
   ipcMain.handle("bridge:fs:move", wrap("bridge:fs:move", (_e, input) => handleMove(input)));
 
-  ipcMain.handle("bridge:terminal:execute", wrap("bridge:terminal:execute", (_e, input) => handleTerminalExecute(input)));
-  ipcMain.handle("bridge:terminal:cancel", wrap("bridge:terminal:cancel", (_e, input) => handleTerminalCancel(input)));
+  ipcMain.handle("bridge:terminal:execute", wrap("bridge:terminal:execute", (e, input) => handleTerminalExecute(input, e)));
+  ipcMain.handle("bridge:terminal:cancel", wrap("bridge:terminal:cancel", (e, input) => handleTerminalCancel(input, e)));
   ipcMain.handle("bridge:terminal:start", wrap("bridge:terminal:start", (e, input) => handleTerminalStart(input, e)));
-  ipcMain.handle("bridge:terminal:write", wrap("bridge:terminal:write", (_e, input) => handleTerminalWrite(input)));
+  ipcMain.handle("bridge:terminal:write", wrap("bridge:terminal:write", (e, input) => handleTerminalWrite(input, e)));
   ipcMain.handle("bridge:terminal:createSession", wrap("bridge:terminal:createSession", (e, input) => handleCreateSession(input, e)));
-  ipcMain.handle("bridge:terminal:writeSession", wrap("bridge:terminal:writeSession", (_e, input) => handleWriteSession(input)));
-  ipcMain.handle("bridge:terminal:resizeSession", wrap("bridge:terminal:resizeSession", (_e, input) => handleResizeSession(input)));
-  ipcMain.handle("bridge:terminal:closeSession", wrap("bridge:terminal:closeSession", (_e, input) => handleCloseSession(input)));
+  ipcMain.handle("bridge:terminal:writeSession", wrap("bridge:terminal:writeSession", (e, input) => handleWriteSession(input, e)));
+  ipcMain.handle("bridge:terminal:resizeSession", wrap("bridge:terminal:resizeSession", (e, input) => handleResizeSession(input, e)));
+  ipcMain.handle("bridge:terminal:closeSession", wrap("bridge:terminal:closeSession", (e, input) => handleCloseSession(input, e)));
 
   // 预留未来敏感通道（credential / mcp / channel）— 已在 ipcSender 中标记为敏感，新增时自动受保护
 }

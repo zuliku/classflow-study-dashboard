@@ -6,6 +6,7 @@ import { ipcMain } from "electron";
 import { getMcpManager } from "@/src/main/mcp/manager";
 import { searchMcpTools, getMcpToolForCall } from "@/src/main/mcp/toolCatalog";
 import { classifyMcpToolRisk, requiresMcpToolConfirmation, isMcpToolAllowedForOrigin } from "@/src/main/mcp/permissions";
+import { sanitizeIpcErrorMessage } from "@/src/main/security/ipcErrors";
 
 function toIpcError(err: unknown): never {
   const raw = err instanceof Error ? err.message : String(err);
@@ -17,12 +18,12 @@ function toIpcError(err: unknown): never {
     throw new Error(
       JSON.stringify({
         code: parsed.code ?? "UNKNOWN",
-        message: parsed.message ?? "Unknown error",
+        message: sanitizeIpcErrorMessage(parsed.message ?? "Unknown error"),
         ...(parsed.approvalRequestId ? { approvalRequestId: parsed.approvalRequestId } : {}),
       })
     );
   }
-  throw new Error(JSON.stringify({ code: "UNKNOWN", message: raw }));
+  throw new Error(JSON.stringify({ code: "UNKNOWN", message: sanitizeIpcErrorMessage(raw) }));
 }
 
 export function registerMcpIpc(opts?: {
@@ -62,6 +63,8 @@ export function registerMcpIpc(opts?: {
       if (!endpoint) throw new Error(JSON.stringify({ code: "INVALID_INPUT", message: "endpoint required" }));
       const mgr = getMcpManager();
       const result = await mgr.testConnection(endpoint, credentialRef);
+      // 连接失败文案直达渲染器：同样脱敏（路径/TLS 细节不出 Main）
+      if (!result.ok) return { ...result, error: sanitizeIpcErrorMessage(result.error) };
       return result;
     } catch (e) {
       toIpcError(e);
