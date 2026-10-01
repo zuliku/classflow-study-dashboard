@@ -386,6 +386,10 @@ export function CommandCenter() {
         visible ? "opacity-100" : "opacity-0",
         !isSearchModalOpen && "pointer-events-none"
       )}
+      // 背板点击关闭（仅点中背板本身；面板内点击不关闭）
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setSearchModalOpen(false);
+      }}
     >
       <div
         data-testid="command-center"
@@ -408,7 +412,7 @@ export function CommandCenter() {
               <button
                 onClick={() => setSearchModalOpen(false)}
                 className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster transition-colors duration-[var(--motion-fast)]"
-                aria-label="关闭"
+                aria-label="关闭快捷键指南"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -484,7 +488,7 @@ export function CommandCenter() {
               <button
                 onClick={() => setSearchModalOpen(false)}
                 className="p-1.5 rounded-lg text-sandrift hover:bg-alba transition-colors"
-                aria-label="关闭"
+                aria-label="关闭命令中心"
               >
                 <X className="w-4 h-4" />
               </button>

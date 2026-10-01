@@ -215,7 +215,7 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       aria-hidden={!visible}
       {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
-        "hidden md:flex fixed z-40 rounded-full overflow-hidden select-none touch-none shadow-card group kiro-capsule",
+        "hidden md:flex fixed z-sidecar rounded-full overflow-hidden select-none touch-none shadow-card group kiro-capsule",
         dragging
           ? "cursor-grabbing transition-none"
           : "cursor-grab transition-[opacity,transform,box-shadow] hover:shadow-[0_6px_18px_-2px_rgba(49,48,50,0.10)]",

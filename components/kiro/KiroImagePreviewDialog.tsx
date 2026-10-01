@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 
 /** Gallery 项：runtime File（调用方从 Live Image Source Registry 解析；绝不落历史） */
 export interface KiroImagePreviewSource {
@@ -91,6 +92,7 @@ export function KiroImagePreviewDialog({
   }, [url]);
 
   // ---- Esc / 方向键（Gallery）----
+  // Esc 经 overlay 栈 topmost 判定（预览叠在审批/Dialog 上时不穿透双关）
   const step = useCallback(
     (delta: number) => {
       if (!gallery) return;
@@ -100,9 +102,10 @@ export function KiroImagePreviewDialog({
   );
   useEffect(() => {
     if (!currentSource) return;
+    pushOverlay("kiro-image-preview", 80);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        if (isTopmostOverlay("kiro-image-preview")) onClose();
         return;
       }
       if (e.key === "ArrowLeft") {
@@ -114,7 +117,10 @@ export function KiroImagePreviewDialog({
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      popOverlay("kiro-image-preview");
+    };
   }, [currentSource, onClose, step]);
 
   if (!currentSource || !url) return null;
