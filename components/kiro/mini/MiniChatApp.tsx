@@ -355,6 +355,7 @@ export function MiniChatApp() {
           className="w-full resize-none bg-transparent text-[13px] leading-relaxed placeholder-sandrift focus:outline-none max-h-28"
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void send();

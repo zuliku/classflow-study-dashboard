@@ -80,6 +80,11 @@ export function KiroAttachmentChip({
   const isImage = attachment.kind === "image";
   const isMaterial = attachment.source === "material";
   const failed = attachment.status === "error" || attachment.status === "unsupported";
+  // 重试只在“可恢复的 error”上出现：unsupported 是确定性路由结论（重跑必回同结果）；
+  // 非 PDF 课程资料无检查可重跑。无意义的重试按钮一律隐藏（此前点了没反应）。
+  const retryable =
+    attachment.status === "error" &&
+    (attachment.source === "local" || (attachment.source === "material" && attachment.kind === "pdf"));
   const scanned = attachment.visionRequired === true;
   const Icon = isImage ? ImageIcon : FileText;
   // V1.5：live local image → runtime File 可预览（历史恢复 / 已移除 → 无 File，降级为静态缩略图）
@@ -153,7 +158,7 @@ export function KiroAttachmentChip({
         </span>
       </span>
 
-      {failed && onRetry && (
+      {retryable && onRetry && (
         <button
           onClick={() => {
             if (!disabled) onRetry(attachment.id);

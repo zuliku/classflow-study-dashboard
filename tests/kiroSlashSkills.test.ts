@@ -62,4 +62,17 @@ describe("KiroComposer Slash 菜单契约（源码锁定）", () => {
     expect(src).toContain("kiro-slash-enter");
     expect(src).not.toMatch(/skill-slash-menu[\s\S]{0,200}kiro-structure-settle/);
   });
+
+  it("IME 组词中 Enter 不发送/不导航（isComposing 首行放行）", () => {
+    expect(src).toContain("e.nativeEvent.isComposing");
+  });
+
+  it("Slash 异步竞态：旧请求晚回不得覆盖新查询（请求 ID 守卫）", () => {
+    expect(src).toContain("slashRequestRef");
+    expect(src).toMatch(/slashRequestRef\.current !== requestId/);
+  });
+
+  it("未配置 AI 服务时禁用发送（有点即静默失败）", () => {
+    expect(src).toMatch(/canSend[\s\S]{0,400}configured &&/);
+  });
 });

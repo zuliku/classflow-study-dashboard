@@ -34,6 +34,9 @@ export function useKiroAttachments() {
   const [attachments, setAttachments] = useState<KiroAttachment[]>([]);
   const pushToast = useToastStore((s) => s.pushToast);
   const seqRef = useRef(0);
+  // 上限计算经 ref 读最新列表（addFiles 回调身份稳定，不 stale）
+  const attachmentsRef = useRef<KiroAttachment[]>([]);
+  attachmentsRef.current = attachments;
 
   const toView = useCallback((a: KiroAttachment): KiroAttachmentView => {
     if (a.source === "local") {
@@ -69,9 +72,19 @@ export function useKiroAttachments() {
   const addFiles = useCallback(
     async (files: File[]) => {
       if (files.length === 0) return;
+      // 上限按「已有 + 新增」合并计算（此前只截新增，超额静默丢弃）
+      const remaining = Math.max(0, MAX_ATTACHMENTS_PER_TURN - attachmentsRef.current.length);
+      if (remaining <= 0) {
+        pushToast({ message: `附件已达上限（${MAX_ATTACHMENTS_PER_TURN} 个），请先移除再添加。`, type: "warning" });
+        return;
+      }
+      const accepted = files.slice(0, remaining);
+      if (accepted.length < files.length) {
+        pushToast({ message: `附件最多 ${MAX_ATTACHMENTS_PER_TURN} 个，已忽略多余的 ${files.length - accepted.length} 个。`, type: "warning" });
+      }
       // 先追加（processing 状态），随后逐项更新，避免状态更新丢失
       const pending: { id: string; base: KiroLocalAttachment; routed: ReturnType<typeof routeAttachment> }[] = [];
-      for (const file of files.slice(0, MAX_ATTACHMENTS_PER_TURN)) {
+      for (const file of accepted) {
         const routed = routeAttachment(file);
         const base: KiroLocalAttachment = {
           id: nextId(),
@@ -134,7 +147,7 @@ export function useKiroAttachments() {
         }
       }
     },
-    []
+    [pushToast]
   );
 
   /** 添加已有课程资料（引用；正文由 read_material 工具读取；PDF 异步 inspection 检测扫描件） */
@@ -157,45 +170,49 @@ export function useKiroAttachments() {
 
       // PDF：异步 inspection（只存 possiblyScanned/pageCount，不复制正文）
       if (kind === "pdf") {
-        const storageKey = useAppStore
-          .getState()
-          .courses.find((c) => c.id === ref.courseId)
-          ?.materials.find((m) => m.id === ref.materialId)?.storageKey;
-        if (!storageKey) return; // 外部链接资料：不尝试下载，保持 ready
-        const patch = (partial: Partial<KiroMaterialAttachment>) =>
-          setAttachments((prev) => prev.map((a) => (a.id === id ? { ...(a as KiroMaterialAttachment), ...partial } : a)));
-        patch({ status: "processing" });
-        void (async () => {
-          try {
-            const blob = await getFileBlob(storageKey);
-            if (!blob) {
-              patch({ status: "error", error: "本地文件已丢失，请重新上传。" });
-              return;
-            }
-            const result = await extractAttachment(blob as Blob & { name?: string }, {
-              kind: "pdf",
-              cacheKey: extractCacheKey({ storageKey }),
-            });
-            if (!result.ok) {
-              patch({ status: "error", error: result.message });
-              return;
-            }
-            if (result.extracted.possiblyScanned === true) {
-              patch({
-                status: "ready",
-                pdfVision: { scanned: true, pageCount: result.extracted.pageCount ?? 1 },
-              });
-            } else {
-              patch({ status: "ready" });
-            }
-          } catch {
-            patch({ status: "error", error: "资料读取失败。" });
-          }
-        })();
+        void inspectMaterialPdf(id, ref.courseId, ref.materialId);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
+
+  /** 课程资料 PDF inspection（添加与重试共用：读 Blob → 提取 → 标记扫描件/页数） */
+  const inspectMaterialPdf = useCallback(async (id: string, courseId: string, materialId: string) => {
+    const storageKey = useAppStore
+      .getState()
+      .courses.find((c) => c.id === courseId)
+      ?.materials.find((m) => m.id === materialId)?.storageKey;
+    if (!storageKey) return; // 外部链接资料：不尝试下载，保持 ready
+    const patch = (partial: Partial<KiroMaterialAttachment>) =>
+      setAttachments((prev) => prev.map((a) => (a.id === id ? { ...(a as KiroMaterialAttachment), ...partial } : a)));
+    patch({ status: "processing" });
+    try {
+      const blob = await getFileBlob(storageKey);
+      if (!blob) {
+        patch({ status: "error", error: "本地文件已丢失，请重新上传。" });
+        return;
+      }
+      const result = await extractAttachment(blob as Blob & { name?: string }, {
+        kind: "pdf",
+        cacheKey: extractCacheKey({ storageKey }),
+      });
+      if (!result.ok) {
+        patch({ status: "error", error: result.message });
+        return;
+      }
+      if (result.extracted.possiblyScanned === true) {
+        patch({
+          status: "ready",
+          pdfVision: { scanned: true, pageCount: result.extracted.pageCount ?? 1 },
+        });
+      } else {
+        patch({ status: "ready" });
+      }
+    } catch {
+      patch({ status: "error", error: "资料读取失败。" });
+    }
+  }, []);
 
   const remove = useCallback((id: string) => {
     unregisterLiveImageSource(id);
@@ -204,8 +221,37 @@ export function useKiroAttachments() {
 
   const retry = useCallback(
     async (id: string) => {
-      const att = attachments.find((a) => a.id === id);
-      if (!att || att.source !== "local" || att.kind === "image") return;
+      const att = attachmentsRef.current.find((a) => a.id === id);
+      if (!att || att.status !== "error") return;
+      // 图片：重生成缩略图（与 addFiles 同一路径；registry 已有 entry 则更新）
+      if (att.source === "local" && att.kind === "image") {
+        setAttachments((prev) =>
+          prev.map((a) => (a.id === id ? { ...(a as KiroLocalAttachment), status: "processing", error: undefined } : a))
+        );
+        try {
+          const thumb = await createImageThumbnail(att.file);
+          updateLiveImageSourceThumbnail(id, thumb || undefined);
+          setAttachments((prev) =>
+            prev.map((a) =>
+              a.id === id ? { ...(a as KiroLocalAttachment), status: "ready", thumbnail: thumb || undefined } : a
+            )
+          );
+        } catch {
+          unregisterLiveImageSource(id);
+          setAttachments((prev) =>
+            prev.map((a) =>
+              a.id === id ? { ...(a as KiroLocalAttachment), status: "error", error: "无法生成预览。" } : a
+            )
+          );
+        }
+        return;
+      }
+      // 课程资料 PDF：重跑 inspection（文件恢复后可自愈）
+      if (att.source === "material" && att.kind === "pdf") {
+        await inspectMaterialPdf(id, att.courseId, att.materialId);
+        return;
+      }
+      if (att.source !== "local") return;
       setAttachments((prev) =>
         prev.map((a) => (a.id === id ? { ...(a as KiroLocalAttachment), status: "processing", error: undefined } : a))
       );
@@ -220,7 +266,7 @@ export function useKiroAttachments() {
         )
       );
     },
-    [attachments]
+    [inspectMaterialPdf]
   );
 
   /** 保存临时附件为某课程资料（saveFileBlob + addCourseMaterial） */

@@ -164,6 +164,8 @@ export function KiroComposer({
   const [submitting, setSubmitting] = useState(false);
   const [slashSkills, setSlashSkills] = useState<{ name: string; description: string }[]>([]);
   const [slashOpen, setSlashOpen] = useState(false);
+  // Slash 异步竞态守卫：快速输入 /a→/ab 时旧请求先回不得覆盖新查询菜单
+  const slashRequestRef = useRef(0);
   const [slashActive, setSlashActive] = useState(0);
   // @ mention：与 Slash 同构的上下文直达入口（选项与 KiroContextListView 同源）
   const [mentionOptions, setMentionOptions] = useState<MentionOption[]>([]);
@@ -244,6 +246,8 @@ export function KiroComposer({
   const setVisualPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.setVisualAttachmentPrivacyNoticeSeen);
   const canSend =
     text.trim().length > 0 &&
+    // 未配置 AI 服务时禁用发送（此前可点，点后静默失败无反馈；下方已有「配置 AI 服务」入口）
+    configured &&
     !hasProcessing &&
     !imagesBlocked &&
     !scannedBlocked &&
@@ -258,17 +262,22 @@ export function KiroComposer({
   useEffect(() => {
     const query = parseSlashQuery(text);
     if (query === null) {
+      slashRequestRef.current += 1; // 作废在途请求（晚回不得重开菜单）
       setSlashOpen(false);
       return;
     }
     const bridge = (window as unknown as { classflowDesktop?: { skills?: { list: () => Promise<{ skills: { name: string; description: string; enabled: boolean; kind?: string }[] }> } } }).classflowDesktop?.skills;
     if (!bridge) {
+      slashRequestRef.current += 1;
       setSlashOpen(false);
       return;
     }
+    const requestId = (slashRequestRef.current += 1);
     bridge
       .list()
       .then((res) => {
+        // 旧请求晚回直接丢弃（当前输入已变化），否则 /a 的结果会覆盖 /ab 的菜单
+        if (slashRequestRef.current !== requestId) return;
         // S1：只展示 Workflow Skill（kind 为 canonical 字段；Recipe 不进入 Slash 菜单）
         const workflows = toSlashSkillOptions(res.skills ?? []);
         const filtered = filterSlashSkills(workflows, query);
@@ -409,6 +418,9 @@ export function KiroComposer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // IME 组词中（中文拼音未上屏）的 Enter 是确认候选，必须放行给输入法：
+    // 否则会把未上屏的拼音直接发送（菜单导航/发送一律不抢）。
+    if (e.nativeEvent.isComposing) return;
     // Slash 菜单键盘导航优先（避免 Enter 直接发送未完成的 /命令）
     if (slashOpen && slashSkills.length > 0) {
       if (e.key === "ArrowDown") {
