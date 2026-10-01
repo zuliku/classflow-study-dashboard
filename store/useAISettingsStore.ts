@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { createGuardedStorage } from "@/lib/persistStorage";
+import { createGuardedStorage, subscribeCrossWindowSync } from "@/lib/persistStorage";
 import { useToastStore } from "@/store/useToastStore";
 import { AIProviderId, AICustomConfig, AISettings } from "@/lib/ai/providers/types";
 import { getDefaultModel } from "@/lib/ai/providers/registry";
@@ -139,3 +139,6 @@ export const useAISettingsStore = create<AISettingsState>()(
 );
 
 export type { AISettings, AISettingsState };
+
+// 跨窗口收敛：他窗写入同 key 后去抖 rehydrate（单窗口写时无 storage 事件，零开销）
+subscribeCrossWindowSync(useAISettingsStore, "classflow-ai-settings-v1");

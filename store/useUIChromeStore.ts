@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { createGuardedStorage } from "@/lib/persistStorage";
+import { createGuardedStorage, subscribeCrossWindowSync } from "@/lib/persistStorage";
 import { useToastStore } from "@/store/useToastStore";
 
 /**
@@ -49,3 +49,6 @@ export const useUIChromeStore = create<UIChromeState>()(
     }
   )
 );
+
+// 跨窗口收敛：他窗写入同 key 后去抖 rehydrate（单窗口写时无 storage 事件，零开销）
+subscribeCrossWindowSync(useUIChromeStore, "classflow-ui-chrome");

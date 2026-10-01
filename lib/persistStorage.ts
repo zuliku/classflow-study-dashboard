@@ -8,6 +8,46 @@
  */
 import { createJSONStorage, type PersistStorage } from "zustand/middleware";
 
+/**
+ * 跨窗口收敛（同源多窗口 last-write-wins 会丢字段）：
+ * 监听 storage 事件，他窗写入本 key 后 500ms 去抖 rehydrate，把远端字段合进来。
+ * - 已收敛（事件值与本地一致）直接跳过，不存在乒乓；
+ * - rehydrate 走各 store 自有 merge/migrate，与启动路径一致；
+ * - 返回取消订阅函数（测试/热更新用；生产常驻）。
+ */
+export function subscribeCrossWindowSync(
+  storeApi: { persist?: { rehydrate: () => void | Promise<void> } },
+  storageKey: string
+): () => void {
+  if (typeof window === "undefined" || typeof window.addEventListener !== "function") return () => {};
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const onStorage = (e: StorageEvent) => {
+    if (e.key !== storageKey || e.newValue == null) return;
+    try {
+      if (window.localStorage.getItem(storageKey) === e.newValue) return;
+    } catch {
+      return;
+    }
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      try {
+        const r = storeApi.persist?.rehydrate();
+        if (r && typeof (r as Promise<void>).catch === "function") {
+          void (r as Promise<void>).catch(() => {});
+        }
+      } catch {
+        /* 收敛失败不影响主流程 */
+      }
+    }, 500);
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    if (timer) clearTimeout(timer);
+  };
+}
+
 function isQuotaError(err: unknown): boolean {
   const name = (err as { name?: unknown })?.name;
   if (name === "QuotaExceededError" || name === "NS_ERROR_FILE_NO_DEVICE_SPACE") return true;
