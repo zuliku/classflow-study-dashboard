@@ -435,7 +435,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
     if (deletedConversationIdsRef.current.has(id)) return;
     const chatNow = chatRef.current;
     const messages = chatNow.messages;
-    if (messages.length === 0 || chatNow.streaming) return;
+    // 半成品不落盘：streaming 执行中，或 awaiting-tool-result / awaiting-continuation
+    //（status 已回 ready 但本轮未 settle）——否则落盘半成品轮次，重载后只剩纯文本
+    if (messages.length === 0 || chatNow.streaming || chatNow.turnInFlight) return;
     // V1.4：signature 包含 visualProposalVersion —— Apply/Undo 未改变 message 内容也必须重新落盘
     const snapshot = buildConversationPersistenceSignature({
       id,
@@ -847,7 +849,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   const sendWithTurn = useCallback(
     async (text: string): Promise<boolean> => {
       // Task 7B：会话切换中（pending transition）拒绝新发送，防止消息混入即将被重置的旧会话
-      if (transitionStateRef.current.pending || sendLockRef.current || chatRef.current.streaming) return false;
+      // 并发门必须用 turnInFlight（awaiting-tool-result / awaiting-continuation 时 status 已回到
+      // ready 但本轮未 settle；仅查 streaming 会在审批等待/工具间隙穿透成双流交错）
+      if (transitionStateRef.current.pending || sendLockRef.current || chatRef.current.turnInFlight) return false;
       sendLockRef.current = true;
       setSendClaimed(true);
       const snapshotRefs = pendingEntryRefsRef.current
