@@ -64,11 +64,15 @@ export function KiroContextSuggestions({ compact, inset }: { compact?: boolean; 
   const session = useKiroSession();
   const kind = session.suggestionsKind;
   // 发送后即消费（gen 推进）：退场走折叠 + 延迟卸载，不硬切顶布局。
+  // 退场播 stale kind（退出延迟期内 kind 可能已空，不能回退 generic，否则闪现错误内容）。
   const open = !!kind && session.suggestionsGen > session.lastUserTurnGen;
   const presence = usePresence(open, MOTION_EXIT_MS.panel);
+  const lastKindRef = React.useRef<string | null>(null);
+  if (kind) lastKindRef.current = kind;
+  const shownKind = kind ?? lastKindRef.current ?? "generic";
   if (!presence.mounted) return null;
 
-  const items = SUGGESTIONS[kind ?? "generic"] ?? [];
+  const items = SUGGESTIONS[shownKind] ?? [];
   return (
     <ExitCollapse exiting={!presence.visible}>
       <div

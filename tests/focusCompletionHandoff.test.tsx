@@ -461,7 +461,7 @@ describe("AssignmentDrawer consumes completion intent", () => {
     expect(useAppStore.getState().pendingFocusCompletionFollowUp).toBeNull();
   });
 
-  it("consume once：关闭 Drawer 再打开同一任务 → Follow-up 不重新出现", () => {
+  it("consume once：关闭 Drawer 再打开同一任务 → Follow-up 不重新出现", async () => {
     seedIntent();
     act(() => {
       useAppStore.setState({ selectedAssignmentId: "a-1" });
@@ -471,6 +471,10 @@ describe("AssignmentDrawer consumes completion intent", () => {
 
     act(() => {
       useAppStore.setState({ selectedAssignmentId: null });
+    });
+    // 退场保留 160ms 后卸载（对称进退；消费语义不变：重开仍不出现）
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 220));
     });
     expect(screen.queryByTestId("focus-follow-up")).toBeNull();
     act(() => {

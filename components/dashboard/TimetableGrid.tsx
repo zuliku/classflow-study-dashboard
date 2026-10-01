@@ -197,6 +197,11 @@ export function TimetableGrid({
   // ignoreSameCourse：同一门课内部时段重叠不标冲突（连堂/同课多节属该课程自身安排）
   const conflicts = findScheduleConflicts(activeSchedules, { ignoreSameCourse: true });
   const firstConflict = conflicts[0];
+  // 横幅退场播 stale 快照（DisclosureRegion 卸载延迟期内 conflicts 已空，直接解引用会崩）
+  const lastConflictsRef = useRef<ScheduleConflict[]>([]);
+  if (conflicts.length > 0) lastConflictsRef.current = conflicts;
+  const shownConflicts = conflicts.length > 0 ? conflicts : lastConflictsRef.current;
+  const shownFirstConflict = shownConflicts[0];
 
   // 周次切换方向：上一周 -6px 进入，下一周 +6px 进入（仅内容区，卡片本体不动）
   const prevWeekRef = useRef(currentSemesterWeek);
@@ -532,19 +537,22 @@ export function TimetableGrid({
       </div>
       )}
 
-      {/* Conflict Warning Banner：折叠进退（整块条件挂载会顶开下方网格） */}
+      {/* Conflict Warning Banner：折叠进退（整块条件挂载会顶开下方网格）；
+          内容走 stale 快照（退场延迟期内 live 数据已空）；内层再守卫一次——JSX children
+          在父 render 时 eager 求值，DisclosureRegion 返回 null 也拦不住空解引用 */}
       <DisclosureRegion open={conflicts.length > 0}>
+        {shownConflicts.length > 0 && shownFirstConflict ? (
         <div className="my-2 p-2.5 bg-danger-bg border border-danger-border rounded-lg flex items-center justify-between text-xs text-danger shrink-0">
           <div className="flex items-center space-x-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>
-              <strong>课程时间冲突：</strong>检测到 {conflicts.length} 处
-              （例如 {["周一","周二","周三","周四","周五","周六","周日"][firstConflict.dayOfWeek - 1]} {firstConflict.timeRange}）
+              <strong>课程时间冲突：</strong>检测到 {shownConflicts.length} 处
+              （例如 {["周一","周二","周三","周四","周五","周六","周日"][shownFirstConflict.dayOfWeek - 1]} {shownFirstConflict.timeRange}）
             </span>
           </div>
           <button
             onClick={() => {
-              setSelectedConflict(firstConflict);
+              setSelectedConflict(shownFirstConflict);
               setConflictModalOpen(true);
             }}
             className="px-2.5 py-1 bg-danger text-white rounded-lg font-bold text-[11px] hover:bg-danger/85 transition-colors shrink-0"
@@ -552,6 +560,7 @@ export function TimetableGrid({
             查看冲突
           </button>
         </div>
+        ) : null}
       </DisclosureRegion>
 
       {/* Grid Container：周切换时仅此区域（表头 + 课程网格）做方向淡入 */}

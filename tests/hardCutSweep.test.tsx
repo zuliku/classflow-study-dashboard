@@ -303,6 +303,15 @@ describe("硬切深筛源码契约", () => {
     expect(sidebar).toContain("ux-fade");
   });
 
+  it("退出保留的数据守卫：stale 快照 + 内层再守卫（JSX children eager 求值，wrapper 返回 null 拦不住空解引用）", () => {
+    const grid = read("components/dashboard/TimetableGrid.tsx");
+    expect(grid).toContain("lastConflictsRef");
+    expect(grid).toContain("shownConflicts.length > 0 && shownFirstConflict");
+    const suggestions = read("components/kiro/KiroContextSuggestions.tsx");
+    expect(suggestions).toContain("lastKindRef");
+    expect(suggestions).toContain("shownKind");
+  });
+
   it("Composer/Context chip：leaving 态 + 横向 collapse（非直接卸载）", () => {
     const composer = read("components/kiro/KiroComposer.tsx");
     expect(composer).toContain("leavingAttachmentIds");

@@ -52,8 +52,10 @@ beforeEach(async () => {
 
 describe("快照读写", () => {
   it("roundtrip：write → read 相等；clear → null", () => {
-    writePendingApprovalSnapshot(snapshot());
-    expect(readPendingApprovalSnapshot()).toEqual(snapshot());
+    // 同一快照对象断言（此前两次 snapshot() 各取一次 Date.now()，跨毫秒即 flaky）
+    const s = snapshot();
+    writePendingApprovalSnapshot(s);
+    expect(readPendingApprovalSnapshot()).toEqual(s);
     clearPendingApprovalSnapshot();
     expect(readPendingApprovalSnapshot()).toBeNull();
   });
