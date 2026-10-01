@@ -108,7 +108,25 @@ describe("Security Baseline — Task 01/02 + Task05 integration", () => {
     expect(bridgeSrc).toContain("withValidation");
     expect(validateIpcSender("bridge:credential:create", { destroyed: false, isTrustedWindow: false, url: "app://bundle/index.html" }).ok).toBe(false);
     expect(validateIpcSender("bridge:mcp:connect", { destroyed: false, isTrustedWindow: false, url: "app://bundle/index.html" }).ok).toBe(false);
-    expect(validateIpcSender("bridge:channel:send", { destroyed: false, isTrustedWindow: false, url: "app://bundle/index.html" }).ok).toBe(false);
+    expect(validateIpcSender("bridge:channels:send", { destroyed: false, isTrustedWindow: false, url: "app://bundle/index.html" }).ok).toBe(false);
+  });
+
+  it("integration: bridge:channels:*（复数）与 bridge:inbox:* 均为敏感通道（单数笔误回归）", () => {
+    const untrusted = { destroyed: false, isTrustedWindow: false, url: "app://bundle/index.html" };
+    const evilTrustedWindow = { destroyed: false, isTrustedWindow: true, url: "https://evil.com" };
+    const trusted = { destroyed: false, isTrustedWindow: true, url: "app://bundle/index.html" };
+    // 复数通道：不受信/异源一律拒绝
+    for (const ch of ["bridge:channels:list", "bridge:channels:connect", "bridge:channels:confirmReply"]) {
+      expect(validateIpcSender(ch, untrusted).ok, ch).toBe(false);
+      expect(validateIpcSender(ch, evilTrustedWindow).ok, ch).toBe(false);
+      expect(validateIpcSender(ch, trusted).ok, ch).toBe(true);
+    }
+    // inbox：rendererReady/ack 同样必须校验
+    for (const ch of ["bridge:inbox:rendererReady", "bridge:inbox:ack"]) {
+      expect(validateIpcSender(ch, untrusted).ok, ch).toBe(false);
+      expect(validateIpcSender(ch, evilTrustedWindow).ok, ch).toBe(false);
+      expect(validateIpcSender(ch, trusted).ok, ch).toBe(true);
+    }
   });
 
   it("integration: main navigation handler 使用 decideNavigation（非手写 startsWith）", () => {

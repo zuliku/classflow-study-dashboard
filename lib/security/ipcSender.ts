@@ -31,8 +31,12 @@ const SENSITIVE_PREFIXES = [
   "bridge:credential:",
   "bridge:skill:",
   "bridge:mcp:",
-  "bridge:channel:",
+  // 注意：实际通道为复数 bridge:channels:*（曾误写单数导致整系 fail-open；单数无生产通道）
+  "bridge:channels:",
+  "bridge:inbox:",
   "bridge:invocation:",
+  // mini:* 由 src/main/miniChat.ts 自带 id+URL 双门；此处同样纳入敏感，前后一致
+  "mini:",
   "window:",
 ] as const;
 const SENSITIVE_EXACT: ReadonlySet<string> = new Set([

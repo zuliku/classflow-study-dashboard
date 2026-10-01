@@ -56,9 +56,18 @@ describe("Main 侧（src/main/miniChat.ts + index.ts 接线）", () => {
     }
   });
 
-  it("sender 校验 fail closed（仅主窗口/Mini 窗；send 必须来自 Mini 窗）", () => {
+  it("sender 校验 fail closed（id+URL 双门；send 必须来自 Mini 窗）", () => {
     expect(src).toContain("PERMISSION_DENIED");
     expect(src).toContain("isMiniWebContents(event.sender.id)");
+    expect(src).toContain("isTrustedRendererUrl");
+  });
+
+  it("done 仅主窗口可回执；mini 窗与主窗同等导航硬化；不下发 capability", () => {
+    expect(src).toContain("event.sender.id !== main.webContents.id");
+    expect(src).toContain("setWindowOpenHandler");
+    expect(src).toContain("will-navigate");
+    expect(src).toContain("decideNavigation");
+    expect(index).toContain('getApiCapability: () => ""');
   });
 
   it("index.ts 注册中继 + 信任 Mini 窗（同 launch 可信窗口）", () => {

@@ -300,7 +300,12 @@ app.whenReady().then(async () => {
     getSession: () => mainWindow?.webContents.session ?? null,
     getPreloadPath: () => join(__dirname, "../preload/index.cjs"),
     getApiBase: () => apiBase,
-    getApiCapability: () => apiCapability,
+    // Mini 不直调 Local API（全部经主窗口中继执行）：不下发 capability， fail closed。
+    // 若未来 Mini 需要直调，必须按窗签发独立 capability，不可复用主窗的。
+    getApiCapability: () => "",
+    getAllowedOrigins: () => getAllowedOrigins(apiBase),
+    isTrustedRendererUrl: (url: string) =>
+      isTrustedRendererUrl(url, { allowedDevOrigin: getAllowedOrigins(apiBase).allowedDevOrigin }),
     isTrustedSender,
   });
 

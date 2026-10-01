@@ -9,10 +9,11 @@
  * - sender 校验：mini:* 显式校验 trusted（主窗口或 Mini 窗其一），fail closed。
  */
 
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { join, dirname } from "node:path";
 import { promises as fs } from "node:fs";
 import type { MiniChatSnapshot } from "@/lib/ai/miniChat/protocol";
+import { decideNavigation } from "@/lib/security/navigation";
 
 export const MINI_DEFAULT_SIZE = { width: 340, height: 560 };
 const MINI_MIN_SIZE = { width: 300, height: 440 };
@@ -122,6 +123,8 @@ async function ensureMiniWindow(opts: {
   preloadPath: string;
   apiBase: string;
   apiCapability: string;
+  allowedApiOrigin: string;
+  allowedDevOrigin: string | undefined;
 }): Promise<BrowserWindow> {
   const existing = getMiniWindow();
   if (existing) return existing;
@@ -158,6 +161,27 @@ async function ensureMiniWindow(opts: {
   });
   miniWindow = w;
   void w.loadURL(miniLoadTarget());
+  // 与主窗同等导航硬化（此前缺失：mini 内 window.open/跳转无拦截）：
+  // 外部链接走系统浏览器，内部仅允许可信渲染器，其余一律拒绝。
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    const verdict = decideNavigation({ url, allowedApiOrigin: opts.allowedApiOrigin, allowedDevOrigin: opts.allowedDevOrigin });
+    if (verdict.kind === "allow-external") {
+      void shell.openExternal(url);
+    } else if (verdict.kind === "deny") {
+      console.warn(`[mini] blocked window.open: ${url} reason=${verdict.reason}`);
+    }
+    return { action: "deny" };
+  });
+  w.webContents.on("will-navigate", (event, url) => {
+    const verdict = decideNavigation({ url, allowedApiOrigin: opts.allowedApiOrigin, allowedDevOrigin: opts.allowedDevOrigin });
+    if (verdict.kind === "allow-internal") return;
+    event.preventDefault();
+    if (verdict.kind === "allow-external") {
+      void shell.openExternal(url);
+    } else {
+      console.warn(`[mini] blocked will-navigate: ${url} reason=${verdict.reason}`);
+    }
+  });
   w.on("ready-to-show", () => {
     w.show();
     // 重开即推最新快照（relay 可能在 mini 关闭期间持续 publish，缓存保证不空白）
@@ -187,26 +211,40 @@ export interface MiniChatMainDeps {
   getPreloadPath: () => string;
   getApiBase: () => string;
   getApiCapability: () => string;
+  getAllowedOrigins: () => { allowedApiOrigin: string; allowedDevOrigin: string | undefined };
+  /** sender URL 是否属于受信任渲染器（app://bundle 或精确 dev origin）；fail closed */
+  isTrustedRendererUrl: (url: string) => boolean;
   /** 受信任 sender（主窗口或 Mini 窗其一）；fail closed */
   isTrustedSender: (sender: Electron.WebContents) => boolean;
 }
 
 export function registerMiniChatIpc(deps: MiniChatMainDeps): void {
+  // id 信任 + URL 信任双门（仅 id 会在窗内导航到恶意 origin 后继续放行）
   const trusted = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): boolean => {
     const sender = event.sender;
     if (!sender || sender.isDestroyed()) return false;
-    return deps.isTrustedSender(sender);
+    if (!deps.isTrustedSender(sender)) return false;
+    let url = "";
+    try {
+      url = sender.getURL();
+    } catch {
+      return false;
+    }
+    return deps.isTrustedRendererUrl(url);
   };
 
   const show = async (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => {
     if (!trusted(event)) return;
     const session = deps.getSession();
     if (!session) return;
+    const { allowedApiOrigin, allowedDevOrigin } = deps.getAllowedOrigins();
     const w = await ensureMiniWindow({
       session,
       preloadPath: deps.getPreloadPath(),
       apiBase: deps.getApiBase(),
       apiCapability: deps.getApiCapability(),
+      allowedApiOrigin,
+      allowedDevOrigin,
     });
     if (!w.isDestroyed()) {
       if (!w.isVisible()) w.show();
@@ -264,9 +302,12 @@ export function registerMiniChatIpc(deps: MiniChatMainDeps): void {
     });
   });
 
-  // 主窗口执行完成回执（requestId 关联 mini:send 的 invoke）
+  // 主窗口执行完成回执（requestId 关联 mini:send 的 invoke；仅主窗口可回执，
+  // 否则 mini 可伪造 ok:true 抢占真回执）
   ipcMain.on("mini:remote-send:done", (event, result: unknown) => {
     if (!trusted(event)) return;
+    const main = deps.getMainWindow();
+    if (!main || main.isDestroyed() || event.sender.id !== main.webContents.id) return;
     const requestId = (result as { requestId?: unknown })?.requestId;
     if (typeof requestId !== "string") return;
     const pending = pendingSends.get(requestId);
