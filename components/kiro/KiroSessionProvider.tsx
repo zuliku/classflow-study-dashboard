@@ -639,6 +639,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       if (m.actions) est += estimateTokens(JSON.stringify(m.actions).slice(0, 4000));
       if (m.historyActions) est += estimateTokens(JSON.stringify(m.historyActions).slice(0, 4000));
     }
+    // 存量摘要同样计入（服务端计划含 summary；不计则长摘要会话永远不再压缩）
+    const existingSummary = conversationSummaryRef.current?.text;
+    if (existingSummary) est += estimateTokens(existingSummary);
     if (!shouldCompact(est, DEFAULT_CONTEXT_BUDGET)) return;
 
     const through = conversationSummaryRef.current?.throughMessageId;

@@ -83,6 +83,17 @@ describe("buildKiroModelContext", () => {
     expect(plan.budgetReport.recentTurns).toBeGreaterThanOrEqual(7);
   });
 
+  it("summary 只计一次（首条 system 消息已含，不重复加总）", () => {
+    const messages = [msg("u1", "user", [text("问题")]), msg("a1", "assistant", [text("回答")])];
+    const summaryText = "此前对话摘要内容。".repeat(50);
+    const base = buildKiroModelContext({ messages, budget: DEFAULT_CONTEXT_BUDGET });
+    const withSummary = buildKiroModelContext({ messages, summaryText, budget: DEFAULT_CONTEXT_BUDGET });
+    // 差值恰为单次 summary 估算；重复加总时会是两倍
+    expect(withSummary.budgetReport.estimatedTokens - base.budgetReport.estimatedTokens).toBe(
+      estimateTokens(summaryText)
+    );
+  });
+
   it("aggressive：更少 turn + 附件预算减半", () => {
     const messages: KiroPlannableMessage[] = [];
     for (let i = 0; i < 12; i++) {

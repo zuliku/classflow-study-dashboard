@@ -72,10 +72,11 @@ export function buildKiroModelContext(input: BuildKiroModelContextInput): KiroMo
   }
   planned.push(...msgResult.messages);
 
+  // summary 已作为首条 system 消息计入 planned（上式已含），不得重复加总——
+  // 否则带摘要长会话估算恒偏大，提前走 aggressive/误报超预算
   const estimatedTokens =
     estimateMessagesTokens(planned) +
-    attResult.attachments.reduce((s, a) => s + estimateTokens(a.text), 0) +
-    estimateTokens(input.summaryText ?? "");
+    attResult.attachments.reduce((s, a) => s + estimateTokens(a.text), 0);
 
   return {
     messages: planned,
