@@ -101,6 +101,7 @@ export const STAGGER_MS = {
   empty2: 110,
   emptyBase: 150,
   emptyStep: 32,
+  mentionStep: 24,
 } as const;
 
 export type MotionTier = keyof typeof MOTION_MS;

@@ -172,7 +172,10 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
       "utf8"
     );
     expect(src).toContain("ux-toast-enter");
-    expect(src).toContain("MOTION_MS.fast");
+    // 退出计时走 exit 常量（此前误用 enter 档 MOTION_MS.fast，已收敛）
+    expect(src).toContain("MOTION_EXIT_MS.fast");
+    expect(src).not.toContain("MOTION_MS.fast");
+    expect(src).toContain("!duration-[var(--motion-exit-fast)]");
     expect(src).toMatch(/exiting[\s\S]{0,200}?opacity-0/);
   });
 
@@ -251,6 +254,7 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     ["empty2", "--kiro-stagger-empty-2", STAGGER_MS.empty2],
     ["emptyBase", "--kiro-stagger-empty-base", STAGGER_MS.emptyBase],
     ["emptyStep", "--kiro-stagger-empty-step", STAGGER_MS.emptyStep],
+    ["mentionStep", "--kiro-stagger-mention-step", STAGGER_MS.mentionStep],
   ] as const)("S3-3 STAGGER_MS.%s = :root %s (%sms)", (tier, cssVar, value) => {
     expect(css).toMatch(new RegExp(`${cssVar}:\\s*${value}ms`));
   });
@@ -483,6 +487,49 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
     const send = read("components/kiro/KiroSendControl.tsx");
     expect(send).toContain("transition-[opacity,background-color]");
     expect(send).toContain("duration-[var(--kiro-motion-control,var(--motion-fast))]");
+  });
+
+  it("深度排查 Batch1：Kiro 消息/会话/导航/历史/检查器对称进退", () => {
+    const message = read("components/kiro/KiroMessage.tsx");
+    expect(message).toContain("usePresence(showStreamingCursor === true, MOTION_EXIT_MS.fast)");
+    expect(message).toContain("animate-enter");
+    const surface = read("components/kiro/computer/session/KiroComputerSessionSurface.tsx");
+    expect(surface).toContain("animate-enter");
+    const navigator = read("components/kiro/navigation/KiroNavigator.tsx");
+    expect(navigator).toContain("KIRO_MOTION_MS.popoverExit");
+    expect(navigator).not.toContain("MOTION_MS.overlay");
+    const inspector = read("components/kiro/inspector/KiroInspector.tsx");
+    expect(inspector).toContain("duration-[var(--motion-exit-panel)]");
+    expect(inspector).toContain("ease-[var(--ease-exit)]");
+    const thread = read("components/kiro/KiroThreadRow.tsx");
+    expect(thread).toContain("KiroMenuPanel");
+    expect(thread).toContain('open={menuOpen}');
+    const history = read("components/kiro/KiroHistoryPanel.tsx");
+    expect(history).toContain("useExitPresenceList");
+    expect(history).toContain("resetKey: query");
+    const home = read("components/kiro/navigation/KiroNavigatorHome.tsx");
+    expect(home).toContain("DisclosureRegion open={showAllThreads}");
+    const countdown = read("components/kiro/run/ApprovalCountdown.tsx");
+    expect(countdown).toContain("tabular-nums");
+  });
+
+  it("深度排查 Batch1：计时错位收敛（presence 常量与 CSS 同源）", () => {
+    const conversation = read("components/kiro/KiroConversation.tsx");
+    expect(conversation).toContain("usePresence(showScrollBtn, MOTION_EXIT_MS.fast)");
+    expect(conversation).not.toContain("MOTION_MS.fast");
+    expect(conversation).toContain("scrollBtnPresence.visible");
+    const css = read("app/globals.css");
+    expect(css).toContain("opacity var(--motion-exit-fast) var(--ease-exit)");
+    expect(css).toContain("animation: kiro-empty-out var(--motion-exit-panel) var(--ease-exit) both;");
+    const center = read("components/reminders/ReminderCenter.tsx");
+    expect(center).toContain("usePresence(editor !== null, MOTION_EXIT_MS.base)");
+    expect(center).not.toContain("MOTION_MS.base");
+    const viewport = read("components/reminders/ReminderViewport.tsx");
+    expect(viewport).toContain("MOTION_EXIT_MS.fast");
+    expect(viewport).toContain("!duration-[var(--motion-exit-fast)]");
+    const navigator = read("components/kiro/navigation/KiroNavigator.tsx");
+    expect(navigator).toContain("usePresence(!expanded, MOTION_EXIT_MS.fast)");
+    expect(navigator).toContain("duration-[var(--motion-exit-fast)]");
   });
 
   it("卡顿点：动画元素无 backdrop-blur；tray 退出期间锁 overflow-x（防滚动条闪烁）", () => {

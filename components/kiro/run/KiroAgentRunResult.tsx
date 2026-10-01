@@ -103,7 +103,7 @@ export function KiroAgentRunResult({
   const canUndo = task.canUndo && !task.undoUsed && task.status === "completed";
 
   return (
-    <div data-testid="kiro-agent-run-result" data-state={task.status} className="space-y-1.5 pt-1">
+    <div data-testid="kiro-agent-run-result" data-state={task.status} className="space-y-1.5 pt-1 animate-enter">
       <p className="text-[11px] font-semibold text-charcoal">
         {formatComputerTaskResultSummary({ status: task.status, changes: task.changes })}
       </p>

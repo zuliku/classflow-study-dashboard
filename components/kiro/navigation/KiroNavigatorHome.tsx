@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Plus, Search } from "lucide-react";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { KiroThreadRow } from "@/components/kiro/KiroThreadRow";
 import { KiroNavigatorSearch } from "@/components/kiro/navigation/KiroNavigatorSearch";
 import {
@@ -137,20 +138,39 @@ export function KiroNavigatorHome({
               {visibleThreads.length === 0 ? (
                 <p className="px-1.5 py-4 text-center text-[11px] text-sandrift">暂无历史对话</p>
               ) : (
-                <div className="space-y-0.5">
-                  {visibleThreads.map((thread) => (
-                    <KiroThreadRow
-                      key={thread.id}
-                      record={thread}
-                      isCurrent={currentConversationId === thread.id}
-                      onOpen={onOpenThread}
-                      disabled={disabled}
-                      transitioning={transitionTargetId === thread.id}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-0.5">
+                    {(searching ? visibleThreads : visibleThreads.slice(0, KIRO_NAVIGATOR_RECENT_LIMIT)).map((thread) => (
+                      <KiroThreadRow
+                        key={thread.id}
+                        record={thread}
+                        isCurrent={currentConversationId === thread.id}
+                        onOpen={onOpenThread}
+                        disabled={disabled}
+                        transitioning={transitionTargetId === thread.id}
+                      />
+                    ))}
+                  </div>
+                  {/* 超出 8 条的部分折叠展开（搜索态全显，不走折叠；按钮只在非搜索态出现） */}
+                  {!searching && threads.length > KIRO_NAVIGATOR_RECENT_LIMIT && (
+                    <DisclosureRegion open={showAllThreads}>
+                      <div className="space-y-0.5">
+                        {visibleThreads.slice(KIRO_NAVIGATOR_RECENT_LIMIT).map((thread) => (
+                          <KiroThreadRow
+                            key={thread.id}
+                            record={thread}
+                            isCurrent={currentConversationId === thread.id}
+                            onOpen={onOpenThread}
+                            disabled={disabled}
+                            transitioning={transitionTargetId === thread.id}
+                          />
+                        ))}
+                      </div>
+                    </DisclosureRegion>
+                  )}
+                </>
               )}
-              {!showAllThreads && threads.length > KIRO_NAVIGATOR_RECENT_LIMIT && (
+              {!showAllThreads && !searching && threads.length > KIRO_NAVIGATOR_RECENT_LIMIT && (
                 <button
                   type="button"
                   onClick={onShowAllThreads}

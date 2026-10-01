@@ -226,6 +226,8 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
             data-testid="kiro-terminal-output"
             className={cn(
               "rounded-lg bg-white/70 border border-line-soft px-2 py-1 font-mono text-[10.5px] leading-relaxed whitespace-pre-wrap break-all overflow-y-auto",
+              // 查看全部/收起：max-height 过渡（内容区撑缩不硬跳）
+              "transition-[max-height] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
               !showAll ? "max-h-40" : "max-h-64"
             )}
           >

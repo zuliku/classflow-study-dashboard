@@ -23,6 +23,8 @@ import type { TaskWorkspaceItem } from "@/lib/tasks/taskViews";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { cn, getPriorityMeta } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
@@ -448,6 +450,9 @@ export function AssignmentTable({
   }, [ctxMenu, assignments]);
 
   const bulkCount = assignmentSelection.length;
+  // Bulk Bar / DDL 浮层对称进退（fixed 浮层，进出不同时，避免开关闪切）
+  const bulkBarPresence = usePresence(isWorkspace && bulkCount > 0, MOTION_EXIT_MS.fast);
+  const bulkDdlPresence = usePresence(bulkDdlOpen, MOTION_EXIT_MS.fast);
   const applyBulkDDL = () => {
     if (!bulkDdlDate) return;
     actions.setDDLDate(assignmentSelection, bulkDdlDate);
@@ -901,11 +906,16 @@ export function AssignmentTable({
         )}
       </div>
 
-      {/* ---- Workspace：Bulk Action Bar（有选择才出现） ---- */}
-      {isWorkspace && bulkCount > 0 && (
+      {/* ---- Workspace：Bulk Action Bar（有选择才出现，对称进退） ---- */}
+      {bulkBarPresence.mounted && (
         <div
           data-testid="assignment-bulk-bar"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2 flex items-center gap-2 text-xs ux-inline"
+          className={cn(
+            "fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2 flex items-center gap-2 text-xs transition-[opacity,transform]",
+            bulkBarPresence.visible
+              ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]"
+              : "opacity-0 translate-y-2 pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+          )}
         >
           <span className="font-bold text-charcoal px-1">
             已选 {bulkCount} 项
@@ -934,10 +944,15 @@ export function AssignmentTable({
             triggerClassName="h-7 px-2 text-[11px] font-semibold text-satin-grey min-w-[92px]"
             itemClassName="h-8"
           />
-          {bulkDdlOpen ? (
+          {bulkDdlPresence.mounted && (
             <span
               data-testid="bulk-ddl-popover"
-              className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 w-72 bg-surface border border-line-strong rounded-xl shadow-card p-3 space-y-2.5 text-xs ux-inline"
+              className={cn(
+                "fixed bottom-16 left-1/2 -translate-x-1/2 z-50 w-72 bg-surface border border-line-strong rounded-xl shadow-card p-3 space-y-2.5 text-xs transition-[opacity,transform]",
+                bulkDdlPresence.visible
+                  ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]"
+                  : "opacity-0 translate-y-2 pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+              )}
             >
               <div className="flex items-center justify-between">
                 <span className="font-bold text-charcoal">调整截止时间</span>
@@ -992,15 +1007,15 @@ export function AssignmentTable({
                 <p className="text-[10px] text-sandrift">各任务相对日期差保持不变，HH:mm 时间均保留</p>
               </div>
             </span>
-          ) : (
-            <button
-              onClick={() => setBulkDdlOpen(true)}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg font-semibold text-satin-grey hover:bg-alabaster transition-colors"
-            >
-              <CalendarPlus className="w-3.5 h-3.5" />
-              调整DDL
-            </button>
           )}
+          <button
+            onClick={() => setBulkDdlOpen((v) => !v)}
+            aria-expanded={bulkDdlOpen}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg font-semibold text-satin-grey hover:bg-alabaster transition-colors"
+          >
+            <CalendarPlus className="w-3.5 h-3.5" />
+            调整DDL
+          </button>
           <button
             onClick={() => actions.remove(assignmentSelection)}
             className="px-2 py-1 rounded-lg font-bold text-danger hover:bg-danger-bg transition-colors"

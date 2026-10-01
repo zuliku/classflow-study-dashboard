@@ -207,6 +207,35 @@ describe("useExitPresenceList ↔ ExitCollapse contract", () => {
     expect(queryByTestId("item-a")).not.toBeNull();
   });
 
+  it("保序：中间项删除原位保留（不 teleport 到末尾、不硬跳兄弟）", () => {
+    function OrderProbe({ items }: { items: string[] }) {
+      const retained = useExitPresenceList({ items, getId: (id) => id, resetKey: "v1" });
+      return (
+        <ul>
+          {retained.map(({ item, exiting }) => (
+            <li key={item} data-testid={`ord-${item}`} data-exiting={String(exiting)}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    const { rerender, container, queryByTestId } = render(<OrderProbe items={["a", "b", "c"]} />);
+    rerender(<OrderProbe items={["a", "c"]} />);
+    // b 原位保留（a 与 c 之间），顺序不变
+    expect(Array.from(container.querySelectorAll("li")).map((li) => li.textContent)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(queryByTestId("ord-b")?.dataset.exiting).toBe("true");
+    act(() => {
+      vi.advanceTimersByTime(MOTION_EXIT_MS.panel);
+    });
+    expect(queryByTestId("ord-b")).toBeNull();
+    expect(Array.from(container.querySelectorAll("li")).map((li) => li.textContent)).toEqual(["a", "c"]);
+  });
+
   it("resetKey 切换：直接同步新列表，不批量播放 exit", () => {
     const { rerender, queryByTestId } = render(<ListProbe items={["a", "b"]} resetKey="filter-1" />);
     rerender(<ListProbe items={["c", "d"]} resetKey="filter-2" />);

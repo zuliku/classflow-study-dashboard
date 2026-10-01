@@ -620,7 +620,7 @@ export function GroupCollaborationView() {
                     <button
                       type="button"
                       onClick={openAddMember}
-                      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal"
+                      className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal ux-fade"
                     >
                       <span>还没有成员</span>
                       <span className="flex items-center gap-1 font-bold">
@@ -710,7 +710,7 @@ export function GroupCollaborationView() {
                   <button
                     type="button"
                     onClick={openAddTask}
-                    className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal"
+                    className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal ux-fade"
                   >
                     <span>
                       {selectedProject.tasks.length === 0 ? "还没有任务" : "没有匹配的任务"}

@@ -69,6 +69,7 @@ export function KiroComputerAuditPanel() {
         )}
       </div>
 
+      <div key={!loaded ? "loading" : entries.length === 0 ? "empty" : "list"} className="ux-fade">
       {!loaded && <p className="mt-2 text-[10px] text-sandrift">加载中…</p>}
       {loaded && entries.length === 0 && (
         <p className="mt-2 text-[10px] text-sandrift">暂无活动记录</p>
@@ -78,7 +79,7 @@ export function KiroComputerAuditPanel() {
       {entries.length > 0 && (
         <ul className="mt-1.5 divide-y divide-line-soft">
           {entries.map((e) => (
-            <li key={e.id} className="flex items-baseline justify-between gap-3 py-2">
+            <li key={e.id} className="flex items-baseline justify-between gap-3 py-2 animate-enter">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold text-charcoal truncate">
                   {describeOperation(e)}
@@ -98,6 +99,7 @@ export function KiroComputerAuditPanel() {
           ))}
         </ul>
       )}
+      </div>
     </div>
   );
 }

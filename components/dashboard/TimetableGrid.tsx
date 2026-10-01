@@ -12,6 +12,7 @@ import { findScheduleConflicts } from "@/lib/conflicts";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { getNowIndicatorPosition } from "@/lib/timeline/nowIndicator";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { MOTION_MS } from "@/lib/motion";
 import { Course, CourseSchedule, ScheduleConflict } from "@/types";
 import {
@@ -531,8 +532,8 @@ export function TimetableGrid({
       </div>
       )}
 
-      {/* Conflict Warning Banner */}
-      {conflicts.length > 0 && (
+      {/* Conflict Warning Banner：折叠进退（整块条件挂载会顶开下方网格） */}
+      <DisclosureRegion open={conflicts.length > 0}>
         <div className="my-2 p-2.5 bg-danger-bg border border-danger-border rounded-lg flex items-center justify-between text-xs text-danger shrink-0">
           <div className="flex items-center space-x-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -551,7 +552,7 @@ export function TimetableGrid({
             查看冲突
           </button>
         </div>
-      )}
+      </DisclosureRegion>
 
       {/* Grid Container：周切换时仅此区域（表头 + 课程网格）做方向淡入 */}
       <div
@@ -709,10 +710,12 @@ export function TimetableGrid({
                     return (
                       <div
                         key={sched.id}
-                        // Geometry Wrapper：只负责定位（top/height/left/right）+ hover 位移
+                        // Geometry Wrapper：只负责定位（top/height/left/right）+ hover 位移。
+                        // top/height 不进过渡：拖拽/缩放按指针逐帧写定位，过渡会让卡片永远慢 3 帧；
+                        // 周切换等结构变化走容器 ux-week-enter，无需此处补间。
                         className={cn(
                           "absolute left-0.5 right-0.5 z-[5]",
-                          "transition-[top,height,transform,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+                          "transition-[transform,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
                           "hover:shadow-card hover:-translate-y-px"
                         )}
                         style={{

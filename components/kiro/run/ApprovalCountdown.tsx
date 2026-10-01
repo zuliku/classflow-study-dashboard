@@ -37,7 +37,8 @@ export function ApprovalCountdown({ testid }: { testid?: string }) {
       role="timer"
       data-testid={testid ?? "approval-countdown"}
       className={cn(
-        "text-[10px] leading-relaxed",
+        // tabular-nums + 右对齐占位：每秒跳变不抖宽度；颜色切换走 fast 过渡
+        "text-[10px] leading-relaxed tabular-nums transition-colors duration-[var(--motion-fast)]",
         urgent ? "font-bold text-danger" : "text-sandrift"
       )}
     >

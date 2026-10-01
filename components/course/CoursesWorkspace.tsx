@@ -144,8 +144,9 @@ export function CoursesWorkspace() {
       {/* 水平 gutter 单一来源（workspace-gutter）；纵向节奏保持 16/24px
           S4-2：纵向滚动唯一归 main，不再自建滚动上下文（与 Assignments/Timeline/Overview 一致） */}
       <div className="workspace-gutter flex-1 min-h-0 pt-4 pb-24 md:pt-6 md:pb-6">
-        {courses.length === 0 ? (
+        {courses.length === 0 && !retainedCourses.some((e) => e.exiting) ? (
           <WorkspaceEmptyState
+            className="ux-fade"
             icon={<BookOpen className="w-8 h-8" strokeWidth={1.5} />}
             title="暂无课程"
             description="添加第一门课程或导入课表，开始建立课程资料库"

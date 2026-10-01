@@ -508,9 +508,9 @@ export function CourseDetailDrawer() {
               error={editError}
             />
 
-            {/* PRIMARY ACTIONS：上传资料 primary；编辑态切换为 [保存][取消] */}
+            {/* PRIMARY ACTIONS：上传资料 primary；编辑态切换为 [保存][取消]（同槽位淡入） */}
           {isEditing ? (
-            <div className="flex items-center gap-1.5">
+            <div key="edit" className="flex items-center gap-1.5 ux-fade">
               <Button variant="secondary" size="sm" onClick={handleCancelEdit}>
                 取消
               </Button>
@@ -519,7 +519,7 @@ export function CourseDetailDrawer() {
               </Button>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div key="view" className="flex flex-wrap items-center gap-1.5 ux-fade">
               <Button variant="primary" size="sm" onClick={handleQuickUploadMaterial} className="h-8 px-3">
                 <FileUp className="h-3.5 w-3.5" />
                 上传资料

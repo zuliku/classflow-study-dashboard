@@ -527,8 +527,8 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             />
           </SettingsRow>
 
-          {webSearchEnabled && (
-            <>
+          {/* 外层再包一层折叠（允许嵌套 DisclosureRegion；开关切换不硬顶布局） */}
+          <DisclosureRegion open={webSearchEnabled}>
               <div className="px-3 -mt-1">
                 <p className="text-[11px] text-sandrift">
                   {webSearchCredentialMode === "server" ? "ClassFlow 提供" : "使用自己的 API Key"}
@@ -596,7 +596,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     )}
                   </SettingsRow>
 
-                  {webSearchCredentialMode === "byok" && (
+                  <DisclosureRegion open={webSearchCredentialMode === "byok"}>
                     <SettingsRow
                       settingId="kiro-web-search-byok-key"
                       title="Tavily API Key"
@@ -623,7 +623,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                         </button>
                       </div>
                     </SettingsRow>
-                  )}
+                  </DisclosureRegion>
 
                   <SettingsRow
                     settingId="kiro-web-search-test"
@@ -658,8 +658,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   </SettingsRow>
                 </div>
               </DisclosureRegion>
-            </>
-          )}
+          </DisclosureRegion>
 
           {/* ---- 记忆 ---- */}
           <div className="pt-1">
@@ -725,9 +724,8 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                 </SettingsRow>
               )}
 
-              {/* ---- Task 19C1：扫描 Web PDF Vision（低频技术配置，收进高级设置） ---- */}
-              {webSearchEnabled && (
-                <>
+              {/* ---- Task 19C1：扫描 Web PDF Vision（低频技术配置，收进高级设置；开关切换折叠进退） ---- */}
+              <DisclosureRegion open={webSearchEnabled}>
                   <SettingsRow
                     settingId="kiro-web-pdf-vision-enabled"
                     title="扫描 PDF 识别"
@@ -790,8 +788,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                       </button>
                     </div>
                   </SettingsRow>
-                </>
-              )}
+              </DisclosureRegion>
             </div>
           </DisclosureRegion>
         </SettingsGroup>

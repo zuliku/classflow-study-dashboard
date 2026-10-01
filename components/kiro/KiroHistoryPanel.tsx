@@ -9,6 +9,8 @@ import { KiroThreadRow } from "@/components/kiro/KiroThreadRow";
 import { listConversations } from "@/lib/ai/history/db";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 import { usePresence } from "@/lib/usePresence";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +39,12 @@ export function KiroHistoryPanel({
     const q = query.trim().toLowerCase();
     return q ? records.filter((r) => r.title.toLowerCase().includes(q)) : records;
   }, [records, query]);
+  // 行删除原位 collapse（搜索 query 变化走 resetKey 即时，不保留过期快照）
+  const retainedFiltered = useExitPresenceList({
+    items: filtered,
+    getId: (r) => r.id,
+    resetKey: query,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -140,8 +148,8 @@ export function KiroHistoryPanel({
             className="w-full bg-[#F7F5F5] border border-line rounded-xl px-3 h-9 text-xs text-charcoal placeholder-sandrift focus:outline-none"
           />
           <div className="rounded-2xl bg-[#F7F5F5] border border-line flex flex-col overflow-hidden min-h-[240px]">
-            {filtered.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center gap-2.5 px-6 py-10">
+            {filtered.length === 0 && retainedFiltered.every((e) => !e.exiting) ? (
+              <div key="empty" className="flex-1 flex flex-col items-center justify-center text-center gap-2.5 px-6 py-10 ux-fade">
                 <span className="w-10 h-10 rounded-xl bg-alabaster flex items-center justify-center shrink-0">
                   <MessageSquare className="w-[18px] h-[18px] text-sandrift" />
                 </span>
@@ -153,16 +161,17 @@ export function KiroHistoryPanel({
                 )}
               </div>
             ) : (
-              <div className="divide-y divide-line-soft">
-                {filtered.map((rec) => (
-                  <KiroThreadRow
-                    key={rec.id}
-                    record={rec}
-                    isCurrent={session.currentConversationId === rec.id}
-                    onOpen={openThread}
-                    disabled={session.conversationTransitioning}
-                    transitioning={session.conversationTransition.target === rec.id}
-                  />
+              <div key="list" className="divide-y divide-line-soft ux-fade">
+                {retainedFiltered.map(({ item: rec, exiting }) => (
+                  <ExitCollapse key={rec.id} exiting={exiting}>
+                    <KiroThreadRow
+                      record={rec}
+                      isCurrent={session.currentConversationId === rec.id}
+                      onOpen={openThread}
+                      disabled={session.conversationTransitioning}
+                      transitioning={session.conversationTransition.target === rec.id}
+                    />
+                  </ExitCollapse>
                 ))}
               </div>
             )}

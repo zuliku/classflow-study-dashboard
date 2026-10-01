@@ -169,9 +169,9 @@ export function ImportScheduleModal() {
           </button>
         </div>
 
-        {/* Wizard Step 1: Input & Upload */}
+        {/* Wizard Step 1: Input & Upload（步骤切换 keyed 淡入，Dialog 内高度跳变柔化） */}
         {step === 1 && (
-          <div className="p-6 space-y-4 text-xs overflow-y-auto">
+          <div key="step-1" className="p-6 space-y-4 text-xs overflow-y-auto ux-fade">
             {/* Format Tabs */}
             <div className="grid grid-cols-3 gap-2 p-1 bg-alabaster rounded-xl border border-line-strong">
               <button
@@ -276,7 +276,7 @@ export function ImportScheduleModal() {
 
         {/* Wizard Step 2: Live Preview & Conflict Check */}
         {step === 2 && parsedData && (
-          <div className="p-6 space-y-4 text-xs overflow-y-auto">
+          <div key="step-2" className="p-6 space-y-4 text-xs overflow-y-auto ux-fade">
             {/* Parsing Errors (skipped rows) */}
             {parsedData.errors.length > 0 && (
               <div className="p-3 bg-danger-bg border border-danger-border rounded-xl text-danger space-y-1">

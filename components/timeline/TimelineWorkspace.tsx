@@ -23,6 +23,7 @@ import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { IconButton } from "@/components/ui/IconButton";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { Popover } from "@/components/ui/Popover";
 import {
   TimelineWorkspaceViewBar,
@@ -1690,6 +1691,14 @@ export function ArrangeSheet({
 
   const placement = getPlacement?.(date, start, end);
   const overlapHint = placement?.courseOverlaps[0];
+  // 警告行退场播 stale 文案（输入变化导致条件翻转时，折叠播完前文案不消失）
+  const overlapHintText =
+    overlapHint && !placement?.hardConflict
+      ? `⚠ 与《${overlapHint.courseName}》${overlapHint.startTime}–${overlapHint.endTime} 重叠`
+      : null;
+  const lastHintRef = useRef<string | null>(null);
+  if (overlapHintText) lastHintRef.current = overlapHintText;
+  const shownHintText = overlapHintText ?? lastHintRef.current;
   return (
     <Dialog
       open={open}
@@ -1744,11 +1753,9 @@ export function ArrangeSheet({
             <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label="结束时间" disabled={!open} className="h-8 px-1.5 text-[11px]" />
           </Field>
         </div>
-        {overlapHint && !placement?.hardConflict && (
-          <p className="text-[11px] font-semibold text-warning">
-            ⚠ 与《{overlapHint.courseName}》{overlapHint.startTime}–{overlapHint.endTime} 重叠
-          </p>
-        )}
+        <DisclosureRegion open={overlapHintText != null}>
+          {shownHintText ? <p className="text-[11px] font-semibold text-warning">{shownHintText}</p> : null}
+        </DisclosureRegion>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={!open}>取消</Button>
           <Button

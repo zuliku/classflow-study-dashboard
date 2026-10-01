@@ -22,6 +22,9 @@ import { KiroChangeReviewDialog } from "@/components/kiro/computer/KiroChangeRev
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { getKiroOutputFontSize } from "@/lib/ai/ui/typography";
+import { usePresence } from "@/lib/usePresence";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -175,6 +178,11 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   // Context-aware 建议可见时，隐藏 EmptyState 的通用建议（两者不同时出现）
   const hasContextSuggestions =
     suggestionsKind != null && suggestionsGen > lastUserTurnGen;
+  // 建议条父级 presence：裸条件会截断其内部退出折叠（同一 panel 时长对齐）
+  const suggestionsPresence = usePresence(
+    variant === "sidecar" && hasMessages && hasContextSuggestions,
+    MOTION_EXIT_MS.panel
+  );
   // Workspace 与 Sidecar 都启用 Context-aware Suggestions（无消息时渲染在标题下方）
   const emptyContextSuggestions =
     !hasMessages && hasContextSuggestions ? (
@@ -240,7 +248,11 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         )}
       </div>
 
-      {variant === "sidecar" && hasMessages && hasContextSuggestions && <KiroContextSuggestions compact />}
+      {suggestionsPresence.mounted && (
+        <ExitCollapse exiting={!suggestionsPresence.visible}>
+          <KiroContextSuggestions compact />
+        </ExitCollapse>
+      )}
 
       <KiroComposer
         compact={compact}

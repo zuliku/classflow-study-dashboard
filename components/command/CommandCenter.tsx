@@ -379,7 +379,9 @@ export function CommandCenter() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-16 md:pt-20 p-3 sm:p-4",
+        // blur 只在完全打开时保留：进退场透明度动画期间逐帧重模糊全屏是已知卡顿源
+        "fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 md:pt-20 p-3 sm:p-4",
+        visible && "backdrop-blur-sm",
         "ux-overlay",
         visible ? "opacity-100" : "opacity-0",
         !isSearchModalOpen && "pointer-events-none"

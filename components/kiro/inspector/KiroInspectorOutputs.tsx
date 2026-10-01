@@ -20,6 +20,7 @@ import {
   KiroInspectorRow,
   KiroInspectorSection,
 } from "@/components/kiro/inspector/KiroInspectorSection";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 
 const TYPE_LABELS: Record<string, string> = { markdown: "Markdown", docx: "Word", text: "文本" };
 
@@ -168,7 +169,7 @@ export function KiroInspectorOutputs() {
         key={entry.artifact.id}
         testId="kiro-inspector-output-row"
         icon={icon}
-        className="data-[availability=missing]:opacity-80"
+        className="data-[availability=missing]:opacity-80 animate-enter"
         {...(available
           ? {
               onClick: () => previewArtifact(entry.artifact.id),
@@ -229,7 +230,7 @@ export function KiroInspectorOutputs() {
             <FileClock className="w-3.5 h-3.5" />
             最近文件
           </button>
-          {showRecent ? (
+          <DisclosureRegion open={showRecent}>
             <div className="mt-0.5">
               {recentEntries.length === 0 ? (
                 <KiroInspectorEmptyState text="暂无最近文件" />
@@ -237,7 +238,7 @@ export function KiroInspectorOutputs() {
                 recentEntries.map((entry) => renderRow(entry))
               )}
             </div>
-          ) : null}
+          </DisclosureRegion>
         </>
       ) : (
         <div className="space-y-0.5">{entries.map((entry) => renderRow(entry))}</div>

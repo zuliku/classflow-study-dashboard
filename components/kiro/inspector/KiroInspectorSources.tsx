@@ -76,7 +76,7 @@ export function KiroInspectorSources() {
               const url = isSafeWebUrl(source.url) ? source.url : null;
               const rowKey = `${source.source}:${source.sourceId}:${source.name}`;
               return (
-                <li key={rowKey}>
+                <li key={rowKey} className="animate-enter">
                   <KiroInspectorRow
                     testId="kiro-inspector-source-row"
                     icon={sourceIcon(source)}

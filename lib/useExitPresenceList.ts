@@ -18,6 +18,10 @@ import { MOTION_EXIT_MS } from "@/lib/motion";
  *
  * Motion Contract：默认 duration = MOTION_EXIT_MS.panel —— 与 ExitCollapse 的 CSS
  * 退出过渡（--motion-exit-panel）同源一致，勿在调用处另传魔法数字。
+ *
+ * 保序：retained snapshot 插回原位（按消失前最后一次完整顺序），而非追加末尾——
+ * 追加会导致原位瞬间空出（兄弟硬跳）+ ghost 跳到末尾再收，等于没修硬切。
+ * 重加（删除后定时器内又出现同 id）：渲染期去重，只保留 live 项。
  */
 export interface RetainedExitItem<T> {
   item: T;
@@ -41,6 +45,11 @@ export function useExitPresenceList<T>({
   const prevItemsRef = useRef<T[]>(items);
   const prevResetKeyRef = useRef(resetKey);
   const exitTimersRef = useRef<number[]>([]);
+  /**
+   * id → 当前坐标系下标（保序插回用）：每 render 用 live 项现序重索引，
+   * ghost 保持旧槽位——坐标系永不过期，多次连续删除也不漂移。
+   */
+  const slotRef = useRef(new Map<string, number>());
   const exitDuration = reducedMotion ? 0 : duration;
 
   // resetKey 变化：输出只含当前 items（不保留旧 snapshot，避免旧筛选行闪现）
@@ -53,6 +62,7 @@ export function useExitPresenceList<T>({
       exitTimersRef.current = [];
       setRetained([]);
       setExitingIds(new Set());
+      slotRef.current.clear();
       prevItemsRef.current = items;
       prevResetKeyRef.current = resetKey;
       return;
@@ -94,12 +104,33 @@ export function useExitPresenceList<T>({
     []
   );
 
-  // resetChanged：直接同步新列表（不保留旧 snapshot）；否则 items + retained(exiting) snapshot
+  // resetChanged：直接同步新列表（不保留旧 snapshot）；否则 live 按现序 +
+  // ghost 按槽位插回（重加回来的 id 只保留 live，不 double render）。
+  // 槽位每 render 用 live 现序重索引（幂等写），ghost 保持旧槽位 → 坐标系永不过期。
   if (resetChanged) {
     return items.map((item) => ({ item, exiting: false }));
   }
-  return [
-    ...items.map((item) => ({ item, exiting: false })),
-    ...retained.map((item) => ({ item, exiting: true })),
-  ];
+  const slots = slotRef.current;
+  items.forEach((item, index) => slots.set(getId(item), index));
+  const liveIds = new Set(items.map(getId));
+  const ghosts = retained.filter((it) => !liveIds.has(getId(it)));
+  const out: RetainedExitItem<T>[] = items.map((item) => ({ item, exiting: false }));
+  const orderedGhosts = [...ghosts].sort((a, b) => {
+    const ia = slots.get(getId(a)) ?? Number.MAX_SAFE_INTEGER;
+    const ib = slots.get(getId(b)) ?? Number.MAX_SAFE_INTEGER;
+    return ia - ib;
+  });
+  for (const ghost of orderedGhosts) {
+    const slot = slots.get(getId(ghost)) ?? Number.MAX_SAFE_INTEGER;
+    out.splice(Math.min(Math.max(slot, 0), out.length), 0, { item: ghost, exiting: true });
+  }
+  // 回收彻底消失的槽位（items 与 retained 都没有的 id）
+  if (slots.size > items.length + ghosts.length + 8) {
+    const alive = new Set<string>();
+    for (const e of out) alive.add(getId(e.item));
+    for (const id of [...slots.keys()]) {
+      if (!alive.has(id)) slots.delete(id);
+    }
+  }
+  return out;
 }

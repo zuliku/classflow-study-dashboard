@@ -93,6 +93,7 @@ export function EntityActivitySection({
 
       <DisclosureRegion open={open}>
         <div id={`entity-activity-${scope}`} className="pt-1">
+          <div key={loading ? "loading" : error ? "error" : rows.length > 0 ? "list" : "empty"} className="ux-fade">
           {loading && (
             <div aria-live="polite" className="ux-skeleton space-y-1.5 py-1">
               <div className="h-3 w-2/3 animate-pulse rounded bg-line-soft" />
@@ -129,7 +130,7 @@ export function EntityActivitySection({
                   <p className="pt-1 pb-0.5 text-[10px] font-bold text-sandrift">{group.label}</p>
                   <ol className="space-y-0">
                     {group.rows.map((r, idx) => (
-                      <li key={r.id} className="relative flex gap-2.5 pb-2">
+                      <li key={r.id} className="relative flex gap-2.5 pb-2 animate-enter">
                         {/* connector（decorative，读屏忽略） */}
                         {idx < group.rows.length - 1 && (
                           <span
@@ -196,6 +197,7 @@ export function EntityActivitySection({
           {coverageText && (
             <p className="pt-1 text-[10px] text-sandrift/70">{coverageText}</p>
           )}
+          </div>
         </div>
       </DisclosureRegion>
     </section>

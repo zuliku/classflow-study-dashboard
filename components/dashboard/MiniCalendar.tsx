@@ -23,6 +23,8 @@ import { Assignment } from "@/types";
 import { isValidDDL, moveAssignmentDDL, editAssignmentDDLTime } from "@/lib/ddlInteraction";
 import { useSlidingIndicator } from "@/lib/useSlidingIndicator";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { paginate } from "@/lib/pagination";
 import {
   format,
@@ -254,8 +256,14 @@ export function MiniCalendar() {
 
   // ---- DDL 移动反馈（局部，4-6 秒）----
   const [feedback, setFeedback] = useState<DDLMoveFeedbackState | null>(null);
+  // 退场播 stale 快照（DisclosureRegion 卸载延迟期内内容仍在，与抽屉 staleMark 同模式）
+  const lastFeedbackRef = useRef<DDLMoveFeedbackState | null>(null);
+  if (feedback) lastFeedbackRef.current = feedback;
+  const shownFeedback = feedback ?? lastFeedbackRef.current;
   const feedbackTimerRef = useRef<number | null>(null);
   const [timeEditOpen, setTimeEditOpen] = useState(false);
+  // 时间编辑浮层对称进退（absolute，不顶布局）
+  const timeEditPresence = usePresence(timeEditOpen, MOTION_EXIT_MS.fast);
   const [timeInput, setTimeInput] = useState("");
   const timeEditRef = useRef<HTMLDivElement | null>(null);
   const timeInputRef = useRef<HTMLInputElement | null>(null);
@@ -909,18 +917,20 @@ export function MiniCalendar() {
       </div>
       </DisclosureRegion>
 
-      {/* DDL Move Feedback：局部轻量反馈（撤销 + 修改时间），不破坏全局 Toast */}
-      {feedback && (
+      {/* DDL Move Feedback：局部轻量反馈（撤销 + 修改时间），不破坏全局 Toast；折叠进退。
+          退场播 stale 快照（内容在折叠播完前不消失，与抽屉 staleMark 同模式） */}
+      <DisclosureRegion open={feedback != null}>
+        {shownFeedback ? (
         <div className="relative">
           <div
             data-testid="ddl-move-feedback"
             className="ux-inline bg-surface border border-line-strong rounded-xl shadow-card p-2.5 space-y-2"
           >
-            <p className="text-[11px] font-bold text-charcoal">
-              已移动到{" "}
-              {format(parseISO(feedback.targetDate), "M月d日", { locale: zhCN })} ·{" "}
-              {getLocalDDLTime(feedback.current.ddl)}
-            </p>
+              <p className="text-[11px] font-bold text-charcoal">
+                已移动到{" "}
+                {format(parseISO(shownFeedback.targetDate), "M月d日", { locale: zhCN })} ·{" "}
+                {getLocalDDLTime(shownFeedback.current.ddl)}
+              </p>
             <div className="flex items-center justify-between">
               <button
                 onClick={openTimeEdit}
@@ -936,11 +946,16 @@ export function MiniCalendar() {
               </button>
             </div>
 
-            {/* 修改时间 Popover：贴近反馈区，Esc / click outside 关闭 */}
-            {timeEditOpen && (
+            {/* 修改时间 Popover：贴近反馈区，Esc / click outside 关闭，对称进退 */}
+            {timeEditPresence.mounted && (
               <div
                 ref={timeEditRef}
-                className="absolute bottom-full right-0 mb-1 w-44 bg-background border border-line-strong rounded-xl shadow-card p-2.5 space-y-2 z-40"
+                className={cn(
+                  "absolute bottom-full right-0 mb-1 w-44 bg-background border border-line-strong rounded-xl shadow-card p-2.5 space-y-2 z-40 origin-bottom-right transition-[opacity,transform]",
+                  timeEditPresence.visible
+                    ? "opacity-100 scale-100 duration-[var(--motion-fast)]"
+                    : "opacity-0 scale-[0.98] translate-y-[3px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+                )}
               >
                 <label className="block text-[10px] font-bold text-sandrift">
                   截止时间
@@ -970,7 +985,8 @@ export function MiniCalendar() {
             )}
           </div>
         </div>
-      )}
+        ) : null}
+      </DisclosureRegion>
     </div>
   );
 }

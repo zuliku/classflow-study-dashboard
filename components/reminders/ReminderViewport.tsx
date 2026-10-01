@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderDeliveryStore } from "@/store/useReminderDeliveryStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
-import { MOTION_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { Reminder } from "@/types";
 import { formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
@@ -18,8 +18,8 @@ const CARD_AUTO_HIDE_MS = 10_000;
 /** 同时最多显示张数（queue 可更多，消失后下一张进入） */
 const MAX_VISIBLE_CARDS = 3;
 /**
- * Motion Contract：卡片视觉退出走 ux-inline（--motion-fast），
- * EXIT_MS = MOTION_MS.fast 与之同源——动画结束即移除（对齐 ToastViewport）。
+ * Motion Contract：卡片视觉退出走 exit-fast + ease-exit（110ms），
+ * 计时用 MOTION_EXIT_MS.fast 与之同源——动画结束即移除（对齐 ToastViewport）。
  */
 
 /**
@@ -38,7 +38,7 @@ export function ReminderViewport() {
     .filter((r): r is Reminder => !!r)
     .slice(0, MAX_VISIBLE_CARDS);
 
-  // 退出 presence：先标记 exiting 播 140ms 淡出，再真正 dismiss（自动隐藏/手动关闭同路径）
+  // 退出 presence：先标记 exiting 播 exit-fast 淡出，再真正 dismiss（自动隐藏/手动关闭同路径）
   const [exiting, setExiting] = useState<Set<string>>(new Set());
   const exitingRef = useRef(exiting);
   exitingRef.current = exiting;
@@ -61,7 +61,7 @@ export function ReminderViewport() {
   const dismissWithExit = (reminder: Reminder, markRead: boolean) => {
     if (exitingRef.current.has(reminder.id)) return;
     setExiting((prev) => new Set(prev).add(reminder.id));
-    timersRef.current.push(window.setTimeout(() => handleDismiss(reminder, markRead), MOTION_MS.fast));
+    timersRef.current.push(window.setTimeout(() => handleDismiss(reminder, markRead), MOTION_EXIT_MS.fast));
   };
 
   const handleOpen = (reminder: Reminder) => {
@@ -123,10 +123,10 @@ function ReminderCard({
       role="status"
       className={cn(
         "pointer-events-auto flex items-start gap-3 bg-surface border border-line-strong rounded-[20px] shadow-card px-4 py-3.5 ux-inline",
-        // 入场一次性 animation + 出场过渡（与 ToastViewport 同模式）
+        // 入场一次性 animation + 出场过渡（与 ToastViewport 同模式；退出时长与计时同源）
         "ux-toast-enter",
         exiting
-          ? "opacity-0 translate-y-1 !ease-[var(--ease-exit)]"
+          ? "opacity-0 translate-y-1 !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
           : "opacity-100 translate-y-0"
       )}
     >

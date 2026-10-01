@@ -14,6 +14,9 @@ import {
   summarizeReminders,
 } from "@/lib/tasks/assignmentDetailView";
 import { Drawer } from "@/components/ui/Drawer";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { IconButton } from "@/components/ui/IconButton";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -125,6 +128,12 @@ export function CalendarMarkDetailDrawer() {
       (r) => r.targetType === "calendarMark" && r.targetId === mark.id && r.status === "scheduled"
     )
     .sort((a, b) => (parseLocalDDL(a.triggerAt)?.getTime() ?? 0) - (parseLocalDDL(b.triggerAt)?.getTime() ?? 0));
+  // 行删除原位 collapse（AssignmentReminderSection 同语法；mark 切换走 resetKey 即时）
+  const retainedScheduled = useExitPresenceList({
+    items: scheduled,
+    getId: (r) => r.id,
+    resetKey: mark.id,
+  });
 
   const handleAddPreset = (offsetMinutes: number) => {
     if (!anchor) return;
@@ -315,7 +324,7 @@ export function CalendarMarkDetailDrawer() {
           >
             <div className="space-y-2 pt-0.5">
               {mark.autoReminderDisabled === true ? (
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-background px-2.5 py-2">
+                <div key="auto-off" className="flex items-center justify-between gap-2 rounded-lg border border-line bg-background px-2.5 py-2 ux-fade">
                   <span className="text-[10px] text-sandrift">默认提醒：已关闭</span>
                   <button
                     type="button"
@@ -327,20 +336,18 @@ export function CalendarMarkDetailDrawer() {
                   </button>
                 </div>
               ) : reminderSummary.hasAuto ? (
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-background px-2.5 py-2">
+                <div key="auto-on" className="flex items-center justify-between gap-2 rounded-lg border border-line bg-background px-2.5 py-2 ux-fade">
                   <span className="text-[10px] text-sandrift">
                     默认提醒：已开启 · {reminderSummary.autoLabel}
                   </span>
                 </div>
               ) : null}
 
-              {scheduled.length > 0 && (
+              <DisclosureRegion open={scheduled.length > 0}>
                 <div className="space-y-0.5">
-                  {scheduled.map((r: Reminder) => (
-                    <div
-                      key={r.id}
-                      className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs"
-                    >
+                  {retainedScheduled.map(({ item: r, exiting }) => (
+                    <ExitCollapse key={r.id} exiting={exiting}>
+                      <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs">
                       <span className="min-w-0 flex-1 truncate font-medium text-charcoal">
                         {formatAssignmentReminderLabel(r)}
                         {r.source === "auto" && (
@@ -360,10 +367,11 @@ export function CalendarMarkDetailDrawer() {
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
-                    </div>
+                      </div>
+                    </ExitCollapse>
                   ))}
                 </div>
-              )}
+              </DisclosureRegion>
 
               {/* preset 添加（无自定义时间第二套编辑器；anchor = date + startTime 或 defaultDDLTime） */}
               {!reminderSummary.disabled && (

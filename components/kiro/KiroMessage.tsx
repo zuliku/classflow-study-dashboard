@@ -22,6 +22,8 @@ import { UserMessageEditBlockReason } from "@/lib/ai/history/messageEditing";
 import { KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresentation";
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
 import { cn } from "@/lib/utils";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import {
   markdownToPlainText,
@@ -144,6 +146,8 @@ export function KiroMessage({
   const showStreamingCursor = assistantTurn
     ? assistantTurn.phase === "answering" && assistantTurn.answerStreaming
     : streaming;
+  // 光标出现/消失淡入淡出（inline span，用 presence 门控显隐，布局零位移）
+  const cursorPresence = usePresence(showStreamingCursor === true, MOTION_EXIT_MS.fast);
   const showComposingSkeleton =
     assistantTurn?.phase === "composing" && !content && !assistantTurn.answerStreaming;
 
@@ -199,13 +203,16 @@ export function KiroMessage({
                 <div className="h-3 w-1/2 rounded bg-alabaster/70 animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />
               </div>
             )}
-            {showStreamingCursor && (
+            {cursorPresence.mounted && (
               <span
                 aria-hidden="true"
                 data-testid="kiro-streaming-cursor"
                 className={cn(
-                  "inline-block w-[2px] h-3.5 bg-sandrift align-middle",
-                  !reducedMotion && "animate-pulse"
+                  "inline-block w-[2px] h-3.5 bg-sandrift align-middle transition-opacity",
+                  cursorPresence.visible
+                    ? "opacity-100 duration-[var(--motion-fast)]"
+                    : "opacity-0 duration-[var(--motion-exit-fast)]",
+                  !reducedMotion && cursorPresence.visible && "animate-pulse"
                 )}
               />
             )}
@@ -219,7 +226,7 @@ export function KiroMessage({
                 {liveCitedWebSources.slice(0, 3).map((s) => (
                   <span
                     key={s.sourceId}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-alabaster border border-line text-[10px] font-medium text-satin-grey"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-alabaster border border-line text-[10px] font-medium text-satin-grey animate-enter"
                     title={s.name}
                   >
                     <Globe2 className="w-3 h-3 text-sandrift shrink-0" />
@@ -232,9 +239,9 @@ export function KiroMessage({
               </div>
             )}
             {/* Hotfix：正文底部不再显示独立 Sources Tray（来源移入 More → 来源） */}
-            {/* Message Actions：整个 Turn 结束后常驻（不依赖 hover），低权重 inline toolbar */}
+            {/* Message Actions：整个 Turn 结束后常驻（不依赖 hover），低权重 inline toolbar；settle 时淡入 */}
             {(actionsReady ?? true) && !streaming && (
-              <div className="flex items-center gap-1 text-[11px] font-semibold text-sandrift">
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-sandrift animate-enter">
                 <button
                   onClick={copyMarkdownSource}
                   aria-label="复制"
@@ -332,7 +339,7 @@ export function KiroMessage({
       ))}
       {/* 空终答安全网：已结算业务工具 + 零正文 → 纯文本追答（零工具重跑） */}
       {showRegenerateAnswer && onRegenerateAnswer && (
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-1 animate-enter">
           <span className="text-[10px] text-sandrift">模型未返回正文</span>
           <button
             data-testid="kiro-regenerate-answer"

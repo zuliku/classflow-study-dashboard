@@ -7,6 +7,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 import { cn } from "@/lib/utils";
+import { KiroMenuPanel } from "@/components/kiro/KiroMenu";
 
 /**
  * Kiro Thread Row（Thread Rail 与 History Panel 共用）：
@@ -48,9 +49,10 @@ export function KiroThreadRow({
     pushToast({ message: "对话已删除" });
   };
 
+  // 行内重命名：编辑态挂载淡入（view 侧常驻，无需 key；高度相近，只盖挂载硬切）
   if (editing) {
     return (
-      <div className="flex items-center gap-2 px-2 py-1.5">
+      <div className="flex items-center gap-2 px-2 py-1.5 ux-fade">
         <input
           autoFocus
           value={editText}
@@ -126,11 +128,8 @@ export function KiroThreadRow({
         >
           <MoreHorizontal className="w-3.5 h-3.5" />
         </button>
-        {menuOpen && (
-          <div
-            role="menu"
-            className="absolute right-0 top-full mt-1 z-30 w-32 bg-surface border border-line-strong rounded-xl shadow-card p-1 text-xs"
-          >
+        {/* 常挂载受控菜单（外层硬条件会截断退出；dismiss 语义保持现状：选项点击关闭） */}
+        <KiroMenuPanel open={menuOpen} placement="bottom-end" className="w-32 p-1 text-xs">
             <button
               role="menuitem"
               onClick={(e) => {
@@ -155,8 +154,7 @@ export function KiroThreadRow({
               <Trash2 className="w-3.5 h-3.5" />
               删除
             </button>
-          </div>
-        )}
+        </KiroMenuPanel>
       </div>
     </div>
   );

@@ -23,6 +23,9 @@ import { KiroCitation } from "@/components/kiro/KiroCitation";
 import { remarkKiroCitation } from "@/lib/ai/citations/remarkCitation";
 import { useToastStore } from "@/store/useToastStore";
 import { copyTextToClipboard } from "@/lib/ai/share";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
 /**
  * Kiro Markdown：Assistant Markdown → ClassFlow styled React（prose + math 单一入口）。
@@ -56,6 +59,8 @@ function getDomain(href: string): string {
 function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   const [open, setOpen] = React.useState(false);
   const [error, setError] = React.useState(false);
+  // 灯箱对称进退（blur 只在全开时保留，进退场不逐帧重模糊）
+  const lightboxPresence = usePresence(open, MOTION_EXIT_MS.base);
   const pushToast = useToastStore((s) => s.pushToast);
   if (!src) return null;
   const safe = isSafeHttpUrl(src) || src.startsWith("data:") || src.startsWith("blob:");
@@ -86,14 +91,29 @@ function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
         />
         {alt && <span className="block text-center text-[11px] text-sandrift mt-1.5">{alt}</span>}
       </span>
-      {open && (
+      {lightboxPresence.mounted && (
         <div
-          className="fixed inset-0 z-[80] bg-charcoal/60 backdrop-blur-sm flex items-center justify-center p-4"
+          className={cn(
+            "fixed inset-0 z-[80] bg-charcoal/60 flex items-center justify-center p-4 transition-opacity",
+            lightboxPresence.visible
+              ? "opacity-100 duration-[var(--motion-base)]"
+              : "opacity-0 pointer-events-none duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]",
+            // blur 只在全开时保留（进退场透明度动画期间逐帧重模糊全屏最贵）
+            lightboxPresence.visible && "backdrop-blur-sm"
+          )}
           onClick={() => setOpen(false)}
           role="dialog"
           aria-modal="true"
         >
-          <div className="relative max-w-[90vw] max-h-[86vh] bg-white rounded-2xl overflow-auto p-2 shadow-card" onClick={(e) => e.stopPropagation()}>
+          <div
+            className={cn(
+              "relative max-w-[90vw] max-h-[86vh] bg-white rounded-2xl overflow-auto p-2 shadow-card transition-[opacity,transform]",
+              lightboxPresence.visible
+                ? "opacity-100 scale-100 duration-[var(--motion-base)]"
+                : "opacity-0 scale-[0.98] duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setOpen(false)}
               className="absolute top-2 right-2 w-8 h-8 rounded-full bg-surface border border-line flex items-center justify-center text-sandrift hover:text-charcoal"

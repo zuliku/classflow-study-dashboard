@@ -45,10 +45,10 @@ export function KiroInspector({ open }: { open: boolean }) {
         <div
           className={cn(
             "flex max-h-[calc(100dvh-120px)] min-h-0 pt-6 pb-6 pr-6",
-            "transition-opacity ease-[var(--ease-standard)]",
+            "transition-opacity",
             visible
-              ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)]"
-              : "opacity-0 duration-[var(--motion-snap)]"
+              ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] ease-[var(--ease-standard)]"
+              : "opacity-0 duration-[var(--motion-exit-panel)] ease-[var(--ease-exit)]"
           )}
         >
           <aside

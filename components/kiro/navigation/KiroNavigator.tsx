@@ -12,7 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { usePresence } from "@/lib/usePresence";
-import { MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS, KIRO_MOTION_MS } from "@/lib/motion";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -92,9 +92,10 @@ export function KiroNavigator() {
   viewRef.current = view;
   const viewShiftRef = useRef<"next" | "prev">("next");
 
-  // Motion V1：collapsed / expanded 两层 presence（同一 persistent shell 做 width morph）
-  const collapsedPresence = usePresence(!expanded, MOTION_EXIT_MS.panel);
-  const expandedPresence = usePresence(expanded, MOTION_MS.overlay);
+  // Motion V1：collapsed / expanded 两层 presence（同一 persistent shell 做 width morph）；
+  // 计时与 CSS 退出时长同源（collapsed: exit-fast；expanded: kiro popover-exit 上界，覆盖双 scope）
+  const collapsedPresence = usePresence(!expanded, MOTION_EXIT_MS.fast);
+  const expandedPresence = usePresence(expanded, KIRO_MOTION_MS.popoverExit);
 
   const goToView = useCallback((next: NavigatorView) => {
     const prev = viewRef.current;
@@ -334,7 +335,7 @@ export function KiroNavigator() {
               expanded && "absolute inset-y-0 left-0 w-[52px] pointer-events-none",
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
               expanded || !collapsedPresence.visible
-                ? "opacity-0 -translate-x-[3px] duration-[var(--motion-snap)] ease-[var(--ease-exit)]"
+                ? "opacity-0 -translate-x-[3px] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
                 : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-3,140ms)]"
             )}
           >

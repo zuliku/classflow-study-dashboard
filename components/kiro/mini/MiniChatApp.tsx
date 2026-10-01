@@ -4,6 +4,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { X, Pin, PinOff, Plus, Square, SendHorizontal, Paperclip } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { getClassFlowDesktopMiniBridge } from "@/lib/desktop/bridge";
+import { usePresence } from "@/lib/usePresence";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { MOTION_EXIT_MS } from "@/lib/motion";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import {
   MINI_MAX_FILES,
   MINI_MAX_FILE_BYTES,
@@ -36,6 +40,46 @@ export function MiniChatApp() {
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  // 常驻窗动效：拖拽/附件/提示对称进退，时长全部走 Contract 常量。
+  const dragPresence = usePresence(dragOver, MOTION_EXIT_MS.fast);
+  const trayPresence = usePresence(files.length > 0, MOTION_EXIT_MS.panel);
+  const noticePresence = usePresence(notice !== null, MOTION_EXIT_MS.panel);
+  // busy 由快照驱动（early return 之前只能读 snapshot，不能读派生 busy）。
+  const busyPresence = usePresence(snapshot?.busy ?? false, MOTION_EXIT_MS.fast);
+  // 附件 chip 原位退出（Composer 同模式；发送清空直接过滤，不过渡）。
+  const reducedMotion = useEffectiveReducedMotion();
+  const [leavingFileKeys, setLeavingFileKeys] = useState<ReadonlySet<string>>(new Set());
+  const leavingTimersRef = useRef<number[]>([]);
+  useEffect(
+    () => () => {
+      leavingTimersRef.current.forEach((t) => window.clearTimeout(t));
+      leavingTimersRef.current = [];
+    },
+    []
+  );
+  const fileKey = (f: File, i: number) => `${f.name}-${f.size}-${f.lastModified}-${i}`;
+  // 按对象标识删除（下标在并发删除时会漂移；leaving key 用渲染期下标，快照级一致即可）。
+  const removeFile = useCallback(
+    (key: string, file: File) => {
+      if (leavingFileKeys.has(key)) return;
+      if (reducedMotion) {
+        setFiles((prev) => prev.filter((f) => f !== file));
+        return;
+      }
+      setLeavingFileKeys((prev) => new Set(prev).add(key));
+      const timer = window.setTimeout(() => {
+        leavingTimersRef.current = leavingTimersRef.current.filter((t) => t !== timer);
+        setLeavingFileKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        setFiles((prev) => prev.filter((f) => f !== file));
+      }, MOTION_EXIT_MS.panel);
+      leavingTimersRef.current.push(timer);
+    },
+    [leavingFileKeys, reducedMotion]
+  );
 
   // 初始快照 + 订阅推送（无 bridge 即 fallback，不抛错）
   useEffect(() => {
@@ -182,8 +226,16 @@ export function MiniChatApp() {
       >
         <KiroMark size="sm" />
         <span className="text-[13px] font-bold flex-1 truncate">Kiro Mini</span>
-        {busy && (
-          <span className="flex items-center gap-1 text-[10px] font-semibold text-sandrift" data-testid="kiro-mini-busy">
+        {busyPresence.mounted && (
+          <span
+            className={cn(
+              "flex items-center gap-1 text-[10px] font-semibold text-sandrift transition-[opacity,transform]",
+              busyPresence.visible
+                ? "opacity-100 duration-[var(--motion-fast)]"
+                : "opacity-0 pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+            )}
+            data-testid="kiro-mini-busy"
+          >
             <span className="w-1.5 h-1.5 rounded-full bg-sandrift animate-pulse" />
             对话中
           </span>
@@ -201,7 +253,9 @@ export function MiniChatApp() {
             } catch {}
           }}
         >
-          {onTop ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+            <span key={String(onTop)} className="ux-fade inline-flex">
+              {onTop ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+            </span>
         </button>
         <button
           type="button"
@@ -221,7 +275,7 @@ export function MiniChatApp() {
       {/* 消息区（只读；富卡片保留在主窗口） */}
       <div ref={listRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto px-3 py-2.5 space-y-2" data-testid="kiro-mini-messages">
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center">
+          <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center animate-enter">
             <KiroMark size="sm" />
             <p className="text-xs font-semibold">在主窗口继续，或直接在这里问</p>
             <p className="text-[11px] text-sandrift">文件可直接拖入输入框作为附件</p>
@@ -231,7 +285,7 @@ export function MiniChatApp() {
           <div
             key={m.id}
             className={cn(
-              "max-w-full rounded-xl px-2.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap break-words",
+              "max-w-full rounded-xl px-2.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap break-words animate-enter",
               m.role === "user" ? "ml-6 bg-alabaster/70" : "mr-6 bg-surface-soft border border-line-soft"
             )}
           >
@@ -241,40 +295,53 @@ export function MiniChatApp() {
         ))}
       </div>
 
-      {dragOver && (
-        <div className="mx-2.5 mb-1.5 rounded-xl border-2 border-dashed border-line-strong bg-alabaster/60 px-3 py-2 text-center text-[11px] font-bold pointer-events-none">
+      {dragPresence.mounted && (
+        <div
+          className={cn(
+            "mx-2.5 mb-1.5 rounded-xl border-2 border-dashed border-line-strong bg-alabaster/60 px-3 py-2 text-center text-[11px] font-bold pointer-events-none transition-[opacity,transform]",
+            dragPresence.visible
+              ? "opacity-100 duration-[var(--motion-fast)]"
+              : "opacity-0 scale-[0.99] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+          )}
+        >
           释放以添加附件
         </div>
       )}
 
-      {/* 本地待发送附件 */}
-      {files.length > 0 && (
-        <div className="shrink-0 px-2.5 pb-1 flex flex-wrap gap-1" data-testid="kiro-mini-files">
-          {files.map((f, i) => (
-            <span
-              key={`${f.name}-${i}`}
-              className="inline-flex items-center gap-1 max-w-full rounded-lg border border-line bg-alabaster/50 pl-1.5 pr-1 py-0.5 text-[11px]"
-            >
-              <Paperclip className="w-3 h-3 text-sandrift shrink-0" />
-              <span className="truncate max-w-[140px] font-semibold">{f.name}</span>
-              <span className="text-sandrift shrink-0">{formatBytes(f.size)}</span>
-              <button
-                type="button"
-                aria-label={`移除附件 ${f.name}`}
-                className="mini-no-drag w-4 h-4 flex items-center justify-center rounded text-sandrift hover:text-charcoal"
-                onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
+      {/* 本地待发送附件：整架对称进退，单 chip 原位 collapse 后删除 */}
+      {trayPresence.mounted && (
+        <ExitCollapse exiting={!trayPresence.visible}>
+          <div className="shrink-0 px-2.5 pb-1 flex flex-wrap gap-1" data-testid="kiro-mini-files">
+            {files.map((f, i) => {
+              const key = fileKey(f, i);
+              return (
+                <ExitCollapse key={key} axis="horizontal" exiting={leavingFileKeys.has(key)} className="shrink-0">
+                  <span className="inline-flex items-center gap-1 max-w-full rounded-lg border border-line bg-alabaster/50 pl-1.5 pr-1 py-0.5 text-[11px]">
+                    <Paperclip className="w-3 h-3 text-sandrift shrink-0" />
+                    <span className="truncate max-w-[140px] font-semibold">{f.name}</span>
+                    <span className="text-sandrift shrink-0">{formatBytes(f.size)}</span>
+                    <button
+                      type="button"
+                      aria-label={`移除附件 ${f.name}`}
+                      className="mini-no-drag w-4 h-4 flex items-center justify-center rounded text-sandrift hover:text-charcoal"
+                      onClick={() => removeFile(key, f)}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                </ExitCollapse>
+              );
+            })}
+          </div>
+        </ExitCollapse>
       )}
 
-      {notice && (
-        <div className="shrink-0 px-3 pb-1 text-[11px] font-semibold text-warning" data-testid="kiro-mini-notice">
-          {notice}
-        </div>
+      {noticePresence.mounted && (
+        <ExitCollapse exiting={!noticePresence.visible}>
+          <div className="shrink-0 px-3 pb-1 text-[11px] font-semibold text-warning" data-testid="kiro-mini-notice">
+            {notice}
+          </div>
+        </ExitCollapse>
       )}
 
       {/* 输入区 */}

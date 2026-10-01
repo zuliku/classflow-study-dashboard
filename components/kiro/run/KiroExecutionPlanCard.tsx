@@ -39,7 +39,7 @@ export function KiroExecutionPlanCard({
   const status = STATUS_COPY[plan.status];
   const live = plan.status === "proposed" || plan.status === "approved" || plan.status === "deviated";
   return (
-    <div data-testid="kiro-execution-plan" data-state={plan.status} className="space-y-1.5 pt-1">
+    <div data-testid="kiro-execution-plan" data-state={plan.status} className="space-y-1.5 pt-1 animate-enter">
       <p className="text-[11px] font-semibold text-satin-grey flex items-center gap-1.5">
         <ListChecks className="w-3 h-3" aria-hidden="true" />
         执行计划：{plan.title}

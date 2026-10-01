@@ -217,7 +217,7 @@ export function CourseLibraryCard({
 
         <div className={cn("flex flex-col pt-1", PREVIEW_SLOT_XL)}>
           {previewTasks.length === 0 ? (
-            <p className={cn(PREVIEW_ROW_HEIGHT, "flex items-center text-[11px] text-sandrift")}>
+            <p className={cn(PREVIEW_ROW_HEIGHT, "flex items-center text-[11px] text-sandrift ux-fade")}>
               暂无待处理任务
             </p>
           ) : (
@@ -291,7 +291,7 @@ export function CourseLibraryCard({
 
         <div className={cn("flex flex-col pt-1", PREVIEW_SLOT_XL)}>
           {previewMaterials.length === 0 ? (
-            <p className={cn(PREVIEW_ROW_HEIGHT, "flex items-center text-[11px] text-sandrift")}>
+            <p className={cn(PREVIEW_ROW_HEIGHT, "flex items-center text-[11px] text-sandrift ux-fade")}>
               暂无课程资料
             </p>
           ) : (

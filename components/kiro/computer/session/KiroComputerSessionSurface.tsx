@@ -76,13 +76,15 @@ export function KiroComputerSessionSurface({
   // 只在进行中展示 reflection 提示（terminal 后不再提示策略调整）
   const showReflection = reflectionRequired && !terminal;
 
+  // 整块出现淡入（只进不出：退出保留需 stale 会话快照 + 停用全部控制，成本高于收益；
+  // 会话清空本就低频，且 terminal 态常驻，卸载几乎无感知）
   return (
     <section
       data-testid="kiro-computer-session-surface"
       data-state={state}
       role="region"
       aria-label="Kiro 电脑操作"
-      className={cn("shrink-0", compact ? "px-3 pt-2" : "pt-2")}
+      className={cn("shrink-0 animate-enter", compact ? "px-3 pt-2" : "pt-2")}
     >
       <div className={cn("mx-auto w-full", compact ? "" : "max-w-[820px] px-1")}>
         <div
@@ -111,7 +113,7 @@ export function KiroComputerSessionSurface({
 
           {/* failed：只展示 Main 已 sanitized 的短句（绝不回显 raw exception / stack） */}
           {state === "failed" && failureReason && (
-            <p data-testid="computer-session-failure" className="pl-3.5 text-[10px] text-danger">
+            <p data-testid="computer-session-failure" className="pl-3.5 text-[10px] text-danger animate-enter">
               {failureReason}
             </p>
           )}
@@ -119,13 +121,14 @@ export function KiroComputerSessionSurface({
           {showReflection && (
             <p
               data-testid="computer-session-reflection"
-              className="pl-3.5 text-[10px] font-semibold text-warning"
+              className="pl-3.5 text-[10px] font-semibold text-warning animate-enter"
             >
               正在调整策略
             </p>
           )}
 
-          {/* 后台静默执行中：界面不可见，仅执行记录可查（terminal 后不再展示） */}
+          {/* 后台静默执行中：界面不可见，仅执行记录可查（terminal 后不再展示）；
+              状态灯语义，随执行通断频繁切换，不加进退场（避免反复重播） */}
           {backgroundActive && !terminal && (
             <p
               data-testid="computer-session-background"
@@ -141,7 +144,7 @@ export function KiroComputerSessionSurface({
 
           {/* completed：降权 terminal surface + 可选保存为 Skill（不显示 Pause / Stop） */}
           {state === "completed" && skillDraft && (
-            <div className="flex items-center justify-between gap-2 pl-3.5">
+            <div className="flex items-center justify-between gap-2 pl-3.5 animate-enter">
               <span className="text-[10px] text-sandrift truncate min-w-0">
                 {skillDraft.steps} 步 · 可复用
               </span>
@@ -165,7 +168,7 @@ export function KiroComputerSessionSurface({
         trace={null}
         prebuiltDraft={skillDraft?.draft ?? null}
         onSaved={(skillName) => {
-          pushToast({ type: "success", message: `已保存 Skill：${skillName}` });
+          pushToast({ message: `已保存 Skill：${skillName}` });
         }}
       />
     </section>

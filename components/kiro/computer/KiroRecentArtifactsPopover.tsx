@@ -13,6 +13,8 @@ import {
 import { getArtifact, removeArtifactRecord } from "@/lib/ai/computer/artifacts/service";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const TYPE_LABELS: Record<string, string> = { markdown: "Markdown", docx: "Word", text: "文本" };
@@ -37,6 +39,8 @@ export function KiroRecentArtifactsPopover() {
   const [entries, setEntries] = useState<KiroRecentArtifactEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // 富面板保持 role="dialog"（非 menu，不迁移 DropdownMenuPanel），对称进退走 usePresence
+  const panelPresence = usePresence(open, MOTION_EXIT_MS.fast);
 
   const refresh = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -118,11 +122,16 @@ export function KiroRecentArtifactsPopover() {
         <FileClock className="w-4 h-4" />
       </button>
 
-      {open && (
+      {panelPresence.mounted && (
         <div
           role="dialog"
           aria-label="最近文件"
-          className="absolute right-0 top-11 z-40 w-[360px] max-w-[calc(100vw-24px)] rounded-2xl bg-surface border border-line shadow-card flex flex-col overflow-hidden animate-enter"
+          className={cn(
+            "absolute right-0 top-11 z-40 w-[360px] max-w-[calc(100vw-24px)] rounded-2xl bg-surface border border-line shadow-card flex flex-col overflow-hidden origin-top-right",
+            panelPresence.visible
+              ? "animate-enter"
+              : "opacity-0 scale-[0.99] translate-y-[-2px] pointer-events-none transition-[opacity,transform] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+          )}
         >
           <div className="shrink-0 flex items-center justify-between px-3 py-2.5 border-b border-line">
             <h3 className="text-xs font-bold text-charcoal">最近文件</h3>

@@ -411,7 +411,7 @@ export function Sidebar() {
                     <span
                       aria-hidden="true"
                       data-testid="reminder-unread-dot"
-                      className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-danger border border-surface"
+                      className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-danger border border-surface animate-enter"
                     />
                   )}
                 </span>
@@ -442,11 +442,13 @@ export function Sidebar() {
             data-testid="sidebar-collapse-toggle"
             className="w-full flex items-center justify-center py-1 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-[color,background-color,opacity] duration-[var(--motion-snap)] focus-visible:outline-2 focus-visible:outline-charcoal/30 active:opacity-[0.78]"
           >
-            {effectiveCollapsed ? (
-              <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
-            ) : (
-              <PanelLeftClose className="w-4 h-4" aria-hidden="true" />
-            )}
+            <span key={String(effectiveCollapsed)} className="ux-fade inline-flex" aria-hidden="true">
+              {effectiveCollapsed ? (
+                <PanelLeftOpen className="w-4 h-4" />
+              ) : (
+                <PanelLeftClose className="w-4 h-4" />
+              )}
+            </span>
           </button>
         )}
         <SidebarProfileCard collapsed={effectiveCollapsed} />

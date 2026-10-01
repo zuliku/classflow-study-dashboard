@@ -118,11 +118,13 @@ export function TitleBar() {
             windowBridge.toggleMaximize();
           }}
         >
-          {maximized ? (
-            <Copy className="w-2.5 h-2.5" strokeWidth={1.75} />
-          ) : (
-            <Square className="w-2.5 h-2.5" strokeWidth={1.75} />
-          )}
+          <span key={String(maximized)} className="ux-fade inline-flex" aria-hidden="true">
+            {maximized ? (
+              <Copy className="w-2.5 h-2.5" strokeWidth={1.75} />
+            ) : (
+              <Square className="w-2.5 h-2.5" strokeWidth={1.75} />
+            )}
+          </span>
         </button>
         <button
           type="button"

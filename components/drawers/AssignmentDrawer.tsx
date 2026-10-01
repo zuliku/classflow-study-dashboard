@@ -643,8 +643,8 @@ export function AssignmentDrawer() {
           />
 
           {/* FOLLOW-UP：本次专注完成（inline contextual，仅当前实体的会话转换或 manual 结束后出现；
-              render 前有 assignmentId 实体 guard） */}
-          {followUpSession && (
+              render 前有 assignmentId 实体 guard；完成/继续后折叠退场） */}
+          <DisclosureRegion open={followUpSession != null}>
             <div
               data-testid="focus-follow-up"
               className="animate-enter flex items-center gap-2 rounded-xl border border-line bg-[#F7F5F5]/60 px-3 py-2"
@@ -679,7 +679,7 @@ export function AssignmentDrawer() {
                 </Button>
               </div>
             </div>
-          )}
+          </DisclosureRegion>
 
           {/* ===== Secondary Stack：Content Group → Auxiliary Group（12px = space-y-3）===== */}
           <div className="space-y-3">
@@ -835,8 +835,8 @@ export function AssignmentDrawer() {
                       </div>
                     )}
 
-                    {materialPickerOpen && (
-                      <DisclosureRegion open={materialPickerOpen}>
+                    {/* 常挂载（外层硬条件会截断内部退出折叠） */}
+                    <DisclosureRegion open={materialPickerOpen}>
                       <div data-testid="material-picker" className="space-y-0.5 rounded-xl border border-line bg-[#F7F5F5] p-2">
                         {courseMaterials.length === 0 ? (
                           <div className="space-y-1 px-1 py-0.5">
@@ -870,8 +870,7 @@ export function AssignmentDrawer() {
                           })
                         )}
                       </div>
-                      </DisclosureRegion>
-                    )}
+                    </DisclosureRegion>
                   </div>
                 </DetailDisclosure>
               </div>

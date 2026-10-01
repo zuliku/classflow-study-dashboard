@@ -1375,6 +1375,8 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   --kiro-stagger-empty-2: 110ms;
   --kiro-stagger-empty-base: 150ms;
   --kiro-stagger-empty-step: 32ms;
+  /* Mention 选项 stagger 步长（@菜单逐行跟随，比 empty 更密） */
+  --kiro-stagger-mention-step: 24ms;
   /* 全产品唯一的常驻 ambient（S3-3；TimetableGrid 当前课程呼吸） */
   --kiro-ambient-breathe: 3.2s;
   /* 思考程度最高档流动彩条周期（暖色光谱；reduced-motion 下静止但保留彩色终态） */
@@ -1535,7 +1537,7 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   }
   .kiro-mention-item-enter {
     animation: kiro-mention-item-in var(--motion-fast) var(--ease-standard) both;
-    animation-delay: calc(var(--kiro-mention-index, 0) * 24ms);
+    animation-delay: calc(var(--kiro-mention-index, 0) * var(--kiro-stagger-mention-step, 24ms));
   }
   @keyframes kiro-mention-item-in {
     from {
@@ -1612,9 +1614,10 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     }
   }
 
-  /* Empty 退场（Contextual Handoff）：semantic close 立即 inert；视觉 ~150ms */
+  /* Empty 退场（Contextual Handoff）：semantic close 立即 inert；
+     时长/曲线与 usePresence(panel) 同源（--motion-exit-panel/--ease-exit），卸载不截断动画尾 */
   .kiro-empty-exit {
-    animation: kiro-empty-out var(--motion-exit-base) var(--ease-standard) both;
+    animation: kiro-empty-out var(--motion-exit-panel) var(--ease-exit) both;
   }
   @keyframes kiro-empty-out {
     from {
@@ -1642,7 +1645,7 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     }
   }
 
-  /* Scroll-to-bottom presence：enter var(--motion-fast) / exit 100ms */
+  /* Scroll-to-bottom presence：enter var(--motion-fast) / exit 与计时同源（--motion-exit-fast/--ease-exit） */
   .kiro-scroll-control-enter {
     transition:
       opacity var(--motion-fast) var(--ease-standard),
@@ -1650,8 +1653,8 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   }
   .kiro-scroll-control-exit {
     transition:
-      opacity 100ms var(--ease-standard),
-      transform 100ms var(--ease-standard);
+      opacity var(--motion-exit-fast) var(--ease-exit),
+      transform var(--motion-exit-fast) var(--ease-exit);
   }
 
   /* Send Control 激活（canSend false→true）：opacity .4→1 + scale .96→1，~120ms，仅 boolean 变化 */

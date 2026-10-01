@@ -99,7 +99,7 @@ export function StudyOutlookCard({
         </p>
         {/* 容量事实：Preferred（非课程时间）vs Combined（soft fallback 后）三层状态 */}
         {summary.counts.totalDue > 0 && (
-          <p className="text-[11px] mt-1" data-testid="outlook-capacity-line">
+          <p className="text-[11px] mt-1 ux-fade" data-testid="outlook-capacity-line">
             {summary.workload.preferredShortfallMinutes === 0 ? (
               <span className="text-[#627566]">尚需安排 {fmt(summary.workload.remainingKnownMinutes)} · 非课程时间可覆盖</span>
             ) : summary.workload.combinedShortfallMinutes === 0 ? (
@@ -156,7 +156,7 @@ export function StudyOutlookCard({
       )}
 
       {bottleneckDays.length > 0 && (
-        <div className="px-4 py-2 border-t border-line-soft">
+        <div className="px-4 py-2 border-t border-line-soft ux-fade">
           <p className="text-[10px] text-sandrift">
             较忙的日子：
             {bottleneckDays.slice(0, 3).map((d, i) => {

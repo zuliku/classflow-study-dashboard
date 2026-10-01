@@ -14,6 +14,8 @@ import {
 } from "@/lib/reminders/assignmentReminderView";
 import { cn } from "@/lib/utils";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
 
 function localDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -37,6 +39,12 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
   const [customError, setCustomError] = useState("");
 
   const scheduled = getAssignmentScheduledReminders(reminders, assignment.id);
+  // 行删除原位 collapse（ReminderCenter 同语法；assignment 切换走 resetKey 即时）
+  const retainedScheduled = useExitPresenceList({
+    items: scheduled,
+    getId: (r) => r.id,
+    resetKey: assignment.id,
+  });
   const now = formatLocalDateTime(new Date());
   const availability = getAssignmentPresetAvailability(assignment, reminders, now, editingId ?? undefined);
   const completed = assignment.status === "completed";
@@ -184,7 +192,7 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
       {/* P3：per-target 默认自动提醒控制（低噪声；opt-out 时提供「重新开启」，调用 P2 semantic action） */}
       {assignment.status === "todo" || assignment.status === "doing" ? (
         assignment.autoReminderDisabled === true ? (
-          <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-[#F7F5F5] border border-line rounded-xl">
+          <div key="auto-off" className="flex items-center justify-between gap-2 px-2.5 py-2 bg-[#F7F5F5] border border-line rounded-xl ux-fade">
             <span className="text-[10px] text-sandrift">默认提醒：已关闭</span>
             <button
               type="button"
@@ -196,20 +204,18 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-2 px-2.5 py-2 bg-[#F7F5F5] border border-line rounded-xl">
+          <div key="auto-on" className="flex items-center justify-between gap-2 px-2.5 py-2 bg-[#F7F5F5] border border-line rounded-xl ux-fade">
             <span className="text-[10px] text-sandrift">默认提醒：已开启</span>
             <span className="text-[9px] text-sandrift/80">删除自动提醒可关闭</span>
           </div>
         )
       ) : null}
 
-      {scheduled.length > 0 && (
+      <DisclosureRegion open={scheduled.length > 0}>
         <div className="space-y-1">
-          {scheduled.map((r) => (
-            <div
-              key={r.id}
-              className="flex items-center gap-2 p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-xs"
-            >
+          {retainedScheduled.map(({ item: r, exiting }) => (
+            <ExitCollapse key={r.id} exiting={exiting}>
+              <div className="flex items-center gap-2 p-2.5 bg-[#F7F5F5] border border-line rounded-xl text-xs">
               <span className="flex-1 min-w-0 font-medium text-charcoal flex items-center gap-1.5">
                 <span className="truncate">{formatAssignmentReminderLabel(r)}</span>
                 {r.source === "auto" && (
@@ -235,10 +241,11 @@ export function AssignmentReminderSection({ assignment }: { assignment: Assignme
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
-            </div>
+              </div>
+            </ExitCollapse>
           ))}
         </div>
-      )}
+      </DisclosureRegion>
 
       {/* 添加/编辑 Picker（Drawer 内内联展开，与关联资料 picker 同一语言；
           presets ↔ custom 二级切换 key + 淡入） */}

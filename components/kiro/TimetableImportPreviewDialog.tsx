@@ -8,6 +8,8 @@ import { BellScheduleTemplate } from "@/types";
 import { preflightScheduleImport } from "@/lib/scheduleImport/preflight";
 import { normalizeTimetableImportDraft } from "@/lib/ai/timetableImport/draft";
 import { resolveLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const DAY_LABELS = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"];
@@ -170,7 +172,10 @@ export function TimetableImportPreviewDialog({
     return initial;
   });
 
-  if (!open) return null;
+  // 对称进退（保留现有语义：无 Esc/无 backdrop 关闭，不迁移 Dialog primitive）；
+  // blur 只在全开时保留，进退场不逐帧重模糊
+  const dialogPresence = usePresence(open, MOTION_EXIT_MS.base);
+  if (!dialogPresence.mounted) return null;
 
   const counts = currentPreflight.counts;
   const issues = currentPreflight.issues;
@@ -228,8 +233,23 @@ export function TimetableImportPreviewDialog({
   const applyDisabled = blockers.length > 0 || selectedCourses.length === 0 || unresolvedPendingCount > 0;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[90] bg-black/40 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-      <div className="w-full max-w-2xl max-h-full flex flex-col bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden">
+    <div
+      className={cn(
+        "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[90] bg-black/40 flex items-center justify-center p-3 sm:p-4 transition-opacity",
+        dialogPresence.visible
+          ? "opacity-100 duration-[var(--motion-base)]"
+          : "opacity-0 pointer-events-none duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]",
+        dialogPresence.visible && "backdrop-blur-sm"
+      )}
+    >
+      <div
+        className={cn(
+          "w-full max-w-2xl max-h-full flex flex-col bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden transition-[opacity,transform]",
+          dialogPresence.visible
+            ? "opacity-100 scale-100 translate-y-0 duration-[var(--motion-base)]"
+            : "opacity-0 scale-[0.99] translate-y-1 pointer-events-none duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]"
+        )}
+      >
         {/* Header */}
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-line-soft shrink-0">
           <div className="min-w-0">

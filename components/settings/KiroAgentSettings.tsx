@@ -10,6 +10,7 @@ import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSegmentedControl } from "@/components/settings/SettingsControls";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -482,8 +483,8 @@ export function KiroAgentSettings() {
             </SettingsRow>
           )}
 
-          {/* Computer Use V2.5：剪贴板读写（默认关闭；独立开关 + 逐次确认） */}
-          {desktopActionAvailable && desktopActionEnabled && (
+          {/* Computer Use V2.5：剪贴板读写（默认关闭；独立开关 + 逐次确认；随操作开关折叠进退） */}
+          <DisclosureRegion open={desktopActionAvailable && desktopActionEnabled}>
             <SettingsRow
               settingId="kiro-desktop-clipboard-enabled"
               title="允许 Kiro 读写剪贴板"
@@ -499,10 +500,10 @@ export function KiroAgentSettings() {
                 label="允许 Kiro 读写剪贴板"
               />
             </SettingsRow>
-          )}
+          </DisclosureRegion>
 
-          {/* 后台静默操作（默认关闭；独立确认；嵌套于电脑操作之下） */}
-          {desktopActionAvailable && desktopActionEnabled && (
+          {/* 后台静默操作（默认关闭；独立确认；嵌套于电脑操作之下；随操作开关折叠进退） */}
+          <DisclosureRegion open={desktopActionAvailable && desktopActionEnabled}>
             <SettingsRow
               settingId="kiro-background-enabled"
               title="允许 Kiro 后台操作电脑"
@@ -518,7 +519,7 @@ export function KiroAgentSettings() {
                 label="允许 Kiro 后台操作电脑"
               />
             </SettingsRow>
-          )}
+          </DisclosureRegion>
         </SettingsGroup>
 
         <SettingsGroup

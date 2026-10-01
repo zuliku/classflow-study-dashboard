@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { usePresence } from "@/lib/usePresence";
-import { MOTION_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
 import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
@@ -93,8 +93,8 @@ export function KiroConversation({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
-  // Motion V1：回到底部浮钮 presence（enter fast / exit 100；hidden 立即不可交互）
-  const scrollBtnPresence = usePresence(showScrollBtn, MOTION_MS.fast);
+  // Motion V1：回到底部浮钮 presence（enter fast / exit 同源 exit-fast；hidden 立即不可交互）
+  const scrollBtnPresence = usePresence(showScrollBtn, MOTION_EXIT_MS.fast);
   const { conversationSummary, currentConversationId } = useKiroSessionMeta();
   const reducedMotion = useEffectiveReducedMotion();
   const messageIds = React.useMemo(
@@ -319,7 +319,8 @@ export function KiroConversation({
       </div>
 
       {/* 用户上滑离开底部时：轻量「回到底部」浮钮（锚定 Conversation 可见区底部，不随消息滚动）。
-          Motion V1：usePresence（enter 140ms / exit 100ms；semantic hidden 立即 pointer-events-none） */}
+          Motion V1：usePresence（enter fast / exit 同源 exit-fast；semantic hidden 立即 pointer-events-none；
+          显隐类必须绑 visible 而非 open，否则挂载即终态、进入过渡永远播不出） */}
       {scrollBtnPresence.mounted && (
         <button
           onClick={scrollToBottom}
@@ -328,8 +329,8 @@ export function KiroConversation({
           aria-hidden={!showScrollBtn}
           className={cn(
             "absolute bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-surface border border-line shadow-subtle flex items-center justify-center text-sandrift hover:text-charcoal hover:border-line-strong z-10",
-            !showScrollBtn && "pointer-events-none",
-            showScrollBtn
+            !scrollBtnPresence.visible && "pointer-events-none",
+            scrollBtnPresence.visible
               ? cn("opacity-100 translate-x-[-50%] translate-y-0 scale-100 kiro-scroll-control-enter")
               : cn("opacity-0 translate-x-[-50%] translate-y-0.5 scale-95 kiro-scroll-control-exit")
           )}

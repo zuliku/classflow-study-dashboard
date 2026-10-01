@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2, AlertTriangle, Info, XCircle, X } from "lucide-react";
 import { useToastStore, ToastType } from "@/store/useToastStore";
 import { MOTION_MS } from "@/lib/motion";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 
 // accent 走 semantic color class（= token 值：success/warning/danger/sandrift），不再散落 HEX
@@ -24,6 +25,7 @@ const EXIT_MS = MOTION_MS.fast;
 export function ToastViewport() {
   const toasts = useToastStore((s) => s.toasts);
   const removeToast = useToastStore((s) => s.removeToast);
+  const reducedMotion = useEffectiveReducedMotion();
   const [exiting, setExiting] = useState<Set<string>>(new Set());
   // action 单发守卫：按钮在 140ms 退出动画期间仍可点击，双击会把「撤销」执行两次
   //（restoreSchedule 曾因此插入重复 id 实体）。点击一次后立即禁用。
@@ -33,6 +35,12 @@ export function ToastViewport() {
 
   const dismiss = (id: string) => {
     const toast = toastsRef.current.find((t) => t.id === id);
+    // reduced-motion 下 CSS 过渡已近即时：跳过退出等待，直接移除（usePresence reduced 语义）
+    if (reducedMotion) {
+      removeToast(id);
+      toast?.onDismiss?.();
+      return;
+    }
     setExiting((prev) => {
       const next = new Set(prev);
       next.add(id);

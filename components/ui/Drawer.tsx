@@ -87,10 +87,10 @@ export function resolveDrawerPresentation(
     overlayClassName: "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/30 backdrop-blur-sm flex justify-end overflow-hidden",
     panelClassName: cn(
       "h-full w-full bg-surface shadow-drawer border-l border-line flex flex-col overflow-hidden ux-drawer-panel",
-      // 右侧来源感：enter = --motion-overlay（220ms，12px 位移）；exit = --motion-exit-panel（160ms 更快），
+      // 右侧来源感：enter = --motion-overlay（220ms，12px 位移）+ emphasized；exit = --motion-exit-panel（160ms 更快）+ exit，
       // 与 floating 同一生命周期语义；不像是从屏幕外飞入
       visible
-        ? "translate-x-0 opacity-100 !duration-[var(--motion-overlay)]"
+        ? "translate-x-0 opacity-100 !duration-[var(--motion-overlay)] !ease-[var(--ease-emphasized)]"
         : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
     ),
   };

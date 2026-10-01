@@ -12,7 +12,7 @@ import { getReminderCenterGroups, formatReminderCenterTime } from "@/lib/reminde
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { usePresence } from "@/lib/usePresence";
-import { MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -91,8 +91,8 @@ export function ReminderCenter() {
   const [error, setError] = useState("");
 
   // Composer presence：editor 置 null 后保留最后一个快照播 exit（纯 UI snapshot，不复制 domain 数据）。
-  // Motion Contract：composer grid 过渡对称（enter=exit=--motion-base），presence 取同值。
-  const composerPresence = usePresence(editor !== null, MOTION_MS.base);
+  // Motion Contract：presence 取 exit 常量，与下方 !duration-[--motion-exit-base] 同源（此前误用 enter 档 180）。
+  const composerPresence = usePresence(editor !== null, MOTION_EXIT_MS.base);
   const lastEditorRef = useRef<typeof editor>(null);
   if (editor) lastEditorRef.current = editor;
   const renderedEditor = editor ?? lastEditorRef.current;
@@ -448,7 +448,7 @@ export function ReminderCenter() {
                 </span>
               </div>
               {upcoming.length === 0 ? (
-                <div className="flex flex-col items-center text-center gap-1.5 px-4 py-7">
+                <div className="flex flex-col items-center text-center gap-1.5 px-4 py-7 ux-fade">
                   <CalendarClock className="w-7 h-7 text-sandrift" />
                   <p className="text-xs font-bold text-charcoal">暂时没有即将提醒</p>
                   <p className="text-[10px] text-sandrift leading-relaxed">
@@ -483,7 +483,7 @@ export function ReminderCenter() {
                 </span>
               </div>
               {history.length === 0 ? (
-                <div className="px-4 py-3.5 text-center">
+                <div className="px-4 py-3.5 text-center ux-fade">
                   <p className="text-[10px] text-sandrift">还没有提醒记录</p>
                   <p className="text-[9px] text-satin-grey mt-0.5">触发过的提醒会保留在这里</p>
                 </div>

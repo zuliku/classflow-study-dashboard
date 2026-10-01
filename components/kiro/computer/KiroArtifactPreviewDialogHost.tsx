@@ -184,11 +184,11 @@ export function KiroArtifactPreviewDialogHost() {
                     </button>
                   </div>
                   {tab === "preview" ? (
-                    <div className="rounded-xl border border-line bg-surface p-3">
+                    <div key="preview" className="rounded-xl border border-line bg-surface p-3 ux-fade">
                       <KiroMarkdown content={preview.text} />
                     </div>
                   ) : (
-                    <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-line bg-surface p-3 text-[12px] text-satin-grey leading-relaxed">
+                    <pre key="source" className="max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-line bg-surface p-3 text-[12px] text-satin-grey leading-relaxed ux-fade">
                       {preview.text}
                     </pre>
                   )}

@@ -164,6 +164,8 @@ export function TimelineKeyLane({
               className={cn(
                 "relative border-r border-line-soft px-0.5",
                 colIdx === weekDates.length - 1 && "border-r-0",
+                // 全天行出现/消失时 lane 高度 64↔78px 过渡（filter 切换不硬跳）
+                "transition-[height] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
                 laneHeightClass
               )}
             >

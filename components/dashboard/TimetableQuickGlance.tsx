@@ -225,7 +225,7 @@ function GlanceChip({
       {/* Detail Popover：hover / focus-within 显示；right-0 对齐避免越出 Card */}
       <div
         role="tooltip"
-        className="absolute right-0 top-full mt-1.5 w-[240px] bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2.5 z-30 ux-inline opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity duration-[var(--motion-fast)]"
+        className="absolute right-0 top-full mt-1.5 w-[240px] bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2.5 z-30 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-[opacity,visibility] duration-[var(--motion-fast)] delay-[var(--motion-exit-fast)] group-hover:delay-0 group-focus-within:delay-0"
       >
         {children}
       </div>
