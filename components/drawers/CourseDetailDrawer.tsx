@@ -14,6 +14,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { Material, CourseSchedule, ScheduleConflict } from "@/types";
 import { deleteFileBlob } from "@/lib/fileStorage";
+import { enqueuePendingBlobDelete, dequeuePendingBlobDelete } from "@/lib/pendingBlobDeletes";
 import { uploadCourseMaterials } from "@/lib/materialUpload";
 import { isValidTimeRange } from "@/lib/schedule";
 import { findScheduleConflicts } from "@/lib/conflicts";
@@ -402,7 +403,12 @@ export function CourseDetailDrawer() {
       },
       onDismiss: () => {
         if (!undone && snapshot.material.storageKey) {
-          deleteFileBlob(snapshot.material.storageKey).catch(() => {});
+          // 先入持久化队列再删：窗口期内刷新/崩溃，启动排水仍会执行（不只靠对账兜底）
+          const key = snapshot.material.storageKey;
+          enqueuePendingBlobDelete(key);
+          deleteFileBlob(key)
+            .then(() => dequeuePendingBlobDelete(key))
+            .catch(() => {});
         }
       },
       duration: 6000,

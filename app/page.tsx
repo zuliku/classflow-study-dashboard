@@ -43,6 +43,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useInboxChannelBridge } from "@/hooks/useInboxChannelBridge";
 import { cn } from "@/lib/utils";
 import { reconcilePersistedFileBlobs } from "@/lib/fileReconcile";
+import { drainPendingBlobDeletes } from "@/lib/pendingBlobDeletes";
 import { didMainStoreHydrationFail } from "@/store/useAppStore";
 import { listAllProjectFileStorageKeys } from "@/lib/ai/projects/files/db";
 import { resolveStartupTab } from "@/lib/startup";
@@ -63,8 +64,11 @@ export default function Home() {
   // 「看不见引用」≠「没有引用」，此时 GC 会清光用户附件且不可逆。
   // 延迟 30s 执行（BUG-067）：避免与启动窗口内 blob-first 上传（恢复/自动流程）
   // 的快照-删除间隙竞态——新落盘的 blob 被误判为 orphan。
+  // 待删队列排水（显式删除意图，不依赖引用枚举，无需 fail-closed；撤销窗口期内
+  // 刷新/崩溃的 Blob 在此回收）：引用安全（key 随机不复用），可立即执行。
   useEffect(() => {
     if (didMainStoreHydrationFail()) return;
+    void drainPendingBlobDeletes().catch(() => {});
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (cancelled) return;
