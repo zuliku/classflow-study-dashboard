@@ -1010,23 +1010,19 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
   }, [newChat, requestConversationTransition]);
 
   // effectiveSidecarMode：Workspace 覆盖（与 capsule 互斥）—— 派生 presentation 状态
-  const effectiveSidecarMode: KiroSidecarMode = activeTab === "kiro" ? "closed" : sidecarMode;
+  // 窄窗口（<md）时 minimized 派生为 open（Fullscreen Sidecar），Capsule 仅 md+ 生效。
+  // 注意：均为派生，永不覆写持久 sidecarMode —— 切 tab / 跨断点回来后恢复用户原意图
+  //（此前直接 setSidecarMode("closed"/"open")，旧模式永久丢失）。
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+  const effectiveSidecarMode: KiroSidecarMode =
+    activeTab === "kiro" ? "closed" : isNarrowViewport && sidecarMode === "minimized" ? "open" : sidecarMode;
   const effectiveSidecarOpen = effectiveSidecarMode !== "closed";
 
-  // 直接进入 Kiro Workspace 等价于收起 Sidecar/Capsule，避免离开后意外复现
-  React.useEffect(() => {
-    if (activeTab === "kiro" && sidecarMode !== "closed") setSidecarMode("closed");
-  }, [activeTab, sidecarMode]);
-
-  // 窄窗口（<md）时 minimized 自动恢复为 open（Fullscreen Sidecar），Capsule 仅 md+ 生效
+  // 窄窗口监听：只更新派生开关，不碰持久 mode
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 767px)");
-    const handler = () => {
-      if (mq.matches && sidecarMode === "minimized") {
-        setSidecarMode("open");
-      }
-    };
+    const handler = () => setIsNarrowViewport(mq.matches);
     handler();
     if (mq.addEventListener) mq.addEventListener("change", handler);
     else (mq as unknown as { addListener: (cb: () => void) => void }).addListener(handler as never);
@@ -1037,7 +1033,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       else (mq as unknown as { removeListener: (cb: () => void) => void }).removeListener(handler as never);
       window.removeEventListener("resize", onResize);
     };
-  }, [sidecarMode]);
+  }, []);
 
   // Sidecar 真正可见（open）时才注册 overlay（Esc 只在 open 关闭；minimized 不抢 Esc）
   React.useEffect(() => {

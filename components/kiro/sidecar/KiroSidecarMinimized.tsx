@@ -14,6 +14,10 @@ import { cn } from "@/lib/utils";
 
 const DRAG_THRESHOLD = 5;
 
+/** 键盘步长（与 Move 把手同网格语义；Shift 加速） */
+const KEY_STEP = 24;
+const KEY_FAST_STEP = 96;
+
 /**
  * Kiro Minimized Capsule（V1 + Desktop Polish）：
  * - 固定 176×46，右下角默认 24px
@@ -204,6 +208,30 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
     [closeSidecar]
   );
 
+  // 键盘等价（S6）：聚焦后方向键按 24px 网格离散移动（Shift 加速 96px），
+  // 与 pointer 拖拽走同一 clamp + 持久化（单步即提交，无需 pointerup）
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const step = e.shiftKey ? KEY_FAST_STEP : KEY_STEP;
+      let dx = 0;
+      let dy = 0;
+      if (e.key === "ArrowLeft") dx = -step;
+      else if (e.key === "ArrowRight") dx = step;
+      else if (e.key === "ArrowUp") dy = -step;
+      else if (e.key === "ArrowDown") dy = step;
+      else return;
+      e.preventDefault();
+      const base = latestDraftRef.current ?? position;
+      setPersisted(
+        clampSidecarMinimizedPosition(
+          { right: base.right - dx, bottom: base.bottom - dy },
+          viewport
+        )
+      );
+    },
+    [position, viewport, setPersisted]
+  );
+
   // 仅 md+ 可见；minimized 时 opacity 1，open/closed 时 hidden + inert
   // 流光边框：inset-0 rounded-full + 1px surface inset，复用 kiro-ring conic 旋转；hover/drag 仅克制反馈，不改变几何
   return (
@@ -236,6 +264,11 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       aria-label="Kiro 已最小化"
+      role="separator"
+      aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+      title="拖拽或方向键移动（Shift 加速）；点击恢复"
+      tabIndex={visible ? 0 : -1}
+      onKeyDown={handleKeyDown}
     >
       {/* Kiro Brand Motion V2 — ambient always, working when busy */}
       <span

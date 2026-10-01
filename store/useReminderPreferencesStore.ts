@@ -1,7 +1,9 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
+import { createGuardedStorage } from "@/lib/persistStorage";
+import { useToastStore } from "@/store/useToastStore";
 import { MissedReminderPolicy } from "@/types";
 
 /**
@@ -113,7 +115,12 @@ export const useReminderPreferencesStore = create<ReminderPreferencesState>()(
     }),
     {
       name: "classflow-reminder-preferences-v1",
-      storage: createJSONStorage(() => localStorage),
+      storage: createGuardedStorage(() =>
+        useToastStore.getState().pushToast({
+          message: "本地存储空间已满，最新更改可能无法保存，请备份后清理空间。",
+          type: "error",
+        })
+      ),
       partialize: (state) => ({
         browserNotificationsEnabled: state.browserNotificationsEnabled,
         missedReminderPolicy: state.missedReminderPolicy,

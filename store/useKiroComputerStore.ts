@@ -1,7 +1,9 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
+import { createGuardedStorage } from "@/lib/persistStorage";
+import { useToastStore } from "@/store/useToastStore";
 import {
   ComputerPermissionRule,
   KiroAgentMode,
@@ -179,7 +181,12 @@ export const useKiroComputerStore = create<KiroComputerState>()(
     }),
     {
       name: "classflow-kiro-computer-v1",
-      storage: createJSONStorage(() => localStorage),
+      storage: createGuardedStorage(() =>
+        useToastStore.getState().pushToast({
+          message: "本地存储空间已满，最新更改可能无法保存，请备份后清理空间。",
+          type: "error",
+        })
+      ),
       version: 2,
       migrate: (persistedState, version) => {
         if (version >= 2) return persistedState as Partial<KiroComputerState>;

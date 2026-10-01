@@ -17,11 +17,12 @@ export async function extractAttachment(
   options: { cacheKey?: string; kind: KiroAttachmentKind }
 ): Promise<
   | { ok: true; extracted: ExtractedDocument }
-  | { ok: false; reason: "unsupported" | "too_large" | "legacy"; message: string }
+  | { ok: false; reason: "unsupported" | "too_large" | "too_small" | "legacy"; message: string }
 > {
   const routed = routeAttachment({ name: file.name ?? "", type: file.type ?? "", size: file.size });
   if (!routed.ok) {
     if (routed.reason === "too_large") return { ok: false, reason: "too_large", message: "文件超过大小限制。" };
+    if (routed.reason === "too_small") return { ok: false, reason: "too_small", message: "文件为空，无法读取。" };
     if (routed.reason === "legacy")
       return { ok: false, reason: "legacy", message: "暂不支持旧版 Office 格式（.doc/.ppt），请另存为 .docx/.pptx 后重试。" };
     return { ok: false, reason: "unsupported", message: "暂不支持这种文件类型。" };
@@ -84,6 +85,17 @@ export async function extractAttachment(
         return { ok: false, reason: "unsupported", message: "该文件不是有效的 PDF（可能是改了扩展名或已损坏），请确认后重试。" };
       }
       return { ok: false, reason: "unsupported", message: "该 PDF 页面无法读取，请尝试打印为新 PDF 后重试。" };
+    }
+    // Office 文档哨兵错误 → 可操作文案（与 PDF invalid 同级；改扩展名/截断 zip 最常见）
+    const sentinel = err instanceof Error ? err.message : "";
+    if (sentinel === "empty-workbook") {
+      return { ok: false, reason: "unsupported", message: "该表格没有可读取的内容（可能是空表或文件已损坏），请确认后重试。" };
+    }
+    if (sentinel === "empty-slides" || sentinel === "no-slides") {
+      return { ok: false, reason: "unsupported", message: "该演示文稿没有可读取的幻灯片（可能是空文件或已损坏），请确认后重试。" };
+    }
+    if (options.kind === "docx" || options.kind === "spreadsheet" || options.kind === "slides") {
+      return { ok: false, reason: "unsupported", message: "该文档无法读取（可能是改了扩展名或文件已损坏），请确认后重试。" };
     }
     return { ok: false, reason: "unsupported", message: "无法读取该文件，请确认格式与内容。" };
   }

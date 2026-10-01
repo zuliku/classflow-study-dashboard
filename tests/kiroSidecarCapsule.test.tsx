@@ -239,6 +239,30 @@ describe("Capsule Interaction", () => {
     s.cleanup();
   });
 
+  it("键盘移动：方向键离散移动（Shift 加速），走同一 clamp + 持久化", async () => {
+    const s = setupCapsule(true);
+    await act(async () => { await Promise.resolve(); });
+    const capsule = s.capsule()!;
+    expect(capsule.getAttribute("role")).toBe("separator");
+    const before = useKiroPreferencesStore.getState().sidecarMinimizedPosition;
+    act(() => {
+      capsule.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowLeft" }));
+    });
+    const afterLeft = useKiroPreferencesStore.getState().sidecarMinimizedPosition;
+    expect(afterLeft.right).toBe(before.right + 24);
+    act(() => {
+      capsule.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowUp", shiftKey: true }));
+    });
+    const afterUp = useKiroPreferencesStore.getState().sidecarMinimizedPosition;
+    expect(afterUp.bottom).toBe(afterLeft.bottom + 96);
+    // 非方向键不移动
+    act(() => {
+      capsule.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+    });
+    expect(useKiroPreferencesStore.getState().sidecarMinimizedPosition).toEqual(afterUp);
+    s.cleanup();
+  });
+
   it("小移动（< threshold）→ 视为 click，恢复", async () => {
     const s = setupCapsule(true);
     await act(async () => { await Promise.resolve(); });

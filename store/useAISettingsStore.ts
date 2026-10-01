@@ -1,7 +1,9 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
+import { createGuardedStorage } from "@/lib/persistStorage";
+import { useToastStore } from "@/store/useToastStore";
 import { AIProviderId, AICustomConfig, AISettings } from "@/lib/ai/providers/types";
 import { getDefaultModel } from "@/lib/ai/providers/registry";
 import { KiroReasoningEffort } from "@/lib/ai/reasoning/types";
@@ -99,7 +101,12 @@ export const useAISettingsStore = create<AISettingsState>()(
     }),
     {
       name: "classflow-ai-settings-v1",
-      storage: createJSONStorage(() => localStorage),
+      storage: createGuardedStorage(() =>
+        useToastStore.getState().pushToast({
+          message: "本地存储空间已满，最新更改可能无法保存，请备份后清理空间。",
+          type: "error",
+        })
+      ),
       partialize: (state): AISettings => ({
         enabled: state.enabled,
         provider: state.provider,
