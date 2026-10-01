@@ -262,6 +262,20 @@ function resolvePathFor(grant: Grant, pathInput: unknown): string | null {
   return resolveWithinRoot(grant.root, pathInput);
 }
 
+/**
+ * 变更操作前复验（关 check→use 窗口）：
+ * 解析与使用之间若有 await，组件替换可使首次解析失效；变更前重新解析并要求
+ * 与首次结果逐字一致，不一致 → 拒绝（fail closed）。
+ * 说明：两次解析仍是微秒级窗口（需本地代码执行精度，已超出渲染器威胁模型；
+ * 真正的原子语义需 oplock alder，本文件以注释记录为后续工作）。
+ * 读路径：每次解析本就新鲜（无跨操作缓存），且渲染器无法可靠卡位微秒窗口，故仅变更操作复验。
+ */
+function reverifyPathFor(grant: Grant, pathInput: unknown, resolved: string): string {
+  const fresh = resolvePathFor(grant, pathInput);
+  if (!fresh || fresh !== resolved) fail("INVALID_OPERATION", "路径已变化，请重试。");
+  return fresh;
+}
+
 async function handleList(input: unknown): Promise<Array<{ name: string; kind: "file" | "directory"; size: number }>> {
   const obj = validateInputObject(input);
   const grant = getGrant(obj?.grantId);
@@ -381,7 +395,7 @@ async function handleCreateDirectory(input: unknown): Promise<"created" | "exist
   const target = resolvePathFor(grant, obj?.path);
   if (!target) fail("INVALID_OPERATION");
   try {
-    await fs.mkdir(target);
+    await fs.mkdir(reverifyPathFor(grant, obj?.path, target));
     return "created";
   } catch (err) {
     if ((err as { code?: string }).code === "EEXIST") return "exists";
@@ -400,7 +414,7 @@ async function handleWriteText(input: unknown): Promise<void> {
   // 写入与读取同上限（此前写无限制，GB 级 Uint8Array 经 IPC 双份克隆可致 Main OOM）
   if (Buffer.byteLength(obj.content, "utf8") > MAX_READ_BYTES) fail("INVALID_OPERATION", "文件过大。");
   try {
-    await atomicWrite(target, Buffer.from(obj.content, "utf8"));
+    await atomicWrite(reverifyPathFor(grant, obj?.path, target), Buffer.from(obj.content, "utf8"));
   } catch (err) {
     failFrom(err);
   }
@@ -417,7 +431,7 @@ async function handleWriteBytes(input: unknown): Promise<void> {
   if (!(content instanceof Uint8Array)) fail("INVALID_OPERATION");
   if (content.byteLength > MAX_READ_BYTES) fail("INVALID_OPERATION", "文件过大。");
   try {
-    await atomicWrite(target, Buffer.from(content));
+    await atomicWrite(reverifyPathFor(grant, obj?.path, target), Buffer.from(content));
   } catch (err) {
     failFrom(err);
   }
@@ -432,8 +446,9 @@ async function handleRemove(input: unknown): Promise<void> {
   if (!target) fail("INVALID_OPERATION");
   const kind = obj?.kind === "directory" ? "directory" : "file";
   try {
-    if (kind === "directory") await fs.rmdir(target);
-    else await fs.unlink(target);
+    const verified = reverifyPathFor(grant, obj?.path, target);
+    if (kind === "directory") await fs.rmdir(verified);
+    else await fs.unlink(verified);
   } catch (err) {
     failFrom(err);
   }
@@ -447,28 +462,31 @@ async function handleMove(input: unknown): Promise<void> {
   const from = resolvePathFor(grant, obj?.from);
   const to = resolvePathFor(grant, obj?.to);
   if (!from || !to) fail("INVALID_OPERATION");
+  // 双端复验后再操作（rename/copy .any 一端被换都拒绝）
+  const verifiedFrom = reverifyPathFor(grant, obj?.from, from);
+  const verifiedTo = reverifyPathFor(grant, obj?.to, to);
   try {
-    const srcStat = await fs.stat(from);
+    const srcStat = await fs.stat(verifiedFrom);
     if (!srcStat.isFile()) fail("INVALID_OPERATION", "仅支持移动文件。");
     try {
-      await fs.access(to);
+      await fs.access(verifiedTo);
       fail("ALREADY_EXISTS");
     } catch (err) {
       if (isBridgeError(err)) throw err;
       // to 不存在 → 继续
     }
     try {
-      await fs.rename(from, to);
+      await fs.rename(verifiedFrom, verifiedTo);
     } catch (err) {
       // 跨卷 rename 失败 → copy + delete（尽力回滚）
       const code = (err as { code?: string }).code;
       if (code === "EXDEV" || code === "EPERM" || code === "EACCES") {
-        await fs.copyFile(from, to);
+        await fs.copyFile(verifiedFrom, verifiedTo);
         try {
-          await fs.unlink(from);
+          await fs.unlink(verifiedFrom);
         } catch (unlinkErr) {
           try {
-            await fs.unlink(to); // 回滚目标
+            await fs.unlink(verifiedTo); // 回滚目标
           } catch {
             /* 尽力 */
           }

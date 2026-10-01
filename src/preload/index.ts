@@ -18,32 +18,158 @@ function resolveApiCapability(): string {
 const apiCapability = resolveApiCapability();
 
 /**
+ * invoke 超时表（防挂起网络/IO 使渲染器 promise 永不结算而卡死 UI）：
+ * - 只给“内部有界”的通道设超时（值 ≥ 内部超时上限 + 余量），无超时即保持原行为；
+ * - 以下三类永不设超时：开原生对话框的（pickDirectory/skill:import，用户选目录时间无界）、
+ *   后台长任务的（syncNow 整库同步）、纯事件订阅。
+ * - 超时只结束渲染器侧等待（Main 侧操作继续，最终结果以事件/下次查询为准），
+ *   错误形状与 bridge 统一 { code: "TIMEOUT" }。
+ */
+const INVOKE_TIMEOUTS_MS: Record<string, number> = {
+  "window:isMaximized": 15_000,
+  // fs（本地 IO；64MB 上限内秒级完成）
+  "bridge:fs:list": 60_000,
+  "bridge:fs:getGrantStatus": 30_000,
+  "bridge:fs:forgetGrant": 30_000,
+  "bridge:fs:stat": 60_000,
+  "bridge:fs:readText": 60_000,
+  "bridge:fs:readBytes": 60_000,
+  "bridge:fs:readTextPrefix": 60_000,
+  "bridge:fs:createDirectory": 60_000,
+  "bridge:fs:writeText": 60_000,
+  "bridge:fs:writeBytes": 60_000,
+  "bridge:fs:remove": 60_000,
+  "bridge:fs:move": 60_000,
+  // terminal（execute 内部上限 120s；其余秒级）
+  "bridge:terminal:execute": 150_000,
+  "bridge:terminal:cancel": 30_000,
+  "bridge:terminal:start": 60_000,
+  "bridge:terminal:write": 30_000,
+  "bridge:terminal:createSession": 30_000,
+  "bridge:terminal:writeSession": 30_000,
+  "bridge:terminal:resizeSession": 30_000,
+  "bridge:terminal:closeSession": 30_000,
+  // computer（observe/动作秒级；审批等待走事件流，不占 invoke）
+  "bridge:computer:capabilities": 30_000,
+  "bridge:computer:observe": 90_000,
+  "bridge:computer:prepareAction": 60_000,
+  "bridge:computer:action": 60_000,
+  "bridge:computer:cancelActions": 60_000,
+  "bridge:computer:listWindows": 30_000,
+  "bridge:computer:findElements": 30_000,
+  "bridge:computer:activateWindow": 60_000,
+  "bridge:computer:openApplication": 60_000,
+  "bridge:computer:getSessionStatus": 30_000,
+  "bridge:computer:pauseSession": 30_000,
+  "bridge:computer:resumeSession": 30_000,
+  "bridge:computer:completeSession": 30_000,
+  "bridge:computer:setSessionState": 30_000,
+  "bridge:computer:updateSessionPlan": 30_000,
+  "bridge:computer:buildSkillDraft": 30_000,
+  // credentials（本地 vault，秒级）
+  "bridge:credential:create": 30_000,
+  "bridge:credential:replace": 30_000,
+  "bridge:credential:delete": 30_000,
+  "bridge:credential:list": 30_000,
+  // skills（本地文件；import 开目录选择器，无界，不设）
+  "bridge:skill:list": 30_000,
+  "bridge:skill:get": 30_000,
+  "bridge:skill:create": 60_000,
+  "bridge:skill:update": 60_000,
+  "bridge:skill:delete": 60_000,
+  "bridge:skill:setEnabled": 30_000,
+  "bridge:skill:export": 60_000,
+  "bridge:skill:test": 90_000,
+  "bridge:skill:activate": 30_000,
+  // mcp（内部调用上限 30s）
+  "bridge:mcp:list": 30_000,
+  "bridge:mcp:add": 30_000,
+  "bridge:mcp:test": 60_000,
+  "bridge:mcp:connect": 60_000,
+  "bridge:mcp:disconnect": 30_000,
+  "bridge:mcp:remove": 30_000,
+  "bridge:mcp:setEnabled": 30_000,
+  "bridge:mcp:searchTools": 60_000,
+  "bridge:mcp:callTool": 60_000,
+  "bridge:mcp:approveAndCall": 60_000,
+  // invocation（本地签发，秒级）
+  "bridge:invocation:beginLocal": 30_000,
+  "bridge:invocation:beginRemoteInbox": 30_000,
+  "bridge:invocation:assertCapability": 30_000,
+  // channels（内部 10s 级；OAuth 内部 180s；syncNow 后台长任务不设）
+  "bridge:channels:list": 30_000,
+  "bridge:channels:addQQ": 60_000,
+  "bridge:channels:addQQMail": 60_000,
+  "bridge:channels:update": 30_000,
+  "bridge:channels:setEnabled": 30_000,
+  "bridge:channels:connect": 60_000,
+  "bridge:channels:disconnect": 30_000,
+  "bridge:channels:test": 60_000,
+  "bridge:channels:remove": 30_000,
+  "bridge:channels:prepareReply": 30_000,
+  "bridge:channels:confirmReply": 60_000,
+  "bridge:channels:cancelReply": 30_000,
+  "bridge:channels:canReply": 30_000,
+  "bridge:channels:startGmailOAuth": 200_000,
+  // inbox（本地队列，秒级）
+  "bridge:inbox:rendererReady": 30_000,
+  "bridge:inbox:ack": 30_000,
+  // mini（send 的 Main 侧上限 90s；其余秒级）
+  "mini:send": 120_000,
+  "mini:is-always-on-top": 30_000,
+  "mini:get-state": 30_000,
+};
+
+/**
  * Bridge IPC 调用封装：
  * - 主进程统一抛 Error（message 内 JSON 编码 { code, message? }）
  * - 这里解析并重构为 { code, message? }，保证 Web 侧（lib/desktop/bridge.ts）
  *   读到的 err.code 就是合同定义的错误码
  */
 async function invokeBridge(channel: string, input: unknown): Promise<unknown> {
-  try {
-    return await ipcRenderer.invoke(channel, input);
-  } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    // Electron 会给 invoke 错误加前缀："Error invoking remote method 'xxx': <message>"
-    const jsonMatch = raw.match(/\{[^{}]*\}/);
-    const payload = jsonMatch ? jsonMatch[0] : raw;
-    let code = "IO_ERROR";
-    let message: string | undefined;
+  const timeoutMs = INVOKE_TIMEOUTS_MS[channel];
+  const rawInvoke = async (): Promise<unknown> => {
     try {
-      const parsed = JSON.parse(payload) as { code?: unknown; message?: unknown };
-      if (typeof parsed?.code === "string") {
-        code = parsed.code;
-        if (typeof parsed.message === "string") message = parsed.message;
-      }
-    } catch {
-      /* 非 JSON 错误信息：保留 IO_ERROR */
+      return await ipcRenderer.invoke(channel, input);
+    } catch (err) {
+      throw normalizeInvokeError(err);
     }
-    throw { code, message };
+  };
+  if (!timeoutMs) return rawInvoke();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      rawInvoke(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(JSON.stringify({ code: "TIMEOUT", message: "请求超时，请重试。" })));
+        }, timeoutMs);
+      }),
+    ]);
+  } catch (err) {
+    throw normalizeInvokeError(err);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
+}
+
+function normalizeInvokeError(err: unknown): { code: string; message?: string } {
+  const raw = err instanceof Error ? err.message : String(err);
+  // Electron 会给 invoke 错误加前缀："Error invoking remote method 'xxx': <message>"
+  const jsonMatch = raw.match(/\{[^{}]*\}/);
+  const payload = jsonMatch ? jsonMatch[0] : raw;
+  let code = "IO_ERROR";
+  let message: string | undefined;
+  try {
+    const parsed = JSON.parse(payload) as { code?: unknown; message?: unknown };
+    if (typeof parsed?.code === "string") {
+      code = parsed.code;
+      if (typeof parsed.message === "string") message = parsed.message;
+    }
+  } catch {
+    /* 非 JSON 错误信息：保留 IO_ERROR */
+  }
+  throw { code, message };
 }
 
 const filesystemBridge = {

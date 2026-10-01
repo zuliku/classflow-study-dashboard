@@ -76,6 +76,31 @@ describe("Main 侧（src/main/miniChat.ts + index.ts 接线）", () => {
   });
 });
 
+describe("Preload invoke 超时表（挂起不卡死 UI）", () => {
+  const src = read("src/preload/index.ts");
+
+  it("网络/长操作通道有超时（值 ≥ 内部上限 + 余量）", () => {
+    for (const ch of [
+      '"bridge:mcp:test": 60_000',
+      '"bridge:mcp:callTool": 60_000',
+      '"bridge:terminal:execute": 150_000',
+      '"bridge:channels:test": 60_000',
+      '"bridge:channels:startGmailOAuth": 200_000',
+      '"mini:send": 120_000',
+      '"bridge:computer:observe": 90_000',
+    ]) {
+      expect(src, ch).toContain(ch);
+    }
+    expect(src).toContain('code: "TIMEOUT"');
+  });
+
+  it("开原生对话框/后台长任务永不超时（用户思考时间无界）", () => {
+    expect(src).not.toContain('"bridge:fs:pickDirectory":');
+    expect(src).not.toContain('"bridge:skill:import":');
+    expect(src).not.toContain('"bridge:channels:syncNow":');
+  });
+});
+
 describe("Preload + 类型 + 访问器", () => {
   it("preload 暴露 mini 双向桥（主窗口侧 + Mini 侧）", () => {
     const src = read("src/preload/index.ts");
