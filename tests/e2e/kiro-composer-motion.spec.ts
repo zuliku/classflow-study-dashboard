@@ -69,6 +69,50 @@ test("退出期间 tray 锁 overflow-x-clip，播完恢复 auto", async ({ page 
   await expect.poll(async () => tray.getAttribute("class"), { timeout: 2000 }).toContain("overflow-x-auto");
 });
 
+test("附件架收缩单调无回弹（删最后一颗）", async ({ page }) => {
+  await openKiro(page);
+  await dropFiles(page, [{ name: "a.txt", content: "hello world " }]);
+  // 先把输入框滚入视口并静置，排除 click 自动滚动对轨迹的污染；采样期间用 force 点击
+  await page.getByTestId("kiro-composer-surface").scrollIntoViewIfNeeded();
+  await page.waitForTimeout(400);
+
+  // 逐帧采样：surface top 只向下收（单调不减），textarea 全程不动
+  await page.evaluate(() => {
+    (window as unknown as { __traj: { surfTop: number; taTop: number }[] }).__traj = [];
+    const tick = () => {
+      const surf = document.querySelector('[data-testid="kiro-composer-surface"]');
+      const ta = document.querySelector('[aria-label="Ask Kiro"]');
+      const store = (window as unknown as { __traj: { surfTop: number; taTop: number }[] }).__traj;
+      store.push({
+        surfTop: surf ? Math.round(surf.getBoundingClientRect().top * 10) / 10 : -1,
+        taTop: ta ? Math.round(ta.getBoundingClientRect().top * 10) / 10 : -1,
+      });
+      if (store.length < 90) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.click('[aria-label="移除附件 a.txt"]', { force: true });
+  await expect(page.getByTestId("kiro-attachment-chip")).toHaveCount(0, { timeout: 5000 });
+  await page.waitForTimeout(600);
+
+  const traj = await page.evaluate(
+    () => (window as unknown as { __traj: { surfTop: number; taTop: number }[] }).__traj
+  );
+  const surf = traj.map((p) => p.surfTop).filter((v) => v >= 0);
+  const ta = traj.map((p) => p.taTop).filter((v) => v >= 0);
+  // surface 只向下收：回弹（向上）容忍 1.5px 亚像素抖动；总行程证明折叠真实发生（非瞬卸）
+  let backtrack = 0;
+  for (let i = 1; i < surf.length; i++) backtrack = Math.max(backtrack, surf[i - 1] - surf[i]);
+  expect(backtrack).toBeLessThanOrEqual(1.5);
+  expect(surf[surf.length - 1] - surf[0]).toBeGreaterThan(20);
+  expect(surf[surf.length - 1] - surf[0]).toBeLessThan(120);
+  // textarea：单步下移 ≤2px 且首尾零位移
+  let taDown = 0;
+  for (let i = 1; i < ta.length; i++) taDown = Math.max(taDown, ta[i] - ta[i - 1]);
+  expect(taDown).toBeLessThanOrEqual(2);
+  expect(Math.abs(ta[ta.length - 1] - ta[0])).toBeLessThanOrEqual(1);
+});
+
 test("收回全程无灾难性掉帧（兜底）", async ({ page }) => {
   await openKiro(page);
   await dropFiles(page, [{ name: "a.txt", content: "hello world " }]);

@@ -604,6 +604,7 @@ export function KiroComposer({
         {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层）。
             focus 仅保留 border 变色（无阴影 / 无浮起，输入时画面稳定） */}
         <div
+          data-testid="kiro-composer-surface"
           className={cn(
             "bg-surface border border-line-strong rounded-2xl shadow-subtle",
             "focus-within:border-sandrift",

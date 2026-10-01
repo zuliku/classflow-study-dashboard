@@ -2,6 +2,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import {
   computeFps,
+  summarizeFrameDeltas,
   shouldShowFpsProbe,
   shouldShowMotionGallery,
 } from "@/lib/motionDev";
@@ -39,5 +40,12 @@ describe("motionDev 门禁与换算", () => {
     expect(computeFps(30, 0)).toBe(0);
     expect(computeFps(-1, 500)).toBe(0);
     expect(computeFps(Number.NaN, 500)).toBe(0);
+  });
+
+  it("summarizeFrameDeltas：数量/最差帧/jank 计数 + 非法值保护", () => {
+    expect(summarizeFrameDeltas([])).toEqual({ count: 0, worstMs: 0, jank50: 0 });
+    expect(summarizeFrameDeltas([16.7, 16.6, 33.3])).toEqual({ count: 3, worstMs: 33.3, jank50: 0 });
+    expect(summarizeFrameDeltas([16.7, 83.24, 120])).toEqual({ count: 3, worstMs: 120, jank50: 2 });
+    expect(summarizeFrameDeltas([Number.NaN, -5, 16.66])).toEqual({ count: 1, worstMs: 16.7, jank50: 0 });
   });
 });
