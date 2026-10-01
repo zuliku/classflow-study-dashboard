@@ -467,6 +467,24 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
     );
   });
 
+  it("＋菜单常挂载受控（外层硬条件会截断 PopoverPanel 退出）", () => {
+    const composer = read("components/kiro/KiroComposer.tsx");
+    expect(composer).toContain('open={openMenu === "add"}');
+    expect(composer).not.toMatch(/\{\s*openMenu === "add" && \(\s*<PopoverPanel/);
+  });
+
+  it("建议条进退场 + 审批条进入 + 发送钮透明度过渡", () => {
+    const suggestions = read("components/kiro/KiroContextSuggestions.tsx");
+    expect(suggestions).toContain("usePresence(open, MOTION_EXIT_MS.panel)");
+    expect(suggestions).toContain("ExitCollapse");
+    expect(suggestions).toContain("animate-enter");
+    const approval = read("components/kiro/run/KiroInlineApproval.tsx");
+    expect(approval).toContain("animate-enter");
+    const send = read("components/kiro/KiroSendControl.tsx");
+    expect(send).toContain("transition-[opacity,background-color]");
+    expect(send).toContain("duration-[var(--kiro-motion-control,var(--motion-fast))]");
+  });
+
   it("卡顿点：动画元素无 backdrop-blur；tray 退出期间锁 overflow-x（防滚动条闪烁）", () => {
     const composer = read("components/kiro/KiroComposer.tsx");
     // 拖拽遮罩透明度动画 + backdrop-blur = 逐帧重模糊（已知卡顿源，已下线；只查工具类，不含注释）

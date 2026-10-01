@@ -49,7 +49,8 @@ export function KiroInlineApproval({
       data-testid="kiro-inline-approval"
       role="group"
       aria-label="Kiro 操作确认"
-      className="border-y border-line-strong py-2.5 space-y-2 min-w-0"
+      // 审批出现需要引起注意：轻进入（只进不出——退出延迟会拖慢阻塞决策链）
+      className="border-y border-line-strong py-2.5 space-y-2 min-w-0 animate-enter"
     >
       <div aria-live="polite">
         <p className="text-[11px] font-bold text-charcoal">{presentation.title}</p>

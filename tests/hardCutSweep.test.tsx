@@ -155,6 +155,19 @@ describe("硬切深筛源码契约", () => {
     expect(src).not.toMatch(/\{attachments\.length > 0 && \(\s*<div/);
   });
 
+  it("Composer ＋菜单：常挂载受控 presence（关闭播退出，不硬卸）", () => {
+    const src = read("components/kiro/KiroComposer.tsx");
+    expect(src).toContain('open={openMenu === "add"}');
+    expect(src).not.toMatch(/\{\s*openMenu === "add" && \(\s*<PopoverPanel/);
+  });
+
+  it("建议条：presence + 折叠退场 + 进入淡入（发送消费不硬切顶布局）", () => {
+    const src = read("components/kiro/KiroContextSuggestions.tsx");
+    expect(src).toContain("usePresence(open, MOTION_EXIT_MS.panel)");
+    expect(src).toContain("ExitCollapse");
+    expect(src).toContain("animate-enter");
+  });
+
   it("Composer/Context chip：leaving 态 + 横向 collapse（非直接卸载）", () => {
     const composer = read("components/kiro/KiroComposer.tsx");
     expect(composer).toContain("leavingAttachmentIds");

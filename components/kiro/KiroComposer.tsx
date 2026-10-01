@@ -881,8 +881,8 @@ export function KiroComposer({
                   >
                     <Plus className="w-4 h-4" />
                   </button>
-                  {openMenu === "add" && (
-                    <PopoverPanel open placement="top-start" motionProfile="kiro" className="w-60">
+                  {/* 常挂载受控 presence（与 Access/Model 等一致）：外层硬条件会截断退出动画 */}
+                  <PopoverPanel open={openMenu === "add"} placement="top-start" motionProfile="kiro" className="w-60">
                       <KiroComposerAddMenu
                         scopeLocked={currentTurnScopeLocked}
                         preferencesLocked={nextTurnPreferencesLocked}
@@ -894,7 +894,6 @@ export function KiroComposer({
                         onClose={() => setOpenMenu(null)}
                       />
                     </PopoverPanel>
-                  )}
                 </div>
 
                 <div ref={accessRef} className="relative shrink-0">

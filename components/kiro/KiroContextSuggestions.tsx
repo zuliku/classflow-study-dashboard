@@ -17,6 +17,9 @@ import {
   Lightbulb,
 } from "lucide-react";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { usePresence } from "@/lib/usePresence";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string }[]> = {
@@ -60,15 +63,21 @@ const SUGGESTIONS: Record<string, { icon: React.ComponentType<{ className?: stri
 export function KiroContextSuggestions({ compact, inset }: { compact?: boolean; inset?: boolean }) {
   const session = useKiroSession();
   const kind = session.suggestionsKind;
-  if (!kind) return null;
-  if (session.suggestionsGen <= session.lastUserTurnGen) return null;
+  // 发送后即消费（gen 推进）：退场走折叠 + 延迟卸载，不硬切顶布局。
+  const open = !!kind && session.suggestionsGen > session.lastUserTurnGen;
+  const presence = usePresence(open, MOTION_EXIT_MS.panel);
+  if (!presence.mounted) return null;
 
-  const items = SUGGESTIONS[kind] ?? [];
+  const items = SUGGESTIONS[kind ?? "generic"] ?? [];
   return (
-    <div
-      data-testid="kiro-context-suggestions"
-      className={cn("shrink-0", inset ? (compact ? "px-3 pb-1.5" : "px-1 pb-1.5") : "pb-0")}
-    >
+    <ExitCollapse exiting={!presence.visible}>
+      <div
+        data-testid="kiro-context-suggestions"
+        className={cn(
+          "shrink-0 animate-enter",
+          inset ? (compact ? "px-3 pb-1.5" : "px-1 pb-1.5") : "pb-0"
+        )}
+      >
       {/* compact（Sidecar 窄壳）：2 列网格代替换行居中，避免 3+1 孤儿 chip；
           非 compact 保持原 flex-wrap 居中 */}
       <div className={cn(compact ? "grid grid-cols-2 gap-1.5" : "flex flex-wrap gap-1.5", !inset && !compact && "justify-center")}>
@@ -85,8 +94,9 @@ export function KiroContextSuggestions({ compact, inset }: { compact?: boolean; 
             </button>
           );
         })}
+        </div>
       </div>
-    </div>
+    </ExitCollapse>
   );
 }
 
