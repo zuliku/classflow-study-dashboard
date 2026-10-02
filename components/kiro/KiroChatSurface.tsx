@@ -36,7 +36,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const runtime = useKiroRuntime();
   const { chat, attachments, activeRefs, removeContext, addManualContext } = runtime;
   const { suggestionsKind, suggestionsGen, lastUserTurnGen, emptyIntroGeneration } = useKiroSessionMeta();
-  const { claimEmptyIntro } = useKiroSessionActions();
+  const { claimEmptyIntro, newChat } = useKiroSessionActions();
   const compact = variant === "sidecar";
 
   // Motion V1：Empty Intro claim（每 generation 每 surface 一次）。
@@ -242,8 +242,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
               });
             }}
             onCancelPlan={(planId) => void chat.cancelExecutionPlan(planId)}
-            // 空终答安全网：纯文本追答（零工具重跑；显隐由 view.needsAnswerRetry 驱动）
-            onRegenerateAnswer={() => void chat.regenerateAnswer()}
+            onNewChat={() => newChat()}
           />
         )}
       </div>

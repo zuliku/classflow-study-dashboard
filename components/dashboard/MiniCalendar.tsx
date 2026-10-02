@@ -24,6 +24,7 @@ import { isValidDDL, moveAssignmentDDL, editAssignmentDDLTime } from "@/lib/ddlI
 import { useSlidingIndicator } from "@/lib/useSlidingIndicator";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { paginate } from "@/lib/pagination";
 import {
@@ -262,8 +263,9 @@ export function MiniCalendar() {
   const shownFeedback = feedback ?? lastFeedbackRef.current;
   const feedbackTimerRef = useRef<number | null>(null);
   const [timeEditOpen, setTimeEditOpen] = useState(false);
-  // 时间编辑浮层对称进退（absolute，不顶布局）
+  // 时间编辑浮层对称进退（absolute，不顶布局）；退出窗口内输入框不可聚焦
   const timeEditPresence = usePresence(timeEditOpen, MOTION_EXIT_MS.fast);
+  const timeEditInertRef = useInertOnHidden<HTMLDivElement>(!timeEditPresence.visible);
   const [timeInput, setTimeInput] = useState("");
   const timeEditRef = useRef<HTMLDivElement | null>(null);
   const timeInputRef = useRef<HTMLInputElement | null>(null);
@@ -949,7 +951,10 @@ export function MiniCalendar() {
             {/* 修改时间 Popover：贴近反馈区，Esc / click outside 关闭，对称进退 */}
             {timeEditPresence.mounted && (
               <div
-                ref={timeEditRef}
+                ref={(el) => {
+                  timeEditRef.current = el;
+                  timeEditInertRef(el);
+                }}
                 className={cn(
                   "absolute bottom-full right-0 mb-1 w-44 bg-background border border-line-strong rounded-xl shadow-card p-2.5 space-y-2 z-40 origin-bottom-right transition-[opacity,transform]",
                   timeEditPresence.visible

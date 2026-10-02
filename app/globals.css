@@ -1377,6 +1377,9 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   --kiro-stagger-empty-step: 32ms;
   /* Mention 选项 stagger 步长（@菜单逐行跟随，比 empty 更密） */
   --kiro-stagger-mention-step: 24ms;
+  /* 流动层柔光晕染时长（opacity 慢洇，非位移；与 lib/motion.ts KIRO_MOTION_MS.glow 对应；
+     workspace/sidecar 不覆盖——洇出速度与浮层节奏无关，保持一致观感） */
+  --kiro-motion-glow: 500ms;
   /* 全产品唯一的常驻 ambient（S3-3；TimetableGrid 当前课程呼吸） */
   --kiro-ambient-breathe: 3.2s;
   /* 思考程度最高档流动彩条周期（暖色光谱；reduced-motion 下静止但保留彩色终态） */
@@ -1443,12 +1446,12 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     }
   }
 
-  /* 流动层显隐：宽度跟底填充同速（structure 档），opacity 单独 500ms ease 柔光晕染 ——
+  /* 流动层显隐：宽度跟底填充同速（structure 档），opacity 单独 glow 档柔光晕染 ——
      彩色是“洇”出来而不是“弹”出来；reduced-motion 由全局 0.01ms 兜底 */
   .kiro-reasoning-flow-fade {
     transition:
       width var(--kiro-motion-structure) var(--ease-standard),
-      opacity 500ms ease;
+      opacity var(--kiro-motion-glow) ease;
   }
 
   @keyframes kiro-structure-in {
@@ -1705,7 +1708,10 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
 [data-geometry-interacting] .kiro-mention-item-enter,
 [data-geometry-interacting] .kiro-popover-motion,
 [data-geometry-interacting] .kiro-scroll-control-enter,
-[data-geometry-interacting] .kiro-scroll-control-exit {
+[data-geometry-interacting] .kiro-scroll-control-exit,
+[data-geometry-interacting] .kiro-check-settle,
+[data-geometry-interacting] .kiro-send-activate,
+[data-geometry-interacting] .kiro-reasoning-flow-fade {
   animation: none !important;
   transition-duration: 0.01ms !important;
 }
@@ -1719,7 +1725,8 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
 
 /* Drag Perf：手势进行中暂停常转装饰（paused 可恢复，不会像 none 那样重放 intro），
    并去掉小窗大阴影（松手恢复），避免每帧重绘。 */
-[data-geometry-interacting] .kiro-ring {
+[data-geometry-interacting] .kiro-ring,
+[data-geometry-interacting] .kiro-reasoning-flow {
   animation-play-state: paused !important;
 }
 [data-geometry-interacting] .kiro-empty-subtitle-intro,

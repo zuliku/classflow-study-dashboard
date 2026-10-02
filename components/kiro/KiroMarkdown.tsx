@@ -24,6 +24,7 @@ import { remarkKiroCitation } from "@/lib/ai/citations/remarkCitation";
 import { useToastStore } from "@/store/useToastStore";
 import { copyTextToClipboard } from "@/lib/ai/share";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,7 @@ function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   const [error, setError] = React.useState(false);
   // 灯箱对称进退（blur 只在全开时保留，进退场不逐帧重模糊）
   const lightboxPresence = usePresence(open, MOTION_EXIT_MS.base);
+  const lightboxInertRef = useInertOnHidden<HTMLDivElement>(!lightboxPresence.visible);
   const pushToast = useToastStore((s) => s.pushToast);
   if (!src) return null;
   const safe = isSafeHttpUrl(src) || src.startsWith("data:") || src.startsWith("blob:");
@@ -93,6 +95,7 @@ function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
       </span>
       {lightboxPresence.mounted && (
         <div
+          ref={lightboxInertRef}
           className={cn(
             "fixed inset-0 z-[80] bg-charcoal/60 flex items-center justify-center p-4 transition-opacity",
             lightboxPresence.visible

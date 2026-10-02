@@ -73,6 +73,8 @@ export const KIRO_MOTION_MS = {
   popoverExit: 120,
   intro: 320,
   composerIntro: 220,
+  /** 流动层柔光晕染（= --kiro-motion-glow；opacity 慢洇，非位移） */
+  glow: 500,
 } as const;
 
 /** Sidecar scope 更快档（= .kiro-motion-sidecar 覆盖值） */

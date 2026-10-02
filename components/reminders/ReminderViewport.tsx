@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useReminderDeliveryStore } from "@/store/useReminderDeliveryStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { MOTION_EXIT_MS } from "@/lib/motion";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { Reminder } from "@/types";
 import { formatLocalDateTime } from "@/lib/reminders/reminderDomain";
 import { getReminderDeliverySubtitle } from "@/lib/reminders/reminderPresentation";
@@ -118,8 +119,11 @@ function ReminderCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 退出窗口内标题点击不再导航（dismiss 守卫只拦关闭，inert 拦全部）
+  const cardInertRef = useInertOnHidden<HTMLDivElement>(exiting);
   return (
     <div
+      ref={cardInertRef}
       role="status"
       className={cn(
         "pointer-events-auto flex items-start gap-3 bg-surface border border-line-strong rounded-[20px] shadow-card px-4 py-3.5 ux-inline",

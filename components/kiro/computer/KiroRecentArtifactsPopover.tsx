@@ -14,6 +14,7 @@ import { getArtifact, removeArtifactRecord } from "@/lib/ai/computer/artifacts/s
 import { KiroContextRef } from "@/lib/ai/context/types";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,7 @@ export function KiroRecentArtifactsPopover() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   // 富面板保持 role="dialog"（非 menu，不迁移 DropdownMenuPanel），对称进退走 usePresence
   const panelPresence = usePresence(open, MOTION_EXIT_MS.fast);
+  const panelInertRef = useInertOnHidden<HTMLDivElement>(!panelPresence.visible);
 
   const refresh = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -124,6 +126,7 @@ export function KiroRecentArtifactsPopover() {
 
       {panelPresence.mounted && (
         <div
+          ref={panelInertRef}
           role="dialog"
           aria-label="最近文件"
           className={cn(

@@ -29,6 +29,7 @@ import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/typ
 import { PopoverPanel } from "@/components/ui/Popover";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
@@ -180,6 +181,9 @@ export function KiroComposer({
   const slashPresence = usePresence(slashOpen, MOTION_EXIT_MS.fast);
   const mentionPresence = usePresence(mentionOpen, MOTION_EXIT_MS.fast);
   const dragPresence = usePresence(dragOver, MOTION_EXIT_MS.fast);
+  // 退出窗口内 inert：菜单项/建议 chip/切换按钮在视觉残留期不可 Tab 到达（pointer-events 拦不住键盘）
+  const slashInertRef = useInertOnHidden<HTMLDivElement>(!slashPresence.visible);
+  const mentionInertRef = useInertOnHidden<HTMLDivElement>(!mentionPresence.visible);
   // 附件 chip 原位退出：点击 × 先 collapse（160ms），再真正删除；
   // 发送清空走父级即时过滤（不保留退出快照），顺序天然保留。
   const reducedMotion = useEffectiveReducedMotion();
@@ -318,6 +322,8 @@ export function KiroComposer({
   const visionWarningOpen = (hasImages && !visionEnabled) || scannedBlocked;
   const warningPresence = usePresence(visionWarningOpen, MOTION_EXIT_MS.fast);
   const preparingPresence = usePresence(!!preparingVision, MOTION_EXIT_MS.fast);
+  // intent 行 / 隐私提示已在 ExitCollapse 内（自带 exiting inert），无需重复守卫
+  const warningInertRef = useInertOnHidden<HTMLSpanElement>(!warningPresence.visible);
   const privacyOpen = hasImages && !visualPrivacyNoticeSeen;
   const privacyPresence = usePresence(privacyOpen, MOTION_EXIT_MS.panel);
 
@@ -652,6 +658,7 @@ export function KiroComposer({
                 ))}
                 {warningPresence.mounted && (
                   <span
+                    ref={warningInertRef}
                     className={cn(
                       "inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-1.5 whitespace-nowrap transition-[opacity,transform]",
                       warningPresence.visible
@@ -724,6 +731,7 @@ export function KiroComposer({
           {/* Slash Skill Menu：仅「输入中的命令」展开；无演示文案；选中项高亮 + 键盘导航；对称进退 */}
           {slashPresence.mounted && (
             <div
+              ref={slashInertRef}
               data-testid="skill-slash-menu"
               className={cn(
                 "mx-2.5 mt-2.5 mb-0.5 bg-surface border border-line rounded-xl shadow-subtle overflow-hidden origin-bottom-left",
@@ -772,6 +780,7 @@ export function KiroComposer({
               / 走左下角指令弹出；选中回填 @label + 写入 Manual Context chip） */}
           {mentionPresence.mounted && (
             <div
+              ref={mentionInertRef}
               data-testid="kiro-mention-menu"
               className={cn(
                 "mx-2.5 mt-2.5 mb-0.5 bg-surface border border-line rounded-xl shadow-subtle overflow-hidden origin-bottom",

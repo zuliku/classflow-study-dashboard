@@ -24,6 +24,7 @@ import { openAssignmentEditor } from "@/lib/uiEvents";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { cn, getPriorityMeta } from "@/lib/utils";
@@ -450,9 +451,12 @@ export function AssignmentTable({
   }, [ctxMenu, assignments]);
 
   const bulkCount = assignmentSelection.length;
-  // Bulk Bar / DDL 浮层对称进退（fixed 浮层，进出不同时，避免开关闪切）
+  // Bulk Bar / DDL 浮层对称进退（fixed 浮层，进出不同时，避免开关闪切）；
+  // 退出窗口内 inert（空选择按钮不可 Tab 到达并执行空操作）
   const bulkBarPresence = usePresence(isWorkspace && bulkCount > 0, MOTION_EXIT_MS.fast);
   const bulkDdlPresence = usePresence(bulkDdlOpen, MOTION_EXIT_MS.fast);
+  const bulkBarInertRef = useInertOnHidden<HTMLDivElement>(!bulkBarPresence.visible);
+  const bulkDdlInertRef = useInertOnHidden<HTMLSpanElement>(!bulkDdlPresence.visible);
   const applyBulkDDL = () => {
     if (!bulkDdlDate) return;
     actions.setDDLDate(assignmentSelection, bulkDdlDate);
@@ -909,6 +913,7 @@ export function AssignmentTable({
       {/* ---- Workspace：Bulk Action Bar（有选择才出现，对称进退） ---- */}
       {bulkBarPresence.mounted && (
         <div
+          ref={bulkBarInertRef}
           data-testid="assignment-bulk-bar"
           className={cn(
             "fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2 flex items-center gap-2 text-xs transition-[opacity,transform]",
@@ -946,6 +951,7 @@ export function AssignmentTable({
           />
           {bulkDdlPresence.mounted && (
             <span
+              ref={bulkDdlInertRef}
               data-testid="bulk-ddl-popover"
               className={cn(
                 "fixed bottom-16 left-1/2 -translate-x-1/2 z-50 w-72 bg-surface border border-line-strong rounded-xl shadow-card p-3 space-y-2.5 text-xs transition-[opacity,transform]",

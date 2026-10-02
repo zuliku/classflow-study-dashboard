@@ -12,6 +12,7 @@ import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { usePresence } from "@/lib/usePresence";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { MOTION_EXIT_MS } from "@/lib/motion";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +55,7 @@ export function KiroContextBar({
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const enteringContextKeys = useEnterOnAdd(contexts.map((context) => context.key));
   const overflowPresence = usePresence(overflowOpen, MOTION_EXIT_MS.fast);
+  const overflowInertRef = useInertOnHidden<HTMLDivElement>(!overflowPresence.visible);
   // P2：chip 移除原位 collapse（160ms 后真正删除；外部整单替换直接卸载，不过渡）。
   const reducedMotion = useEffectiveReducedMotion();
   const [leavingKeys, setLeavingKeys] = useState<ReadonlySet<string>>(new Set());
@@ -180,7 +182,10 @@ export function KiroContextBar({
           </button>
           {overflowPresence.mounted && (
             <div
-              ref={popoverRef}
+              ref={(el) => {
+                popoverRef.current = el;
+                overflowInertRef(el);
+              }}
               role="dialog"
               aria-label="当前上下文"
               className={cn(

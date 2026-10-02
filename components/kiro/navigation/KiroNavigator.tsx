@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS, KIRO_MOTION_MS } from "@/lib/motion";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -96,6 +97,8 @@ export function KiroNavigator() {
   // 计时与 CSS 退出时长同源（collapsed: exit-fast；expanded: kiro popover-exit 上界，覆盖双 scope）
   const collapsedPresence = usePresence(!expanded, MOTION_EXIT_MS.fast);
   const expandedPresence = usePresence(expanded, KIRO_MOTION_MS.popoverExit);
+  // 折叠层退出时内部按钮不可聚焦（absolute 残留层，pointer-events-none 拦不住 Tab）
+  const collapsedInertRef = useInertOnHidden<HTMLDivElement>(!collapsedPresence.visible);
 
   const goToView = useCallback((next: NavigatorView) => {
     const prev = viewRef.current;
@@ -328,6 +331,7 @@ export function KiroNavigator() {
         {/* Collapsed layer：52px（expand 时 absolute 脱离流，不撑高 shell） */}
         {collapsedPresence.mounted && (
           <div
+            ref={collapsedInertRef}
             data-layer="collapsed"
             aria-hidden={expanded}
             className={cn(

@@ -1,8 +1,10 @@
 ﻿"use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useId, useRef } from "react";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,11 +31,15 @@ export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function Popover({ open, onOpenChange, className, children, ...props }: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null);
+  // Esc topmost 语义：打开时进 overlay 栈（视觉层级 z-40），有 Dialog/Drawer 等更高层时
+  // 后台 Popover 不再跟着一起关；嵌套 Popover 只关最上层。
+  const overlayId = useId();
 
   useEffect(() => {
     if (!open) return;
+    pushOverlay(overlayId, 40);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onOpenChange(false);
+      if (event.key === "Escape" && isTopmostOverlay(overlayId)) onOpenChange(false);
     };
     const onPointerDown = (event: PointerEvent) => {
       const root = ref.current;
@@ -42,10 +48,11 @@ export function Popover({ open, onOpenChange, className, children, ...props }: P
     window.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
     return () => {
+      popOverlay(overlayId);
       window.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open, onOpenChange]);
+  }, [open, onOpenChange, overlayId]);
 
   return (
     <div ref={ref} className={cn("relative", className)} {...props}>
@@ -123,10 +130,13 @@ export function PopoverPanel({
     open ?? true,
     motionProfile === "kiro" ? 160 : MOTION_EXIT_MS.fast
   );
+  // 退出窗口内 inert：pointer-events-none 防不住 Tab，菜单项不可二次触发
+  const inertRef = useInertOnHidden<HTMLDivElement>(!visible);
   if (!mounted) return null;
 
   return (
     <div
+      ref={inertRef}
       data-kiro-open={motionProfile === "kiro" ? String(visible) : undefined}
       className={cn(
         "absolute z-40 bg-surface border border-line-strong rounded-2xl shadow-card",

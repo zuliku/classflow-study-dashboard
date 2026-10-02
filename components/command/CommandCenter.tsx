@@ -123,8 +123,11 @@ export function CommandCenter() {
     [pushToast, confirmRequest]
   );
 
-  // Motion Contract：面板 exit --motion-exit-base 150，与 CSS 退出过渡同源
+  // Motion Contract：卸载窗口 MOTION_EXIT_MS.base（150）；ux-overlay/ux-modal-panel 类内
+  // 是 base 档（180，兼顾进入），退场以内联时长精确对齐 exitMs（OverlayLayer BUG-070 同式），
+  // 否则退出动画在 150ms 被卸载截断约两帧跳变。
   const { mounted, visible } = usePresence(isSearchModalOpen, MOTION_EXIT_MS.base);
+  const exitDurationStyle = visible ? undefined : { transitionDuration: `${MOTION_EXIT_MS.base}ms` };
   useRestoreFocus(isSearchModalOpen);
 
   // Overlay 栈 + Esc（仅最上层）
@@ -386,6 +389,7 @@ export function CommandCenter() {
         visible ? "opacity-100" : "opacity-0",
         !isSearchModalOpen && "pointer-events-none"
       )}
+      style={exitDurationStyle}
       // 背板点击关闭（仅点中背板本身；面板内点击不关闭）
       onClick={(e) => {
         if (e.target === e.currentTarget) setSearchModalOpen(false);
@@ -400,6 +404,7 @@ export function CommandCenter() {
           "ux-modal-panel",
           visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
         )}
+        style={exitDurationStyle}
       >
         {searchModalView === "guide" ? (
           /* ---- Shortcut Guide 子视图（BUG-G10：key 驱动 ux-fade 淡入） ---- */

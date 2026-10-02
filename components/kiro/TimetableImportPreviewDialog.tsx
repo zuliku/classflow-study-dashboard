@@ -9,6 +9,7 @@ import { preflightScheduleImport } from "@/lib/scheduleImport/preflight";
 import { normalizeTimetableImportDraft } from "@/lib/ai/timetableImport/draft";
 import { resolveLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -175,6 +176,7 @@ export function TimetableImportPreviewDialog({
   // 对称进退（保留现有语义：无 Esc/无 backdrop 关闭，不迁移 Dialog primitive）；
   // blur 只在全开时保留，进退场不逐帧重模糊
   const dialogPresence = usePresence(open, MOTION_EXIT_MS.base);
+  const dialogInertRef = useInertOnHidden<HTMLDivElement>(!dialogPresence.visible);
   if (!dialogPresence.mounted) return null;
 
   const counts = currentPreflight.counts;
@@ -234,6 +236,7 @@ export function TimetableImportPreviewDialog({
 
   return (
     <div
+      ref={dialogInertRef}
       className={cn(
         "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[90] bg-black/40 flex items-center justify-center p-3 sm:p-4 transition-opacity",
         dialogPresence.visible

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS } from "@/lib/motion";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
 import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
@@ -56,6 +57,7 @@ export function KiroConversation({
   onApprovePlan,
   onCancelPlan,
   onRegenerateAnswer,
+  onNewChat,
 }: {
   messages: KiroChatMessageView[];
   error: AIError | null;
@@ -88,6 +90,8 @@ export function KiroConversation({
   onCancelPlan?: (planId: string) => void;
   /** 空终答追答（纯文本重跑；零工具） */
   onRegenerateAnswer?: () => void;
+  /** 超预算失败出口（CONTEXT_TOO_LARGE 时错误条出现“新建对话”，打破原样重发必败循环） */
+  onNewChat?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -95,6 +99,8 @@ export function KiroConversation({
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
   // Motion V1：回到底部浮钮 presence（enter fast / exit 同源 exit-fast；hidden 立即不可交互）
   const scrollBtnPresence = usePresence(showScrollBtn, MOTION_EXIT_MS.fast);
+  // 退出隐藏后不可聚焦（aria-hidden 与键盘可达必须一致）
+  const scrollBtnInertRef = useInertOnHidden<HTMLButtonElement>(!scrollBtnPresence.visible);
   const { conversationSummary, currentConversationId } = useKiroSessionMeta();
   const reducedMotion = useEffectiveReducedMotion();
   const messageIds = React.useMemo(
@@ -304,6 +310,15 @@ export function KiroConversation({
                     <RotateCcw className="w-3.5 h-3.5" />
                     重试
                   </button>
+                  {/* 超预算：原样重试必然再败，给一键新建对话出口（provider 未传时不渲染） */}
+                  {error.code === "CONTEXT_TOO_LARGE" && onNewChat && (
+                    <button
+                      onClick={onNewChat}
+                      className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-semibold text-satin-grey bg-surface border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+                    >
+                      新建对话
+                    </button>
+                  )}
                   <button
                     onClick={onOpenSettings}
                     className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-semibold text-satin-grey bg-surface border border-line hover:text-charcoal hover:border-line-strong transition-colors"
@@ -323,6 +338,7 @@ export function KiroConversation({
           显隐类必须绑 visible 而非 open，否则挂载即终态、进入过渡永远播不出） */}
       {scrollBtnPresence.mounted && (
         <button
+          ref={scrollBtnInertRef}
           onClick={scrollToBottom}
           aria-label="回到底部"
           title="回到底部"
