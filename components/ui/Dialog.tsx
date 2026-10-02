@@ -66,9 +66,10 @@ export function Dialog({
       closeOnBackdrop={closeOnBackdrop}
       onEscapeKeyDown={onEscapeKeyDown}
       className={cn(
-        "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/40 backdrop-blur-sm",
+        "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/40",
         overlayClassName
       )}
+      scrimBlurClass="backdrop-blur-sm"
     >
       {({ visible }) => (
         <div className="flex h-full w-full items-center justify-center p-3 sm:p-4">

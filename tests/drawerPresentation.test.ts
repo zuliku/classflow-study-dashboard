@@ -12,8 +12,9 @@ import { resolveDrawerAriaModal, resolveDrawerPresentation } from "@/components/
 describe("Drawer presentation class contract", () => {
   it("edge（默认）：overlay + panel class；enter/exit 走 motion token", () => {
     const enter = resolveDrawerPresentation("edge", true);
+    // blur 改由 OverlayLayer scrimBlurClass 按可见挂载（进退场不逐帧重模糊），静态串不再含 blur
     expect(enter.overlayClassName).toBe(
-      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/30 backdrop-blur-sm flex justify-end overflow-hidden"
+      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/30 flex justify-end overflow-hidden"
     );
     expect(enter.panelClassName).toContain("h-full w-full bg-surface shadow-drawer border-l border-line");
     expect(enter.panelClassName).toContain("translate-x-0 opacity-100");

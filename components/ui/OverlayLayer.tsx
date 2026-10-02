@@ -31,6 +31,11 @@ export interface OverlayLayerProps {
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
   className?: string;
   /**
+   * 背板模糊类（如 backdrop-blur-sm）：只在完全可见时挂载，进退场透明度动画期间
+   * 不逐帧重模糊全屏（与 CommandCenter / 灯箱同模式）。默认不挂，需要的调用方显式传。
+   */
+  scrimBlurClass?: string;
+  /**
    * opt-in：open 期间该 key 变化（如 Detail Panel 实体切换）→ 更新 focus restore 目标
    * 为最近一次触发切换的可聚焦元素。无该 prop 的 consumer 行为完全不变。
    */
@@ -48,6 +53,7 @@ export function OverlayLayer({
   closeOnBackdrop = false,
   onEscapeKeyDown,
   className,
+  scrimBlurClass,
   focusRestoreKey,
   children,
 }: OverlayLayerProps) {
@@ -92,6 +98,7 @@ export function OverlayLayer({
         "ux-overlay",
         visible ? "opacity-100" : "opacity-0 !ease-[var(--ease-exit)]",
         !open && "pointer-events-none",
+        visible && scrimBlurClass,
         className
       )}
       // 退出过渡期（mounted 但 open=false）立即 inert：焦点已在 open=false 时还给触发元素，

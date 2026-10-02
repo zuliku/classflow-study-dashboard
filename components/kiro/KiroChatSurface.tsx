@@ -241,6 +241,8 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
                 pushToast({ message: "计划已批准并切换到工作区自动，发送下一条消息即按计划执行。" });
               });
             }}
+            // 空终答追答入口（view 层判定 + hook 纯文本追答链；缺失则重试按钮永不出现）
+            onRegenerateAnswer={() => void chat.regenerateAnswer()}
             onCancelPlan={(planId) => void chat.cancelExecutionPlan(planId)}
             onNewChat={() => newChat()}
           />
