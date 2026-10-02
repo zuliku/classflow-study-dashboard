@@ -60,6 +60,7 @@ function getDomain(href: string): string {
 function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   const [open, setOpen] = React.useState(false);
   const [error, setError] = React.useState(false);
+  const [imgReady, setImgReady] = React.useState(false);
   // 灯箱对称进退（blur 只在全开时保留，进退场不逐帧重模糊）
   const lightboxPresence = usePresence(open, MOTION_EXIT_MS.base);
   const lightboxInertRef = useInertOnHidden<HTMLDivElement>(!lightboxPresence.visible);
@@ -82,14 +83,24 @@ function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   return (
     <>
       <span className="block my-[0.85em]">
+        {/* 解码前骨架定高占位（自然尺寸未知，加载完成前后不塌陷/不二次推高） */}
+        {!imgReady && (
+          <span aria-hidden="true" className="ux-skeleton block max-w-full h-40 rounded-xl border border-line bg-alabaster/60" />
+        )}
         <img
+          ref={(el) => {
+            // 缓存命中时 load 可能已错过：挂载即检查 complete（同值 bail，不循环）
+            if (el && el.complete && el.naturalHeight > 0) setImgReady(true);
+          }}
           src={src}
           alt={alt ?? ""}
           loading="lazy"
           decoding="async"
           onError={() => setError(true)}
+          onLoad={() => setImgReady(true)}
           onClick={() => setOpen(true)}
-          className="rounded-xl border border-line max-w-full h-auto cursor-zoom-in mx-auto max-h-[420px] object-contain bg-alabaster"
+          aria-hidden={!imgReady}
+          className={`rounded-xl border border-line max-w-full h-auto cursor-zoom-in mx-auto max-h-[420px] object-contain bg-alabaster${imgReady ? "" : " invisible"}`}
         />
         {alt && <span className="block text-center text-[11px] text-sandrift mt-1.5">{alt}</span>}
       </span>

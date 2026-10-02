@@ -178,7 +178,7 @@ export function FullTimetableModal() {
                       setFullTimetableModalOpen(false);
                       setSelectedCourseId(course.id);
                     }}
-                    className="p-3 rounded-xl border flex flex-col justify-between cursor-pointer transition-[transform,box-shadow] hover:shadow-subtle hover:-translate-y-px"
+                    className="p-3 rounded-xl border flex flex-col justify-between cursor-pointer transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-standard)] hover:shadow-subtle hover:-translate-y-px"
                     style={{ backgroundColor: `${course.bgHex}60`, borderColor: course.borderHex }}
                   >
                     <div>

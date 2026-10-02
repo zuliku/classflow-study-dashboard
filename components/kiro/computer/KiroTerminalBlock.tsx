@@ -61,12 +61,23 @@ function statusMeta(activity: TerminalActivity): { icon: React.ReactNode; label:
   }
 }
 
+/** elapsed 计时文本（独立 tick：500ms 重渲染只落在这个 span，不波及输出大列表） */
+function TerminalElapsed({ activity }: { activity: TerminalActivity }) {
+  const running = !isTerminalActivityTerminal(activity.status);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, [running]);
+  return <>{elapsedLabel(activity, now)}</>;
+}
+
 export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
   activity,
 }: {
   activity: TerminalActivity;
 }) {
-  const [now, setNow] = useState(() => Date.now());
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -76,13 +87,7 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
   const [inputSent, setInputSent] = useState(false);
   const running = !isTerminalActivityTerminal(activity.status);
   const cancelling = stopping;
-
-  // elapsed tick：运行中每 500ms 刷新（仅本 block 内部状态）
-  useEffect(() => {
-    if (!running || cancelling) return;
-    const id = window.setInterval(() => setNow(Date.now()), 500);
-    return () => window.clearInterval(id);
-  }, [running, cancelling]);
+  const outputRef = useRef<HTMLDivElement | null>(null);
 
   // secure input：用户手动输入 → bridgeV2.write（绝不进入模型 context / 对话历史 / audit）
   const onSendInput = async () => {
@@ -106,6 +111,16 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
 
   const body = [...activity.stdoutLines, ...activity.stderrLines.map((l) => `  ${l}`)];
   const displayLines = showAll ? body : body.slice(-PREVIEW_LINES);
+
+  // 输出跟尾：行数变化且用户停在底部才自动跟随（上翻查看旧输出时不抢滚动；纯 DOM，无重渲染）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = outputRef.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [body.length]);
   const meta = statusMeta(activity);
   const shellLabel = activity.shell === "powershell" ? "PowerShell" : "命令提示符";
 
@@ -124,14 +139,14 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
   return (
     <div
       data-testid="kiro-terminal-block"
-      className="rounded-xl border border-line-soft bg-alabaster/40 overflow-hidden"
+      className="rounded-xl border border-line-soft bg-alabaster/40 overflow-hidden animate-enter"
     >
       {/* Header：icon + shell + elapsed + status + collapse */}
       <div className="flex items-center gap-1.5 px-2.5 py-1.5">
         <Terminal className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
         <span className="text-[11px] font-semibold text-charcoal truncate">{shellLabel}</span>
         <span className="text-[10px] text-satin-grey tabular-nums shrink-0 ml-1">
-          {elapsedLabel(activity, now)}
+          <TerminalElapsed activity={activity} />
         </span>
         <span className={cn("text-[10px] flex items-center gap-1 shrink-0 ml-1", meta.tone)}>
           {meta.icon}
@@ -223,6 +238,7 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
         )}
         {body.length > 0 ? (
           <div
+            ref={outputRef}
             data-testid="kiro-terminal-output"
             className={cn(
               "rounded-lg bg-white/70 border border-line-soft px-2 py-1 font-mono text-[10.5px] leading-relaxed whitespace-pre-wrap break-all overflow-y-auto",
@@ -231,6 +247,7 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
               !showAll ? "max-h-40" : "max-h-64"
             )}
           >
+            {/* index key 刻意：滑动窗口追加语义，行就地更新文本不 remount（稳定 key 会导致滚动闪变） */}
             {displayLines.map((line, i) => (
               <div key={i} className={cn(line.startsWith("  ") ? "text-satin-grey" : "text-charcoal")}>
                 {line}

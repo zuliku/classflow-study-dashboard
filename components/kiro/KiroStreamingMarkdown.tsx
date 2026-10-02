@@ -372,16 +372,16 @@ export function KiroStreamingMarkdown({
   }, [split, content, streaming]);
 
   if (canonicalRender) {
-    // Phase 2 canonical fallback：完整 document render（正确性优先；允许一次重 parse）
+    // Phase 2 canonical fallback：完整 document render（正确性优先；允许一次重 parse；切换淡入）
     return (
-      <div data-testid="kiro-streaming-markdown">
+      <div data-testid="kiro-streaming-markdown" className="ux-fade">
         <SettleCanonicalRenderer content={content} sources={sources} />
       </div>
     );
   }
 
   return (
-    <div data-testid="kiro-streaming-markdown">
+    <div data-testid="kiro-streaming-markdown" className="ux-fade">
       {blocks.map((b) => (
         <KiroStreamingBlock
           key={`${renderEpochRef.current}:${b.ordinal}`}

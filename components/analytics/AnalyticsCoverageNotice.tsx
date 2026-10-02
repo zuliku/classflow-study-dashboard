@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Info, ChevronDown } from "lucide-react";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import {
   buildCoverageFactLines,
   buildCoverageSummary,
@@ -17,22 +20,29 @@ import { cn } from "@/lib/utils";
  */
 export function AnalyticsCoverageNotice({ facts }: { facts: CoverageFacts }) {
   const summary = buildCoverageSummary(facts);
+  // 整条 notice 进退：退场播 stale 快照（facts 变化致 summary 消失时不硬切顶布局）
+  const noticePresence = usePresence(summary != null, MOTION_EXIT_MS.panel);
+  const lastSummaryRef = useRef<typeof summary>(null);
+  if (summary) lastSummaryRef.current = summary;
+  const shownSummary = summary ?? lastSummaryRef.current;
   const [open, setOpen] = useState(false);
   const factsLines = buildCoverageFactLines(facts);
-  if (!summary) return null;
+  if (!noticePresence.mounted) return null;
 
   const panelId = "analytics-coverage-detail";
   return (
-    <div
-      data-testid="analytics-coverage-notice"
-      className="flex items-start gap-2 px-3 py-2 bg-alabaster/60 border border-line rounded-xl text-[11px] text-sandrift"
-    >
+    <ExitCollapse exiting={!noticePresence.visible}>
+      {shownSummary ? (
+      <div
+        data-testid="analytics-coverage-notice"
+        className="flex items-start gap-2 px-3 py-2 bg-alabaster/60 border border-line rounded-xl text-[11px] text-sandrift"
+      >
       <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-          <span className="font-semibold text-charcoal/80">{summary.title}</span>
+          <span className="font-semibold text-charcoal/80">{shownSummary.title}</span>
           <span>·</span>
-          <span>{summary.hint}</span>
+          <span>{shownSummary.hint}</span>
           <button
             type="button"
             aria-expanded={open}
@@ -57,6 +67,8 @@ export function AnalyticsCoverageNotice({ facts }: { facts: CoverageFacts }) {
           </ul>
         </DisclosureRegion>
       </div>
-    </div>
+      </div>
+      ) : null}
+    </ExitCollapse>
   );
 }

@@ -23,6 +23,7 @@ import { KiroAssistantTurnPresentation } from "@/lib/ai/presentation/turnPresent
 import { citationsToReadableText } from "@/lib/ai/citations/parser";
 import { cn } from "@/lib/utils";
 import { usePresence } from "@/lib/usePresence";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import {
@@ -148,6 +149,11 @@ export function KiroMessage({
     : streaming;
   // 光标出现/消失淡入淡出（inline span，用 presence 门控显隐，布局零位移）
   const cursorPresence = usePresence(showStreamingCursor === true, MOTION_EXIT_MS.fast);
+  // live 引用 tray：settled 后折叠退场（直接卸载会顶起下方工具栏）
+  const liveTrayPresence = usePresence(
+    streaming === true && liveCitedWebSources.length > 0,
+    MOTION_EXIT_MS.fast
+  );
   const showComposingSkeleton =
     assistantTurn?.phase === "composing" && !content && !assistantTurn.answerStreaming;
 
@@ -189,7 +195,8 @@ export function KiroMessage({
         />
       )}
         {(content || showComposingSkeleton) ? (
-          <div>
+          // 骨架→首 token 同槽位淡入（key 切换触发挂载动画；流式中 content 常驻不重播）
+          <div key={content ? "content" : "skeleton"} className="ux-fade">
             {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（同语义 Markdown） */}
             {content ? (
               <KiroStreamingMarkdown content={content} streaming={!!streaming} sources={sources} />
@@ -217,7 +224,8 @@ export function KiroMessage({
               />
             )}
             {/* V2 live 引用预取：流式中即显示已引用的来源 chips（settled 后收敛到 More→来源） */}
-            {streaming && liveCitedWebSources.length > 0 && (
+            {liveTrayPresence.mounted && (
+              <ExitCollapse exiting={!liveTrayPresence.visible}>
               <div
                 data-testid="kiro-live-citations"
                 className="mt-2 flex flex-wrap gap-1.5"
@@ -237,6 +245,7 @@ export function KiroMessage({
                   <span className="inline-flex items-center px-2 py-1 text-[10px] text-sandrift">+{liveCitedWebSources.length - 3}</span>
                 )}
               </div>
+              </ExitCollapse>
             )}
             {/* Hotfix：正文底部不再显示独立 Sources Tray（来源移入 More → 来源） */}
             {/* Message Actions：整个 Turn 结束后常驻（不依赖 hover），低权重 inline toolbar；settle 时淡入 */}
@@ -485,7 +494,7 @@ export function KiroUserMessage({
           </div>
         )}
         {editing ? (
-          <div className="w-full min-w-[260px] space-y-1.5">
+          <div key="edit" className="w-full min-w-[260px] space-y-1.5 ux-fade">
             <textarea
               ref={taRef}
               value={draft}
@@ -500,7 +509,7 @@ export function KiroUserMessage({
                 }
               }}
               aria-label="编辑消息"
-              className="w-full px-3 py-2.5 bg-white border border-line-strong rounded-2xl text-xs font-medium text-charcoal focus:outline-none focus:border-charcoal resize-none whitespace-pre-wrap leading-relaxed"
+              className="w-full px-3 py-2.5 bg-white border border-line-strong rounded-2xl text-xs font-medium text-charcoal focus:outline-none focus:border-charcoal resize-none whitespace-pre-wrap leading-relaxed transition-[height] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
             />
             <div className="flex items-center justify-end gap-1.5">
               <button
@@ -524,7 +533,7 @@ export function KiroUserMessage({
           </div>
         ) : (
           <>
-            <div className="bg-alabaster border border-line rounded-2xl rounded-br-md px-4 py-2.5 text-xs font-medium text-charcoal whitespace-pre-wrap leading-relaxed">
+            <div className="bg-alabaster border border-line rounded-2xl rounded-br-md px-4 py-2.5 text-xs font-medium text-charcoal whitespace-pre-wrap leading-relaxed ux-fade">
               {content}
             </div>
             <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">

@@ -11,6 +11,7 @@ import { format } from "date-fns";
 
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -408,7 +409,8 @@ export function AddAssignmentModal() {
                     aria-label="设置截止时间"
                   />
                 </div>
-                {ddlEnabled ? (
+                <DisclosureRegion open={ddlEnabled}>
+                  {ddlEnabled ? (
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <Input
@@ -440,8 +442,10 @@ export function AddAssignmentModal() {
                       />
                     </div>
                   </>
-                ) : (
-                  <p className="text-[11px] text-sandrift">未设置截止日期，任务仍可正常创建与安排。</p>
+                  ) : null}
+                </DisclosureRegion>
+                {!ddlEnabled && (
+                  <p className="text-[11px] text-sandrift ux-fade">未设置截止日期，任务仍可正常创建与安排。</p>
                 )}
               </div>
 
@@ -479,7 +483,7 @@ export function AddAssignmentModal() {
 
                 <div className="space-y-1.5">
                   {subtasks.map((st, idx) => (
-                    <div key={st.id || idx} className="flex items-center gap-2">
+                    <div key={st.id || idx} className="flex items-center gap-2 animate-enter">
                       <Input
                         type="text"
                         placeholder={`子步骤 #${idx + 1}（如：收集案例数据）`}

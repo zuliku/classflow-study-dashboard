@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { useDesktopSessionPreviewStore } from "@/store/useDesktopSessionPreviewStore";
@@ -23,6 +23,11 @@ export function KiroComputerSessionPreview({ sessionId }: { sessionId: string })
   const [open, setOpen] = useState(false);
 
   const matching = preview && preview.sessionId === sessionId ? preview : null;
+  const [imgReady, setImgReady] = useState(false);
+  // 新截图到达回到骨架态（解码完成前定高占位，布局不跳）
+  useEffect(() => {
+    setImgReady(false);
+  }, [matching?.dataUrl]);
   // §30：没有 evidence 就不显示「查看画面」——绝不为了预览主动 observe
   if (!matching) return null;
 
@@ -54,13 +59,21 @@ export function KiroComputerSessionPreview({ sessionId }: { sessionId: string })
           <p className="text-[10px] text-sandrift truncate">
             {matching.windowTitle ? `${matching.appName} · ${matching.windowTitle}` : matching.appName}
           </p>
-          {/* 只读：不可 focus / 不可交互（Interactive Computer Canvas 属于后续阶段） */}
-          <img
-            src={matching.dataUrl}
-            alt="Kiro 最近一次桌面观察"
-            draggable={false}
-            className="block max-w-full max-h-[240px] object-contain rounded-lg pointer-events-none select-none"
-          />
+          {/* 只读：不可 focus / 不可交互（Interactive Computer Canvas 属于后续阶段）；
+              解码前 skeleton 定高占位（图片尺寸未知，加载完成前后不跳变） */}
+          <div className="min-h-[120px]">
+            {!imgReady && (
+              <div aria-hidden="true" className="ux-skeleton h-[120px] rounded-lg bg-alabaster/60" />
+            )}
+            <img
+              key={matching.dataUrl}
+              src={matching.dataUrl}
+              alt="Kiro 最近一次桌面观察"
+              draggable={false}
+              onLoad={() => setImgReady(true)}
+              className="block max-w-full max-h-[240px] object-contain rounded-lg pointer-events-none select-none"
+            />
+          </div>
           <p className="text-[10px] text-sandrift">最近一次查看</p>
         </div>
       </DisclosureRegion>

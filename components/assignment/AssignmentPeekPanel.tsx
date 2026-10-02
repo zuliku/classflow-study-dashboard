@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { X, BookOpen, CheckCircle2, Clock, Flag, ListChecks, CalendarClock, Tags } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { usePresence } from "@/lib/usePresence";
@@ -30,12 +30,16 @@ export function AssignmentPeekPanel() {
     semester,
     currentSemesterWeek,
   } = useAppStore();
-  const assignment = assignments.find((a) => a.id === assignmentPeekId) ?? null;
+  const liveAssignment = assignments.find((a) => a.id === assignmentPeekId) ?? null;
 
   // Motion Contract（BUG-072 修正）：入场 --motion-panel(230)；退场对齐 Drawer 家族
   // exit-panel(160) —— presence 窗口与 CSS 退出过渡同源，不再借用入场档当卸载窗口。
-  const { mounted, visible } = usePresence(!!assignment, MOTION_EXIT_MS.panel);
-  const peekOpen = !!assignment;
+  const { mounted, visible } = usePresence(!!liveAssignment, MOTION_EXIT_MS.panel);
+  const peekOpen = !!liveAssignment;
+  // 退出窗口播 stale 快照：assignment 置空瞬间直接 return 会截断退出动画（此前硬卸）
+  const lastAssignmentRef = useRef<typeof liveAssignment>(null);
+  if (liveAssignment) lastAssignmentRef.current = liveAssignment;
+  const renderedAssignment = liveAssignment ?? lastAssignmentRef.current;
 
   // S2-3：页脚承诺「Esc 关闭」自持 —— 焦点在面板内时 Table 列表处理器够不到；
   // 有 Overlay 在栈上时让栈 own Esc（OverlayLayer topmost 处理，不抢 Dialog/Drawer）。
@@ -50,8 +54,9 @@ export function AssignmentPeekPanel() {
     return () => window.removeEventListener("keydown", onKey);
   }, [peekOpen, setAssignmentPeekId]);
 
-  if (!mounted || !assignment) return null;
+  if (!mounted || !renderedAssignment) return null;
 
+  const assignment = renderedAssignment;
   const course = courses.find((c) => c.id === assignment.courseId);
   const priorityMeta = getPriorityMeta(assignment.priority);
   const completedSubtasks = assignment.subtasks?.filter((st) => st.completed).length ?? 0;

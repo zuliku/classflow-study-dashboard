@@ -33,7 +33,7 @@ export function FocusRhythmCard({ rhythm }: { rhythm: FocusRhythm }) {
               <span className="w-8 text-[11px] font-semibold text-charcoal">{b.bucket}</span>
               <div className="flex-1 h-1.5 rounded-full bg-alabaster overflow-hidden">
                 <div
-                  className={cn("h-full rounded-full", active ? "bg-success/70" : "bg-[#CDB9AB]")}
+                  className={cn("h-full rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-standard)]", active ? "bg-success/70" : "bg-[#CDB9AB]")}
                   style={{ width: `${Math.max((b.minutes / maxMinutes) * 100, 2)}%` }}
                 />
               </div>

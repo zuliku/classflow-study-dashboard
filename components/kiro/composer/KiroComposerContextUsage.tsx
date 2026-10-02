@@ -2,6 +2,7 @@
 
 import React from "react";
 import { PopoverPanel } from "@/components/ui/Popover";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import {
   ContextUsageSnapshot,
   buildContextUsageCompactView,
@@ -100,6 +101,7 @@ export function KiroComposerContextUsage({
               strokeLinecap="round"
               strokeDasharray={`${(RING_CIRCUMFERENCE * ratio).toFixed(2)} ${RING_CIRCUMFERENCE.toFixed(2)}`}
               transform="rotate(-90 12 12)"
+              className="transition-[stroke-dasharray] duration-[var(--motion-data)] ease-[var(--ease-standard)]"
             />
           )}
         </svg>
@@ -140,12 +142,14 @@ export function KiroComposerContextUsage({
             ) : (
               <>
                 <p className="text-xs font-bold text-charcoal">{view.title}</p>
-                <p className="text-[11px] font-semibold text-charcoal">{view.percentLine}</p>
-                <p className="text-[11px] text-sandrift">{view.tokensLine}</p>
-                {view.compactedLine && (
-                  <p className="text-[11px] text-warning">{view.compactedLine}</p>
-                )}
-                {view.overflowLine && <p className="text-[11px] text-danger">{view.overflowLine}</p>}
+                <p className="text-[11px] font-semibold text-charcoal tabular-nums">{view.percentLine}</p>
+                <p className="text-[11px] text-sandrift tabular-nums">{view.tokensLine}</p>
+                <DisclosureRegion open={!!view.compactedLine || !!view.overflowLine}>
+                  {view.compactedLine && (
+                    <p className="text-[11px] text-warning">{view.compactedLine}</p>
+                  )}
+                  {view.overflowLine && <p className="text-[11px] text-danger">{view.overflowLine}</p>}
+                </DisclosureRegion>
               </>
             )}
           </div>

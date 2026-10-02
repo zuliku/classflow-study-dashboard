@@ -211,7 +211,10 @@ export function TimelineKeyLane({
   );
 }
 
-/** Hover Bridge 通用逻辑：mouseleave 延迟 100ms 关闭；popover mouseenter 取消 */
+/** Hover Bridge 宽限（非 motion 时长：给指针从锚点滑到浮层留时间，与 TimelineWorkspace 同值） */
+const HOVER_BRIDGE_GRACE_MS = 100;
+
+/** Hover Bridge 通用逻辑：mouseleave 延迟关闭；popover mouseenter 取消 */
 function useHoverBridge(): {
   open: boolean;
   setOpen: (v: boolean) => void;
@@ -228,7 +231,7 @@ function useHoverBridge(): {
   };
   const anchorLeave = () => {
     cancelClose();
-    timerRef.current = window.setTimeout(() => setOpen(false), 100);
+    timerRef.current = window.setTimeout(() => setOpen(false), HOVER_BRIDGE_GRACE_MS);
   };
   useEffect(
     () => () => {

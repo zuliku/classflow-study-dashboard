@@ -112,6 +112,8 @@ export function KiroMermaid({ code }: { code: string }) {
         </div>
       </div>
       <div className="p-3 bg-white overflow-x-auto max-h-[520px]">
+        {/* 三态同槽位 keyed 淡入（高度未知无法占位，淡入覆盖骨架→图/错的硬切） */}
+        <div key={error ? "error" : svg ? "svg" : "loading"} className="ux-fade">
         {error ? (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-danger-bg border border-danger-border text-[12px] text-danger">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -129,6 +131,7 @@ export function KiroMermaid({ code }: { code: string }) {
             <div className="h-32 rounded bg-alabaster/50" />
           </div>
         )}
+        </div>
         {error && (
           <pre className="mt-3 p-3 rounded-lg bg-alabaster border border-line overflow-x-auto font-mono text-[0.84em] leading-[1.65] text-charcoal whitespace-pre">
             <code>{code}</code>

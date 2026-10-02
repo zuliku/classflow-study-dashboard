@@ -516,7 +516,9 @@ button:disabled {
   }
 
   /* Motion V3 P1 Choreography：首屏 staged fade（s0/s1/s2/s3 复用 stagger tokens）。
-     用法：hero 首卡 s0、次卡 s1、第二屏 s1/s2；一次性 animation，both fill。
+     用法：hero 首卡 s0、次卡 s1、第二屏 s1/s2；s3 为容器档预留（当前仅 MotionGallery dev 演示调用，
+     生产暂无调用方——保留 token 完整性，勿删，契约测试 pin 住存在性）。
+     一次性 animation，both fill。
      reduced-motion 下由下方全局守卫降为静态（animation-duration 0.01ms）。 */
   .ux-staged-s0 {
     animation: ux-staged-in var(--motion-base) var(--ease-standard) both;

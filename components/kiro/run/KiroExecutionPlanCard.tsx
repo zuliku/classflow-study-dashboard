@@ -45,20 +45,20 @@ export function KiroExecutionPlanCard({
         执行计划：{plan.title}
         <span className={`text-[10px] font-bold ${status.className}`}>{status.label}</span>
         {(plan.status === "approved" || plan.status === "deviated") && (
-          <span className="text-[10px] text-sandrift">
+          <span className="text-[10px] text-sandrift tabular-nums">
             {doneCount}/{plan.steps.length}
           </span>
         )}
       </p>
       {plan.goal && <p className="text-[11px] text-satin-grey">{plan.goal}</p>}
       {plan.status === "deviated" && (
-        <p className="text-[11px] font-semibold text-warning flex items-center gap-1.5">
+        <p className="text-[11px] font-semibold text-warning flex items-center gap-1.5 animate-enter">
           <AlertTriangle className="w-3 h-3" aria-hidden="true" />
           有 {plan.deviationCount} 次超计划操作经你放行，其余步骤仍按计划约束
         </p>
       )}
       {plan.status === "completed" && (
-        <p className="text-[11px] font-semibold text-success flex items-center gap-1.5">
+        <p className="text-[11px] font-semibold text-success flex items-center gap-1.5 animate-enter">
           <CheckCheck className="w-3 h-3" aria-hidden="true" />
           计划步骤全部完成
         </p>
@@ -71,7 +71,7 @@ export function KiroExecutionPlanCard({
             ) : (
               <Circle className="w-3 h-3 mt-0.5 text-sandrift shrink-0" aria-hidden="true" />
             )}
-            <span className={s.done ? "text-sandrift line-through" : "text-charcoal"}>
+            <span className={`${s.done ? "text-sandrift line-through" : "text-charcoal"} transition-colors`}>
               {i + 1}. {s.title}
               {stepScopeText(s) && <span className="text-sandrift">（{stepScopeText(s)}）</span>}
             </span>

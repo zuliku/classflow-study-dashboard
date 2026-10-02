@@ -69,7 +69,7 @@ export function CourseTaskSection({
         <button
           type="button"
           onClick={onAddTask}
-          className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal"
+          className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal ux-fade"
         >
           <span>暂无相关任务</span>
           <span className="flex items-center gap-1 font-bold">

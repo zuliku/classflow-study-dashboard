@@ -312,6 +312,49 @@ describe("硬切深筛源码契约", () => {
     expect(suggestions).toContain("shownKind");
   });
 
+  it("深度 Batch6：退出保留 stale 快照（数据先清空、UI 后卸载不崩）", () => {
+    const peek = read("components/assignment/AssignmentPeekPanel.tsx");
+    expect(peek).toContain("renderedAssignment");
+    const coverage = read("components/analytics/AnalyticsCoverageNotice.tsx");
+    expect(coverage).toContain("shownSummary");
+    const grid = read("components/dashboard/TimetableGrid.tsx");
+    expect(grid).toContain("shownFirstConflict");
+  });
+
+  it("深度 Batch7：表单/抽屉/弹窗行级进退", () => {
+    const detail = read("components/assignment/detail/AssignmentDetailExecution.tsx");
+    expect(detail).toContain("DisclosureRegion");
+    const schedule = read("components/course/detail/CourseScheduleSection.tsx");
+    expect(schedule).toContain("DisclosureRegion open={isCustom}");
+    const addModal = read("components/modals/AddAssignmentModal.tsx");
+    expect(addModal).toContain("DisclosureRegion open={ddlEnabled}");
+    const menu = read("components/assignment/AssignmentContextMenu.tsx");
+    expect(menu).toContain("if (!mounted) return null");
+    const floating = read("components/timeline/FloatingTimelineDetail.tsx");
+    expect(floating).toContain("transition-[opacity,transform]");
+    const lane = read("components/timeline/TimelineKeyLane.tsx");
+    expect(lane).toContain("HOVER_BRIDGE_GRACE_MS");
+  });
+
+  it("深度 Batch8：渲染管线占位与 settle（流式/终端/预览/引用）", () => {
+    const tail = read("components/kiro/KiroStreamingTail.tsx");
+    expect(tail).toContain("firstMarkerLang");
+    const image = read("components/kiro/KiroMarkdown.tsx");
+    expect(image).toContain("setImgReady");
+    const terminal = read("components/kiro/computer/KiroTerminalBlock.tsx");
+    expect(terminal).toContain("TerminalElapsed");
+    expect(terminal).toContain("outputRef");
+    const preview = read("components/kiro/computer/session/KiroComputerSessionPreview.tsx");
+    expect(preview).toContain("ux-skeleton");
+    const mermaid = read("components/kiro/KiroMermaid.tsx");
+    expect(mermaid).toContain('key={error ? "error"');
+    const conversation = read("components/kiro/KiroConversation.tsx");
+    expect(conversation).toContain("SCROLL_STICK_DISTANCE_PX");
+    expect(conversation).toContain("DisclosureRegion");
+    const streaming = read("components/kiro/KiroStreamingMarkdown.tsx");
+    expect(streaming).toContain("ux-fade");
+  });
+
   it("Composer/Context chip：leaving 态 + 横向 collapse（非直接卸载）", () => {
     const composer = read("components/kiro/KiroComposer.tsx");
     expect(composer).toContain("leavingAttachmentIds");

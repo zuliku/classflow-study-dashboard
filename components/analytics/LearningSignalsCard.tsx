@@ -38,7 +38,7 @@ export function LearningSignalsCard({
     // V3.1：紧凑 Level 3 contextual state；等高配对下内容垂直/水平居中（不制造空洞感）
     return (
       <div
-        className="w-full min-w-0 bg-alabaster/50 border border-line rounded-2xl px-3.5 py-4 h-full flex flex-col items-center justify-center text-center"
+        className="w-full min-w-0 bg-alabaster/50 border border-line rounded-2xl px-3.5 py-4 h-full flex flex-col items-center justify-center text-center ux-fade"
         data-testid="learning-signals-card"
       >
         <h3 className="text-[11px] font-bold text-charcoal">值得注意</h3>
@@ -48,7 +48,7 @@ export function LearningSignalsCard({
   }
   return (
     <div
-      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 flex flex-col"
+      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 flex flex-col ux-fade"
       data-testid="learning-signals-card"
     >
       <h3 className="text-sm font-bold text-charcoal">值得注意</h3>

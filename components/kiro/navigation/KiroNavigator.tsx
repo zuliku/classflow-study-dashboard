@@ -148,7 +148,10 @@ export function KiroNavigator() {
     (opts?: { focusSearch?: boolean }) => {
       setExpanded(true);
       if (opts?.focusSearch) {
-        setTimeout(() => searchRef.current?.focus(), 50);
+        // 展开过渡中聚焦搜索框：等一帧挂载而非固定时长（reduced-motion 下零等待）
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => searchRef.current?.focus());
+        });
       }
     },
     []

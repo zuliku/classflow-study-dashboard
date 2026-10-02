@@ -2,8 +2,14 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { usePresence } from "@/lib/usePresence";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useInertOnHidden } from "@/lib/useInertOnHidden";
+
+/** 滚动跟随/按钮阈值（px）：贴底判定 / 浮钮出现 / 直接赋值的最小有效距离 */
+const SCROLL_STICK_DISTANCE_PX = 80;
+const SCROLL_BUTTON_DISTANCE_PX = 160;
+const SCROLL_WRITE_TOLERANCE_PX = 2;
 import { KiroMessage, KiroUserMessage } from "@/components/kiro/KiroMessage";
 import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
 import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
@@ -147,8 +153,8 @@ export function KiroConversation({
     const el = scrollRef.current;
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stickToBottomRef.current = distance < 80;
-    const shouldShow = distance > 160;
+    stickToBottomRef.current = distance < SCROLL_STICK_DISTANCE_PX;
+    const shouldShow = distance > SCROLL_BUTTON_DISTANCE_PX;
     setShowScrollBtn((prev) => (prev === shouldShow ? prev : shouldShow));
   }, []);
 
@@ -158,7 +164,7 @@ export function KiroConversation({
 
   // 单一 rAF scheduler（Task 5）：高度变化只在同一帧合并一次 reconcile；
   // sticky 跟随使用直接 scrollTop 赋值（不做 smooth，避免抖动 / scroll queue）；
-  // 只有确实存在距离差（>2px tolerance）时才赋值，避免无意义重复写 scrollTop
+  // 只有确实存在距离差（tolerance 外）时才赋值，避免无意义重复写 scrollTop
   const rafRef = useRef<number | null>(null);
   const scheduleHeightReconcile = React.useCallback(() => {
     if (rafRef.current !== null) return;
@@ -169,7 +175,7 @@ export function KiroConversation({
       if (!el) return;
       if (stickToBottomRef.current) {
         const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-        if (distance > 2) {
+        if (distance > SCROLL_WRITE_TOLERANCE_PX) {
           bumpStreamPerf("scrollTopWrites");
           el.scrollTop = el.scrollHeight;
         }
@@ -540,19 +546,28 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
           </div>
         )}
         {/* Study Plan Proposal Card（真实 ToolResult 事实 UI；仅 live 轮次，历史恢复不渲染） */}
-        {view.proposals && view.proposals.length > 0 && !view.streaming && (
-          <StudyPlanProposalCard proposals={view.proposals} />
-        )}
+        <DisclosureRegion open={!!view.proposals && view.proposals.length > 0 && !view.streaming}>
+          {view.proposals && view.proposals.length > 0 && !view.streaming ? (
+            <StudyPlanProposalCard proposals={view.proposals} />
+          ) : null}
+        </DisclosureRegion>
         {/* Study Rebalance Proposal Card（Part 5；真实 ToolResult 事实 UI；仅 live 轮次） */}
-        {view.rebalanceProposals && view.rebalanceProposals.length > 0 && !view.streaming && (
-          <StudyRebalanceProposalCard proposals={view.rebalanceProposals} />
-        )}
+        <DisclosureRegion open={!!view.rebalanceProposals && view.rebalanceProposals.length > 0 && !view.streaming}>
+          {view.rebalanceProposals && view.rebalanceProposals.length > 0 && !view.streaming ? (
+            <StudyRebalanceProposalCard proposals={view.rebalanceProposals} />
+          ) : null}
+        </DisclosureRegion>
         {/* Task Breakdown Proposal Card（真实 ToolResult 事实 UI；仅 live 轮次） */}
-        {view.breakdowns && view.breakdowns.length > 0 && !view.streaming && (
-          <TaskBreakdownProposalCard proposals={view.breakdowns} />
-        )}
+        <DisclosureRegion open={!!view.breakdowns && view.breakdowns.length > 0 && !view.streaming}>
+          {view.breakdowns && view.breakdowns.length > 0 && !view.streaming ? (
+            <TaskBreakdownProposalCard proposals={view.breakdowns} />
+          ) : null}
+        </DisclosureRegion>
         {/* Visual Action Intake Proposal Card（真实 ToolResult 事实 UI；仅 live Proposal） */}
-        {view.visualActionProposals && view.visualActionProposals.length > 0 && !view.streaming && (
+        <DisclosureRegion
+          open={!!view.visualActionProposals && view.visualActionProposals.length > 0 && !view.streaming}
+        >
+          {view.visualActionProposals && view.visualActionProposals.length > 0 && !view.streaming ? (
           <div className="space-y-2.5 pt-1">
             {view.visualActionProposals.map((p) => (
               // V1.5：Conversation 层解析 live 来源（sourceAttachmentIds → runtime File lookup；
@@ -564,18 +579,23 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
               />
             ))}
           </div>
-        )}
+          ) : null}
+        </DisclosureRegion>
         {/* Visual Timetable Import Proposal Card（课表初始化导入；独立于 Visual Action Intake） */}
-        {view.timetableImportProposals && view.timetableImportProposals.length > 0 && !view.streaming && (
-          <div className="space-y-2.5 pt-1">
-            {view.timetableImportProposals.map((p) => (
-              <TimetableImportProposalCard key={p.id} proposal={p} />
-            ))}
-          </div>
-        )}
+        <DisclosureRegion
+          open={!!view.timetableImportProposals && view.timetableImportProposals.length > 0 && !view.streaming}
+        >
+          {view.timetableImportProposals && view.timetableImportProposals.length > 0 && !view.streaming ? (
+            <div className="space-y-2.5 pt-1">
+              {view.timetableImportProposals.map((p) => (
+                <TimetableImportProposalCard key={p.id} proposal={p} />
+              ))}
+            </div>
+          ) : null}
+        </DisclosureRegion>
         {/* Visual Intake V1.3：历史只读 Proposal 快照（display-only；绝不交叉到 live Card） */}
         {view.historyVisualActionProposals && view.historyVisualActionProposals.length > 0 && (
-          <div className="space-y-2.5 pt-1">
+          <div className="space-y-2.5 pt-1 ux-fade">
             {view.historyVisualActionProposals.map((p) => (
               <VisualActionProposalHistoryCard key={p.id} proposal={p} />
             ))}

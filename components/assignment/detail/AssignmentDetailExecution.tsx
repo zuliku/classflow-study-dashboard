@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { cn } from "@/lib/utils";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { formatFocusDurationMs } from "@/lib/focus/focusView";
@@ -14,6 +15,23 @@ import {
 
 /** 子任务默认直接展示上限；超出部分折叠 */
 const SUBTASKS_INLINE_LIMIT = 4;
+
+function SubtaskRow({
+  st,
+  onToggle,
+}: {
+  st: { id: string; title: string; completed: boolean };
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-alabaster/70">
+      <Checkbox checked={st.completed} onChange={() => onToggle(st.id)} />
+      <span className={cn("flex-1 text-charcoal", st.completed ? "text-sandrift line-through" : "font-medium")}>
+        {st.title}
+      </span>
+    </label>
+  );
+}
 
 /**
  * 专注行的实时剩余时钟（仅本小子树每秒 tick，不波及 Execution 其余行）。
@@ -66,7 +84,6 @@ export function AssignmentDetailExecution({
 }) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false);
   const completedSubtasks = subtasks.filter((s) => s.completed).length;
-  const visibleSubtasks = subtasksExpanded ? subtasks : subtasks.slice(0, SUBTASKS_INLINE_LIMIT);
 
   return (
     <section className="space-y-2.5">
@@ -157,25 +174,19 @@ export function AssignmentDetailExecution({
             </span>
           </p>
           <div className="space-y-0.5">
-            {visibleSubtasks.map((st) => (
-              <label
-                key={st.id}
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-alabaster/70"
-              >
-                <Checkbox
-                  checked={st.completed}
-                  onChange={() => onToggleSubtask(st.id)}
-                />
-                <span
-                  className={cn(
-                    "flex-1 text-charcoal",
-                    st.completed ? "text-sandrift line-through" : "font-medium"
-                  )}
-                >
-                  {st.title}
-                </span>
-              </label>
+            {subtasks.slice(0, SUBTASKS_INLINE_LIMIT).map((st) => (
+              <SubtaskRow key={st.id} st={st} onToggle={onToggleSubtask} />
             ))}
+            {/* 超出 4 项的部分折叠展开（直接增删 DOM 高度跳变） */}
+            {subtasks.length > SUBTASKS_INLINE_LIMIT && (
+              <DisclosureRegion open={subtasksExpanded}>
+                <div className="space-y-0.5">
+                  {subtasks.slice(SUBTASKS_INLINE_LIMIT).map((st) => (
+                    <SubtaskRow key={st.id} st={st} onToggle={onToggleSubtask} />
+                  ))}
+                </div>
+              </DisclosureRegion>
+            )}
           </div>
           {subtasks.length > SUBTASKS_INLINE_LIMIT && (
             <button

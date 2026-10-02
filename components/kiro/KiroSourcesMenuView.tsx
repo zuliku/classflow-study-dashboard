@@ -36,7 +36,7 @@ export function KiroSourcesMenuView({
         {sources.map((source) => {
           const url = isSafeWebUrl(source.url) ? source.url : null;
           return (
-            <li key={source.sourceId} className="flex items-center gap-2 px-2.5 py-2 min-w-0">
+            <li key={source.sourceId} className="flex items-center gap-2 px-2.5 py-2 min-w-0 animate-enter">
               <Globe2 className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
               <div className="flex flex-col min-w-0 flex-1">
                 <span className="text-[11px] font-semibold text-charcoal truncate" title={source.name}>

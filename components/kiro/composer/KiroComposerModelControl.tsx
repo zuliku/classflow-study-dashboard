@@ -3,6 +3,7 @@
 import React from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { PopoverPanel } from "@/components/ui/Popover";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { ProviderLogo } from "@/components/kiro/ProviderLogo";
 import { AIModelVendor } from "@/lib/ai/providers/types";
 import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
@@ -107,9 +108,11 @@ export function KiroComposerModelControl({
           onPointerUp={(e) => e.stopPropagation()}
         >
           <p className="px-3 pt-1 pb-1 text-[10px] font-bold text-sandrift">模型</p>
-          {modelUnavailable && (
-            <p className="px-3 py-2 text-[11px] font-semibold text-danger">当前模型已不可用，请重新选择。</p>
-          )}
+          <DisclosureRegion open={modelUnavailable === true}>
+            {modelUnavailable ? (
+              <p className="px-3 py-2 text-[11px] font-semibold text-danger">当前模型已不可用，请重新选择。</p>
+            ) : null}
+          </DisclosureRegion>
           {modelOptions.length === 0 ? (
             <button
               type="button"
@@ -133,7 +136,7 @@ export function KiroComposerModelControl({
                   setOpen(false);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-xs font-semibold transition-colors",
+                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-xs font-semibold transition-colors animate-enter",
                   m.value === selectedModelId ? "text-charcoal bg-pastel-mint" : "text-satin-grey hover:bg-alabaster"
                 )}
               >

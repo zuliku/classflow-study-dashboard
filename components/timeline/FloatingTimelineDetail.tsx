@@ -176,9 +176,10 @@ export function FloatingTimelineDetail({
       onMouseLeave={onMouseLeave}
       className={cn(
         "fixed z-[70] bg-surface border border-line-strong rounded-[13px] shadow-card",
-        // enter = --motion-fast / exit = --motion-exit-fast（与 presence unmount 同源对应）
-        "transition-opacity ease-[var(--ease-standard)]",
-        visible ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]" : "opacity-0 translate-y-1 pointer-events-none !duration-[var(--motion-exit-fast)]"
+        // enter = --motion-fast / exit = --motion-exit-fast（与 presence unmount 同源对应）；
+        // 位移必须进过渡（否则只有透明度渐变、位移瞬跳，视觉断裂）
+        "transition-[opacity,transform] ease-[var(--ease-standard)]",
+        visible ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]" : "opacity-0 translate-y-1 pointer-events-none !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
       )}
       style={{
         left: pos?.x ?? -9999,

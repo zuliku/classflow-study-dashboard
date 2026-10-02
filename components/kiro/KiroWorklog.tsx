@@ -63,7 +63,7 @@ const KiroToolRow = React.memo(function KiroToolRow({ block }: { block: ToolBloc
   const rowClass = cn(TOOL_ROW_BODY, rowClasses(block));
 
   return (
-    <div data-testid="kiro-tool-row">
+    <div data-testid="kiro-tool-row" className="animate-enter">
       {expandable ? (
         <button
           type="button"
@@ -185,7 +185,7 @@ export const KiroWorklogTimeline = React.memo(function KiroWorklogTimeline({
           block.kind === "commentary" ? (
             <p
               key={block.id}
-              className="text-[11px] text-sandrift leading-relaxed whitespace-pre-wrap break-words"
+              className="text-[11px] text-sandrift leading-relaxed whitespace-pre-wrap break-words animate-enter"
             >
               {block.text}
             </p>
@@ -201,7 +201,7 @@ export const KiroWorklogTimeline = React.memo(function KiroWorklogTimeline({
 
       {/* Final Answer 前的极弱分割线：无论折叠与否都保留（answering/done 才可能有 answer） */}
       {worklog.length > 0 && (phase === "answering" || phase === "done") && (
-        <div className="border-t border-line-soft my-1.5" aria-hidden="true" />
+        <div className="border-t border-line-soft my-1.5 ux-fade" aria-hidden="true" />
       )}
     </div>
   );

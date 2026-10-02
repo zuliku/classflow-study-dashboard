@@ -41,16 +41,18 @@ function WeeksSelect({ value, onChange }: { value: string; onChange: (weeks: str
         ]}
         triggerClassName="bg-[#F7F5F5] text-[11px]"
       />
-      {isCustom && (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="如 1-8周 / 单周 / 5-5周"
-          aria-label="自定义周次"
-          className="w-full rounded-lg border border-line-strong bg-[#F7F5F5] p-1.5 text-[11px] focus:outline-none"
-        />
-      )}
+      <DisclosureRegion open={isCustom}>
+        {isCustom ? (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="如 1-8周 / 单周 / 5-5周"
+            aria-label="自定义周次"
+            className="w-full rounded-lg border border-line-strong bg-[#F7F5F5] p-1.5 text-[11px] focus:outline-none"
+          />
+        ) : null}
+      </DisclosureRegion>
     </div>
   );
 }
@@ -283,7 +285,7 @@ export function CourseScheduleSection({
         <button
           type="button"
           onClick={openAddForm}
-          className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal"
+          className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal ux-fade"
         >
           <span>暂无排课</span>
           <span className="flex items-center gap-1 font-bold">
@@ -295,12 +297,13 @@ export function CourseScheduleSection({
         <div className="divide-y divide-line-soft">
           {schedules.map((sched) => {
             if (editingSlotId === sched.id) {
+              // 编辑表单 50px→300px：包折叠后展开（行本身即时替换，表单高度动画覆盖主要跳变）
               return (
-                <div
-                  key={sched.id}
-                  data-testid="schedule-edit-form"
-                  className="space-y-2.5 rounded-xl border border-[#CDB9AB] bg-[#F7F5F5] px-3 py-3"
-                >
+                <DisclosureRegion key={sched.id} open>
+                  <div
+                    data-testid="schedule-edit-form"
+                    className="space-y-2.5 rounded-xl border border-[#CDB9AB] bg-[#F7F5F5] px-3 py-3"
+                  >
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-sandrift">编辑时段</span>
                     <IconButton
@@ -376,7 +379,8 @@ export function CourseScheduleSection({
                       保存时段
                     </Button>
                   </div>
-                </div>
+                  </div>
+                </DisclosureRegion>
               );
             }
 

@@ -262,10 +262,14 @@ export function AssignmentContextMenu({
     </>
   );
 
+  // 关闭后延迟卸载（此前常驻 body 的隐形节点可被 Tab 到达）；退出窗口内 inert
+  if (!mounted) return null;
+
   return createPortal(
     <div
       ref={menuRef}
       data-testid="assignment-context-menu"
+      {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
         "fixed z-50 w-52 bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 text-xs ux-inline overflow-x-clip",
         // BUG-073：open 驱动进出场（fast 档上浮），退场期间冻结最后定位
