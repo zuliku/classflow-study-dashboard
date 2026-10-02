@@ -94,6 +94,9 @@ export function OverlayLayer({
         !open && "pointer-events-none",
         className
       )}
+      // 退出过渡期（mounted 但 open=false）立即 inert：焦点已在 open=false 时还给触发元素，
+      // 面板残留 150/160ms 内 Tab 不得再落入正在淡出的面板（此前仅 pointer-events-none，只能防指针）。
+      {...(!open ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       style={{
         zIndex: stackZ,
         // BUG-070：背板淡出必须与 presence 卸载窗口同长 —— 共享类是 base(180ms)，

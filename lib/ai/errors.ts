@@ -45,6 +45,8 @@ function statusToCode(status: number): AIErrorCode {
   if (status === 404) return "MODEL_NOT_FOUND";
   if (status === 429) return "RATE_LIMITED";
   if (status >= 500) return "PROVIDER_UNAVAILABLE";
+  // 413：请求体超限（视觉附件 base64 wire 膨胀最常见）→ 按超预算指引（压缩/新建对话）
+  if (status === 413) return "CONTEXT_TOO_LARGE";
   // 400/415/422：Provider 拒绝请求（格式 / schema / 能力不兼容）——具体原因留在开发日志
   if (status === 400 || status === 415 || status === 422) return "INVALID_PROVIDER_REQUEST";
   return "UNKNOWN";
@@ -111,6 +113,10 @@ export function normalizeAIError(err: unknown): AIError {
       if (pc === "context_length_exceeded" || /context.*(too long|exceed|maximum|max_tokens|length)/.test(pc)) {
         return new AIError("CONTEXT_TOO_LARGE");
       }
+      // 请求体超限类 code（413 系文本形态各异，统一按超预算指引）
+      if (/payload.*too.?large/.test(pc) || /request.*too.?large/.test(pc) || pc === "too_many_tokens") {
+        return new AIError("CONTEXT_TOO_LARGE");
+      }
       if (pc.includes("invalid_api_key") || pc.includes("authentication")) return new AIError("INVALID_API_KEY");
       if (pc.includes("rate_limit")) return new AIError("RATE_LIMITED");
       if (pc.includes("model_not_found")) return new AIError("MODEL_NOT_FOUND");
@@ -151,6 +157,15 @@ export function normalizeAIError(err: unknown): AIError {
   if (
     (msg.includes("context") || msg.includes("prompt")) &&
     (msg.includes("too large") || msg.includes("exceeded") || msg.includes("maximum") || msg.includes("too long") || msg.includes("length"))
+  ) {
+    return new AIError("CONTEXT_TOO_LARGE");
+  }
+  // 请求体超限（视觉 base64 wire 膨胀 / token 超量）：无 context 前缀也按超预算指引
+  if (
+    msg.includes("payload too large") ||
+    msg.includes("request entity too large") ||
+    msg.includes("request too large") ||
+    msg.includes("too many tokens")
   ) {
     return new AIError("CONTEXT_TOO_LARGE");
   }

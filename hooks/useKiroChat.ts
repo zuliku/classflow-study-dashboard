@@ -3337,7 +3337,8 @@ export function useKiroChat({
                 }
               }
               if (renderedFigurePages === 0) {
-                pushToast({ message: "PDF 图表页渲染失败，本次仅按文字内容作答。", type: "error" });
+                // 降级提示非失败：本轮继续按文字作答，用 warning 而非 error（红色会误导为整轮失败）
+                pushToast({ message: "PDF 图表页未能渲染，本次仅按文字内容作答。", type: "warning" });
               }
             }
           }

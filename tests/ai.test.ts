@@ -449,6 +449,21 @@ describe("AI Error 归一化", () => {
     expect(normalizeAIError({ message: "fetch timed out" }).code).toBe("TIMEOUT");
   });
 
+  it("请求体超限（413 / payload / token 超量）→ CONTEXT_TOO_LARGE（压缩/新建对话指引）", () => {
+    expect(normalizeAIError({ statusCode: 413 }).code).toBe("CONTEXT_TOO_LARGE");
+    expect(normalizeAIError({ message: "Request Entity Too Large" }).code).toBe("CONTEXT_TOO_LARGE");
+    expect(normalizeAIError({ message: "payload too large, max 20mb" }).code).toBe("CONTEXT_TOO_LARGE");
+    expect(normalizeAIError({ message: "This model supports at most 128k tokens, too many tokens" }).code).toBe(
+      "CONTEXT_TOO_LARGE"
+    );
+    expect(
+      normalizeAIError({
+        statusCode: 400,
+        responseBody: JSON.stringify({ error: { code: "payload_too_large", message: "too big" } }),
+      }).code
+    ).toBe("CONTEXT_TOO_LARGE");
+  });
+
   it("服务端下发的 { code, message } JSON → 直接消费", () => {
     const err = normalizeAIError(new Error(JSON.stringify({ code: "RATE_LIMITED", message: "请求过于频繁" })));
     expect(err.code).toBe("RATE_LIMITED");
