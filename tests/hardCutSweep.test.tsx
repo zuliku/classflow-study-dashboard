@@ -355,6 +355,45 @@ describe("硬切深筛源码契约", () => {
     expect(streaming).toContain("ux-fade");
   });
 
+  it("深度 Batch9：退出期 inert 安全网（pointer-events 拦不住键盘）", () => {
+    const popover = read("components/ui/Popover.tsx");
+    expect(popover).toContain("useInertOnHidden");
+    const composer = read("components/kiro/KiroComposer.tsx");
+    expect(composer).toContain("slashInertRef");
+    expect(composer).toContain("mentionInertRef");
+    expect(composer).toContain("warningInertRef");
+    const table = read("components/dashboard/AssignmentTable.tsx");
+    expect(table).toContain("bulkBarInertRef");
+    expect(table).toContain("bulkDdlInertRef");
+    const viewport = read("components/reminders/ReminderViewport.tsx");
+    expect(viewport).toContain("cardInertRef");
+    const conversation = read("components/kiro/KiroConversation.tsx");
+    expect(conversation).toContain("scrollBtnInertRef");
+    const navigator = read("components/kiro/navigation/KiroNavigator.tsx");
+    expect(navigator).toContain("collapsedInertRef");
+  });
+
+  it("深度 Batch10：渲染管线占位（流式/终端/预览/引用/编辑）", () => {
+    const tail = read("components/kiro/KiroStreamingTail.tsx");
+    expect(tail).toContain("firstMarkerLang");
+    expect(tail).toContain("min-h-[3rem]");
+    const image = read("components/kiro/KiroMarkdown.tsx");
+    expect(image).toContain("setImgReady");
+    const terminal = read("components/kiro/computer/KiroTerminalBlock.tsx");
+    expect(terminal).toContain("TerminalElapsed");
+    expect(terminal).toContain("outputRef");
+    const preview = read("components/kiro/computer/session/KiroComputerSessionPreview.tsx");
+    expect(preview).toContain("min-h-[120px]");
+    const usage = read("components/kiro/composer/KiroComposerContextUsage.tsx");
+    expect(usage).toContain("transition-[stroke-dasharray]");
+    expect(usage).toContain("tabular-nums");
+    const mermaid = read("components/kiro/KiroMermaid.tsx");
+    expect(mermaid).toContain("MERMAID_RENDER_DEBOUNCE_MS");
+    const message = read("components/kiro/KiroMessage.tsx");
+    expect(message).toContain("liveTrayPresence.mounted");
+    expect(message).toContain('key="edit"');
+  });
+
   it("Composer/Context chip：leaving 态 + 横向 collapse（非直接卸载）", () => {
     const composer = read("components/kiro/KiroComposer.tsx");
     expect(composer).toContain("leavingAttachmentIds");

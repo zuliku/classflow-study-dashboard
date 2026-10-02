@@ -6,6 +6,8 @@ import { copyTextToClipboard } from "@/lib/ai/share";
 import { useToastStore } from "@/store/useToastStore";
 
 let mermaidInitialized = false;
+/** 流式渲染防抖（非 motion 时长：等代码稳定 350ms 再全量布局，token 间隔通常远小于此） */
+const MERMAID_RENDER_DEBOUNCE_MS = 350;
 async function getMermaid() {
   const m = await import("mermaid");
   const mm = (m as any).default ?? m;
@@ -54,23 +56,28 @@ export function KiroMermaid({ code }: { code: string }) {
       setError(null);
       return;
     }
-    getMermaid()
-      .then(async (mm) => {
-        try {
-          const { svg: rendered } = await mm.render(idRef.current + "-svg", trimmed);
-          if (!cancelled) {
-            setSvg(rendered);
-            setError(null);
+    // 流式防抖：代码高频变化时等稳定再全量渲染（mm.render 不可中途取消，
+    // 每 token 都渲会把废弃结果也算完，主线程持续过载；350ms 内新 token 到达即顺延）
+    const timer = window.setTimeout(() => {
+      getMermaid()
+        .then(async (mm) => {
+          try {
+            const { svg: rendered } = await mm.render(idRef.current + "-svg", trimmed);
+            if (!cancelled) {
+              setSvg(rendered);
+              setError(null);
+            }
+          } catch (e: any) {
+            if (!cancelled) setError(e?.message ?? "渲染失败");
           }
-        } catch (e: any) {
-          if (!cancelled) setError(e?.message ?? "渲染失败");
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(String(e));
-      });
+        })
+        .catch((e) => {
+          if (!cancelled) setError(String(e));
+        });
+    }, MERMAID_RENDER_DEBOUNCE_MS);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [code]);
 
