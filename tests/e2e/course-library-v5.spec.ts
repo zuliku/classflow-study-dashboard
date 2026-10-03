@@ -165,8 +165,8 @@ base("Copy：待处理 2（c1）/ 全部 3 项 / 课程资料 2 / submitted 不�
   // 空课程
   const c2 = page.getByTestId("course-library-card-c2");
   await expect(c2.getByText("待处理 0", { exact: true })).toBeVisible();
-  await expect(c2.getByText("暂无待处理任务", { exact: true })).toBeVisible();
-  await expect(c2.getByText("暂无课程资料", { exact: true })).toBeVisible();
+  await expect(c2.getByText("还没有任务，点击新建", { exact: true })).toBeVisible();
+  await expect(c2.getByText("还没有资料，点击上传", { exact: true })).toBeVisible();
 });
 
 base("长课程名：单行 truncate 不撑高 row；Footer 不存在", async ({ page }) => {
@@ -226,7 +226,7 @@ base("V5.1：completed-only 课程 → 待处理 0 + 全部 2 项 → Popover �
   const c5 = page.getByTestId("course-library-card-c5");
   await expect(c5).toBeVisible();
   await expect(c5.getByText("待处理 0", { exact: true })).toBeVisible();
-  await expect(c5.getByText("暂无待处理任务", { exact: true })).toBeVisible();
+  await expect(c5.getByText("还没有任务，点击新建", { exact: true })).toBeVisible();
   await expect(c5.getByText("全部 2 项", { exact: true })).toBeVisible();
 
   // 点击 → Popover 展示完整列表（两个 completed 任务可见）

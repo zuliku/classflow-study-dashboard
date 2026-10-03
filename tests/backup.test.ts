@@ -37,7 +37,7 @@ describe("validateBackup / parseBackupJSON", () => {
   it("拒绝缺少关键字段", () => {
     const r = validateBackup({ version: 1, exportedAt: "x", data: { courses: [], schedules: [] } });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain("assignments");
+    if (!r.ok) expect(r.error).toContain("作业");
   });
 
   it("拒绝非 JSON 文本", () => {

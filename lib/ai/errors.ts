@@ -31,13 +31,13 @@ export const AI_ERROR_MESSAGES: Record<AIErrorCode, string> = {
   MODEL_UNAVAILABLE: "当前模型已不可用，请重新选择。",
   UNSUPPORTED_TRANSPORT: "当前模型使用的接口暂未支持。",
   RATE_LIMITED: "请求过于频繁，请稍后再试。",
-  TIMEOUT: "请求超时，请重试。",
+  TIMEOUT: "刚才超时了，请再试一次；一直超时可以缩短问题或新建对话。",
   PROVIDER_UNAVAILABLE: "服务无法连接，请检查网络或稍后再试。",
   INVALID_PROVIDER_RESPONSE: "服务返回异常，请稍后再试。",
   INVALID_PROVIDER_REQUEST: "当前模型请求格式不兼容，请更换模型或稍后重试。",
   INVALID_CUSTOM_URL: "自定义服务地址无效。",
   CONTEXT_TOO_LARGE: "当前对话内容较长，Kiro 已尝试压缩上下文。可以新建对话后继续。",
-  UNKNOWN: "发生了未知错误，请重试。",
+  UNKNOWN: "没能完成这次回复，请再试一次；一直不行可以新建对话或检查 AI 设置。",
 };
 
 function statusToCode(status: number): AIErrorCode {

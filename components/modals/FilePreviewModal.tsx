@@ -185,7 +185,7 @@ export function FilePreviewModal() {
                   文件读取失败
                 </h4>
                 <p className="text-xs text-sandrift">
-                  找不到该文件，可能已被删除，请重新上传。
+                  文件找不到了，重新上传即可预览。
                 </p>
               </div>
             </div>
@@ -211,7 +211,7 @@ export function FilePreviewModal() {
                   {material.title}
                 </h4>
                 <p className="text-xs text-sandrift">
-                  该格式支持下载后阅读
+                  这种格式暂不支持预览，下载后查看。
                 </p>
               </div>
               {displayUrl ? (

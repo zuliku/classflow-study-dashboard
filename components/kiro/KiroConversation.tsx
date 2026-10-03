@@ -304,7 +304,7 @@ export function KiroConversation({
                 data-testid="kiro-error"
                 className="kiro-structure-settle rounded-2xl bg-danger-bg border border-danger-border p-3.5 space-y-2"
               >
-                <p className="text-xs font-bold text-danger">Kiro 暂时没有完成回复</p>
+                <p className="text-xs font-bold text-danger">这次没能生成回复</p>
                 <p className="text-[11px] text-satin-grey leading-relaxed">
                   {error.message || AI_ERROR_MESSAGES[error.code]}
                 </p>

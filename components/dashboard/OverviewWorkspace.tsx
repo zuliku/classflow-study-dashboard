@@ -59,7 +59,7 @@ export function OverviewWorkspace() {
           >
             <div>
               <h2 className="text-lg font-bold text-charcoal">欢迎使用 ClassFlow</h2>
-              <p className="text-xs text-sandrift mt-1">建立你的学习工作区</p>
+              <p className="text-xs text-sandrift mt-1">先搭好课表，任务和日程会自动归位</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2.5">
               <button
@@ -85,7 +85,7 @@ export function OverviewWorkspace() {
               </button>
             </div>
             <p className="text-[11px] text-sandrift">
-              也可以直接新建任务或浏览课表，随时可以从设置中调整
+              已有任务？直接新建任务也行
             </p>
           </div>
         </div>

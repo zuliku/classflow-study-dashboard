@@ -878,7 +878,7 @@ export function KiroComposer({
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 rows={1}
-                placeholder="Ask Kiro…"
+                placeholder="问问 Kiro，比如：今天先做什么…"
                 aria-label="Ask Kiro"
                 className={cn(
                   "relative w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",

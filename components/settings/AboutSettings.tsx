@@ -19,7 +19,7 @@ export function AboutSettings() {
               </span>
             </p>
             <p className="text-[11px] text-satin-grey mt-0.5">
-              课程、任务与学习日程的一体化学习工作台。
+              在一个地方看课表、管任务、排学习计划。
             </p>
           </div>
           <div className="pt-2 border-t border-line-soft space-y-1.5">

@@ -27,11 +27,11 @@ function isNonEmptyString(v: unknown): v is string {
 const BACKUP_VERSION = 1;
 
 const ARRAY_FIELDS: { key: keyof ClassFlowBackupData; label: string }[] = [
-  { key: "courses", label: "课程 (courses)" },
-  { key: "schedules", label: "排课 (schedules)" },
-  { key: "assignments", label: "作业 (assignments)" },
-  { key: "calendarMarks", label: "日历标记 (calendarMarks)" },
-  { key: "groupProjects", label: "小组项目 (groupProjects)" },
+  { key: "courses", label: "课程" },
+  { key: "schedules", label: "排课" },
+  { key: "assignments", label: "作业" },
+  { key: "calendarMarks", label: "日历标记" },
+  { key: "groupProjects", label: "小组项目" },
 ];
 
 /** Task 7G-A1：Reminder（旧备份可缺失 → 恢复 []）；非法条目在 restore 时经 normalizeReminder 丢弃 */
@@ -136,63 +136,63 @@ function validateGroupProjects(v: unknown): v is GroupProject[] {
  */
 export function validateBackup(raw: unknown): BackupValidationResult {
   if (!isPlainObject(raw)) {
-    return { ok: false, error: "备份文件内容不是有效的 JSON 对象" };
+    return { ok: false, error: "这个备份文件打不开了，请确认选的是 ClassFlow 导出的备份文件。" };
   }
 
   // 旧版扁平结构（无 version 字段）直接当作数据区
   const data: unknown = raw.version === undefined ? raw : raw.data;
   if (!isPlainObject(data)) {
-    return { ok: false, error: "备份文件缺少 data 数据区，无法恢复" };
+    return { ok: false, error: "这个备份文件打不开了，请确认选的是 ClassFlow 导出的备份文件。" };
   }
 
   if (raw.version !== undefined && raw.version !== BACKUP_VERSION) {
     return {
       ok: false,
-      error: `不支持的备份版本 (v${String(raw.version)})，请使用当前版本重新导出后导入`,
+      error: `备份版本太旧，打不开，请用当前版本重新导出后再导入`,
     };
   }
 
   for (const { key, label } of ARRAY_FIELDS) {
     if (!Array.isArray(data[key])) {
-      return { ok: false, error: `备份数据缺少 ${label}，无法恢复` };
+      return { ok: false, error: `这个备份里${label}缺失，恢复不了，请换用最新导出的备份文件。` };
     }
   }
 
   if (!validateSemester(data.semester)) {
-    return { ok: false, error: "备份数据中的学期信息 (semester) 不完整或格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里学期信息不完整，恢复不了，请换用最新导出的备份文件。" };
   }
   if (!validateUserProfile(data.userProfile)) {
-    return { ok: false, error: "备份数据中的用户资料 (userProfile) 不完整或格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里用户资料不完整，恢复不了，请换用最新导出的备份文件。" };
   }
   if (!validateCourses(data.courses)) {
-    return { ok: false, error: "课程数据 (courses) 格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里课程数据有问题，恢复不了，请换用最新导出的备份文件。" };
   }
   if (!validateSchedules(data.schedules)) {
-    return { ok: false, error: "排课数据 (schedules) 格式异常（星期应为 1-7），无法恢复" };
+    return { ok: false, error: "这个备份里排课数据有问题，恢复不了，请换用最新导出的备份文件。" };
   }
   if (!validateAssignments(data.assignments)) {
-    return { ok: false, error: "作业数据 (assignments) 格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里作业数据有问题，恢复不了，请换用最新导出的备份文件。" };
   }
   if (!validateCalendarMarks(data.calendarMarks)) {
-    return { ok: false, error: "日历标记数据 (calendarMarks) 格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里日历标记有问题，恢复不了，请换用最新导出的备份文件。" };
   }
   if (!validateGroupProjects(data.groupProjects)) {
-    return { ok: false, error: "小组项目数据 (groupProjects) 格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里小组项目有问题，恢复不了，请换用最新导出的备份文件。" };
   }
   // Timeline V1：学习计划可选（旧备份缺失合法；存在则必须合法）
   if (data.studyBlocks !== undefined && !validateStudyBlocks(data.studyBlocks)) {
-    return { ok: false, error: "学习计划数据 (studyBlocks) 格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里学习计划有问题，恢复不了，请换用最新导出的备份文件。" };
   }
   // Task 7G-A1：Reminder 可选（旧备份缺失合法 → 恢复 []；存在则必须合法）
   if (data.reminders !== undefined && !validateReminders(data.reminders)) {
-    return { ok: false, error: "提醒数据 (reminders) 格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里提醒数据有问题，恢复不了，请换用最新导出的备份文件。" };
   }
   // Task 7：Schedule Occurrence Override 可选（旧备份缺失合法 → 恢复 []；存在则必须合法）
   if (
     data.scheduleOccurrenceOverrides !== undefined &&
     !validateScheduleOccurrenceOverrides(data.scheduleOccurrenceOverrides)
   ) {
-    return { ok: false, error: "临时调整数据 (scheduleOccurrenceOverrides) 格式异常，无法恢复" };
+    return { ok: false, error: "这个备份里临时调整数据有问题，恢复不了，请换用最新导出的备份文件。" };
   }
 
   return {

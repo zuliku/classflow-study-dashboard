@@ -19,7 +19,7 @@ const HEALTH_COPY: Record<OutlookHealth, { label: string; cls: string }> = {
 };
 
 const PLAN_OUTLOOK_PROMPT =
-  "结合未来 7 天学习前瞻，帮我处理最需要安排的任务。缺少估时的任务先指出，不要自行假设耗时；需要排期时走学习计划 Proposal。";
+  "未来 7 天哪些任务最紧，帮我排一下。缺估时的任务先指出来，不要自己假设耗时。";
 
 const ESTIMATE_PROMPT = "帮我根据任务内容估算预计耗时，并先给出建议，不要直接修改。";
 

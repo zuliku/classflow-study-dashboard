@@ -85,6 +85,9 @@ export function ChannelSettings() {
 
   const isBusy = (id: string, action: string) => !!busyMap[`${id}:${action}`];
   const setBusy = (id: string, action: string, v: boolean) => setBusyMap((prev) => ({ ...prev, [`${id}:${action}`]: v }));
+  // toast 带对象名（“已连接”不知道连上了谁）：按 id 取展示名，找不到回落“该渠道”
+  const channelNameOf = (id: string) =>
+    channels.find((c) => c.config.id === id)?.config.displayName || "该渠道";
 
   // Latest-wins generation token：connect/disconnect/test 各自触发 refresh()，
   // 无守卫时慢的旧 list() 响应会覆盖新状态（卡片显示与真实连接态相反，直到下次刷新）
@@ -113,12 +116,12 @@ export function ChannelSettings() {
   const handleConnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
     setBusy(id, "connect", true);
-    try { await b.connect({ id }); await refresh(); pushToast({ message: "已连接", type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "连接失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "connect", false); }
+    try { await b.connect({ id }); await refresh(); pushToast({ message: `「${channelNameOf(id)}」已连接`, type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "连接失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "connect", false); }
   };
   const handleDisconnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
     setBusy(id, "disconnect", true);
-    try { await b.disconnect({ id }); await refresh(); pushToast({ message: "已断开", type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "断开失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "disconnect", false); }
+    try { await b.disconnect({ id }); await refresh(); pushToast({ message: `「${channelNameOf(id)}」已断开`, type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "断开失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "disconnect", false); }
   };
   const handleTest = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
@@ -148,7 +151,7 @@ export function ChannelSettings() {
       onConfirm: async () => {
         setBusy(id, "remove", true);
         const b = getChannelsBridge(); if (!b) { setBusy(id, "remove", false); return; }
-        try { await b.remove({ id }); await refresh(); pushToast({ message: "已删除", type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "删除失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "remove", false); }
+        try { await b.remove({ id }); await refresh(); pushToast({ message: `已删除「${displayName}」`, type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "删除失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "remove", false); }
       },
     });
   };

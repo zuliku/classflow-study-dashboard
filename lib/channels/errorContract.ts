@@ -61,7 +61,7 @@ export function isChannelErrorCode(value: unknown): value is ChannelErrorCode {
 }
 
 const USER_MESSAGES: Record<ChannelErrorCode, string> = {
-  QQ_AUTH_FAILED: "QQ 机器人认证失败，请检查 App ID / Secret",
+  QQ_AUTH_FAILED: "QQ 机器人验证没通过，请在设置 - 消息渠道里检查账号和密钥后重试",
   QQ_NETWORK_ERROR: "网络连接失败，请稍后重试",
   QQ_GATEWAY_DISCONNECTED: "网关连接已断开，正在重连",
   QQ_RATE_LIMITED: "请求过于频繁，请稍后重试",

@@ -217,9 +217,13 @@ export function CourseLibraryCard({
 
         <div className={cn("flex flex-col pt-1", PREVIEW_SLOT_XL)}>
           {previewTasks.length === 0 ? (
-            <p className={cn(PREVIEW_ROW_HEIGHT, "flex items-center text-[11px] text-sandrift ux-fade")}>
-              暂无待处理任务
-            </p>
+            <button
+              type="button"
+              onClick={onAddTask}
+              className={cn(PREVIEW_ROW_HEIGHT, "flex items-center gap-1 text-[11px] text-sandrift hover:text-charcoal transition-colors ux-fade")}
+            >
+              还没有任务，点击新建
+            </button>
           ) : (
             previewTasks.map((row) => (
               <button
@@ -291,9 +295,13 @@ export function CourseLibraryCard({
 
         <div className={cn("flex flex-col pt-1", PREVIEW_SLOT_XL)}>
           {previewMaterials.length === 0 ? (
-            <p className={cn(PREVIEW_ROW_HEIGHT, "flex items-center text-[11px] text-sandrift ux-fade")}>
-              暂无课程资料
-            </p>
+            <button
+              type="button"
+              onClick={onUploadClick}
+              className={cn(PREVIEW_ROW_HEIGHT, "flex items-center gap-1 text-[11px] text-sandrift hover:text-charcoal transition-colors ux-fade")}
+            >
+              还没有资料，点击上传
+            </button>
           ) : (
             previewMaterials.map((m) => (
               <button

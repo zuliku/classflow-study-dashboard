@@ -37,7 +37,7 @@ export function KiroEmptyState({
         { icon: TrendingUp, label: "分析本周学习负担" },
       ]
     : [
-        { icon: BookOpen, label: "了解 Kiro 能做什么" },
+        { icon: BookOpen, label: "我该怎么开始记课程和作业？" },
         { icon: ListChecks, label: "制定一个学习计划" },
         { icon: CalendarCheck, label: "解释一个知识点" },
       ];

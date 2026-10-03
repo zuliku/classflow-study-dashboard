@@ -49,9 +49,7 @@ function EmptyState() {
     <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex flex-col items-center justify-center text-center gap-1.5">
       <p className="text-xs font-bold text-charcoal">学习洞察会随着使用逐渐形成</p>
       <p className="text-[11px] text-sandrift leading-relaxed">
-        完成任务、安排学习计划或进行专注后，
-        <br />
-        这里会展示你的学习趋势。
+        完成 1 个任务或记 1 次专注，这里就会生成趋势图。
       </p>
     </div>
   );

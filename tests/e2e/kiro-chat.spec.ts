@@ -90,7 +90,7 @@ test("Kiro Chat：输入消息 → 流式回复最终渲染；错误路径显示
   // 错误路径：再发一条 → INVALID_API_KEY → 错误提示 + 重试/设置按钮
   await composer.getByLabel("Ask Kiro").fill("再问一个问题");
   await composer.getByLabel("发送").click();
-  await expect(page.getByTestId("kiro-error")).toContainText("Kiro 暂时没有完成回复", { timeout: 10000 });
+  await expect(page.getByTestId("kiro-error")).toContainText("这次没能生成回复", { timeout: 10000 });
   await expect(page.getByTestId("kiro-error")).toContainText("API Key 无效");
   await expect(page.getByTestId("kiro-error").getByRole("button", { name: "重试" })).toBeVisible();
   await expect(page.getByTestId("kiro-error").getByRole("button", { name: "打开设置" })).toBeVisible();

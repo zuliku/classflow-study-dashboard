@@ -134,12 +134,12 @@ describe("CourseLibraryCard V5 copy", () => {
     h.cleanup();
   });
 
-  it("5 completed → 待处理 0 + 暂无待处理任务 + 全部 5 项", () => {
+  it("5 completed → 待处理 0 + 还没有任务 + 全部 5 项", () => {
     const rows = Array.from({ length: 5 }, (_, i) => mkRow({ id: `c${i}`, status: "completed" as const }));
     const h = renderCard({ taskRows: rows });
     const text = h.container.textContent ?? "";
     expect(text).toContain("待处理 0");
-    expect(text).toContain("暂无待处理任务");
+    expect(text).toContain("还没有任务，点击新建");
     expect(text).toContain("全部 5 项");
     expect(text).not.toContain("待处理 5");
     h.cleanup();
@@ -208,7 +208,7 @@ describe("CourseLibraryCard V5 copy", () => {
     });
     const text = h.container.textContent ?? "";
     expect(text).toContain("待处理 0");
-    expect(text).toContain("暂无待处理任务");
+    expect(text).toContain("还没有任务，点击新建");
     expect(text).toContain("全部 1 项");
     expect(text).not.toContain("已完成任务"); // preview 不显示 completed
     h.cleanup();
@@ -314,13 +314,13 @@ describe("CourseLibraryCard V5 actions / identity", () => {
     h.cleanup();
   });
 
-  it("empty course：待处理 0 + 暂无待处理任务 + 暂无课程资料（视觉完整）", () => {
+  it("empty course：待处理 0 + 还没有任务 + 还没有资料（视觉完整）", () => {
     const h = renderCard();
     const text = h.container.textContent ?? "";
     expect(text).toContain("待处理 0");
-    expect(text).toContain("暂无待处理任务");
+    expect(text).toContain("还没有任务，点击新建");
     expect(text).toContain("课程资料 0");
-    expect(text).toContain("暂无课程资料");
+    expect(text).toContain("还没有资料，点击上传");
     expect(text).toContain("本周无后续课程");
     h.cleanup();
   });

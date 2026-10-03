@@ -98,7 +98,7 @@ export function CoursesWorkspace() {
         pushToast({ type: "error", message: "本地存储空间已满，清理课程资料或备份后重试。" });
       } else {
         for (const name of failed) {
-          pushToast({ type: "error", message: `《${name}》保存失败，请重试` });
+          pushToast({ type: "error", message: `《${name}》没能保存，可能是文件损坏或名字太长，换个文件重试` });
         }
       }
     } finally {

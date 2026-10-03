@@ -31,7 +31,7 @@ describe("Shared Channel Error Contract", () => {
   });
 
   it("userMessageForChannelCode returns known message and fallback", () => {
-    expect(userMessageForChannelCode("QQ_AUTH_FAILED")).toBe("QQ 机器人认证失败，请检查 App ID / Secret");
+    expect(userMessageForChannelCode("QQ_AUTH_FAILED")).toBe("QQ 机器人验证没通过，请在设置 - 消息渠道里检查账号和密钥后重试");
     expect(userMessageForChannelCode("QQ_NETWORK_ERROR")).toBe("网络连接失败，请稍后重试");
     expect(userMessageForChannelCode("GMAIL_OAUTH_STATE_MISMATCH")).toBe("Gmail 登录验证失败，请重新连接");
     // unknown should fallback
@@ -39,12 +39,12 @@ describe("Shared Channel Error Contract", () => {
   });
 
   it("resolveChannelUserMessage handles various shapes and unknown fallback", () => {
-    expect(resolveChannelUserMessage({ code: "QQ_AUTH_FAILED" })).toBe("QQ 机器人认证失败，请检查 App ID / Secret");
+    expect(resolveChannelUserMessage({ code: "QQ_AUTH_FAILED" })).toBe("QQ 机器人验证没通过，请在设置 - 消息渠道里检查账号和密钥后重试");
     expect(resolveChannelUserMessage({ error: "QQ_NETWORK_ERROR" })).toBe("网络连接失败，请稍后重试");
     expect(resolveChannelUserMessage("QQ_RATE_LIMITED")).toBe("请求过于频繁，请稍后重试");
     expect(resolveChannelUserMessage({ code: "FUTURE_PROVIDER_FAILURE" }, "连接失败，请稍后重试")).toBe("连接失败，请稍后重试");
     expect(resolveChannelUserMessage({ code: "UNKNOWN_CODE" })).toBe("操作失败，请稍后重试");
-    expect(resolveChannelUserMessage({ message: "QQ_AUTH_FAILED" })).toBe("QQ 机器人认证失败，请检查 App ID / Secret");
+    expect(resolveChannelUserMessage({ message: "QQ_AUTH_FAILED" })).toBe("QQ 机器人验证没通过，请在设置 - 消息渠道里检查账号和密钥后重试");
     expect(resolveChannelUserMessage(null)).toBe("操作失败，请稍后重试");
     expect(resolveChannelUserMessage(undefined, "自定义 fallback")).toBe("自定义 fallback");
   });
@@ -163,7 +163,7 @@ describe("Manager Contract — testChannel / testConnectionForInput", () => {
     };
 
     const cases: Array<[string, string]> = [
-      ["QQ_AUTH_FAILED", "QQ 机器人认证失败，请检查 App ID / Secret"],
+      ["QQ_AUTH_FAILED", "QQ 机器人验证没通过，请在设置 - 消息渠道里检查账号和密钥后重试"],
       ["QQ_MAIL_AUTH_FAILED", "QQ 邮箱认证失败，请检查邮箱地址/授权码"],
       ["GMAIL_AUTH_FAILED", "Gmail 认证失败"],
       ["PERSISTENCE_FAILED", "保存配置失败"],

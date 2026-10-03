@@ -9,7 +9,7 @@ import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 
 const DEEP_REVIEW_PROMPT =
-  "基于我本周的学习洞察，帮我做一次简洁复盘：先总结本周投入、计划与实际、任务完成和学习节奏，再指出最值得调整的 1–3 个方面。请基于 ClassFlow 的真实学习数据，不要给学习力评分。";
+  "帮我复盘下这周：总结投入和完成情况，再指出 2-3 个最值得调整的地方。只用我的真实学习数据，别打分。";
 
 const PLAN_NEXT_WEEK_PROMPT =
   "结合我本周的学习洞察和未来 7 天任务，帮我规划下一阶段学习。先判断哪些任务最需要安排，再给出可执行的学习计划建议。";

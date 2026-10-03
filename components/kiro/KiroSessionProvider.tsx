@@ -1085,7 +1085,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         bumpProjects();
         return record;
       } catch {
-        pushToast({ message: "项目创建失败，请重试", type: "error" });
+        pushToast({ message: "项目没能创建，请检查网络后重试。", type: "error" });
         return null;
       }
     },
@@ -1116,7 +1116,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         bumpProjects();
         return record;
       } catch {
-        pushToast({ message: "项目更新失败，请重试", type: "error" });
+        pushToast({ message: "项目没能更新，请检查网络后重试。", type: "error" });
         return null;
       }
     },
@@ -1135,7 +1135,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         }
         bumpProjects();
       } catch {
-        pushToast({ message: "项目删除失败，请重试", type: "error" });
+        pushToast({ message: "项目没能删除，请检查网络后重试。", type: "error" });
       }
     },
     [bumpProjects, pushToast]
@@ -1156,7 +1156,7 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
         bumpProjects();
         return true;
       } catch {
-        pushToast({ message: "无法移动这条对话，请重试", type: "error" });
+        pushToast({ message: "对话没能移动，请检查网络后重试。", type: "error" });
         return false;
       }
     },

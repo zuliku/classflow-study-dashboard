@@ -157,7 +157,7 @@ export function DataSettings() {
           <div data-testid="dev-demo-reload">
             <SettingsActionRow
               title="载入完整演示数据"
-              description="一学期的演示数据（课程 / 课表 / 任务 / 资料），用于体验与测试；载入后替换当前业务数据（含学期），个人资料与偏好不受影响。"
+              description="载入一套示例课表和任务来体验功能。会替换当前课程和任务，不动你的个人资料和偏好。"
               icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
               actionLabel="载入演示数据"
               onAction={reloadDemoData}

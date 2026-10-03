@@ -132,7 +132,7 @@ describe("Channel Runtime Truth — ChannelSettings", () => {
       const toasts = useToastStore.getState().toasts;
       expect(toasts.length).toBeGreaterThan(0);
       const last = toasts[toasts.length - 1];
-      expect(last.message).toBe("QQ 机器人认证失败，请检查 App ID / Secret");
+      expect(last.message).toBe("QQ 机器人验证没通过，请在设置 - 消息渠道里检查账号和密钥后重试");
       expect(last.message).not.toContain("invalid");
       expect(last.message).not.toContain("QQ_AUTH_FAILED");
     });

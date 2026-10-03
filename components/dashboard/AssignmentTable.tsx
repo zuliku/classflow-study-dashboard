@@ -817,7 +817,7 @@ export function AssignmentTable({
               >
                 <ClipboardList className="w-8 h-8 mx-auto text-sandrift" strokeWidth={1.5} />
                 <p className="font-bold text-charcoal">还没有任务</p>
-                <p className="text-[11px] text-sandrift">从右上角「新增任务」开始安排你的第一个 DDL</p>
+                <p className="text-[11px] text-sandrift">新建任务，写上截止日期就能开始</p>
               </div>
             ) : (
               <div className="py-10 text-center text-xs text-sandrift space-y-1">

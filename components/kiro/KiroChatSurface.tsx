@@ -238,7 +238,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
               void chat.approveExecutionPlan(planId).then((ok) => {
                 if (!ok) return;
                 setAgentMode("workspace-auto");
-                pushToast({ message: "计划已批准并切换到工作区自动，发送下一条消息即按计划执行。" });
+                pushToast({ message: "已批准，发下一条消息时就按这个计划执行。" });
               });
             }}
             // 空终答追答入口（view 层判定 + hook 纯文本追答链；缺失则重试按钮永不出现）

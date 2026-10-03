@@ -52,7 +52,6 @@ export function AddAssignmentModal() {
 
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [prefillSource, setPrefillSource] = useState<"course" | "calendar" | null>(null);
   const submittingRef = useRef(false);
 
   const [title, setTitle] = useState("");
@@ -167,7 +166,6 @@ export function AddAssignmentModal() {
           setPriority(draft.priority ?? defaults.priority);
           setStatus(draft.status ?? defaults.status);
           setDescription(draft.description ?? "");
-          setPrefillSource(null); // draft 移交不属于 course/calendar legacy source
         } else {
           // ---- Legacy create context ----
           setTitle("");
@@ -180,7 +178,6 @@ export function AddAssignmentModal() {
           setPriority(defaults.priority);
           setStatus(defaults.status);
           setDescription("");
-          setPrefillSource(detail.courseId ? "course" : detail.ddlDate ? "calendar" : null);
         }
 
         // ---- Workflow UX V7：materialId create-only context（Resource → Task）----
@@ -284,10 +281,10 @@ export function AddAssignmentModal() {
         .getState()
         .assignments.find((a) => a.id === newId)?.materialIds?.length;
       if (linkedCreated) {
-        pushToast({ message: "任务已创建并关联资料" });
+        pushToast({ message: "任务已创建，已关联资料。" });
       } else {
         // 从课程/日历发起的任务创建，提示带上下文语义
-        pushToast({ message: prefillSource ? "任务已添加" : "任务已创建" });
+        pushToast({ message: "任务已创建。" });
       }
       setInitialMaterialId(null);
     }
@@ -445,7 +442,7 @@ export function AddAssignmentModal() {
                   ) : null}
                 </DisclosureRegion>
                 {!ddlEnabled && (
-                  <p className="text-[11px] text-sandrift ux-fade">未设置截止日期，任务仍可正常创建与安排。</p>
+                  <p className="text-[11px] text-sandrift ux-fade">不设截止日期也能保存，之后随时补上。</p>
                 )}
               </div>
 
