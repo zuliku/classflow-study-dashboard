@@ -113,7 +113,7 @@ export function KiroComposerAccessControl({
         data-testid="kiro-composer-access"
         data-access-mode={state}
         className={cn(
-          "flex items-center h-9 rounded-xl text-[11px] font-semibold transition-colors",
+          "flex items-center h-9 rounded-xl text-[11px] font-semibold transition-colors min-w-0",
           compact ? "w-9 justify-center" : "gap-1.5 px-2.5",
           danger
             ? open

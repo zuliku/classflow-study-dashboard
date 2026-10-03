@@ -144,6 +144,13 @@ export function GroupCollaborationView() {
   // Global Search Deep Link 在本组件 mount 前写入目标 id → 首帧即精确直达。
   const selectedGroupProjectId = useAppStore((s) => s.selectedGroupProjectId);
 
+  // 相对时间（“x分钟后”）随分钟流逝过期：60s 轻量重渲染刷新文案
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick((v) => v + 1), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   const [projectMoreOpen, setProjectMoreOpen] = useState(false);
 
   // 弹窗表单状态：null = 关闭

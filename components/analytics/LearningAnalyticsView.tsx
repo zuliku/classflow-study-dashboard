@@ -173,7 +173,7 @@ export function LearningAnalyticsView() {
           data-testid="analytics-body"
           // 水平 gutter 单一来源（workspace-gutter 16/24）+ intentional xl:px-8 大屏档；
           // S4-1：gutter 已入 components 层，utilities 的 xl:px-8 自然覆盖，不再需要 !important
-          className="w-full max-w-none flex flex-col gap-6 workspace-gutter py-4 md:py-6 xl:px-8 xl:py-8"
+          className="w-full max-w-none flex flex-col gap-6 workspace-gutter py-4 pb-24 md:py-6 md:pb-6 xl:px-8 xl:py-8 xl:pb-8"
         >
           {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle）——
               StudyOutlookCard 在其下方独立存在，不随 preset 重播 */}

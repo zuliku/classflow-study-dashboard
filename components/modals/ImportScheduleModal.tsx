@@ -147,10 +147,10 @@ export function ImportScheduleModal() {
       overlayId="import-schedule-modal"
       stackZ={50}
       aria-label="导入课表"
-      className="max-w-2xl max-h-[85dvh]"
+      className="max-w-2xl max-h-[85dvh] flex flex-col"
     >
         {/* Header */}
-        <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between">
+        <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2">
             <FileUp className="w-4 h-4 text-[#A48F82]" />
             <h3 className="text-base font-bold text-charcoal">
@@ -171,7 +171,7 @@ export function ImportScheduleModal() {
 
         {/* Wizard Step 1: Input & Upload（步骤切换 keyed 淡入，Dialog 内高度跳变柔化） */}
         {step === 1 && (
-          <div key="step-1" className="p-6 space-y-4 text-xs overflow-y-auto ux-fade">
+          <div key="step-1" className="p-6 space-y-4 text-xs overflow-y-auto ux-fade flex-1 min-h-0">
             {/* Format Tabs */}
             <div className="grid grid-cols-3 gap-2 p-1 bg-alabaster rounded-xl border border-line-strong">
               <button
@@ -276,7 +276,7 @@ export function ImportScheduleModal() {
 
         {/* Wizard Step 2: Live Preview & Conflict Check */}
         {step === 2 && parsedData && (
-          <div key="step-2" className="p-6 space-y-4 text-xs overflow-y-auto ux-fade">
+          <div key="step-2" className="p-6 space-y-4 text-xs overflow-y-auto ux-fade flex-1 min-h-0">
             {/* Parsing Errors (skipped rows) */}
             {parsedData.errors.length > 0 && (
               <div className="p-3 bg-danger-bg border border-danger-border rounded-xl text-danger space-y-1">

@@ -69,7 +69,9 @@ export function KiroComposerModelControl({
         data-testid="kiro-composer-model"
         data-model-open={open}
         className={cn(
-          "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+          // 窄屏可压缩（min-w-0 + label truncate）：390px 下 toolbar 总宽不足时 label 先缩，
+          // 桌面无约束不受影响；绝不在 toolbar 链路上加 overflow 裁剪（会裁掉上弹菜单）
+          "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed min-w-0",
           compact
             ? cn(
                 "w-9 justify-center",

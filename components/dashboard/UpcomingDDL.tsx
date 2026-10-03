@@ -112,6 +112,13 @@ export function UpcomingDDL() {
     if (currentPage > totalPages) setCurrentPage(Math.max(1, totalPages));
   }, [upcomingAssignments.length, pageSize, currentPage]);
 
+  // 相对时间（“x分钟前/后”）随分钟流逝过期：60s 轻量重渲染刷新文案（与课表 now 指示同频语义）
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick((v) => v + 1), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
   const paged = useMemo(() => paginate(upcomingAssignments, currentPage, pageSize), [upcomingAssignments, currentPage, pageSize]);
   const pagedItems = paged.items;
   const totalPages = paged.totalPages;
@@ -191,9 +198,9 @@ export function UpcomingDDL() {
                 >
                   <DDLDateTile date={ddlDate} taskId={task.id} density={density} />
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-[13px] font-bold text-charcoal truncate group-hover:text-black leading-5">{task.title}</h4>
+                    <h4 title={task.title} className="text-[13px] font-bold text-charcoal truncate group-hover:text-black leading-5">{task.title}</h4>
                     <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
-                      <span className="text-[11px] text-satin-grey truncate">{course?.name || "通用课题"}</span>
+                      <span title={course?.name || "通用课题"} className="text-[11px] text-satin-grey truncate">{course?.name || "通用课题"}</span>
                       {getPriorityMark(task.priority)}
                     </div>
                   </div>

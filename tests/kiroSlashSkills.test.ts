@@ -75,4 +75,19 @@ describe("KiroComposer Slash 菜单契约（源码锁定）", () => {
   it("未配置 AI 服务时禁用发送（有点即静默失败）", () => {
     expect(src).toMatch(/canSend[\s\S]{0,400}configured &&/);
   });
+
+  it("toolbar 窄屏可压缩（label 先缩，不断行不溢出；链路禁 overflow 裁剪保住上弹菜单）", () => {
+    // 左右组 + 锚点 wrapper 可收缩（min-w-0），label truncate 生效
+    expect(src).toContain('<div ref={addRef} className="relative min-w-0">');
+    expect(src).toContain('<div ref={accessRef} className="relative min-w-0">');
+    expect(src).toContain('<div ref={modelRef} className="relative min-w-0">');
+    const model = readFileSync(join(process.cwd(), "components/kiro/composer/KiroComposerModelControl.tsx"), "utf8");
+    const access = readFileSync(join(process.cwd(), "components/kiro/composer/KiroComposerAccessControl.tsx"), "utf8");
+    expect(model).toContain("disabled:opacity-40 disabled:cursor-not-allowed min-w-0");
+    expect(access).toContain('text-[11px] font-semibold transition-colors min-w-0');
+    // toolbar 行禁 overflow 裁剪（上弹菜单会被裁掉）
+    const row = src.match(/<div className="flex items-center justify-between gap-2 pt-1\.5">/);
+    expect(row).toBeTruthy();
+    expect(row![0]).not.toContain("overflow");
+  });
 });

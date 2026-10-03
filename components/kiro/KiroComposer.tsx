@@ -893,7 +893,7 @@ export function KiroComposer({
             <div className="flex items-center justify-between gap-2 pt-1.5">
               {/* 左组：＋（内容与来源）· 访问（Computer 范围 / Agent Mode） */}
               <div className="flex items-center gap-1 min-w-0">
-                <div ref={addRef} className="relative shrink-0">
+                <div ref={addRef} className="relative min-w-0">
                   <button
                     type="button"
                     onClick={() => setOpenMenu((v) => (v === "add" ? null : "add"))}
@@ -926,7 +926,7 @@ export function KiroComposer({
                     </PopoverPanel>
                 </div>
 
-                <div ref={accessRef} className="relative shrink-0">
+                <div ref={accessRef} className="relative min-w-0">
                   <KiroComposerAccessControl
                     computerEnabled={!!computerEnabled}
                     agentMode={agentMode ?? "guided"}
@@ -946,7 +946,7 @@ export function KiroComposer({
               </div>
 
               {/* 右组：上下文占用（Codex-style ring）+ 思考程度（Codex-style 滑块）+ 模型 + 发送 */}
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1 min-w-0">
                 <div ref={contextUsageRef} className="relative shrink-0">
                   <KiroComposerContextUsage
                     snapshot={contextUsage ?? null}
@@ -969,7 +969,7 @@ export function KiroComposer({
                     onOpenChange={(next) => setOpenMenu(next ? "reasoning" : null)}
                   />
                 </div>
-                <div ref={modelRef} className="relative">
+                <div ref={modelRef} className="relative min-w-0">
                   <KiroComposerModelControl
                     modelOptions={modelOptions}
                     selectedModelId={selectedModelId}

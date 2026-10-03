@@ -95,7 +95,7 @@ export function AssignmentPeekPanel() {
       data-testid="assignment-peek"
       aria-label="任务快速预览"
       className={cn(
-        "fixed right-0 top-24 bottom-24 w-80 z-30 bg-surface border-l border-line shadow-drawer rounded-l-2xl flex flex-col overflow-hidden ux-drawer-panel",
+        "fixed right-0 top-24 bottom-24 w-80 max-w-[calc(100vw-24px)] z-30 bg-surface border-l border-line shadow-drawer rounded-l-2xl flex flex-col overflow-hidden ux-drawer-panel",
         visible
           ? "translate-x-0 opacity-100"
           : "!duration-[var(--motion-exit-panel)] translate-x-8 opacity-0"

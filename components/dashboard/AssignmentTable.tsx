@@ -545,6 +545,7 @@ export function AssignmentTable({
           <div className="min-w-0 flex-1">
             <div className="flex items-center space-x-2">
               <h4
+                title={task.title}
                 className={`text-xs font-bold truncate ${
                   isCompleted
                     ? "line-through text-sandrift"
@@ -586,13 +587,13 @@ export function AssignmentTable({
             </div>
 
             <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">
-              <span className="truncate font-semibold">{course?.name || "通用"}</span>
+              <span title={course?.name || "通用"} className="truncate font-semibold">{course?.name || "通用"}</span>
               <span>·</span>
-              <span className={hasDdl ? "" : "text-satin-grey/70"}>截止: {formattedDate}</span>
+              <span className={hasDdl ? "whitespace-nowrap" : "text-satin-grey/70 whitespace-nowrap"}>截止: {formattedDate}</span>
               {task.estimatedMinutes && isWorkspace && (
                 <>
                   <span>·</span>
-                  <span>预计 {formatEstimatedMinutes(task.estimatedMinutes)}</span>
+                  <span className="whitespace-nowrap">预计 {formatEstimatedMinutes(task.estimatedMinutes)}</span>
                 </>
               )}
               {/* Task 7F：重复任务弱标记（仅 workspace 完整模式） */}
@@ -714,9 +715,9 @@ export function AssignmentTable({
               {filteredAssignments.length} 项任务
             </span>
             {overdueCount > 0 && (
-              <span className="text-[10px] font-bold text-danger bg-danger-bg px-2 py-0.5 rounded-full border border-danger-border flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                {overdueCount} 项已逾期
+              <span className="text-[10px] font-bold text-danger bg-danger-bg px-2 py-0.5 rounded-full border border-danger-border flex items-center gap-1 tabular-nums whitespace-nowrap">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                {overdueCount > 99 ? "99+" : overdueCount} 项已逾期
               </span>
             )}
           </div>
@@ -822,6 +823,18 @@ export function AssignmentTable({
               <div className="py-10 text-center text-xs text-sandrift space-y-1">
                 <CheckCircle2 className="w-8 h-8 mx-auto text-success" />
                 <p>该视图暂无任务</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCourseFilter("all");
+                    controller?.setSearchQuery("");
+                    controller?.setRiskOnly(false);
+                    setAssignmentTimeSlice("all");
+                  }}
+                  className="mt-1 px-3 h-7 rounded-lg text-[11px] font-bold text-satin-grey bg-alabaster border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+                >
+                  清除筛选
+                </button>
               </div>
             )
           ) : (

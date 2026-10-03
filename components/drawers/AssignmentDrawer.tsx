@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import { Priority, AssignmentStatus, Assignment } from "@/types";
 import { formatEstimatedMinutes, isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
 import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
@@ -109,6 +110,7 @@ export function AssignmentDrawer() {
     setPendingFocusCompletionFollowUp,
   } = useAppStore();
   const pushToast = useToastStore((s) => s.pushToast);
+  const confirmRequest = useConfirmStore((s) => s.confirm);
   const handoff = useKiroHandoff();
   // Task 6A：关联资料 Mini Picker 展开状态
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
@@ -203,15 +205,25 @@ export function AssignmentDrawer() {
   if (!assignment) return null;
 
   const handleDelete = () => {
-    const removed = deleteAssignment(assignment.id);
+    // 与列表右键/批量删除一致：先二次确认（课程删除同范式），确认后仍保留 Toast 撤销
+    const target = assignment;
     setMoreOpen(false);
-    if (removed) {
-      pushToast({
-        message: "任务已删除",
-        actionLabel: "撤销",
-        onAction: () => restoreAssignment(removed),
-      });
-    }
+    confirmRequest({
+      title: "删除任务？",
+      description: `任务《${target.title}》删除后可在提示中撤销。`,
+      confirmLabel: "删除任务",
+      danger: true,
+      onConfirm: () => {
+        const removed = deleteAssignment(target.id);
+        if (removed) {
+          pushToast({
+            message: "任务已删除",
+            actionLabel: "撤销",
+            onAction: () => restoreAssignment(removed),
+          });
+        }
+      },
+    });
   };
 
   // 返回链路：任务 → 课程 Drawer

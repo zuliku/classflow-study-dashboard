@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User } from "lucide-react";
+import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User, CalendarPlus, FileUp } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { cn } from "@/lib/utils";
@@ -128,6 +128,8 @@ export function TimetableGrid({
   // actions（zustand 引用稳定）
   const setCurrentSemesterWeek = useAppStore((s) => s.setCurrentSemesterWeek);
   const setSelectedCourseId = useAppStore((s) => s.setSelectedCourseId);
+  const setAddCourseModalOpen = useAppStore((s) => s.setAddCourseModalOpen);
+  const setImportScheduleModalOpen = useAppStore((s) => s.setImportScheduleModalOpen);
   const setConflictModalOpen = useAppStore((s) => s.setConflictModalOpen);
   const setSelectedConflict = useAppStore((s) => s.setSelectedConflict);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -773,7 +775,7 @@ export function TimetableGrid({
                         <div className="space-y-0.5 min-w-0">
                           {/* 1. Course Title */}
                           <div className="flex items-start justify-between">
-                            <h4 className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal truncate">
+                            <h4 title={course.name} className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal truncate">
                               {course.name}
                             </h4>
                             {hasConflict && (
@@ -800,7 +802,7 @@ export function TimetableGrid({
                           {/* 2. Teacher Info */}
                           <div className="flex items-center text-[10px] sm:text-[11px] opacity-85 space-x-1 font-medium leading-none">
                             <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                            <span className="truncate">{course.teacher}</span>
+                            <span title={course.teacher} className="truncate">{course.teacher}</span>
                           </div>
                         </div>
 
@@ -817,7 +819,7 @@ export function TimetableGrid({
                             </span>
                           )}
                           <MapPin className="w-2.5 h-2.5 mr-1 shrink-0 opacity-75" />
-                          <span className="truncate">{sched.location}</span>
+                          <span title={sched.location} className="truncate">{sched.location}</span>
                         </div>
 
                         {/* Resize Handle：仅工作区显示（moved/extra 一次性 occurrence 不显示），hover/focus/拖拽中才明显 */}
@@ -940,6 +942,30 @@ export function TimetableGrid({
                 </div>
               );
             })}
+            {/* 本周零排课空态：网格线之上居中引导（z-10，不挡拖拽 ghost z-20）；有排课即消失 */}
+            {activeSchedules.length === 0 && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-surface/70 backdrop-blur-[1px] rounded-xl ux-fade">
+                <CalendarPlus className="w-8 h-8 text-sandrift" strokeWidth={1.5} />
+                <p className="text-xs font-bold text-charcoal">本周暂无课程</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAddCourseModalOpen(true)}
+                    className="px-3 h-7 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+                  >
+                    添加课程
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportScheduleModalOpen(true)}
+                    className="px-3 h-7 rounded-lg text-[11px] font-bold text-satin-grey bg-alabaster border border-line hover:text-charcoal hover:border-line-strong transition-colors flex items-center gap-1"
+                  >
+                    <FileUp className="w-3 h-3" />
+                    导入课表
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         </div>

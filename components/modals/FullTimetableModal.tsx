@@ -57,7 +57,7 @@ export function FullTimetableModal() {
       overlayId="full-timetable-modal"
       stackZ={50}
       aria-label="完整课表"
-      className="max-w-6xl h-[94dvh] rounded-3xl"
+      className="max-w-6xl h-[94dvh] rounded-3xl flex flex-col"
     >
         {/* Modal Header */}
         <div className="p-4 px-6 border-b border-[#F0EBE1] bg-[#F7F5F5] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">

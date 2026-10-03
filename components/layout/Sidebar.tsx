@@ -217,7 +217,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "sidebar-shell hidden md:flex h-[calc(100vh-var(--titlebar-h))] bg-[#F7F5F5] border-r border-line flex-col pt-3.5 px-3.5 pb-3.5 sticky top-0 select-none z-20 shrink-0",
+        "sidebar-shell hidden md:flex h-[calc(100dvh-var(--titlebar-h))] bg-[#F7F5F5] border-r border-line flex-col pt-3.5 px-3.5 pb-3.5 sticky top-0 select-none z-20 shrink-0",
         effectiveCollapsed ? "w-16" : "w-56"
       )}
       data-testid="app-sidebar"

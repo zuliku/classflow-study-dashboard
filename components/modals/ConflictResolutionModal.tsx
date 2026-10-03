@@ -60,10 +60,10 @@ export function ConflictResolutionModal() {
       overlayId="conflict-modal"
       stackZ={50}
       aria-label="课程时间重叠"
-      className="max-w-md max-h-[85dvh]"
+      className="max-w-md max-h-[85dvh] flex flex-col"
     >
         {/* Header */}
-        <div className="p-4 px-6 border-b border-danger-border bg-danger-bg flex items-center justify-between">
+        <div className="p-4 px-6 border-b border-danger-border bg-danger-bg flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2 text-danger">
             <AlertTriangle className="w-5 h-5 shrink-0" />
             <h3 className="text-base font-bold">课程时间重叠</h3>
@@ -78,7 +78,7 @@ export function ConflictResolutionModal() {
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4 text-xs overflow-y-auto">
+        <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1 min-h-0">
           <p className="text-satin-grey">
             以下两门课程在第 {currentSemesterWeek} 周时间重叠（{dayName} {timeRange}）：
           </p>
@@ -149,7 +149,7 @@ export function ConflictResolutionModal() {
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end pt-2 border-t border-[#F0EBE1]">
+          <div className="flex justify-end pt-2 border-t border-[#F0EBE1] shrink-0">
             <button
               onClick={() => setConflictModalOpen(false)}
               className="px-4 py-2 text-xs font-medium text-white bg-charcoal rounded-xl hover:bg-black"

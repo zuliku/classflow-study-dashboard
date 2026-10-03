@@ -101,7 +101,7 @@ export function TimelineUnscheduledShelf({
               {directManipulationEnabled && (
                 <GripVertical className="w-3 h-3 text-sandrift shrink-0" aria-hidden="true" />
               )}
-              <span className="truncate">{a.title}</span>
+              <span title={a.title} className="truncate">{a.title}</span>
               <span className="text-[10px] text-sandrift font-medium shrink-0">{ddlText(a)}</span>
               <button
                 onPointerDown={(e) => e.stopPropagation()}
