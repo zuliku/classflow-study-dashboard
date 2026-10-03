@@ -110,10 +110,10 @@ export function AssignmentContextMenu({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [onClose]);
 
-  // Scroll（capture 捕获内部 scroll container）/ Resize → 关闭
+  // Scroll（capture 捕获内部 scroll container）/ Resize → 关闭（passive：只关闭不 preventDefault）
   useEffect(() => {
     const onCloseAny = () => onClose();
-    window.addEventListener("scroll", onCloseAny, { capture: true });
+    window.addEventListener("scroll", onCloseAny, { capture: true, passive: true });
     window.addEventListener("resize", onCloseAny);
     return () => {
       window.removeEventListener("scroll", onCloseAny, { capture: true });

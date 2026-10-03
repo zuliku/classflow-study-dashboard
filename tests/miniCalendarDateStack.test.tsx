@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
-import React from "react";
+import React, { act } from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { format, addDays } from "date-fns";
 
@@ -190,10 +190,14 @@ describe("MiniCalendar DDL drag feedback", () => {
     return src;
   }
 
-  it("dragging 时 source card subdued（opacity-40）且 pointer preview 即时跟随（无 transition）", () => {
+  it("dragging 时 source card subdued（opacity-40）且 pointer preview 即时跟随（无 transition）", async () => {
     useAppStore.setState({ assignments: [mkDdlAssignment("a-drag", TODAY_KEY)] });
     render(<MiniCalendar />);
     const src = engageDdlDrag();
+    // pointermove 经 rAF 合并（与课表拖拽同模式）：等一帧再断言
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 32));
+    });
 
     expect(src.className).toContain("opacity-40");
 
@@ -206,7 +210,7 @@ describe("MiniCalendar DDL drag feedback", () => {
     fireEvent.pointerUp(src, { clientX: 312, clientY: 300, pointerId: 1 });
   });
 
-  it("hover 目标日期保持 1px 低对比 outline target surface；非目标格低饱和 outline", () => {
+  it("hover 目标日期保持 1px 低对比 outline target surface；非目标格低饱和 outline", async () => {
     useAppStore.setState({ assignments: [mkDdlAssignment("a-drag2", TODAY_KEY)] });
     render(<MiniCalendar />);
     const src = engageDdlDrag();
@@ -217,6 +221,14 @@ describe("MiniCalendar DDL drag feedback", () => {
         selector === "[data-calendar-day]" ? targetCell : null,
     });
     fireEvent.pointerMove(src, { clientX: 320, clientY: 302, pointerId: 1 });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 32));
+    });
+    // rAF 合并后：第一帧只完成阈值跨越（hover=null），再补一帧才计算 hover 目标
+    fireEvent.pointerMove(src, { clientX: 320, clientY: 302, pointerId: 1 });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 32));
+    });
 
     // 统一 Timeline 强度：1px 低对比 ring + 极弱 tint（不大面积填色）
     expect(targetCell.className).toContain("outline-charcoal/30");

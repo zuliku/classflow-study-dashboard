@@ -50,8 +50,11 @@ type ComposerMenu = "add" | "access" | "reasoning" | "model" | "contextUsage" | 
  * Kiro Composer（Task 4 / P3 Productization）：真实发送入口 + 附件（上传/拖拽/粘贴/课程资料/保存）。
  * - 一级工具栏收敛为四入口：＋（Add / 来源）· 访问（Access）· 模型（Model · Reasoning）· 发送
  * - 文档：选择后本地解析 → ready 才能发送；图片：vision 模型以原生 image part 发送
+ *
+ * React.memo：Surface 流式每 token 重渲染时，只要 props 全稳定即整棵跳过
+ * （输入文本走内部 state；owner 侧回调已全部稳定化，见 KiroChatSurface）。
  */
-export function KiroComposer({
+export const KiroComposer = React.memo(function KiroComposer({
   contexts,
   onAddContext,
   onRemoveContext,
@@ -560,12 +563,16 @@ export function KiroComposer({
     if (nextAgentMode) onSetAgentMode?.(nextAgentMode);
   };
 
-  const resolvedPermissions: KiroComposerPermissionSummary = permissionSummary ?? {
-    terminal: false,
-    desktopObserve: false,
-    desktopAction: false,
-    clipboard: false,
-  };
+  const resolvedPermissions: KiroComposerPermissionSummary = React.useMemo(
+    () =>
+      permissionSummary ?? {
+        terminal: false,
+        desktopObserve: false,
+        desktopAction: false,
+        clipboard: false,
+      },
+    [permissionSummary]
+  );
 
   return (
     <div
@@ -1041,7 +1048,7 @@ export function KiroComposer({
       </div>
     </div>
   );
-}
+});
 
 
 

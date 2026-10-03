@@ -542,7 +542,7 @@ describe("P1 Resource → Task Promotion", () => {
     const a = useAppStore.getState().assignments[0];
     expect(a.materialIds).toEqual(["mat-promo"]);
     const lastToast = useToastStore.getState().toasts.at(-1);
-    expect(lastToast?.message).toContain("并关联资料");
+    expect(lastToast?.message).toContain("已关联资料");
   });
 
   it("移除 context（×）→ 提交后无 materialIds", () => {

@@ -254,6 +254,10 @@ export function MiniCalendar() {
     setDrag(d);
   };
   const wasDraggedRef = useRef(false);
+  // pointermove rAF 合并：hit-test（elementFromPoint 强制布局）+ setState 每帧至多一次；
+  // 松手/取消时同步 flush，保证最后一帧不丢（与课表拖拽同模式）
+  const ddlMoveFrameRef = useRef(0);
+  const pendingDdlMoveRef = useRef<{ x: number; y: number } | null>(null);
 
   // ---- DDL 移动反馈（局部，4-6 秒）----
   const [feedback, setFeedback] = useState<DDLMoveFeedbackState | null>(null);
@@ -279,12 +283,20 @@ export function MiniCalendar() {
   useEffect(
     () => () => {
       if (feedbackTimerRef.current) window.clearTimeout(feedbackTimerRef.current);
+      pendingDdlMoveRef.current = null;
+      if (ddlMoveFrameRef.current) cancelAnimationFrame(ddlMoveFrameRef.current);
+      ddlMoveFrameRef.current = 0;
     },
     []
   );
 
   const cancelDrag = () => {
     wasDraggedRef.current = false;
+    pendingDdlMoveRef.current = null;
+    if (ddlMoveFrameRef.current) {
+      cancelAnimationFrame(ddlMoveFrameRef.current);
+      ddlMoveFrameRef.current = 0;
+    }
     setDragSync({ type: "idle" });
   };
 
@@ -341,17 +353,21 @@ export function MiniCalendar() {
     }
   };
 
-  const handleDDLPointerMove = (e: React.PointerEvent) => {
+  const flushDdlMoveFrame = () => {
+    ddlMoveFrameRef.current = 0;
+    const pending = pendingDdlMoveRef.current;
+    pendingDdlMoveRef.current = null;
+    if (!pending) return;
     const current = dragRef.current;
     if (current.type === "pending") {
-      const dist = Math.hypot(e.clientX - current.startX, e.clientY - current.startY);
+      const dist = Math.hypot(pending.x - current.startX, pending.y - current.startY);
       if (dist >= DRAG_THRESHOLD_PX) {
         wasDraggedRef.current = true;
         setDragSync({
           type: "dragging",
           assignment: current.assignment,
-          x: e.clientX,
-          y: e.clientY,
+          x: pending.x,
+          y: pending.y,
           hoverDateStr: null,
         });
       }
@@ -359,11 +375,17 @@ export function MiniCalendar() {
     }
     if (current.type === "dragging") {
       const hit = document
-        .elementFromPoint(e.clientX, e.clientY)
+        .elementFromPoint(pending.x, pending.y)
         ?.closest?.("[data-calendar-day]");
       const hoverDateStr = hit?.getAttribute("data-calendar-day") ?? null;
-      setDragSync({ ...current, x: e.clientX, y: e.clientY, hoverDateStr });
+      setDragSync({ ...current, x: pending.x, y: pending.y, hoverDateStr });
     }
+  };
+
+  const handleDDLPointerMove = (e: React.PointerEvent) => {
+    pendingDdlMoveRef.current = { x: e.clientX, y: e.clientY };
+    if (ddlMoveFrameRef.current) return;
+    ddlMoveFrameRef.current = requestAnimationFrame(flushDdlMoveFrame);
   };
 
   const handleDDLPointerUp = (e: React.PointerEvent) => {
@@ -372,6 +394,12 @@ export function MiniCalendar() {
     } catch {
       /* ignore */
     }
+    // 先同步 flush 最后一帧，再按最新 hover 落位
+    if (ddlMoveFrameRef.current) {
+      cancelAnimationFrame(ddlMoveFrameRef.current);
+      ddlMoveFrameRef.current = 0;
+    }
+    flushDdlMoveFrame();
     const current = dragRef.current;
     if (current.type !== "dragging") {
       // 未跨阈值 → 保持 click 语义（打开 Assignment Drawer）

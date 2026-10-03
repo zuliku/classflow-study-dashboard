@@ -75,9 +75,31 @@ function findFirstDelimiter(line: string): { index: number; type: "$$" | "\\(" |
 const MATH_NORMALIZE_CACHE = new Map<string, string>();
 const MATH_CACHE_MAX = 64;
 
+/** 流式追加快路径状态：解析逐行独立，唯一跨行态是未闭合 \( / \[（pending）；
+ * fence 内外都不影响“无标记行原样通过”这一事实，故追加段无 $/ \ 且上次无 pending
+ * 时可直接拼接（精确等价，全量解析作兜底）。 */
+let lastNormalizeInput = "";
+let lastNormalizeOutput = "";
+let lastNormalizePendingOpen = false;
+
 export function normalizeMathDelimiters(md: string): string {
   const cached = MATH_NORMALIZE_CACHE.get(md);
   if (cached !== undefined) return cached;
+  // Append-only fast path（流式每 token 全文本重扫 O(n²) 的主因；此处 O(appended)）
+  if (lastNormalizeInput && md.startsWith(lastNormalizeInput) && !lastNormalizePendingOpen) {
+    const appended = md.slice(lastNormalizeInput.length);
+    if (!/[$\\]/.test(appended)) {
+      const fast = lastNormalizeOutput + appended;
+      if (MATH_NORMALIZE_CACHE.size >= MATH_CACHE_MAX) {
+        const firstKey = MATH_NORMALIZE_CACHE.keys().next().value as string;
+        MATH_NORMALIZE_CACHE.delete(firstKey);
+      }
+      MATH_NORMALIZE_CACHE.set(md, fast);
+      lastNormalizeInput = md;
+      lastNormalizeOutput = fast;
+      return fast;
+    }
+  }
   const lines = md.split("\n");
   const out: string[] = [];
   let inFence = false;
@@ -182,6 +204,8 @@ export function normalizeMathDelimiters(md: string): string {
     if (after.trim()) out.push("", after);
   }
 
+  // flushPending 会把 pending 置空：快照必须取在它之前
+  const endedOpen = pending !== null;
   flushPending();
   const result = out.join("\n");
   if (MATH_NORMALIZE_CACHE.size >= MATH_CACHE_MAX) {
@@ -189,9 +213,15 @@ export function normalizeMathDelimiters(md: string): string {
     MATH_NORMALIZE_CACHE.delete(firstKey);
   }
   MATH_NORMALIZE_CACHE.set(md, result);
+  lastNormalizeInput = md;
+  lastNormalizeOutput = result;
+  lastNormalizePendingOpen = endedOpen;
   return result;
 }
 
 export function clearMathNormalizeCache(): void {
   MATH_NORMALIZE_CACHE.clear();
+  lastNormalizeInput = "";
+  lastNormalizeOutput = "";
+  lastNormalizePendingOpen = false;
 }

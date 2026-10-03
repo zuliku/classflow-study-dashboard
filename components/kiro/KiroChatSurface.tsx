@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useMemo, useRef } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroRuntime, useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
@@ -8,6 +8,7 @@ import { KiroEmptyExperience } from "@/components/kiro/motion/KiroEmptyExperienc
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
 import { getActiveModelName, getActiveModelVendor, getModelContextWindowTokens, getModelsForProvider } from "@/lib/ai/providers/registry";
 import { findApprovalOwnerMessageId } from "@/lib/ai/ui/kiroAgentRun";
+import type { ComputerApprovalDecision } from "@/lib/ai/computer/approval";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
@@ -64,10 +65,19 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
    * P4 §11：orphan fallback 判定——pendingApproval 必须能通过 taskId 找到 owning Computer Task
    * （→ owning assistant row 的 Inline Approval）。找不到（row 尚未建立 / 恢复竞态 /
    * unexpected runtime state）时继续用 ComputerApprovalDialog，绝不出现「审批无处可操作」。
+   *
+   * 性能：computerTask 归属只随各条 task id 变化；流式 token 只改文本。用 id 序列键
+   * 代替 messages 数组依赖——每 token 只做一次 map+join（便宜），归属扫描只在结构变化时跑。
+   * 键包含全部 id，故无过期风险（编辑/撤销改变任一条即重扫）。
    */
+  const approvalMessagesKey = useMemo(
+    () => chat.messages.map((m) => m.computerTask?.id ?? "").join(","),
+    [chat.messages]
+  );
   const approvalOwnerMessageId = useMemo(
     () => findApprovalOwnerMessageId(chat.messages, pendingApproval?.taskId),
-    [pendingApproval?.taskId, chat.messages]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pendingApproval?.taskId, approvalMessagesKey]
   );
 
   // Task 7C：Kiro 输出字号（顶层一次订阅；CSS variable 让所有历史 Message 同步缩放，不逐条订阅）
@@ -126,22 +136,22 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
     [provider, model, custom.model]
   );
 
-  const openKiroSettings = () => {
+  // P3：Access Menu 的权限摘要（只含 boolean preference，不含 runtime 事实）
+  const openKiroSettings = useCallback(() => {
     setSettingsTargetSection("kiro");
     setSettingsModalOpen(true);
-  };
+  }, [setSettingsTargetSection, setSettingsModalOpen]);
 
   // ---- Kiro Computer Agent V1：Composer Computer 模式 owner（订阅 stores + capability）----
-  const {
-    computerEnabled,
-    activeWorkspaceId,
-    agentMode,
-    workspaces,
-    setComputerEnabled,
-    setActiveWorkspaceId,
-    setAgentMode,
-    addWorkspace,
-  } = useKiroComputerStore();
+  // 细粒度订阅：整库解构会在 computer 任意字段变化时重渲染整个会话面（含流式中的 Conversation）；
+  // 各自按需订阅，流式 token 期间无关 computer 写入不再进 render。
+  const computerEnabled = useKiroComputerStore((s) => s.computerEnabled);
+  const activeWorkspaceId = useKiroComputerStore((s) => s.activeWorkspaceId);
+  const agentMode = useKiroComputerStore((s) => s.agentMode);
+  const workspaces = useKiroComputerStore((s) => s.workspaces);
+  const setComputerEnabled = useKiroComputerStore((s) => s.setComputerEnabled);
+  const setActiveWorkspaceId = useKiroComputerStore((s) => s.setActiveWorkspaceId);
+  const setAgentMode = useKiroComputerStore((s) => s.setAgentMode);
   const reasoningEffort = useAISettingsStore((s) => s.reasoningEffort);
   const setReasoningEffort = useAISettingsStore((s) => s.setReasoningEffort);
   const reasoningCapability = useMemo(
@@ -161,18 +171,23 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
     ) ?? false;
 
   // Computer toggle：无 workspace 时走 canonical Sandbox 引导（CI-friendly；绝不产生重复 Sandbox）
-  const handleToggleComputer = (enabled: boolean) => {
-    if (!enabled) {
-      setComputerEnabled(false);
-      return;
-    }
-    if (workspaces.length === 0) {
-      useKiroComputerStore.getState().ensureDefaultSandboxWorkspace();
-      return;
-    }
-    if (!activeWorkspaceId) setActiveWorkspaceId(workspaces[0].id);
-    setComputerEnabled(true);
-  };
+  // useCallback 稳定 identity：内联定义会在 Surface 每 render（流式每 token）时产生新回调，
+  // 穿透下游 memo（Composer / Row），故此处及下方传给 Conversation 的回调全部稳定化。
+  const handleToggleComputer = useCallback(
+    (enabled: boolean) => {
+      if (!enabled) {
+        setComputerEnabled(false);
+        return;
+      }
+      if (workspaces.length === 0) {
+        useKiroComputerStore.getState().ensureDefaultSandboxWorkspace();
+        return;
+      }
+      if (!activeWorkspaceId) setActiveWorkspaceId(workspaces[0].id);
+      setComputerEnabled(true);
+    },
+    [workspaces, activeWorkspaceId, setComputerEnabled, setActiveWorkspaceId]
+  );
 
   const hasMessages = chat.messages.length > 0;
   // Context-aware 建议可见时，隐藏 EmptyState 的通用建议（两者不同时出现）
@@ -188,6 +203,45 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
     !hasMessages && hasContextSuggestions ? (
       <KiroContextSuggestions compact={compact} inset={false} />
     ) : undefined;
+
+  // 传给 Conversation / Dialog 的回调全部稳定化：内联箭头每 render 产生新 identity，
+  // 会穿透 Row / Composer memo 使流式每 token 全树重渲染（chat.* 均为 useCallback，已稳定，
+  // 此处依赖它们而非空数组——方法变化时正确更新）。
+  const handleApprovalDecision = useCallback(
+    (id: string, decision: ComputerApprovalDecision) => void chat.resolveApproval(id, decision),
+    [chat.resolveApproval]
+  );
+  const handleUndoComputerTask = useCallback((taskId: string) => void chat.undoComputerTask(taskId), [
+    chat.undoComputerTask,
+  ]);
+  const handleApprovePlan = useCallback(
+    (planId: string) => {
+      void chat.approveExecutionPlan(planId).then((ok) => {
+        if (!ok) return;
+        setAgentMode("workspace-auto");
+        pushToast({ message: "已批准，发下一条消息时就按这个计划执行。" });
+      });
+    },
+    [chat.approveExecutionPlan, setAgentMode, pushToast]
+  );
+  const handleCancelPlan = useCallback((planId: string) => void chat.cancelExecutionPlan(planId), [
+    chat.cancelExecutionPlan,
+  ]);
+  const handleRegenerateAnswer = useCallback(() => void chat.regenerateAnswer(), [chat.regenerateAnswer]);
+  const handleNewChat = useCallback(() => newChat(), [newChat]);
+  const resolveBulkApproval = (chat as unknown as { resolveBulkApproval: (d: ComputerApprovalDecision) => void })
+    .resolveBulkApproval;
+  const handleBulkDecision = useCallback(
+    (decision: ComputerApprovalDecision) => void resolveBulkApproval(decision),
+    [resolveBulkApproval]
+  );
+  const handleReviewDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) setPendingApproval(null);
+      setReviewTaskId(null);
+    },
+    [setPendingApproval, setReviewTaskId]
+  );
 
   return (
     <div
@@ -227,24 +281,18 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
             pendingApproval={pendingApproval}
             approvalOwnerMessageId={approvalOwnerMessageId}
             pendingQueueLength={pendingQueueLength}
-            onApprovalDecision={(id, decision) => void chat.resolveApproval(id, decision)}
+            onApprovalDecision={handleApprovalDecision}
             desktopPaused={desktopSessionPaused}
             onStop={chat.stop}
             onReviewComputerTask={setReviewTaskId}
             // S-fix durable undo：live/restored 路由（restored 走 undoRestoredTask）
-            onUndoComputerTask={(taskId) => void chat.undoComputerTask(taskId)}
+            onUndoComputerTask={handleUndoComputerTask}
             // plan-approve：批准 = 单次授权整计划 + 切工作区自动（下一条发送按计划执行；不自动发送）
-            onApprovePlan={(planId) => {
-              void chat.approveExecutionPlan(planId).then((ok) => {
-                if (!ok) return;
-                setAgentMode("workspace-auto");
-                pushToast({ message: "已批准，发下一条消息时就按这个计划执行。" });
-              });
-            }}
+            onApprovePlan={handleApprovePlan}
             // 空终答追答入口（view 层判定 + hook 纯文本追答链；缺失则重试按钮永不出现）
-            onRegenerateAnswer={() => void chat.regenerateAnswer()}
-            onCancelPlan={(planId) => void chat.cancelExecutionPlan(planId)}
-            onNewChat={() => newChat()}
+            onRegenerateAnswer={handleRegenerateAnswer}
+            onCancelPlan={handleCancelPlan}
+            onNewChat={handleNewChat}
           />
         )}
       </div>
@@ -306,8 +354,8 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
       <ComputerApprovalDialog
         request={approvalOwnerMessageId ? null : pendingApproval}
         queueLength={pendingQueueLength}
-        onDecision={(id, decision) => void chat.resolveApproval(id, decision)}
-        onBulkDecision={(decision) => void (chat as unknown as { resolveBulkApproval: (d: string) => void }).resolveBulkApproval(decision)}
+        onDecision={handleApprovalDecision}
+        onBulkDecision={handleBulkDecision}
       />
       <KiroChangeReviewDialog
         task={
@@ -315,10 +363,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
             ? (chat.messages.find((m) => m.computerTask?.id === reviewTaskId)?.computerTask ?? null)
             : null
         }
-        onOpenChange={(open) => {
-          if (!open) setPendingApproval(null);
-          setReviewTaskId(null);
-        }}
+        onOpenChange={handleReviewDialogOpenChange}
       />
     </div>
   );

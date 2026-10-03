@@ -125,7 +125,8 @@ export function UISelect<T extends string | number>({
     };
     const onResize = () => closeMenu();
     document.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("scroll", onScroll, true);
+    // passive：只做关闭判定从不 preventDefault，不得阻塞滚动
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
     window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown);

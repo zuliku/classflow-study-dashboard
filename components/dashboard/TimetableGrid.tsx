@@ -264,9 +264,24 @@ export function TimetableGrid({
   const dragOffsetRef = useRef(0);
   const wasDraggedRef = useRef(false);
 
+  // pointermove rAF 合并（与 Sidecar Shell 同模式）：高频事件只记最新坐标，
+  // 每帧至多一次 setState + 冲突重算；松手/取消时同步 flush，保证最后一帧不丢。
+  const moveFrameRef = useRef(0);
+  const pendingPointerRef = useRef<{
+    x: number;
+    y: number;
+    sched: CourseSchedule;
+    kind: "move" | "resize";
+  } | null>(null);
+
   const cancelInteraction = () => {
     pendingRef.current = null;
     wasDraggedRef.current = false;
+    pendingPointerRef.current = null;
+    if (moveFrameRef.current) {
+      cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = 0;
+    }
     setInteractionSync({ type: "idle" });
   };
 
@@ -293,6 +308,9 @@ export function TimetableGrid({
     () => () => {
       pendingRef.current = null;
       wasDraggedRef.current = false;
+      pendingPointerRef.current = null;
+      if (moveFrameRef.current) cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = 0;
       if (settleTimerRef.current) window.clearTimeout(settleTimerRef.current);
     },
     []
@@ -346,21 +364,41 @@ export function TimetableGrid({
     }
   };
 
+  /** 同步执行一次 pending pointer（rAF 回调与 pointerup 共用，保证最后一帧不丢） */
+  const flushPointerFrame = () => {
+    moveFrameRef.current = 0;
+    const pending = pendingPointerRef.current;
+    pendingPointerRef.current = null;
+    if (!pending) return;
+    if (pending.kind === "move") processCardPointerMove(pending.x, pending.y, pending.sched);
+    else processResizePointerMove(pending.x, pending.y, pending.sched);
+  };
+
+  const schedulePointerFrame = (x: number, y: number, sched: CourseSchedule, kind: "move" | "resize") => {
+    pendingPointerRef.current = { x, y, sched, kind };
+    if (moveFrameRef.current) return;
+    moveFrameRef.current = requestAnimationFrame(flushPointerFrame);
+  };
+
   const handleCardPointerMove = (e: React.PointerEvent, sched: CourseSchedule) => {
+    schedulePointerFrame(e.clientX, e.clientY, sched, "move");
+  };
+
+  const processCardPointerMove = (clientX: number, clientY: number, sched: CourseSchedule) => {
     const current = interactionRef.current;
     const pending = pendingRef.current;
     if (pending && current.type === "idle") {
-      const dist = Math.hypot(e.clientX - pending.startX, e.clientY - pending.startY);
-      if (dist >= DRAG_THRESHOLD_PX) engageMove(pending.origin, e.clientX, e.clientY);
+      const dist = Math.hypot(clientX - pending.startX, clientY - pending.startY);
+      if (dist >= DRAG_THRESHOLD_PX) engageMove(pending.origin, clientX, clientY);
       return;
     }
     if (current.type === "move" && current.scheduleId === sched.id) {
-      const pointerMin = getPointerMinutes(e.clientY);
+      const pointerMin = getPointerMinutes(clientY);
       const candidate = calculateDraggedSchedule(
         current.origin,
         pointerMin,
         dragOffsetRef.current,
-        getDayIndex(e.clientX) + 1
+        getDayIndex(clientX) + 1
       );
       const { valid, conflict } = validateScheduleCandidate(
         candidate,
@@ -377,6 +415,12 @@ export function TimetableGrid({
     } catch {
       /* 已释放 */
     }
+    // 先同步 flush 最后一帧（rAF 可能还没跑），再按最新 candidate 提交
+    if (moveFrameRef.current) {
+      cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = 0;
+    }
+    flushPointerFrame();
     const current = interactionRef.current;
     if (current.type === "move" && current.scheduleId === sched.id) {
       commitInteraction(current);
@@ -405,9 +449,13 @@ export function TimetableGrid({
   };
 
   const handleResizePointerMove = (e: React.PointerEvent, sched: CourseSchedule) => {
+    schedulePointerFrame(e.clientX, e.clientY, sched, "resize");
+  };
+
+  const processResizePointerMove = (clientX: number, clientY: number, sched: CourseSchedule) => {
     const current = interactionRef.current;
     if (current.type !== "resize" || current.scheduleId !== sched.id) return;
-    const candidate = calculateResizedSchedule(current.origin, getPointerMinutes(e.clientY));
+    const candidate = calculateResizedSchedule(current.origin, getPointerMinutes(clientY));
     const { valid, conflict } = validateScheduleCandidate(
       candidate,
       schedules,
@@ -423,6 +471,11 @@ export function TimetableGrid({
     } catch {
       /* ignore */
     }
+    if (moveFrameRef.current) {
+      cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = 0;
+    }
+    flushPointerFrame();
     const current = interactionRef.current;
     if (current.type === "resize" && current.scheduleId === sched.id) {
       commitInteraction(current);

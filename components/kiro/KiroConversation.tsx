@@ -365,29 +365,22 @@ export function KiroConversation({
 }
 
 /**
- * 单条消息行（Task 13）：React.memo。
+ * 单条消息行（Task 13）：React.memo + 自定义比较。
  * view 依赖 Message View 缓存（identity 稳定）→ streaming 时历史行不重渲染；
  * actionsReady/sources 对历史行是稳定原语；最后一行收到真实变化值。
+ *
+ * allMessages 特殊处理：chat.messages 每 token 都是新数组 identity，但内容 slice
+ * （id 序列）不变时行输出不变 → 按 id 序列比较而非引用比较，否则 memo 恒穿透、
+ * 流式每 token 全树 reconcile。编辑/重生成/恢复会改变 id 序列或 view 本体，照常更新。
  */
-const KiroConversationRow = React.memo(function KiroConversationRow({
-  view,
-  allMessages,
-  actionsReady,
-  sources,
-  onUndo,
-  onRetry,
-  onEditUserMessage,
-  runLive,
-  approval,
-  desktopPaused,
-  onStop,
-  onReviewComputerTask,
-  onUndoComputerTask,
-  onApprovePlan,
-  onCancelPlan,
-  showRegenerateAnswer,
-  onRegenerateAnswer,
-}: {
+function sameMessageIdList(a?: KiroChatMessageView[], b?: KiroChatMessageView[]): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i].id !== b[i].id) return false;
+  return true;
+}
+
+export interface KiroConversationRowProps {
   view: KiroChatMessageView;
   allMessages?: KiroChatMessageView[];
   actionsReady: boolean;
@@ -410,7 +403,38 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   showRegenerateAnswer?: boolean;
   /** 空终答追答（纯文本重跑；零工具） */
   onRegenerateAnswer?: () => void;
-}) {
+}
+
+export function areConversationRowsEqual(prev: KiroConversationRowProps, next: KiroConversationRowProps): boolean {
+  if (!sameMessageIdList(prev.allMessages, next.allMessages)) return false;
+  const prevRest = prev as unknown as Record<string, unknown>;
+  const nextRest = next as unknown as Record<string, unknown>;
+  for (const key of Object.keys(prevRest)) {
+    if (key === "allMessages") continue;
+    if (!Object.is(prevRest[key], nextRest[key])) return false;
+  }
+  return Object.keys(nextRest).every((key) => key === "allMessages" || key in prevRest);
+}
+
+const KiroConversationRow = React.memo(function KiroConversationRow({
+  view,
+  allMessages,
+  actionsReady,
+  sources,
+  onUndo,
+  onRetry,
+  onEditUserMessage,
+  runLive,
+  approval,
+  desktopPaused,
+  onStop,
+  onReviewComputerTask,
+  onUndoComputerTask,
+  onApprovePlan,
+  onCancelPlan,
+  showRegenerateAnswer,
+  onRegenerateAnswer,
+}: KiroConversationRowProps) {
   // Hooks 必须在 assistant 占位由空变为可见内容前后保持同一顺序。
   const actionSummaries = React.useMemo(
     () => [
@@ -605,7 +629,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
       <SkillDistillDialog open={skillDistillOpen} onOpenChange={setSkillDistillOpen} trace={skillTrace} />
     </div>
   );
-});
+}, areConversationRowsEqual);
 
 function isVisibleConversationMessage(message: KiroChatMessageView): boolean {
   if (message.role === "user") return true;

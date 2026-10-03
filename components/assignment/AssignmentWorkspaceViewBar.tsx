@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AlertTriangle, BookOpen, MoreHorizontal } from "lucide-react";
 import { WorkspaceViewBar } from "@/components/layout/WorkspaceViewBar";
 import { UISelect } from "@/components/ui/Select";
@@ -35,6 +35,18 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
   const assignments = useAppStore((s) => s.assignments);
   const courses = useAppStore((s) => s.courses);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // 搜索输入 180ms 去抖：每键直写会全量重算列表 + 重置退出快照（输入期卡顿主因之一）；
+  // 本地即时回显，提交才进 controller。外部清空（如表格内“清除筛选”）回写本地。
+  const [draftQuery, setDraftQuery] = useState(searchQuery);
+  useEffect(() => {
+    setDraftQuery(searchQuery);
+  }, [searchQuery]);
+  useEffect(() => {
+    if (draftQuery === searchQuery) return;
+    const timer = setTimeout(() => setSearchQuery(draftQuery), 180);
+    return () => clearTimeout(timer);
+  }, [draftQuery, searchQuery, setSearchQuery]);
 
   // More 菜单：outside click / Esc 关闭（非 modal，不拦截页面交互）
   useEffect(() => {
@@ -148,10 +160,10 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
         </button>
       )}
 
-      {/* Search → 全局 SearchField（筛选语义不变） */}
+      {/* Search → 全局 SearchField（筛选语义不变；输入经上游去抖） */}
       <SearchField
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
+        value={draftQuery}
+        onChange={(e) => setDraftQuery(e.target.value)}
         placeholder="搜索任务…"
         aria-label="搜索任务"
         className="min-w-[150px]"

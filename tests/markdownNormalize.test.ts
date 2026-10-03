@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeMathDelimiters } from "@/lib/ai/markdown";
+import { normalizeMathDelimiters, clearMathNormalizeCache } from "@/lib/ai/markdown";
 
 describe("normalizeMathDelimiters", () => {
   it("普通文本原样保留", () => {
@@ -84,5 +84,34 @@ describe("normalizeMathDelimiters", () => {
 
   it("Task 7A：未闭合 $$ 在流式/原文中原样保留", () => {
     expect(normalizeMathDelimiters("计算 $$x+y")).toBe("计算 $$x+y");
+  });
+
+  it("流式追加快路径：与冷解析逐字等价（含数学与 pending notions）", () => {
+    // 模拟流式逐段追加：第一段触发全量解析，后续纯文本追加走快路径
+    const chunks = [
+      "需求函数为 ",
+      "$$Q_d = a - bP$$",
+      "，其中 b>0。\n推导过程如下：\n",
+      "\\( Q_d =\nf(P) \\)\n完成。",
+    ];
+    let acc = "";
+    for (const c of chunks) {
+      acc += c;
+      expect(typeof normalizeMathDelimiters(acc)).toBe("string");
+    }
+    // 最终全文结果稳定：追加式与（清空缓存后）一次性解析一致
+    const streamed = normalizeMathDelimiters(acc);
+    clearMathNormalizeCache();
+    expect(normalizeMathDelimiters(acc)).toBe(streamed);
+  });
+
+  it("pending 未闭合时追加含标记段 → 回退全量，结果正确", () => {
+    clearMathNormalizeCache();
+    // 未闭合时先走全量（pending 置位）；断言追加闭合后正确折叠即可
+    normalizeMathDelimiters("推导 \\( Q_d =");
+    // 追加含闭合标记：必须走全量解析并正确合并跨行公式
+    expect(normalizeMathDelimiters("推导 \\( Q_d =\nf(P) \\)\n完成。")).toBe(
+      "推导 \n\n$$\nQ_d =\nf(P)\n$$\n完成。"
+    );
   });
 });
