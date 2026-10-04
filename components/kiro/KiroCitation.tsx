@@ -36,6 +36,7 @@ export function KiroCitation({
     const pill = (
       <span
         data-testid="kiro-citation"
+        data-citation-source={source.sourceId}
         className="inline-flex items-center gap-1 align-baseline mx-[0.15em] px-1.5 py-px rounded-md bg-pastel-mint/70 border border-line text-[11px] font-semibold text-charcoal whitespace-nowrap max-w-[220px]"
         title={source.domain ? `${label} · ${source.domain}` : label}
       >
@@ -60,6 +61,7 @@ export function KiroCitation({
   return (
     <span
       data-testid="kiro-citation"
+      data-citation-source={source.sourceId}
       className="inline-flex items-center gap-1 align-baseline mx-[0.15em] px-1.5 py-px rounded-md bg-pastel-mint/70 border border-line text-[11px] font-semibold text-charcoal whitespace-nowrap max-w-[220px]"
       title={label}
     >

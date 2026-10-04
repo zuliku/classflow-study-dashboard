@@ -241,7 +241,26 @@ export function KiroInspectorOutputs() {
           </DisclosureRegion>
         </>
       ) : (
-        <div className="space-y-0.5">{entries.map((entry) => renderRow(entry))}</div>
+        <>
+          <div className="space-y-0.5">{entries.map((entry) => renderRow(entry))}</div>
+          {/* P1：常驻“最近文件”双段（此前切对话即清零，用户以为文件没生成；此处含其他对话产物，去重本段已有） */}
+          <button
+            type="button"
+            onClick={() => setShowRecent((v) => !v)}
+            aria-expanded={showRecent}
+            className="mt-0.5 flex w-full items-center gap-1.5 px-1.5 h-7 rounded-lg text-[11px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
+          >
+            <FileClock className="w-3.5 h-3.5" />
+            最近文件（含其他对话）
+          </button>
+          <DisclosureRegion open={showRecent}>
+            <div className="mt-0.5">
+              {recentEntries
+                .filter((e) => !entries.some((c) => c.artifact.id === e.artifact.id))
+                .map((entry) => renderRow(entry))}
+            </div>
+          </DisclosureRegion>
+        </>
       )}
     </KiroInspectorSection>
   );

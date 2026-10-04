@@ -275,6 +275,22 @@ describe("Kiro Inspector — Outputs", () => {
     expect(artifactSpies.listRecentArtifactEntries).not.toHaveBeenCalled();
   });
 
+  it("有本对话输出时仍常驻最近文件段（含其他对话，去重不重复）", async () => {
+    await renderInspector();
+    expect(text()).toContain("summary.md");
+    const recent = Array.from(container!.querySelectorAll("button")).find((b) =>
+      (b.textContent ?? "").includes("最近文件（含其他对话）")
+    ) as HTMLElement;
+    expect(recent).toBeTruthy();
+    await act(async () => {
+      recent.click();
+    });
+    await flush();
+    expect(text()).toContain("其他对话文件.md");
+    // 本段 2 + 最近段 1（去重后不重复 summary.md 行）
+    expect(container!.querySelectorAll('[data-testid="kiro-inspector-output-row"]').length).toBe(3);
+  });
+
   it("Conversation 无输出 → 空态 + 低权重「最近文件」按需展开", async () => {
     artifactSpies.listArtifactEntriesForConversation.mockResolvedValue([]);
     await renderInspector();
@@ -439,6 +455,39 @@ describe("Kiro Inspector — Sources", () => {
     const link = q("打开来源：OpenAI — Codex") as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("https://openai.com/codex");
     expect(link.getAttribute("rel")).toContain("noopener");
+  });
+
+  it("每行有点位按钮；无引用时 toast 说明不抛错", async () => {
+    metaState.currentTurnSources = [webSource];
+    await renderInspector();
+    const btn = q("在对话中定位来源 OpenAI — Codex");
+    expect(btn).toBeTruthy();
+    await act(async () => {
+      (btn as HTMLElement).click();
+    });
+    await flush();
+  });
+
+  it("有引用时滚动到目标并闪光", async () => {
+    metaState.currentTurnSources = [webSource];
+    const conv = document.createElement("div");
+    conv.setAttribute("data-testid", "kiro-conversation");
+    const pill = document.createElement("span");
+    pill.setAttribute("data-citation-source", "web-1");
+    const scrolled: string[] = [];
+    (pill as unknown as { scrollIntoView: (opts: unknown) => void }).scrollIntoView = () => {
+      scrolled.push("y");
+    };
+    conv.appendChild(pill);
+    document.body.appendChild(conv);
+    try {
+      await renderInspector();
+      await click("在对话中定位来源 OpenAI — Codex");
+      expect(scrolled).toEqual(["y"]);
+      expect(pill.classList.contains("kiro-citation-flash")).toBe(true);
+    } finally {
+      conv.remove();
+    }
   });
 
   it("超过 6 个 → 查看全部 disclosure（不新开 Modal）", async () => {

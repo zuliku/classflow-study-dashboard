@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ExternalLink, FileText, FolderOpen, Globe2, MessagesSquare } from "lucide-react";
+import { Crosshair, ExternalLink, FileText, FolderOpen, Globe2, MessagesSquare } from "lucide-react";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
+import { useToastStore } from "@/store/useToastStore";
 import { isSafeWebUrl } from "@/lib/ai/citations/parser";
 import type { KiroSourceMeta } from "@/lib/ai/citations/types";
 import {
@@ -45,10 +46,36 @@ function sourceMetaLine(source: KiroSourceMeta): string {
  * 只读展示：不重新抓网页 / 不重新读文件；Web 只允许 safe URL 点击；
  * 绝不显示 snippet / 正文 / query / score / provider raw response。
  * 单条 Message 的精确 Citation 入口仍在 KiroMessage More → 来源（本组件不替代）。
+ * 行点击：在对话中定位首次引用该来源的位置（滚动 + 高亮；无引用则 toast 说明）。
  */
+
+/** 在对话区定位首次引用该 sourceId 的位置；返回是否找到 */
+function locateSourceCitation(sourceId: string): boolean {
+  try {
+    const scope =
+      document.querySelector('[data-testid="kiro-conversation"]') ?? document;
+    // jsdom 无 CSS.escape：sourceId 均为 [A-Za-z0-9_-] 安全字符，仅转义引号与反斜杠兜底
+    const esc =
+      typeof CSS !== "undefined" && typeof CSS.escape === "function"
+        ? CSS.escape(sourceId)
+        : sourceId.replace(/["\\]/g, "\\$&");
+    const el = scope.querySelector(`[data-citation-source="${esc}"]`);
+    if (!el) return false;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.remove("kiro-citation-flash");
+    // 强制重启动画（同一来源连续点击两次也闪）
+    void (el as HTMLElement).offsetWidth;
+    el.classList.add("kiro-citation-flash");
+    window.setTimeout(() => el.classList.remove("kiro-citation-flash"), 1600);
+    return true;
+  } catch {
+    return false;
+  }
+}
 export function KiroInspectorSources() {
   const meta = useKiroSessionMeta();
   const actions = useKiroSessionActions();
+  const pushToast = useToastStore((s) => s.pushToast);
   const [showAll, setShowAll] = useState(false);
 
   const sources = useMemo(
@@ -81,17 +108,33 @@ export function KiroInspectorSources() {
                     testId="kiro-inspector-source-row"
                     icon={sourceIcon(source)}
                     actions={
-                      url ? (
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={`打开来源：${source.name}`}
+                      <>
+                        {/* P1：在对话中定位首次引用（此前来源看得到但定位不到，依据不可溯源） */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!locateSourceCitation(source.sourceId)) {
+                              pushToast({ message: "对话中暂无该来源的引用", type: "info" });
+                            }
+                          }}
+                          aria-label={`在对话中定位来源 ${source.name}`}
+                          title="在对话中定位引用位置"
                           className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
                         >
-                          <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-                        </a>
-                      ) : null
+                          <Crosshair className="w-3.5 h-3.5" aria-hidden="true" />
+                        </button>
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`打开来源：${source.name}`}
+                            className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                          </a>
+                        ) : null}
+                      </>
                     }
                   >
                     <span className="block text-xs font-semibold text-charcoal truncate" title={source.name}>

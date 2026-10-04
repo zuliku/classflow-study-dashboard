@@ -1759,3 +1759,24 @@ html[data-motion-effective="reduced"] .kiro-send-activate {
 div[data-geometry-interacting] {
   box-shadow: none !important;
 }
+
+/* P1：Inspector 来源定位闪光（滚动到引用后 1.2s 描边提示，JS 侧超时摘除） */
+@keyframes kiro-citation-flash {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(49, 48, 50, 0);
+  }
+  30%, 70% {
+    box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.55);
+  }
+}
+.kiro-citation-flash {
+  animation: kiro-citation-flash 1.2s var(--ease-standard);
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kiro-citation-flash {
+    animation: none;
+    outline: 2px solid rgba(49, 48, 50, 0.55);
+    outline-offset: 1px;
+  }
+}
