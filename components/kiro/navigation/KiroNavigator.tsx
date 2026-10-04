@@ -200,11 +200,15 @@ export function KiroNavigator() {
 
   const openThread = useCallback(
     (id: string) => {
-      if (transitioning) return;
+      // P1：切换中点第二条不再静默丢弃（此前毫无反应，用户多点后目标混乱）
+      if (transitioning) {
+        pushToast({ message: "正在切换对话，请稍候", type: "info" });
+        return;
+      }
       collapseAfterTransitionRef.current = true;
       actions.loadConversation(id);
     },
-    [actions, transitioning]
+    [actions, transitioning, pushToast]
   );
 
   const openProject = useCallback(

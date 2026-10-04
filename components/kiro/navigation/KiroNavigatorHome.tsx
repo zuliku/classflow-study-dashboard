@@ -12,6 +12,7 @@ import {
 } from "@/components/kiro/navigation/KiroNavigatorProjects";
 import { KiroProjectRecord } from "@/lib/ai/projects/types";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
+import { groupThreadsByRecency } from "@/lib/ai/history/search";
 
 /** Home 默认显示最近对话条数（超出折叠为「查看全部」） */
 export const KIRO_NAVIGATOR_RECENT_LIMIT = 8;
@@ -80,8 +81,8 @@ export function KiroNavigatorHome({
             ref={searchInputRef}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="搜索对话与项目"
-            aria-label="搜索对话与项目"
+            placeholder="搜索标题、摘要与正文"
+            aria-label="搜索标题、摘要与正文"
             className="w-full bg-transparent text-xs text-charcoal placeholder-sandrift focus:outline-none"
           />
         </div>
@@ -137,20 +138,39 @@ export function KiroNavigatorHome({
               <KiroNavigatorSectionHeader label="最近" />
               {visibleThreads.length === 0 ? (
                 <p className="px-1.5 py-4 text-center text-[11px] text-sandrift">暂无历史对话</p>
+              ) : searching ? (
+                <div className="space-y-0.5">
+                  {visibleThreads.map((thread) => (
+                    <KiroThreadRow
+                      key={thread.id}
+                      record={thread}
+                      isCurrent={currentConversationId === thread.id}
+                      onOpen={onOpenThread}
+                      disabled={disabled}
+                      transitioning={transitionTargetId === thread.id}
+                    />
+                  ))}
+                </div>
               ) : (
                 <>
-                  <div className="space-y-0.5">
-                    {(searching ? visibleThreads : visibleThreads.slice(0, KIRO_NAVIGATOR_RECENT_LIMIT)).map((thread) => (
-                      <KiroThreadRow
-                        key={thread.id}
-                        record={thread}
-                        isCurrent={currentConversationId === thread.id}
-                        onOpen={onOpenThread}
-                        disabled={disabled}
-                        transitioning={transitionTargetId === thread.id}
-                      />
-                    ))}
-                  </div>
+                  {/* P1：今天/昨天/更早分组（此前 8 条平铺，昨天和上周混一起难定位） */}
+                  {groupThreadsByRecency(visibleThreads.slice(0, KIRO_NAVIGATOR_RECENT_LIMIT)).map((group) => (
+                    <div key={group.label}>
+                      <p className="px-2 pt-1.5 pb-0.5 text-[10px] font-bold text-sandrift">{group.label}</p>
+                      <div className="space-y-0.5">
+                        {group.items.map((thread) => (
+                          <KiroThreadRow
+                            key={thread.id}
+                            record={thread}
+                            isCurrent={currentConversationId === thread.id}
+                            onOpen={onOpenThread}
+                            disabled={disabled}
+                            transitioning={transitionTargetId === thread.id}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                   {/* 超出 8 条的部分折叠展开（搜索态全显，不走折叠；按钮只在非搜索态出现） */}
                   {!searching && threads.length > KIRO_NAVIGATOR_RECENT_LIMIT && (
                     <DisclosureRegion open={showAllThreads}>

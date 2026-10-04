@@ -5,6 +5,7 @@ import { KIRO_PROJECT_ICON } from "@/components/kiro/kiroProjectIcon";
 import { KiroProjectRecord } from "@/lib/ai/projects/types";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
+import { filterConversations } from "@/lib/ai/history/search";
 import { cn } from "@/lib/utils";
 
 const MAX_PROJECT_RESULTS = 6;
@@ -37,9 +38,10 @@ export function KiroNavigatorSearch({
           (project.description ?? "").toLowerCase().includes(q)
       )
     : [];
-  const matchedThreads = q
-    ? threads.filter((thread) => thread.title.toLowerCase().includes(q))
-    : [];
+  // P1：标题 + 摘要 + 正文（此前只搜标题，记得内容搜不到）
+  const matchedWithKind = q ? filterConversations(threads, q) : [];
+  const matchedThreads = matchedWithKind.map((m) => m.thread);
+  const matchById = new Map(matchedWithKind.map((m) => [m.thread.id, m.match]));
 
   if (matchedProjects.length === 0 && matchedThreads.length === 0) {
     return (
@@ -87,28 +89,44 @@ export function KiroNavigatorSearch({
 
       {matchedThreads.length > 0 && (
         <section aria-label="对话搜索结果">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift px-1.5 pt-1 pb-1">对话</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift px-1.5 pt-1 pb-1">
+            对话 · 标题/摘要/正文
+          </p>
           <div className="space-y-0.5">
-            {matchedThreads.slice(0, MAX_THREAD_RESULTS).map((thread) => (
-              <button
-                key={thread.id}
-                type="button"
-                onClick={() => {
-                  if (disabled) return;
-                  onOpenThread(thread.id);
-                }}
-                disabled={disabled}
-                aria-label={`打开对话 ${thread.title}`}
-                className={cn(
-                  "w-full flex items-center gap-1.5 px-2 h-9 rounded-lg text-left hover:bg-alabaster/70 transition-colors",
-                  disabled && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                <span className="min-w-0 flex-1 block text-xs font-semibold text-charcoal truncate">{thread.title}</span>
-                <span className="shrink-0 text-[10px] text-sandrift tabular-nums">{formatHistoryTime(thread.updatedAt)}</span>
-              </button>
-            ))}
+            {matchedThreads.slice(0, MAX_THREAD_RESULTS).map((thread) => {
+              const match = matchById.get(thread.id);
+              return (
+                <button
+                  key={thread.id}
+                  type="button"
+                  onClick={() => {
+                    if (disabled) return;
+                    onOpenThread(thread.id);
+                  }}
+                  disabled={disabled}
+                  aria-label={`打开对话 ${thread.title}`}
+                  className={cn(
+                    "w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-left hover:bg-alabaster/70 transition-colors",
+                    disabled && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold text-charcoal truncate">{thread.title}</span>
+                    {match && match.kind !== "title" && match.excerpt && (
+                      <span className="block text-[10px] text-sandrift truncate">{match.excerpt}</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-sandrift tabular-nums">{formatHistoryTime(thread.updatedAt)}</span>
+                </button>
+              );
+            })}
           </div>
+          {/* 截断声明（此前超 10 条静默丢弃，以为没有） */}
+          {matchedThreads.length > MAX_THREAD_RESULTS && (
+            <p className="px-1.5 py-1 text-[10px] text-sandrift">
+              仅显示前 {MAX_THREAD_RESULTS} 条，共 {matchedThreads.length} 条匹配
+            </p>
+          )}
         </section>
       )}
     </div>

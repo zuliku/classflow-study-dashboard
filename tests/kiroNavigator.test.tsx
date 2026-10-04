@@ -531,13 +531,13 @@ describe("Kiro Navigator — 统一搜索", () => {
     dbSpies.listConversations.mockResolvedValue([conv("c1", "查找QQ班助群近期通知")]);
     await renderNavigator();
     await click("展开对话");
-    await setInput("搜索对话与项目", "国贸");
+    await setInput("搜索标题、摘要与正文", "国贸");
     expect(text()).toContain("国贸竞赛");
     expect(text()).not.toContain("查找QQ班助群近期通知");
-    await setInput("搜索对话与项目", "QQ");
+    await setInput("搜索标题、摘要与正文", "QQ");
     expect(text()).toContain("查找QQ班助群近期通知");
     expect(text()).not.toContain("国贸竞赛");
-    await setInput("搜索对话与项目", "不存在的关键词");
+    await setInput("搜索标题、摘要与正文", "不存在的关键词");
     expect(container!.querySelector('[data-testid="kiro-navigator-search-empty"]')).toBeTruthy();
   });
 });

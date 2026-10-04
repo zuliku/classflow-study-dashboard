@@ -7,6 +7,7 @@ import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { KiroThreadRow } from "@/components/kiro/KiroThreadRow";
 import { listConversations } from "@/lib/ai/history/db";
+import { filterConversations } from "@/lib/ai/history/search";
 import { KiroConversationRecord } from "@/lib/ai/history/types";
 import { usePresence } from "@/lib/usePresence";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
@@ -35,9 +36,12 @@ export function KiroHistoryPanel({
   const [requestedThreadId, setRequestedThreadId] = useState<string | null>(null);
   const [requestedTransitionStarted, setRequestedTransitionStarted] = useState(false);
   const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.panel);
+  // P1：标题 + 摘要 + 正文（与导航搜索同口径，此前只搜标题）
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? records.filter((r) => r.title.toLowerCase().includes(q)) : records;
+    if (!q) return records;
+    const matched = new Set(filterConversations(records, q).map((m) => m.thread.id));
+    return records.filter((r) => matched.has(r.id));
   }, [records, query]);
   // 行删除原位 collapse（搜索 query 变化走 resetKey 即时，不保留过期快照）
   const retainedFiltered = useExitPresenceList({
@@ -81,7 +85,11 @@ export function KiroHistoryPanel({
   if (!mounted) return null;
 
   const openThread = (id: string) => {
-    if (session.conversationTransitioning) return;
+    // P1：切换中点第二条不再静默丢弃（此前毫无反应，用户以为没点中而反复点）
+    if (session.conversationTransitioning) {
+      pushToast({ message: "正在切换对话，请稍候", type: "info" });
+      return;
+    }
     void session.loadConversation(id);
     setRequestedThreadId(id);
     setRequestedTransitionStarted(false);
@@ -143,8 +151,8 @@ export function KiroHistoryPanel({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索对话标题"
-            aria-label="搜索对话"
+            placeholder="搜索标题、摘要与正文"
+            aria-label="搜索标题、摘要与正文"
             className="w-full bg-[#F7F5F5] border border-line rounded-xl px-3 h-9 text-xs text-charcoal placeholder-sandrift focus:outline-none"
           />
           <div className="rounded-2xl bg-[#F7F5F5] border border-line flex flex-col overflow-hidden min-h-[240px]">

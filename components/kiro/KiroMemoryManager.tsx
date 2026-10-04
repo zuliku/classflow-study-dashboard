@@ -76,10 +76,20 @@ export function KiroMemoryManager({
     }
   };
 
-  const remove = async (id: string) => {
-    await memory.remove(id);
-    pushToast({ message: "已删除记忆" });
-    onChanged?.();
+  // P1：单条删除加确认（此前直接删，与“清空全部”有确认不一致；记忆删后不可恢复）
+  const remove = (id: string, title?: string) => {
+    confirmRequest({
+      title: "删除这条记忆？",
+      description: title ? `「${title}」删除后不可恢复。` : "删除后不可恢复。",
+      confirmLabel: "删除",
+      danger: true,
+      onConfirm: () => {
+        void memory.remove(id).then(() => {
+          pushToast({ message: "已删除记忆" });
+          onChanged?.();
+        });
+      },
+    });
   };
 
   const clearAll = () => {
@@ -241,7 +251,7 @@ export function KiroMemoryManager({
                           <IconButton
                             variant="danger"
                             size="sm"
-                            onClick={() => remove(m.id)}
+                            onClick={() => remove(m.id, m.title)}
                             aria-label={`删除记忆 ${m.title}`}
                             className="h-6 w-6"
                           >
