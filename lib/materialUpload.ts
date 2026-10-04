@@ -6,7 +6,18 @@
  */
 
 import { Material } from "@/types";
-import { createStorageKey, saveFileBlob, isQuotaExceededError } from "@/lib/fileStorage";
+import { createStorageKey, saveFileBlob, deleteFileBlob, isQuotaExceededError } from "@/lib/fileStorage";
+
+/** P1 存储安全：上传前置校验（此前 accept 仅 UI 提示，可绕过；超大/0B/可执行直接进 IndexedDB 才报配额） */
+const MATERIAL_MAX_BYTES = 20 * 1024 * 1024;
+const MATERIAL_BLOCKED_EXT = new Set(["exe", "bat", "cmd", "ps1", "msi", "dll", "scr", "com", "docm", "xlsm"]);
+export function validateMaterialFile(file: File): string | null {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (MATERIAL_BLOCKED_EXT.has(ext)) return `不支持的文件类型（.${ext}），请选择文档/图片/PDF`;
+  if (file.size === 0) return "文件为空，无法上传";
+  if (file.size > MATERIAL_MAX_BYTES) return `文件过大（${(file.size / 1048576).toFixed(1)}MB），上限 20MB`;
+  return null;
+}
 
 /** 扩展名 → Material type（txt/md 及未知类型继续映射 doc；不重构 Material Type Domain） */
 export function inferMaterialType(fileName: string): Material["type"] {
@@ -33,7 +44,7 @@ export interface UploadCourseMaterialInput {
 
 export type UploadCourseMaterialResult =
   | { ok: true; material: Material }
-  | { ok: false; fileName: string; quotaExceeded?: boolean };
+  | { ok: false; fileName: string; quotaExceeded?: boolean; reason?: string };
 
 /**
  * 单文件上传：
@@ -46,6 +57,8 @@ export async function uploadCourseMaterial(
 ): Promise<UploadCourseMaterialResult> {
   const { courseId, file, addMaterial } = input;
   const saveBlob = input.saveBlob ?? saveFileBlob;
+  const precheck = validateMaterialFile(file);
+  if (precheck) return { ok: false, fileName: file.name, reason: precheck };
   const storageKey = createStorageKey();
   try {
     await saveBlob(storageKey, file);
@@ -54,13 +67,23 @@ export async function uploadCourseMaterial(
   }
 
   const sizeStr = file.size > 0 ? (file.size / (1024 * 1024)).toFixed(2) + " MB" : undefined;
-  const material = addMaterial(courseId, {
-    title: file.name,
-    type: inferMaterialType(file.name),
-    size: sizeStr,
-    storageKey,
-  });
-  return { ok: true, material };
+  try {
+    const material = addMaterial(courseId, {
+      title: file.name,
+      type: inferMaterialType(file.name),
+      size: sizeStr,
+      storageKey,
+    });
+    return { ok: true, material };
+  } catch (err) {
+    // addMaterial 抛错（配额/校验）→ 补偿删除已存 Blob，避免孤儿 storageKey 膨胀（此前无补偿，只靠启动对账）
+    try {
+      await deleteFileBlob(storageKey);
+    } catch {
+      /* 补偿失败：启动对账兜底 */
+    }
+    return { ok: false, fileName: file.name, quotaExceeded: isQuotaExceededError(err) };
+  }
 }
 
 /** 批量上传：逐文件独立成败（普通文件上传，不是业务事务；一个失败不影响其余） */

@@ -171,7 +171,14 @@ function isTrustedSender(sender: Electron.WebContents): boolean {
   return isMiniWebContents(sender.id);
 }
 
+/** P1：sender 校验 5s 缓存 + 成功路径零日志（此前每次 IPC new URL+3 次 console，高频 observe/action 下持续 GC/IO） */
+const senderTrustCache = new Map<number, { at: number; ok: boolean }>();
+const SENDER_CACHE_TTL_MS = 5_000;
 function validateWindowSender(channel: string, sender: Electron.WebContents, apiBase: string): boolean {
+  const cached = senderTrustCache.get(sender.id);
+  if (cached && Date.now() - cached.at < SENDER_CACHE_TTL_MS && !sender.isDestroyed()) {
+    return cached.ok;
+  }
   const { allowedApiOrigin, allowedDevOrigin } = getAllowedOrigins(apiBase);
   const rawUrl = (() => {
     try {
@@ -199,12 +206,16 @@ function validateWindowSender(channel: string, sender: Electron.WebContents, api
     url: rawUrl,
   };
   const result = validateIpcSender(channel, ctx, { allowedApiOrigin, allowedDevOrigin });
-  // Sanitized debug instrumentation (no secrets, no query)
-  console.log(`[classflow] window IPC received channel=${channel} protocol=${protocolCategory} originCategory=${originCategory} trusted=${ctx.isTrustedWindow} destroyed=${ctx.destroyed}`);
+  // 成功路径不再 console.log（高频通道每秒数十次）；仅拒绝时 warn（安全可观测保留）
   if (!result.ok) {
     console.warn(`[classflow] IPC denied ${channel}: ${result.reason} protocol=${protocolCategory} originCategory=${originCategory}`);
-  } else {
-    console.log(`[classflow] IPC validate ${channel}: allowed protocol=${protocolCategory} originCategory=${originCategory}`);
+  }
+  try {
+    senderTrustCache.set(sender.id, { at: Date.now(), ok: result.ok });
+    // destroyed 的 sender 不再复用缓存（窗口关闭后 id 可能重用，5s 后自然过期）
+    if (sender.isDestroyed()) senderTrustCache.delete(sender.id);
+  } catch {
+    /* ignore */
   }
   return result.ok;
 }

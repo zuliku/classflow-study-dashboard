@@ -7,7 +7,10 @@ import { ExtractedDocument, normalizeLineEndings, truncateText } from "@/lib/ai/
  * V1：extractXlsxRawText 提供 untruncated 完整正文（search_project_file 复用）；
  * extractXlsx 保持 bounded extraction（100k truncate），与 docx 同语义。
  */
-export async function extractXlsxRawText(file: Blob): Promise<string> {
+const XLSX_MAX_BYTES = 20 * 1024 * 1024;
+export async function extractXlsxRawText(file: Blob, opts?: { signal?: AbortSignal }): Promise<string> {
+  if (file.size > XLSX_MAX_BYTES) throw new Error(`表格过大（${(file.size / 1048576).toFixed(1)}MB），上限 20MB`);
+  opts?.signal?.throwIfAborted();
   const XLSX = await import("xlsx");
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: "array" });

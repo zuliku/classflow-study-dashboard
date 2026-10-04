@@ -32,6 +32,9 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
   const [tone, setTone] = useState<"natural" | "concise" | "formal" | "friendly">("natural");
   const [draftGenerated, setDraftGenerated] = useState(false);
   const currentDialogItemIdRef = React.useRef<string | null>(null);
+  // P0 防重：同 tick 双击穿透 state 异步 → 同步 ref 守卫；UNCERTAIN 后锁定同 approval 二次 confirm
+  const inFlightRef = React.useRef(false);
+  const [confirmLocked, setConfirmLocked] = useState(false);
 
   // Fresh-open session reset（Motion V2.1）：组件常驻后，false→true 沿清空上一会话的
   // 草稿 / 错误 / 审批流状态（保持既有「每次打开为新回复」语义）；不在 close 时 reset。
@@ -45,6 +48,8 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       setApproval(null);
       setConfirmOpen(false);
       setSaving(false);
+      setConfirmLocked(false);
+      inFlightRef.current = false;
     }
     prevOpenRef.current = open;
   }, [open]);
@@ -66,6 +71,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
   if (!item) return null;
 
   const handlePrepare = async () => {
+    if (inFlightRef.current || saving) return;
     if (!item.replyContextId) {
       setError("此消息来自旧版本，无法直接回复");
       return;
@@ -83,27 +89,31 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       setError("桌面环境不可用");
       return;
     }
+    inFlightRef.current = true;
     setSaving(true);
     setError(null);
     try {
       const res = await bridge.prepareReply({ replyContextId: item.replyContextId, text: text.trim() });
       setApproval(res);
+      setConfirmLocked(false);
       setConfirmOpen(true);
     } catch (e) {
       const msg = (e as { message?: string })?.message ?? String(e);
       setError(msg);
     } finally {
       setSaving(false);
+      inFlightRef.current = false;
     }
   };
 
   const handleConfirm = async () => {
-    if (!approval) return;
+    if (!approval || inFlightRef.current || confirmLocked) return;
     const bridge = getChannelsBridge();
     if (!bridge) {
       setError("桌面环境不可用");
       return;
     }
+    inFlightRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -121,7 +131,9 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       if (code === "QQ_REPLY_REJECTED") {
         setError("QQ 已无法将此消息作为被动回复发送，请重新收到一条消息后再回复。");
       } else if (code === "QQ_SEND_UNCERTAIN") {
-        setError("发送结果不确定，请先检查 QQ，避免重复发送。");
+        // 结果不确定即锁定同 approval 二次发送，只允许关闭去检查（防重复外发）
+        setConfirmLocked(true);
+        setError("发送结果不确定，请先去 QQ 检查是否已发送，确认未发送后再重新发起（不要重复点击发送）。");
       } else if (code === "QQ_RATE_LIMITED") {
         setError("发送过于频繁，请稍后重试");
       } else {
@@ -129,6 +141,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       }
     } finally {
       setSaving(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -219,7 +232,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
         <div className="flex items-center gap-2">
           <div className="flex-1" />
           <button type="button" onClick={handleCancelPrepare} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
-          <button type="button" onClick={handleConfirm} disabled={saving} data-testid="qq-reply-confirm" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "发送中..." : "确认发送"}</button>
+          <button type="button" onClick={handleConfirm} disabled={saving || confirmLocked} data-testid="qq-reply-confirm" title={confirmLocked ? "结果不确定已锁定，请先去 QQ 检查" : undefined} className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "发送中..." : confirmLocked ? "已锁定，去检查" : "确认发送"}</button>
         </div>
       </Dialog>
     </>

@@ -5,7 +5,10 @@ import { ExtractedDocument, normalizeLineEndings, truncateText } from "@/lib/ai/
  * V1.4：extractDocxRawText 提供 untruncated 完整正文（search_project_file 复用）；
  * extractDocx 保持 bounded extraction（100k truncate），语义不变。
  */
-export async function extractDocxRawText(file: Blob): Promise<string> {
+const DOCX_MAX_BYTES = 20 * 1024 * 1024;
+export async function extractDocxRawText(file: Blob, opts?: { signal?: AbortSignal }): Promise<string> {
+  if (file.size > DOCX_MAX_BYTES) throw new Error(`DOCX 过大（${(file.size / 1048576).toFixed(1)}MB），上限 20MB`);
+  opts?.signal?.throwIfAborted();
   const mammoth = await import("mammoth");
   const arrayBuffer = await file.arrayBuffer();
   const options = typeof window === "undefined" ? { buffer: Buffer.from(arrayBuffer) } : { arrayBuffer };

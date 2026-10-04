@@ -36,24 +36,31 @@ async function getMermaid() {
   return mm;
 }
 
-export function KiroMermaid({ code }: { code: string }) {
+export function KiroMermaid({ code, streaming = false }: { code: string; streaming?: boolean }) {
   const [svg, setSvg] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
   const pushToast = useToastStore((s) => s.pushToast);
-  const idRef = React.useRef(`mmd-${Math.random().toString(36).slice(2, 8)}`);
+  const renderSeqRef = React.useRef(0);
+  const copyTimerRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
+    // P1：单调 renderId（此前固定 id 复用撞 mermaid 唯一 id 要求 + 布尔 cancelled 竞态不可靠）
+    const seq = (renderSeqRef.current += 1);
     const trimmed = code.trim();
+    // 新 code 到达先清旧 error（保留旧 svg，避免 stale 红框闪 350ms）
+    setError(null);
     if (!trimmed) {
       setError("空图表");
       return;
     }
-    // 流式中未闭合的 mermaid（常见：```mermaid 未闭合）先不渲染，避免闪错
-    if (trimmed.length < 10) {
-      setSvg(null);
-      setError(null);
+    // 流式 fence 未闭合 / streaming 显式标记：只给骨架，不调 mm.render（此前短码才挡，稍长未闭合仍全量算废弃结果）
+    if (streaming || trimmed.length < 10) {
       return;
     }
     // 流式防抖：代码高频变化时等稳定再全量渲染（mm.render 不可中途取消，
@@ -62,31 +69,33 @@ export function KiroMermaid({ code }: { code: string }) {
       getMermaid()
         .then(async (mm) => {
           try {
-            const { svg: rendered } = await mm.render(idRef.current + "-svg", trimmed);
-            if (!cancelled) {
-              setSvg(rendered);
-              setError(null);
-            }
+            // 每次唯一 id（mermaid 要求），过期结果按 seq 丢弃
+            const { svg: rendered } = await mm.render(`mmd-${seq}-${Date.now().toString(36)}`, trimmed);
+            if (renderSeqRef.current !== seq) return;
+            setSvg(rendered);
+            setError(null);
           } catch (e: any) {
-            if (!cancelled) setError(e?.message ?? "渲染失败");
+            if (renderSeqRef.current !== seq) return;
+            setError(e?.message ?? "渲染失败");
           }
         })
         .catch((e) => {
-          if (!cancelled) setError(String(e));
+          if (renderSeqRef.current !== seq) return;
+          setError(String(e));
         });
     }, MERMAID_RENDER_DEBOUNCE_MS);
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [code]);
+  }, [code, streaming]);
 
   const onCopy = async () => {
     const ok = await copyTextToClipboard(code);
     if (ok) {
       setCopied(true);
       pushToast({ message: "已复制 Mermaid 源码" });
-      setTimeout(() => setCopied(false), 1500);
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1500);
     }
   };
 

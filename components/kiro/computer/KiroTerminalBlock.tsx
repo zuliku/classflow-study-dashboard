@@ -319,10 +319,17 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
 /**
  * 行数组内容相等（精确比较，非引用比较）。
  * reducer 的 appendLines 每次返回新数组（即使 chunk 为空），引用比较每帧必 miss；
- * 内容 join 比较是 memcmp 级开销，远小于一次整块 reconcile，且永远精确（无启发式漏判）。
+ * 先比长度+首尾+中间行快速短路，miss 才 join（60k 全量分配只走最后兜底）。
  */
 function sameLines(x: string[], y: string[]): boolean {
   if (x === y) return true;
   if (x.length !== y.length) return false;
+  if (x.length === 0) return true;
+  if (x[0] !== y[0]) return false;
+  if (x[x.length - 1] !== y[y.length - 1]) return false;
+  if (x.length > 2) {
+    const mid = (x.length / 2) | 0;
+    if (x[mid] !== y[mid]) return false;
+  }
   return x.join("\n") === y.join("\n");
 }

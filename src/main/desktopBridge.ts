@@ -276,7 +276,12 @@ function reverifyPathFor(grant: Grant, pathInput: unknown, resolved: string): st
   return fresh;
 }
 
-async function handleList(input: unknown): Promise<Array<{ name: string; kind: "file" | "directory"; size: number }>> {
+/** 大目录保护：条目上限 + 并发 stat（此前串行 N 次 stat，大目录秒级卡主线程） */
+const DESKTOP_LIST_MAX_ENTRIES = 500;
+const DESKTOP_LIST_STAT_CONCURRENCY = 8;
+async function handleList(
+  input: unknown
+): Promise<Array<{ name: string; kind: "file" | "directory"; size: number }> & { truncated?: boolean }> {
   const obj = validateInputObject(input);
   const grant = getGrant(obj?.grantId);
   if (!grant) fail("PERMISSION_DENIED");
@@ -284,17 +289,27 @@ async function handleList(input: unknown): Promise<Array<{ name: string; kind: "
   if (!target) fail("INVALID_OPERATION");
   try {
     const entries = await fs.readdir(target, { withFileTypes: true });
+    const sliced = entries.slice(0, DESKTOP_LIST_MAX_ENTRIES);
+    const truncated = entries.length > sliced.length;
     const out: Array<{ name: string; kind: "file" | "directory"; size: number }> = [];
-    for (const e of entries) {
-      try {
-        const full = join(target, e.name);
-        const st = await fs.stat(full);
-        out.push({ name: e.name, kind: e.isDirectory() ? "directory" : "file", size: st.size });
-      } catch {
-        /* 单项失败跳过（竞争删除） */
+    // 并发上限 8 的 worker 池（避免 Promise.all 全并发打爆 fd）
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(DESKTOP_LIST_STAT_CONCURRENCY, sliced.length) }, async () => {
+      while (cursor < sliced.length) {
+        const e = sliced[cursor++];
+        try {
+          const full = join(target, e.name);
+          const st = await fs.stat(full);
+          out.push({ name: e.name, kind: e.isDirectory() ? "directory" : "file", size: st.size });
+        } catch {
+          /* 单项失败跳过（竞争删除） */
+        }
       }
-    }
-    return out;
+    });
+    await Promise.all(workers);
+    // 保持目录优先+字母序稳定（此前 readdir 原序，截断后抖动）
+    out.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name, "zh-CN") : a.kind === "directory" ? -1 : 1));
+    return Object.assign(out, truncated ? { truncated: true as const } : {});
   } catch (err) {
     failFrom(err);
   }
@@ -545,34 +560,71 @@ const MAX_OUTPUT_BYTES = 512 * 1024; // Runtime 第一层 bound（Web 有第二�
 /** Windows：taskkill /T /F 终止整个 process tree */
 function killProcessTree(pid: number): Promise<void> {
   return new Promise((resolve) => {
-    const killer = spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { windowsHide: true });
-    killer.on("close", () => resolve());
-    killer.on("error", () => resolve());
-    setTimeout(() => resolve(), 3000);
+    if (!Number.isFinite(pid) || pid <= 0) {
+      resolve();
+      return;
+    }
+    try {
+      const killer = spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { windowsHide: true, stdio: "ignore" });
+      killer.on("close", () => resolve());
+      killer.on("error", () => resolve());
+      // V2 已有 unref 范本：taskkill 自身卡住不拖住退出（此前无 unref 拖 event loop 3s）
+      try {
+        (killer as unknown as { unref?: () => void }).unref?.();
+      } catch {
+        /* ignore */
+      }
+      const timer = setTimeout(() => resolve(), 2000);
+      try {
+        (timer as unknown as { unref?: () => void }).unref?.();
+      } catch {
+        /* ignore */
+      }
+    } catch {
+      resolve();
+    }
   });
 }
 
 function collectOutput(child: ChildProcess): { stdout: string; stderr: string; stdoutTruncated: boolean; stderrTruncated: boolean } {
-  // 共享引用对象：data 事件闭包直接修改 state 字段（返回对象与闭包同一引用）
-  const state = { stdout: "", stderr: "", stdoutTruncated: false, stderrTruncated: false };
-  child.stdout?.on("data", (chunk: Buffer) => {
-    if (state.stdout.length < MAX_OUTPUT_BYTES) {
-      const room = MAX_OUTPUT_BYTES - state.stdout.length;
-      state.stdout += chunk.toString("utf8", 0, Math.min(chunk.length, room));
-      if (chunk.length > room) state.stdoutTruncated = true;
-    } else {
-      state.stdoutTruncated = true;
+  // P1：按 byte 增量计数（此前 string.length 当 byte 用，CJK 下实际内存超 3 倍；与 V2 Accumulator 同口径）
+  const state = { stdout: "", stderr: "", stdoutTruncated: false, stderrTruncated: false, stdoutBytes: 0, stderrBytes: 0 };
+  const append = (isStdout: boolean, chunk: Buffer) => {
+    const text = chunk.toString("utf8");
+    const bytes = Buffer.byteLength(text, "utf8");
+    if (isStdout) {
+      if (state.stdoutBytes + bytes <= MAX_OUTPUT_BYTES) {
+        state.stdout += text;
+        state.stdoutBytes += bytes;
+      } else {
+        state.stdoutTruncated = true;
+        // 保留尾部 80%（最新输出最有价值），按行切避免半行
+        const merged = state.stdout + text;
+        const keepBytes = Math.floor(MAX_OUTPUT_BYTES * 0.8);
+        let cut = Math.max(0, merged.length - Math.floor((merged.length * keepBytes) / Math.max(1, state.stdoutBytes + bytes)));
+        const nl = merged.indexOf("\n", cut);
+        if (nl !== -1 && nl - cut < 4096) cut = nl + 1;
+        state.stdout = merged.slice(cut);
+        state.stdoutBytes = Buffer.byteLength(state.stdout, "utf8");
+      }
+      return;
     }
-  });
-  child.stderr?.on("data", (chunk: Buffer) => {
-    if (state.stderr.length < MAX_OUTPUT_BYTES) {
-      const room = MAX_OUTPUT_BYTES - state.stderr.length;
-      state.stderr += chunk.toString("utf8", 0, Math.min(chunk.length, room));
-      if (chunk.length > room) state.stderrTruncated = true;
+    if (state.stderrBytes + bytes <= MAX_OUTPUT_BYTES) {
+      state.stderr += text;
+      state.stderrBytes += bytes;
     } else {
       state.stderrTruncated = true;
+      const merged = state.stderr + text;
+      const keepBytes = Math.floor(MAX_OUTPUT_BYTES * 0.8);
+      let cut = Math.max(0, merged.length - Math.floor((merged.length * keepBytes) / Math.max(1, state.stderrBytes + bytes)));
+      const nl = merged.indexOf("\n", cut);
+      if (nl !== -1 && nl - cut < 4096) cut = nl + 1;
+      state.stderr = merged.slice(cut);
+      state.stderrBytes = Buffer.byteLength(state.stderr, "utf8");
     }
-  });
+  };
+  child.stdout?.on("data", (chunk: Buffer) => append(true, chunk));
+  child.stderr?.on("data", (chunk: Buffer) => append(false, chunk));
   return state;
 }
 

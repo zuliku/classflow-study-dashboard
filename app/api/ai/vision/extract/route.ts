@@ -161,37 +161,83 @@ export async function handleVisionExtract(req: Request) {
   // ---- Vision Worker：每张图片独立转录；单图失败保留成功项 ----
   // Client disconnect → req.signal abort（httpServer 已在 res close 时 abort Web Request）；
   // 不接线会让已关闭的对话框仍烧完最多 6 张图片的 paid vision 调用。
-  const results = await Promise.allSettled(
-    files.map(async ({ file, page }) => {
-      const buffer = await file.arrayBuffer();
-      const image = new Uint8Array(buffer);
-      const { text } = await generateText({
-        model: modelInstance,
-        maxOutputTokens: MAX_OUTPUT_TOKENS_PER_IMAGE,
-        abortSignal: req.signal,
-        experimental_include: { requestBody: false, responseBody: false },
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: buildProjectVisualWorkerInstruction(queryHint) },
-              { type: "image", image, mediaType: file.type as "image/jpeg" | "image/png" | "image/webp" },
-            ],
-          },
-        ],
-      });
-      return { page, text: text.trim() };
-    })
-  );
+  // P1：总预算 50s（此前单图 hang 拖满平台 60s）+ 并发上限 2（此前 6 并发全开）+ 部分失败显式 partial
+  const combined = (() => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(new DOMException("vision extract timeout", "TimeoutError")), 50_000);
+    const onAbort = () => {
+      clearTimeout(timer);
+      ctrl.abort(req.signal.reason);
+    };
+    if (req.signal.aborted) ctrl.abort(req.signal.reason);
+    else req.signal.addEventListener("abort", onAbort, { once: true });
+    const signal = ctrl.signal;
+    // 完成后清理（避免 timer 泄漏到 50s）
+    const done = () => {
+      clearTimeout(timer);
+      req.signal.removeEventListener("abort", onAbort);
+    };
+    return { signal, done };
+  })();
+  const CONCURRENCY = 2;
+  const queue = [...files];
+  const results: PromiseSettledResult<{ page?: number; text: string }>[] = [];
+  const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+    while (queue.length > 0) {
+      const { file, page } = queue.shift()!;
+      try {
+        const buffer = await file.arrayBuffer();
+        const image = new Uint8Array(buffer);
+        const { text } = await generateText({
+          model: modelInstance,
+          maxOutputTokens: MAX_OUTPUT_TOKENS_PER_IMAGE,
+          abortSignal: combined.signal,
+          experimental_include: { requestBody: false, responseBody: false },
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: buildProjectVisualWorkerInstruction(queryHint) },
+                { type: "image", image, mediaType: file.type as "image/jpeg" | "image/png" | "image/webp" },
+              ],
+            },
+          ],
+        });
+        results.push({ status: "fulfilled", value: { page, text: text.trim() } } as const);
+      } catch (e) {
+        results.push({ status: "rejected", reason: e } as const);
+      }
+    }
+  });
+  try {
+    await Promise.all(workers);
+  } finally {
+    combined.done();
+  }
 
   const items: { page?: number; text: string }[] = [];
+  const failedPages: number[] = [];
   for (const r of results) {
-    if (r.status !== "fulfilled") continue;
-    if (!r.value.text) continue;
+    if (r.status !== "fulfilled") {
+      failedPages.push(-1);
+      continue;
+    }
+    if (!r.value.text) {
+      if (r.value.page !== undefined) failedPages.push(r.value.page);
+      else failedPages.push(-1);
+      continue;
+    }
     items.push(r.value.page !== undefined ? { page: r.value.page, text: r.value.text } : { text: r.value.text });
   }
   if (items.length === 0) {
     return Response.json({ ok: false, code: "VISION_EXTRACT_FAILED", message: "未能从图片中提取到文字内容。" }, { status: 200 });
   }
-  return Response.json({ ok: true, items });
+  const partial = failedPages.length > 0;
+  return Response.json({
+    ok: true,
+    items,
+    partial,
+    failedCount: failedPages.length,
+    failedPages: failedPages.filter((p) => p >= 0),
+  });
 }

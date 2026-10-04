@@ -238,7 +238,14 @@ function persistEnabledMap(map: Map<string, boolean>): void {
   renameSync(tmp, mapPath);
 }
 
+/** P1：list 结果 5s 缓存（此前每次 slash 输入都全量同步读盘+解析，高频 IPC 卡主线程） */
+let listCache: { at: number; data: SkillPackage[] } | null = null;
+const LIST_CACHE_TTL_MS = 5_000;
+export function invalidateSkillListCache(): void {
+  listCache = null;
+}
 export function listSkills(): SkillPackage[] {
+  if (listCache && Date.now() - listCache.at < LIST_CACHE_TTL_MS) return listCache.data;
   const dir = ensureSkillsDir();
   const enabledMap = loadEnabledMap();
   const entries = readdirSync(dir, { withFileTypes: true });
@@ -250,6 +257,7 @@ export function listSkills(): SkillPackage[] {
     const pkg = readSkillPackage(e.name, enabledMap);
     if (pkg) out.push(pkg);
   }
+  listCache = { at: Date.now(), data: out };
   return out;
 }
 
@@ -321,6 +329,7 @@ export function createSkill(input: {
   }
   enabledMap.set(name, true);
   persistEnabledMap(enabledMap);
+  invalidateSkillListCache();
   return getSkill(name)!;
 }
 
@@ -365,6 +374,7 @@ export function updateSkill(
       writeFileAtomic(kiroManifestPathFor(name), serializeKiroSkillManifest(manifest));
     }
   }
+  invalidateSkillListCache();
   return getSkill(name)!;
 }
 
@@ -376,6 +386,7 @@ export function deleteSkill(name: string): void {
   const enabledMap = loadEnabledMap();
   enabledMap.delete(name);
   persistEnabledMap(enabledMap);
+  invalidateSkillListCache();
 }
 
 export function setSkillEnabled(name: string, enabled: boolean): void {
@@ -385,6 +396,7 @@ export function setSkillEnabled(name: string, enabled: boolean): void {
   const map = loadEnabledMap();
   map.set(name, enabled);
   persistEnabledMap(map);
+  invalidateSkillListCache();
 }
 
 /** Import 体积上限：SKILL.md 单文件 + 目录拷贝总量（防无界同步 IO/内存 DoS） */

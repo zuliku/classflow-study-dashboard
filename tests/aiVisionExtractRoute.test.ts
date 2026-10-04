@@ -64,7 +64,7 @@ describe("internal vision extract route", () => {
     const res = await post(makeForm({ files: [{ name: "img.png", type: "image/png", size: 64 }] }));
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json).toEqual({ ok: true, items: [{ text: "EVIDENCE_123" }] });
+    expect(json).toEqual({ ok: true, items: [{ text: "EVIDENCE_123" }], partial: false, failedCount: 0, failedPages: [] });
     const raw = JSON.stringify(json);
     expect(raw).not.toContain("sk-test");
     expect(raw).not.toContain("requestBody");

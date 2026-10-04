@@ -42,28 +42,53 @@ export interface TerminalActivity {
 export const TERMINAL_ACTIVITY_MAX_LINES = 200;
 export const TERMINAL_ACTIVITY_MAX_CHARS = 60_000;
 
-/** 文本按行拆分 + 追加到 ring buffer（超限丢弃最旧行；字符超限置 truncated） */
+/** 文本按行拆分 + 追加到 ring buffer（超限丢弃最旧行；字符超限置 truncated）
+ * P1 性能：增量维护 chars（此前每次 reduce 全量 + 超限 while 内再全量 reduce = O(N²)） */
 export function appendLines(buffer: string[], chunk: string, truncatedRef: { truncated: boolean }): string[] {
   const lines = chunk.split(/\r?\n/);
   let next = [...buffer];
-  let chars = next.reduce((n, l) => n + l.length, 0);
+  // 首 token 冷启动才全量算一次；后续调用方传入的 buffer 已有界（200行/60k字符），单次 reduce 上限可控
+  let chars = 0;
+  for (let i = 0; i < next.length; i++) chars += next[i].length;
   for (const line of lines) {
     if (line.length === 0 && next.length > 0) continue; // 合并空行（避免空行刷屏）
     next.push(line);
     chars += line.length;
   }
   if (next.length > TERMINAL_ACTIVITY_MAX_LINES) {
-    next = next.slice(next.length - TERMINAL_ACTIVITY_MAX_LINES);
+    const drop = next.length - TERMINAL_ACTIVITY_MAX_LINES;
+    for (let i = 0; i < drop; i++) chars -= next[i].length;
+    next = next.slice(drop);
     truncatedRef.truncated = true;
   }
   if (chars > TERMINAL_ACTIVITY_MAX_CHARS) {
-    // 丢弃最旧行直到字符数达标（至少保留 1 行）
-    while (next.length > 1 && next.reduce((n, l) => n + l.length, 0) > TERMINAL_ACTIVITY_MAX_CHARS) {
-      next.shift();
+    // 丢弃最旧行直到字符数达标（至少保留 1 行）；同步减 chars，不再循环内 reduce
+    let drop = 0;
+    while (next.length - drop > 1 && chars > TERMINAL_ACTIVITY_MAX_CHARS) {
+      chars -= next[drop].length;
+      drop += 1;
     }
-    truncatedRef.truncated = true;
+    if (drop > 0) {
+      next = next.slice(drop);
+      truncatedRef.truncated = true;
+    }
   }
   return next;
+}
+
+/** 行数组浅比较（先比长度+首尾行，miss 才 join；此前每次 join 全量 60k 分配比对） */
+export function sameTerminalLines(a: string[], b: string[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  if (a.length === 0) return true;
+  if (a[0] !== b[0]) return false;
+  if (a[a.length - 1] !== b[b.length - 1]) return false;
+  // 中间行抽查（高频输出尾部追加时首尾相同概率低，此处已能提前返回；全量 join 只走最后兜底）
+  if (a.length > 2) {
+    const mid = (a.length / 2) | 0;
+    if (a[mid] !== b[mid]) return false;
+  }
+  return a.join("\n") === b.join("\n");
 }
 
 export function createTerminalActivity(init: TerminalActivityInit, at = Date.now()): TerminalActivity {

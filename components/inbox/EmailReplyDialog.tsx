@@ -38,6 +38,8 @@ export function EmailReplyDialog({ open, onOpenChange, item, onSent }: EmailRepl
   const [confirmOpen, setConfirmOpen] = useState(false);
 const [tone, setTone] = useState<"natural" | "concise" | "formal" | "friendly">("natural");
 const [draftGenerated, setDraftGenerated] = useState(false);
+  const inFlightRef = useRef(false);
+  const [confirmLocked, setConfirmLocked] = useState(false);
 
 // Fresh-open session reset（Motion V2.1）：组件常驻后，false→true 沿清空上一会话的
 // 草稿 / 错误 / 审批流状态（保持既有「每次打开为新回复」语义）；不在 close 时 reset。
@@ -51,6 +53,8 @@ useEffect(() => {
     setApproval(null);
     setConfirmOpen(false);
     setSaving(false);
+    setConfirmLocked(false);
+    inFlightRef.current = false;
   }
   prevOpenRef.current = open;
 }, [open]);
@@ -73,6 +77,7 @@ useEffect(() => {
   if (!item) return null;
 
   const handlePrepare = async () => {
+    if (inFlightRef.current || saving) return;
     if (!item.replyContextId) {
       setError("此邮件来自旧版本，无法直接回复");
       return;
@@ -90,27 +95,31 @@ useEffect(() => {
       setError("桌面环境不可用");
       return;
     }
+    inFlightRef.current = true;
     setSaving(true);
     setError(null);
     try {
       const res = await bridge.prepareReply({ replyContextId: item.replyContextId, text: text.trim() });
       setApproval(res);
+      setConfirmLocked(false);
       setConfirmOpen(true);
     } catch (e) {
       const msg = (e as { message?: string })?.message ?? String(e);
       setError(msg);
     } finally {
       setSaving(false);
+      inFlightRef.current = false;
     }
   };
 
   const handleConfirm = async () => {
-    if (!approval) return;
+    if (!approval || inFlightRef.current || confirmLocked) return;
     const bridge = getChannelsBridge();
     if (!bridge) {
       setError("桌面环境不可用");
       return;
     }
+    inFlightRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -128,7 +137,8 @@ useEffect(() => {
       if (code === "EMAIL_SEND_REJECTED") {
         setError("邮件发送被拒绝，请检查发件人地址与线程。");
       } else if (code === "EMAIL_SEND_UNCERTAIN") {
-        setError("发送结果不确定，请先检查“已发送”，避免重复发送。");
+        setConfirmLocked(true);
+        setError("发送结果不确定，请先去“已发送”检查是否已发出，确认未发送后再重新发起（不要重复点击发送）。");
       } else if (code === "EMAIL_REPLY_CONTEXT_INVALID") {
         setError("邮件回复上下文无效，请重新同步后重试。");
       } else if (code === "GMAIL_AUTH_FAILED") {
@@ -138,6 +148,7 @@ useEffect(() => {
       }
     } finally {
       setSaving(false);
+      inFlightRef.current = false;
     }
   };
 
@@ -242,7 +253,7 @@ useEffect(() => {
         <div className="flex items-center gap-2">
           <div className="flex-1" />
           <Button variant="secondary" size="sm" onClick={handleCancelPrepare}>取消</Button>
-          <Button variant="primary" size="sm" loading={saving} loadingLabel="发送中..." onClick={handleConfirm} data-testid="email-reply-confirm">确认发送</Button>
+          <Button variant="primary" size="sm" loading={saving} loadingLabel="发送中..." onClick={handleConfirm} disabled={confirmLocked} title={confirmLocked ? "结果不确定已锁定，请先去已发送检查" : undefined} data-testid="email-reply-confirm">{confirmLocked ? "已锁定，去检查" : "确认发送"}</Button>
         </div>
       </Dialog>
     </>

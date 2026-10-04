@@ -3955,7 +3955,10 @@ export function useKiroChat({
         }
         const restoredTask = restoredComputerTasksRef.current.get(m.id);
         if (attachedTask || restoredTask) {
-          view = { ...view, computerTask: attachedTask, historyComputerTask: restoredTask };
+          // P0：引用守卫（此前无条件 spread 新 view，areConversationRowsEqual 的 Object.is(view) 恒失败，历史子树每 token 全 reconcile）
+          if (view.computerTask !== attachedTask || view.historyComputerTask !== restoredTask) {
+            view = { ...view, computerTask: attachedTask, historyComputerTask: restoredTask };
+          }
           // S-fix durable undo：恢复任务附带未使用的 durable checkpoint → 可撤销
           if (restoredTask) {
             const restoredCp = checkpointsRef.current.get(restoredTask.taskId);
@@ -3970,7 +3973,9 @@ export function useKiroChat({
           (p) => p.proposingMessageId === m.id
         );
         if (ownedPlans.length > 0) {
-          view = { ...view, executionPlans: ownedPlans };
+          if (view.executionPlans !== ownedPlans) {
+            view = { ...view, executionPlans: ownedPlans };
+          }
           needsAttach = true;
         }
       }
@@ -3979,7 +3984,9 @@ export function useKiroChat({
       // - 本会话 Turn 绑定：turnBoundSourcesRef（Inspector P2 §14 stable boundary 绑定）
       const restoredSrcs = restoredSourcesRef.current.get(m.id) ?? turnBoundSourcesRef.current.get(m.id);
       if (restoredSrcs && restoredSrcs.length > 0) {
-        view = { ...view, sources: restoredSrcs };
+        if (view.sources !== restoredSrcs) {
+          view = { ...view, sources: restoredSrcs };
+        }
         needsAttach = true;
       }
       // Task 7：User Message 编辑安全（attachment/history 绑定完成后计算；turn in-flight 一律不可编辑）

@@ -339,6 +339,25 @@ html[data-motion-effective="reduced"] .kiro-now-course {
   box-shadow: 0 0 0 2px rgba(49, 48, 50, 0.32);
 }
 
+/* P1 合成层节流：系统级 reduced-motion 下关闭常驻 conic/sweep/breathe（此前仅组件级 data-motion 关闭部分） */
+@media (prefers-reduced-motion: reduce) {
+  .kiro-ring,
+  .kiro-featured-flow,
+  [data-kiro-flow] .kiro-ring {
+    animation: none !important;
+  }
+  .kiro-now-course {
+    animation: none !important;
+  }
+  .ux-skeleton::after {
+    animation: none !important;
+  }
+}
+/* 后台 tab 隐藏时停播常驻动画（display:none 不触发，visibility 切换由浏览器自动暂停；此处兜底 content-visibility） */
+.ux-skeleton {
+  content-visibility: auto;
+}
+
 .kiro-attachment-tray:hover::-webkit-scrollbar-thumb {
   background: #E4E0D8;
 }

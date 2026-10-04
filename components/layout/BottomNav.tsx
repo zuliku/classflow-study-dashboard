@@ -17,7 +17,10 @@ import {
 
 /** 移动端（<768px）底部导航：4 个主入口 + 「更多」轻量菜单 */
 export function BottomNav() {
-  const { activeTab, setActiveTab, setSettingsModalOpen } = useAppStore();
+  // P1：细粒度订阅 + 常驻 blur 改不透明（此前整 store 订阅抖动 + 全帧模糊）
+  const activeTab = useAppStore((s) => s.activeTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
   const reminderCenterOpen = useReminderCenterStore((s) => s.open);
   const [moreOpen, setMoreOpen] = useState(false);
   const navRef = useRef<HTMLElement | null>(null);
@@ -60,7 +63,7 @@ export function BottomNav() {
     <nav
       ref={navRef}
       aria-label="底部导航"
-      className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/95 backdrop-blur border-t border-line select-none"
+      className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface border-t border-line select-none"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className="flex items-stretch">

@@ -141,16 +141,36 @@ export default function Home() {
     }
   }, []);
 
-  // 启动位置：hydrate 完成后只执行一次 startup resolution。
-  // last 使用上次使用的工作区（lastWorkspaceTab，持久化）。
-  // 只依赖空数组：修改设置值只影响下次打开 ClassFlow，不会把用户踢走。
+  // 启动位置：等 persist 水合完成后再 resolution（此前 hydrate 前读到初始 overview 跳一次，空闪+覆盖）。
   const startupApplied = useRef(false);
   useEffect(() => {
-    if (startupApplied.current) return;
-    startupApplied.current = true;
-    const s = useAppStore.getState();
-    const tab = resolveStartupTab(s.preferences.startupView, s.lastWorkspaceTab);
-    if (tab !== s.activeTab) s.setActiveTab(tab);
+    const apply = () => {
+      if (startupApplied.current) return;
+      startupApplied.current = true;
+      const s = useAppStore.getState();
+      const tab = resolveStartupTab(s.preferences.startupView, s.lastWorkspaceTab);
+      if (tab !== s.activeTab) s.setActiveTab(tab);
+    };
+    try {
+      const persist = (useAppStore as unknown as { persist?: { hasHydrated?: () => boolean; onFinishHydration?: (cb: () => void) => () => void } }).persist;
+      if (persist?.hasHydrated?.()) {
+        apply();
+        return;
+      }
+      const unsub = persist?.onFinishHydration?.(() => apply());
+      // 兜底：persist 不可用/回调丢失时 1.5s 后强制应用，避免永远停在 overview
+      const timer = window.setTimeout(() => apply(), 1500);
+      return () => {
+        try {
+          unsub?.();
+        } catch {
+          /* ignore */
+        }
+        window.clearTimeout(timer);
+      };
+    } catch {
+      apply();
+    }
   }, []);
 
   return (

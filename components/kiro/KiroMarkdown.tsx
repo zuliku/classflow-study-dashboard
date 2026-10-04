@@ -329,47 +329,58 @@ const kiroRehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = 
   rehypeHighlight as any,
   [rehypeKatex, { throwOnError: false, trust: false }],
 ];
+/** 流式 tail 轻量栈：跳过 highlight.js 全量分词 + KaTeX 排版（每 token O(n) 最贵两项）；settled 后切回全量 */
+const kiroStreamingRehypePlugins: Parameters<typeof ReactMarkdown>[0]["rehypePlugins"] = [];
 
-export function KiroMarkdown({
+export const KiroMarkdown = React.memo(function KiroMarkdown({
   content,
   sources,
   mode = "block",
+  streaming = false,
 }: {
   content: string;
   sources?: KiroSourceMeta[];
   /** inline-fragment：仅限 scanner 证明安全的 inline chunk；block 级构造会被压成文本 */
   mode?: "block" | "inline-fragment";
+  /** 流式 tail：轻量渲染（无高亮/无 KaTeX），整段 settled 后父级切回 streaming=false 做 canonical 全渲染 */
+  streaming?: boolean;
 }) {
   const inlineComponents = React.useMemo(() => makeKiroInlineComponents(sources), [sources]);
   const normalized = React.useMemo(() => normalizeMathDelimiters(content), [content]);
+  // components 对象 memo 化（此前每 render 新对象，ReactMarkdown 内部 memo 全 miss）
+  const inlineFragmentComponents = React.useMemo(
+    () => ({
+      ...inlineComponents,
+      p: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      h1: ({ children }: { children?: React.ReactNode }) => <span className="font-semibold text-charcoal">{children}</span>,
+      h2: ({ children }: { children?: React.ReactNode }) => <span className="font-semibold text-charcoal">{children}</span>,
+      h3: ({ children }: { children?: React.ReactNode }) => <span className="font-semibold text-charcoal">{children}</span>,
+      h4: ({ children }: { children?: React.ReactNode }) => <span className="font-semibold text-charcoal">{children}</span>,
+      h5: ({ children }: { children?: React.ReactNode }) => <span className="font-semibold text-charcoal">{children}</span>,
+      h6: ({ children }: { children?: React.ReactNode }) => <span className="font-semibold text-charcoal">{children}</span>,
+      ul: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      ol: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      li: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      blockquote: ({ children }: { children?: React.ReactNode }) => <span className="text-satin-grey">{children}</span>,
+      pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      hr: () => null,
+      table: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      thead: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      tbody: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      tr: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      th: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      td: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+      img: () => null,
+    }),
+    [inlineComponents]
+  );
+  const rehypePlugins = streaming ? kiroStreamingRehypePlugins : kiroRehypePlugins;
   if (mode === "inline-fragment") {
     return (
       <ReactMarkdown
         remarkPlugins={kiroRemarkPlugins}
-        rehypePlugins={kiroRehypePlugins}
-        components={{
-          ...inlineComponents,
-          p: ({ children }) => <>{children}</>,
-          h1: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
-          h2: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
-          h3: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
-          h4: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
-          h5: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
-          h6: ({ children }) => <span className="font-semibold text-charcoal">{children}</span>,
-          ul: ({ children }) => <>{children}</>,
-          ol: ({ children }) => <>{children}</>,
-          li: ({ children }) => <>{children}</>,
-          blockquote: ({ children }) => <span className="text-satin-grey">{children}</span>,
-          pre: ({ children }) => <>{children}</>,
-          hr: () => null,
-          table: ({ children }) => <>{children}</>,
-          thead: ({ children }) => <>{children}</>,
-          tbody: ({ children }) => <>{children}</>,
-          tr: ({ children }) => <>{children}</>,
-          th: ({ children }) => <>{children}</>,
-          td: ({ children }) => <>{children}</>,
-          img: () => null,
-        }}
+        rehypePlugins={rehypePlugins}
+        components={inlineFragmentComponents as any}
       >
         {normalized}
       </ReactMarkdown>
@@ -384,7 +395,7 @@ export function KiroMarkdown({
     >
       <ReactMarkdown
         remarkPlugins={kiroRemarkPlugins}
-        rehypePlugins={kiroRehypePlugins}
+        rehypePlugins={rehypePlugins}
         components={{
           p: ({ children, ...props }) => {
             // 独行裸链接 → 卡片
@@ -593,4 +604,4 @@ export function KiroMarkdown({
       </ReactMarkdown>
     </div>
   );
-}
+});

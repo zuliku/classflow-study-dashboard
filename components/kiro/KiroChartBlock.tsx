@@ -19,16 +19,34 @@ interface ChartJson {
   nameKey?: string;
 }
 
-export function KiroChartBlock({ code }: { code: string }) {
+/** P1 流畅度：流中只渲染占位（此前每 token JSON.parse+recharts 全布局）；data 上限 200 防 SVG 爆炸 */
+const CHART_DATA_CAP = 200;
+export const KiroChartBlock = React.memo(function KiroChartBlock({
+  code,
+  streaming = false,
+}: {
+  code: string;
+  streaming?: boolean;
+}) {
   const [copied, setCopied] = React.useState(false);
   const pushToast = useToastStore((s) => s.pushToast);
+  const copyTimerRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    };
+  }, []);
   let parsed: ChartJson | null = null;
   let error: string | null = null;
+  // 流中 fence 未闭合 / JSON 尚不完整时不做 parse+recharts，只给骨架（闭合瞬间一次真渲染）
+  const looksStreaming = streaming;
   try {
+    if (looksStreaming) throw new Error("__STREAMING_PLACEHOLDER__");
     parsed = JSON.parse(code);
     if (!parsed || !Array.isArray(parsed.data)) throw new Error("data 需为数组");
   } catch (e: any) {
-    error = e?.message ?? "JSON 解析失败";
+    if (looksStreaming) error = "__STREAMING__";
+    else error = e?.message ?? "JSON 解析失败";
   }
 
   const onCopy = async () => {
@@ -36,12 +54,15 @@ export function KiroChartBlock({ code }: { code: string }) {
     if (ok) {
       setCopied(true);
       pushToast({ message: "已复制图表 JSON" });
-      setTimeout(() => setCopied(false), 1500);
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1500);
     }
   };
 
   const type: ChartType = (parsed?.type as ChartType) ?? "bar";
-  const data = parsed?.data ?? [];
+  const rawData = parsed?.data ?? [];
+  const capped = rawData.length > CHART_DATA_CAP;
+  const data = React.useMemo(() => (capped ? rawData.slice(0, CHART_DATA_CAP) : rawData), [rawData, capped]);
   const xKey = parsed?.xKey ?? parsed?.dataKey ?? "name";
   const yKey = parsed?.yKey ?? "value";
   const nameKey = parsed?.nameKey ?? "name";
@@ -61,7 +82,12 @@ export function KiroChartBlock({ code }: { code: string }) {
         </button>
       </div>
       <div className="p-3 bg-white">
-        {error ? (
+        {error === "__STREAMING__" ? (
+          <div className="ux-skeleton space-y-2" aria-label="图表生成中">
+            <div className="h-3 w-2/5 rounded bg-alabaster" />
+            <div className="h-32 rounded bg-alabaster/60" />
+          </div>
+        ) : error ? (
           <div className="rounded-lg bg-danger-bg border border-danger-border p-3 text-[12px] text-danger">
             图表解析失败：{error}
             <pre className="mt-2 p-2 rounded bg-alabaster border border-line overflow-x-auto font-mono text-[11px] text-charcoal whitespace-pre">
@@ -72,6 +98,9 @@ export function KiroChartBlock({ code }: { code: string }) {
           <div className="rounded-lg border border-dashed border-line bg-alabaster/30 px-4 py-6 text-center text-[12px] text-sandrift">暂无数据</div>
         ) : (
           <div className="w-full h-[260px]">
+            {capped && (
+              <p className="mb-2 text-[11px] text-sandrift">数据较多，仅展示前 {CHART_DATA_CAP} 项</p>
+            )}
             <ResponsiveContainer width="100%" height="100%">
               {type === "bar" ? (
                 <BarChart data={data}>
@@ -106,4 +135,4 @@ export function KiroChartBlock({ code }: { code: string }) {
       </div>
     </div>
   );
-}
+});

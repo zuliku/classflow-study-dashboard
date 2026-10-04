@@ -33,6 +33,9 @@ export type DesktopControlSessionState =
   | "failed"
   | "cancelled";
 
+/** 非终态闲置回收 + 总量 LRU（此前 sweep 只删终态，任意 sessionId 可刷爆 Map） */
+export const DESKTOP_SESSION_MAX_RECORDS = 100;
+export const DESKTOP_SESSION_IDLE_TTL_MS = 30 * 60_000;
 export const DESKTOP_SESSION_LIMITS = {
   maxActions: 30,
   maxObservations: 60,
@@ -174,6 +177,26 @@ export class DesktopControlSessionStore {
   ensure(sessionId: string, now: number = Date.now()): DesktopControlSessionStatus {
     const existing = this.sessions.get(sessionId);
     if (existing) return this.toStatus(existing, now);
+    // sessionId 格式守卫（renderer 可编造任意 cs-* 刷 Map；过长/非法直接拒绝，不建记录）
+    if (typeof sessionId !== "string" || sessionId.length === 0 || sessionId.length > 128 || !/^[A-Za-z0-9_-]+$/.test(sessionId)) {
+      throw new DesktopSessionGuardError("SESSION_LIMIT_REACHED", "会话标识非法，已拒绝创建。");
+    }
+    // 总量 LRU：超限淘汰最旧非终态闲置（运行中永保留由调用方保证，此处按 updatedAt 最旧优先）
+    if (this.sessions.size >= DESKTOP_SESSION_MAX_RECORDS) {
+      let oldestId: string | null = null;
+      let oldestAt = Number.POSITIVE_INFINITY;
+      for (const [id, r] of this.sessions) {
+        if (isTerminalSessionState(r.state)) {
+          oldestId = id;
+          break;
+        }
+        if (r.updatedAt < oldestAt) {
+          oldestAt = r.updatedAt;
+          oldestId = id;
+        }
+      }
+      if (oldestId) this.sessions.delete(oldestId);
+    }
     const record: SessionRecord = {
       id: sessionId,
       state: "idle",
@@ -488,12 +511,18 @@ export class DesktopControlSessionStore {
     return this.sessions.get(sessionId)?.state === "paused";
   }
 
-  /** 清理长时间未更新的 session 记录 */
+  /** 清理长时间未更新的 session 记录（终态 10min + 非终态闲置 30min） */
   sweep(now: number = Date.now()): number {
     let removed = 0;
     for (const [id, record] of this.sessions) {
-      if (!isTerminalSessionState(record.state)) continue;
-      if (now - record.updatedAt > DESKTOP_SESSION_LIMITS.terminalTtlMs) {
+      if (isTerminalSessionState(record.state)) {
+        if (now - record.updatedAt > DESKTOP_SESSION_LIMITS.terminalTtlMs) {
+          this.sessions.delete(id);
+          removed += 1;
+        }
+        continue;
+      }
+      if (now - record.updatedAt > DESKTOP_SESSION_IDLE_TTL_MS) {
         this.sessions.delete(id);
         removed += 1;
       }

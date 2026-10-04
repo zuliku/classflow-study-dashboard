@@ -44,7 +44,7 @@ export function classifyPdfTextLayer(input: {
 }
 
 /** PDF 提取失败分类（UI 给出可操作提示，而非笼统“无法读取”） */
-export type PdfExtractFailureKind = "encrypted" | "invalid" | "unreadable";
+export type PdfExtractFailureKind = "encrypted" | "invalid" | "unreadable" | "too_large";
 
 export class PdfExtractError extends Error {
   readonly failureKind: PdfExtractFailureKind;
@@ -89,7 +89,17 @@ export function classifyPdfExtractError(err: unknown): PdfExtractFailureKind {
  * - getDocument 失败 → 按分类抛 PdfExtractError（入口负责文案）；
  * - 全部页都失败 → unreadable（不是扫描件：连页数都不可信，不走 Vision）。
  */
-export async function extractPdf(file: Blob): Promise<ExtractedDocument & { possiblyScanned: boolean }> {
+/** P1：提取前大小预检 + 可中断分页（此前全量 arrayBuffer + 串行全页，大文件卡死主线程无取消） */
+const PDF_EXTRACT_MAX_BYTES = 20 * 1024 * 1024;
+const PDF_EXTRACT_MAX_PAGES = 50;
+export async function extractPdf(
+  file: Blob,
+  opts?: { signal?: AbortSignal; maxPages?: number }
+): Promise<ExtractedDocument & { possiblyScanned: boolean }> {
+  if (file.size > PDF_EXTRACT_MAX_BYTES) {
+    throw new PdfExtractError("too_large", `PDF 过大（${(file.size / 1048576).toFixed(1)}MB），上限 20MB`);
+  }
+  opts?.signal?.throwIfAborted();
   // 动态加载：Browser 用标准 build；Node（测试）用 legacy build
   const pdfjs = await loadPdfJs();
   const data = new Uint8Array(await file.arrayBuffer());
@@ -110,7 +120,10 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
     const pages: { page: number; text: string }[] = [];
     let nonWhitespaceTextChars = 0;
     let failedPages = 0;
-    for (let i = 1; i <= doc.numPages; i++) {
+    const pageCap = Math.min(doc.numPages, opts?.maxPages ?? PDF_EXTRACT_MAX_PAGES);
+    const truncatedByCap = doc.numPages > pageCap;
+    for (let i = 1; i <= pageCap; i++) {
+      opts?.signal?.throwIfAborted();
       try {
         const page = await doc.getPage(i);
         const content = await page.getTextContent();
@@ -144,7 +157,7 @@ export async function extractPdf(file: Blob): Promise<ExtractedDocument & { poss
     return {
       text: limited.text,
       pages: limited.pages,
-      truncated: limited.truncated,
+      truncated: limited.truncated || truncatedByCap,
       pageCount: doc.numPages,
       possiblyScanned: false,
     };

@@ -71,7 +71,8 @@ export const KiroStreamingTail = React.memo(function KiroStreamingTail({
       </div>
     );
   }
-  return <KiroMarkdown content={text} sources={sources} />;
+  // P0 流畅度：tail text 走轻量 pipeline（无 highlight/KaTeX），settled 后稳定块切回全量
+  return <KiroMarkdown content={text} sources={sources} streaming />;
 });
 
 /** 去掉未闭合构造的首行 marker（``` / $$），内容保持原样，避免把 marker 当正文显示 */

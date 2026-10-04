@@ -60,6 +60,8 @@ export function createGuardedStorage<S>(onQuotaExceeded?: () => void): PersistSt
   let notified = false;
   return {
     getItem: (name) => inner.getItem(name),
+    // 同步直写（zustand persist 契约要求；防抖会破坏“写入后立即可读”，persist.test 已锁定）。
+    // 高频全量 JSON.stringify 的优化应在 store 层做 partialize 拆分/节流 set 调用，见 P1-1 备注。
     setItem: (name, newValue) => {
       try {
         inner.setItem(name, newValue);
