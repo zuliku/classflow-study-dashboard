@@ -43,6 +43,12 @@ export function useKiroReplyDraft() {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      // P0：30s 超时（此前弱网永久 loading；超时按可重试错误上屏，而非静默）
+      let timedOut = false;
+      const timeoutId = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort(new DOMException("timeout", "TimeoutError"));
+      }, 30_000);
       const seq = ++seqRef.current;
       currentItemIdRef.current = input.inboxItemId;
       setLoading(true);
@@ -50,9 +56,9 @@ export function useKiroReplyDraft() {
 
       try {
         const invBridge = (window as unknown as { classflowDesktop?: { invocation?: { beginRemoteInbox: (input: unknown) => Promise<{ invocationId: string }> } } }).classflowDesktop?.invocation;
-        if (!invBridge) throw new Error("Invocation not available");
+        if (!invBridge) throw new Error("桌面环境不可用，请重启应用后重试");
         const invSource = (input as { source?: string }).source ?? "qq-bot";
-        if (!["qq-bot", "gmail", "qq-mail"].includes(invSource)) throw new Error("Invalid source for draft");
+        if (!["qq-bot", "gmail", "qq-mail"].includes(invSource)) throw new Error("该消息暂不支持 AI 草稿");
         const { invocationId } = await invBridge.beginRemoteInbox({ source: invSource, inboxItemId: input.inboxItemId });
         // Check stale after beginRemoteInbox (could have been cancelled/switched)
         if (seq !== seqRef.current || currentItemIdRef.current !== input.inboxItemId || controller.signal.aborted) {
@@ -83,8 +89,13 @@ export function useKiroReplyDraft() {
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({ message: res.statusText }));
-          throw new Error((err as { message?: string }).message ?? `Draft failed: ${res.status}`);
+          // P0：状态码分流中文（此前英文裸错/技术码直达 UI）
+          if (res.status === 401 || res.status === 403) throw new Error("API Key 无效，请去设置检查后重试");
+          if (res.status === 404) throw new Error("模型不可用，请去设置更换模型后重试");
+          if (res.status === 429) throw new Error("请求太频繁，请稍后重试");
+          const err = await res.json().catch(() => ({}));
+          const msg = (err as { message?: string }).message;
+          throw new Error(msg && !/^Draft failed|^[A-Z_]+$/.test(msg) ? msg : `草稿生成失败（${res.status}），可点击重新生成重试`);
         }
         const data = (await res.json()) as { draft: string };
         if (seq !== seqRef.current || currentItemIdRef.current !== input.inboxItemId || controller.signal.aborted) {
@@ -92,11 +103,18 @@ export function useKiroReplyDraft() {
         }
         return { draft: data.draft, inboxItemId: input.inboxItemId, requestSeq: seq };
       } catch (e) {
-        if ((e as Error).name === "AbortError") return null;
+        if ((e as Error).name === "AbortError") {
+          // 用户取消/切走静默；超时给可重试提示
+          if (timedOut && seq === seqRef.current && currentItemIdRef.current === input.inboxItemId) {
+            setError("请求超时，可点击重新生成重试");
+          }
+          return null;
+        }
         if (seq !== seqRef.current || currentItemIdRef.current !== input.inboxItemId) return null;
-        setError((e as Error).message ?? String(e));
+        setError((e as Error).message ?? "草稿生成失败，可重试");
         return null;
       } finally {
+        window.clearTimeout(timeoutId);
         if (seq === seqRef.current) setLoading(false);
       }
     },

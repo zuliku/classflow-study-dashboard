@@ -143,7 +143,7 @@ describe("KiroComposer 输入高亮镜像", () => {
   }
 
   async function typeText(value: string) {
-    const ta = container!.querySelector('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    const ta = container!.querySelector('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, value);
       ta.dispatchEvent(new Event("input", { bubbles: true }));

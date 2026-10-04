@@ -18,7 +18,8 @@ export interface ProjectVisualEvidenceItem {
 }
 
 export type ProjectVisualEvidenceOutcome =
-  | { ok: true; items: ProjectVisualEvidenceItem[] }
+  // P0：透传 partial/failedPages（此前服务端算出后客户端丢弃，缺页回答却声称看过全文）
+  | { ok: true; items: ProjectVisualEvidenceItem[]; partial?: boolean; failedCount?: number; failedPages?: number[] }
   | { ok: false; code: string; message: string };
 
 export interface ProjectVisualEvidenceInput {
@@ -86,7 +87,16 @@ export async function extractProjectVisualEvidence(
         text: typeof it.text === "string" ? it.text : "",
       }))
       .filter((it) => it.text.length > 0);
-    return { ok: true, items };
+    const failedPages = Array.isArray(body.failedPages)
+      ? (body.failedPages as unknown[]).filter((p): p is number => typeof p === "number")
+      : [];
+    return {
+      ok: true,
+      items,
+      partial: body.partial === true,
+      failedCount: typeof body.failedCount === "number" ? body.failedCount : 0,
+      failedPages,
+    };
   }
   return {
     ok: false,

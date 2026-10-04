@@ -10,7 +10,7 @@ import {
   KiroAttachmentView,
   KiroAttachmentKind,
 } from "@/lib/ai/attachments/types";
-import { routeAttachment, kindToMaterialType } from "@/lib/ai/attachments/router";
+import { routeAttachment, kindToMaterialType, formatAttachmentLimit } from "@/lib/ai/attachments/router";
 import { extractAttachment } from "@/lib/ai/attachments";
 import { extractCacheKey, hashBlobFingerprint } from "@/lib/ai/attachments/cache";
 import { MAX_ATTACHMENTS_PER_TURN } from "@/lib/ai/attachments/limits";
@@ -95,7 +95,16 @@ export function useKiroAttachments() {
           size: file.size,
           kind: routed.ok ? routed.kind : "text",
           status: routed.ok ? "processing" : "unsupported",
-          error: routed.ok ? undefined : routed.reason === "too_large" ? "文件超过大小限制。" : routed.reason === "too_small" ? "文件为空，无法读取。" : routed.reason === "legacy" ? "暂不支持旧版 Office 格式（.doc/.ppt），请另存为 .docx/.pptx 后重试。" : "暂不支持这种文件类型。",
+          // P0：失败给数字+下一步（此前“超过限制”无数字、“不支持”无列表，删了重加同样失败）
+          error: routed.ok
+            ? undefined
+            : routed.reason === "too_large"
+              ? `文件过大（${(file.size / 1048576).toFixed(1)}MB），${routed.kind}上限 ${formatAttachmentLimit(routed.limit)}，请压缩或拆分后重试。`
+              : routed.reason === "too_small"
+                ? "文件为空，无法读取。"
+                : routed.reason === "legacy"
+                  ? "暂不支持旧版 Office 格式（.doc/.ppt），请另存为 .docx/.pptx 后重试。"
+                  : "暂不支持这种文件类型（支持 PDF/Word/Excel/PPT/纯文本/图片）。",
         };
         pending.push({ id: base.id, base, routed });
       }

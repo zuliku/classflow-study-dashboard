@@ -399,16 +399,23 @@ export async function executeReadProjectVisual(
     .map((p) => ({ page: p, text: evidenceByPage.get(p) as string }));
   // partial extraction：rendered 页数与成功 evidence 页数不一致 → 截断（不能只依赖 rendered.truncated）
   const partialExtraction = pages.length < renderedPageNumbers.length;
+  // P0：缺页点名（此前缺页静默，回答可能声称看过全文；failedPages 由 route 透传）
+  const failedNote =
+    evidence.partial === true && (evidence.failedPages ?? []).length > 0
+      ? `\n（第 ${(evidence.failedPages ?? []).join("、")} 页未能读取，回答未含这些页的内容）`
+      : partialExtraction
+        ? "\n（部分页面未能读取，回答仅含成功读取的页面）"
+        : "";
   return {
     ok: true,
     data: {
       projectFileId,
       name: record.name,
       kind: "pdf",
-      text: pages.length > 0 ? pages.map((p) => `第 ${p.page} 页：${p.text}`).join("\n") : "",
+      text: (pages.length > 0 ? pages.map((p) => `第 ${p.page} 页：${p.text}`).join("\n") : "") + failedNote,
       pages,
       visualTranscribed: true,
-      truncated: rendered.truncated || partialExtraction,
+      truncated: rendered.truncated || partialExtraction || evidence.partial === true,
     },
   };
 }

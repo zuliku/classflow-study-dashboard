@@ -7,7 +7,9 @@ import { SIZE_LIMITS } from "@/lib/ai/attachments/limits";
  */
 export type AttachmentRoute =
   | { ok: true; kind: KiroAttachmentKind }
-  | { ok: false; reason: "unsupported" | "too_large" | "too_small" | "legacy" };
+  | { ok: false; reason: "unsupported" | "too_small" | "legacy" }
+  // P0：too_large 携带 kind + 限额（调用方直接给出“当前 X MB，上限 Y MB”可行动文案，此前只有一句“超过限制”）
+  | { ok: false; reason: "too_large"; kind: KiroAttachmentKind; limit: number };
 
 const TEXT_MIMES = ["text/plain", "text/markdown", "text/x-markdown", "text/csv", "text/tab-separated-values"];
 const IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp"];
@@ -72,9 +74,14 @@ export function routeAttachment(file: { name: string; type: string; size: number
 
   if (!kind) return { ok: false, reason: "unsupported" };
   const limit = SIZE_LIMITS[kind];
-  if (file.size > limit) return { ok: false, reason: "too_large" };
+  if (file.size > limit) return { ok: false, reason: "too_large", kind, limit };
   if (file.size <= 0) return { ok: false, reason: "too_small" };
   return { ok: true, kind };
+}
+
+/** 限额字节 → “20MB/5MB”短文案 */
+export function formatAttachmentLimit(limit: number): string {
+  return limit >= 1024 * 1024 ? `${Math.round(limit / 1024 / 1024)}MB` : `${Math.round(limit / 1024)}KB`;
 }
 
 /** 附件 kind → Material.type（保存到课程资料时使用） */

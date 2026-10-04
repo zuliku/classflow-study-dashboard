@@ -12,6 +12,10 @@ export type AIErrorCode =
   | "INVALID_PROVIDER_REQUEST"
   | "INVALID_CUSTOM_URL"
   | "CONTEXT_TOO_LARGE"
+  // P0：视觉链路独立成码（此前全掉进 INVALID_PROVIDER_REQUEST“格式不兼容”，用户换模型而非减图，做错动作）
+  | "VISION_MODEL_REQUIRED"
+  | "VISION_BUDGET_EXHAUSTED"
+  | "VISION_EXTRACT_FAILED"
   | "UNKNOWN";
 
 export class AIError extends Error {
@@ -36,6 +40,9 @@ export const AI_ERROR_MESSAGES: Record<AIErrorCode, string> = {
   INVALID_PROVIDER_RESPONSE: "服务返回异常，请稍后再试。",
   INVALID_PROVIDER_REQUEST: "当前模型不支持此次请求（如推理+工具组合），请更换支持工具的模型、调低推理强度，或去设置检查。",
   INVALID_CUSTOM_URL: "自定义服务地址无效，请去设置检查地址是否填写正确。",
+  VISION_MODEL_REQUIRED: "当前模型不支持图片理解，请切换支持图片的模型后重试。",
+  VISION_BUDGET_EXHAUSTED: "图片过大或过多，请减少图片数量、压缩图片后重试。",
+  VISION_EXTRACT_FAILED: "未能从图片中提取到内容，请换一张更清晰的图片重试。",
   CONTEXT_TOO_LARGE: "当前对话内容较长，Kiro 已尝试压缩上下文。可以新建对话后继续。",
   UNKNOWN: "没能完成这次回复，请再试一次；一直不行可以新建对话或检查 AI 设置。",
 };
@@ -120,6 +127,10 @@ export function normalizeAIError(err: unknown): AIError {
       if (pc.includes("invalid_api_key") || pc.includes("authentication")) return new AIError("INVALID_API_KEY");
       if (pc.includes("rate_limit")) return new AIError("RATE_LIMITED");
       if (pc.includes("model_not_found")) return new AIError("MODEL_NOT_FOUND");
+      // 视觉链路：显式 vision 码 + 图片超限（此前统一吞成“格式不兼容”）
+      if (pc.includes("vision_model_required") || pc.includes("vision_not_supported")) return new AIError("VISION_MODEL_REQUIRED");
+      if (pc.includes("vision_budget_exceeded") || pc.includes("image_too_large") || pc.includes("too_many_images")) return new AIError("VISION_BUDGET_EXHAUSTED");
+      if (pc.includes("vision_extract_failed")) return new AIError("VISION_EXTRACT_FAILED");
       // invalid_request_error / 未识别 code → 请求格式不兼容（Tool schema、thinking 组合、能力不支持等）
       return new AIError("INVALID_PROVIDER_REQUEST");
     }

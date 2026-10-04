@@ -1,5 +1,5 @@
 import { KiroAttachmentKind } from "@/lib/ai/attachments/types";
-import { routeAttachment } from "@/lib/ai/attachments/router";
+import { routeAttachment, formatAttachmentLimit } from "@/lib/ai/attachments/router";
 import { extractTextFile, ExtractedDocument } from "@/lib/ai/attachments/extractors";
 import { extractPdf, PdfExtractError } from "@/lib/ai/attachments/pdf";
 import { extractDocx } from "@/lib/ai/attachments/docx";
@@ -21,11 +21,16 @@ export async function extractAttachment(
 > {
   const routed = routeAttachment({ name: file.name ?? "", type: file.type ?? "", size: file.size });
   if (!routed.ok) {
-    if (routed.reason === "too_large") return { ok: false, reason: "too_large", message: "文件超过大小限制。" };
+    if (routed.reason === "too_large")
+      return {
+        ok: false,
+        reason: "too_large",
+        message: `文件过大（${(file.size / 1048576).toFixed(1)}MB），${routed.kind}上限 ${formatAttachmentLimit(routed.limit)}，请压缩或拆分后重试。`,
+      };
     if (routed.reason === "too_small") return { ok: false, reason: "too_small", message: "文件为空，无法读取。" };
     if (routed.reason === "legacy")
       return { ok: false, reason: "legacy", message: "暂不支持旧版 Office 格式（.doc/.ppt），请另存为 .docx/.pptx 后重试。" };
-    return { ok: false, reason: "unsupported", message: "暂不支持这种文件类型。" };
+    return { ok: false, reason: "unsupported", message: "暂不支持这种文件类型（支持 PDF/Word/Excel/PPT/纯文本/图片）。" };
   }
 
   const cacheKey =

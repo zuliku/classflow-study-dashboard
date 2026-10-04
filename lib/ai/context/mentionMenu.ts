@@ -51,6 +51,21 @@ export function filterMentionOptions(
   return flat.slice(0, MENTION_MENU_LIMIT);
 }
 
+/** 未截断的匹配总数（菜单 footer “还有 N 项”用；此前截断后用户以为只有这些） */
+export function countMentionOptions(
+  groups: ReturnType<typeof getKiroContextGroups>,
+  query: string
+): number {
+  const q = query.trim().toLowerCase();
+  let n = 0;
+  for (const g of groups) {
+    for (const ref of g.items) {
+      if (!q || ref.label.toLowerCase().includes(q)) n += 1;
+    }
+  }
+  return n;
+}
+
 /** 由 Store 实体直接构建可展示选项（Composer 内联使用） */
 export function buildMentionOptions(
   courses: ContextSource[0],

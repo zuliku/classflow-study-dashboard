@@ -441,14 +441,17 @@ describe("Kiro Composer — Reasoning / Model", () => {
 
   it("S-fix 模型不可用时发送前即禁用（不再白等一轮 MODEL_NOT_FOUND）", async () => {
     await renderComposer({ modelUnavailable: true, activeModelName: "模型不可用" });
-    const ta = q('textarea[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    const ta = q('textarea[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
       setter?.call(ta, "帮我总结");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await flush();
-    const send = q('[aria-label="发送"]') as HTMLButtonElement;
+    // 禁用原因进 aria-label（“发送（…）”），仍可定位
+    const send = q('[aria-label^="发送"]') as HTMLButtonElement;
+    expect(send).toBeTruthy();
+    expect(send.getAttribute("aria-label")).toContain("切换模型");
     expect(send.disabled).toBe(true);
     await act(async () => {
       send.click();
@@ -490,7 +493,7 @@ describe("Kiro Composer — 回归", () => {
     (window as unknown as { classflowDesktop?: unknown }).classflowDesktop = {
       skills: { list: async () => ({ skills: [{ name: "doc", description: "文档", enabled: true, kind: "workflow" }] }) },
     };
-    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    const ta = q('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, "/d");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
@@ -541,7 +544,7 @@ describe("Kiro Composer — 回归", () => {
 
 describe("Kiro Composer — @ mention（对标 Slash）", () => {
   async function typeText(value: string) {
-    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    const ta = q('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, value);
       ta.dispatchEvent(new Event("input", { bubbles: true }));
@@ -550,7 +553,7 @@ describe("Kiro Composer — @ mention（对标 Slash）", () => {
   }
 
   async function pressKey(key: string) {
-    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    const ta = q('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
     await act(async () => {
       ta.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
     });
@@ -570,7 +573,7 @@ describe("Kiro Composer — @ mention（对标 Slash）", () => {
     expect(handlers.onAddContext).toHaveBeenCalledWith(
       expect.objectContaining({ key: "manual-course-c1", kind: "course" })
     );
-    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    const ta = q('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
     expect(ta.value).toBe("帮我看下@中级计量经济学（王老师） ");
     // 尾随空格 = 完成态：先播退出过渡（非硬切），再延迟卸载（退出 timer 是真时钟，直接等）
     const closing = q('[data-testid="kiro-mention-menu"]') as HTMLElement;
@@ -584,8 +587,10 @@ describe("Kiro Composer — @ mention（对标 Slash）", () => {
 
   it("无命中关闭；Escape 关闭；键盘导航选中", async () => {
     await renderComposer();
+    // 无命中保留菜单空态（不再静默消失），提示换关键词
     await typeText("@不存在的");
-    expect(q('[data-testid="kiro-mention-menu"]')).toBeNull();
+    expect(q('[data-testid="kiro-mention-menu"]')).toBeTruthy();
+    expect(q('[data-testid="kiro-mention-menu"]')!.textContent).toContain("无匹配");
 
     await typeText("@");
     expect(q('[data-testid="kiro-mention-menu"]')).toBeTruthy();

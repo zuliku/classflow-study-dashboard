@@ -91,9 +91,10 @@ export function KiroAttachmentChip({
   const liveSource = isImage && !isMaterial ? resolveLiveImageSource(attachment.id) : undefined;
   const [previewFile, setPreviewFile] = React.useState<File | null>(null);
 
+  // P0：processing 显示大小（大文件卡住时用户能判断是“大”还是“坏”；× 在 Turn 未锁定时始终可取消）
   const meta =
     attachment.status === "processing"
-      ? "正在读取…"
+      ? `正在读取…${attachment.size ? ` · ${sizeLabel(attachment.size)}` : ""}`
       : failed
         ? (attachment.error ?? "读取失败")
         : scanned

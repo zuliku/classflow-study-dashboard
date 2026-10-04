@@ -195,7 +195,8 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
                 <Sparkles className="w-3 h-3" />
                 {draftGenerated ? "重新生成" : "Kiro 生成草稿"}
               </button>
-              <select value={tone} onChange={(e) => setTone(e.target.value as never)} data-testid="qq-reply-tone" className="h-7 px-2 bg-white border border-line rounded-lg text-xs">
+              {/* P0：切 tone 先取消在途草稿（此前旧 tone 回包继续烧，浪费且可能覆盖） */}
+              <select value={tone} onChange={(e) => { cancelDraft(); setTone(e.target.value as never); }} data-testid="qq-reply-tone" className="h-7 px-2 bg-white border border-line rounded-lg text-xs">
                 <option value="natural">自然</option>
                 <option value="concise">简洁</option>
                 <option value="formal">正式</option>

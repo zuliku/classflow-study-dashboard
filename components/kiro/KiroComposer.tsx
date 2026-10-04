@@ -35,13 +35,16 @@ import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 import { filterSlashSkills, moveSlashIndex, parseSlashQuery, toSlashSkillOptions } from "@/lib/ai/skills/slashMenu";
 import { tokenizeComposerPrompt } from "@/lib/ai/composer/promptHighlight";
+import { estimateTokens } from "@/lib/ai/contextBudget/estimate";
 import {
   applyMentionPick,
   buildMentionOptions,
+  countMentionOptions,
   moveMentionIndex,
   parseMentionQuery,
   type MentionOption,
 } from "@/lib/ai/context/mentionMenu";
+import { getKiroContextGroups } from "@/lib/ai/context/options";
 
 /** P3：Composer 只允许一个菜单同时打开（add / access / model） */
 type ComposerMenu = "add" | "access" | "reasoning" | "model" | "contextUsage" | null;
@@ -171,8 +174,12 @@ export const KiroComposer = React.memo(function KiroComposer({
   // Slash 异步竞态守卫：快速输入 /a→/ab 时旧请求先回不得覆盖新查询菜单
   const slashRequestRef = useRef(0);
   const [slashActive, setSlashActive] = useState(0);
+  // / 空菜单原因（null = 有结果；此前空结果直接不弹菜单）
+  const [slashEmptyReason, setSlashEmptyReason] = useState<null | "no-match" | "no-skills" | "no-bridge">(null);
   // @ mention：与 Slash 同构的上下文直达入口（选项与 KiroContextListView 同源）
   const [mentionOptions, setMentionOptions] = useState<MentionOption[]>([]);
+  // 未截断匹配总数（footer“还有 N 项”；空结果时菜单保留空态而非消失）
+  const [mentionTotal, setMentionTotal] = useState(0);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionActive, setMentionActive] = useState(0);
   // Esc/外部点击读最新菜单状态（listener 只订阅一次，不 stale；关了任一即 stopPropagation，
@@ -269,6 +276,50 @@ export const KiroComposer = React.memo(function KiroComposer({
     !preparingSend &&
     !submitting &&
     !preparingVision;
+  // P0 可理解性：发送前本地预检（此前首条大消息直接失败才知超限；此处为粗估，精确值仍以服务端快照为准）
+  const contextPrecheck: string | null = React.useMemo(() => {
+    if (!contextWindowTokens || contextWindowTokens <= 0) return null;
+    if (text.trim().length === 0) return null;
+    try {
+      const promptTokens = estimateTokens(text);
+      // 附件无正文（View 层）：按体积保守粗估（上限 25k/个，避免小附件误报）
+      let attachTokens = 0;
+      for (const a of attachments) {
+        if (a.status !== "ready" || a.kind === "image") continue;
+        const bytes = typeof a.size === "number" ? a.size : 0;
+        attachTokens += Math.min(Math.ceil(bytes / 4), 25_000);
+      }
+      const total = promptTokens + attachTokens;
+      if (total >= contextWindowTokens * 0.9) {
+        return `预计占用约 ${Math.round((total / contextWindowTokens) * 100)}%，很可能超限，先删附件或缩短问题`;
+      }
+      if (total >= contextWindowTokens * 0.75) {
+        return `预计占用约 ${Math.round((total / contextWindowTokens) * 100)}%，接近上限，超限时可删附件重试`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, [text, attachments, contextWindowTokens]);
+  // P0 可理解性：禁用原因首因（此前 10+ 门控坍缩成一个灰按钮，用户反复点，回车无反馈）
+  const sendDisabledReason: string | null =
+    text.trim().length === 0
+      ? null
+      : !configured
+        ? "尚未配置 AI 服务，点击下方「配置 AI 服务」"
+        : modelUnavailable
+          ? "当前模型已下线，请切换模型后再发送"
+          : hasProcessing
+            ? "附件正在读取，完成后即可发送"
+            : imagesBlocked
+              ? "当前模型不支持图片，请切换支持图片的模型或移除图片"
+              : scannedBlocked
+                ? "扫描版 PDF 需要支持图片理解的模型，请切换模型"
+                : turnInFlight
+                  ? "Kiro 正在回复，稍候再发送"
+                  : preparingSend || submitting || preparingVision
+                    ? "正在准备，请稍候"
+                    : null;
   // Task 07: Slash Skill — 仅显示 enabled skills；仅「输入中的命令」展开（选中后带空格 → 自动折叠）
   // P1 流畅度：150ms debounce（此前每键一次 bridge.list() 同步读盘，高频输入 /a→/ab 发起 N 次 IPC）
   useEffect(() => {
@@ -282,7 +333,9 @@ export const KiroComposer = React.memo(function KiroComposer({
       const bridge = (window as unknown as { classflowDesktop?: { skills?: { list: () => Promise<{ skills: { name: string; description: string; enabled: boolean; kind?: string }[] }> } } }).classflowDesktop?.skills;
       if (!bridge) {
         slashRequestRef.current += 1;
-        setSlashOpen(false);
+        setSlashSkills([]);
+        setSlashEmptyReason("no-bridge");
+        setSlashOpen(true);
         return;
       }
       const requestId = (slashRequestRef.current += 1);
@@ -296,9 +349,17 @@ export const KiroComposer = React.memo(function KiroComposer({
           const filtered = filterSlashSkills(workflows, query);
           setSlashSkills(filtered);
           setSlashActive(0);
-          setSlashOpen(filtered.length > 0);
+          // P0：空结果保留菜单空态（此前无匹配/全禁用/IPC 失败都静默消失，用户分不清）
+          setSlashEmptyReason(
+            filtered.length > 0 ? null : workflows.length === 0 ? "no-skills" : "no-match"
+          );
+          setSlashOpen(true);
         })
-        .catch(() => setSlashOpen(false));
+        .catch(() => {
+          setSlashSkills([]);
+          setSlashEmptyReason("no-bridge");
+          setSlashOpen(true);
+        });
     }, 150);
     return () => window.clearTimeout(timer);
   }, [text]);
@@ -367,8 +428,14 @@ export const KiroComposer = React.memo(function KiroComposer({
     }
     const options = buildMentionOptions(mentionCourses, mentionAssignments, mentionGroupProjects, query);
     setMentionOptions(options);
+    // 总数同源一次计算（空结果保留菜单空态，不再静默消失）
+    try {
+      setMentionTotal(countMentionOptions(getKiroContextGroups(mentionCourses, mentionAssignments, mentionGroupProjects), query));
+    } catch {
+      setMentionTotal(options.length);
+    }
     setMentionActive(0);
-    setMentionOpen(options.length > 0);
+    setMentionOpen(true);
   }, [text, slashOpen, mentionCourses, mentionAssignments, mentionGroupProjects, currentTurnScopeLocked]);
 
   // 输入高亮镜像：与 textarea 同步滚动（backdrop 方案：textarea 文字正常绘制，
@@ -757,6 +824,15 @@ export const KiroComposer = React.memo(function KiroComposer({
                 aria-label="Skills"
                 className="max-h-44 overflow-y-auto overscroll-contain py-1"
               >
+                {slashSkills.length === 0 && (
+                  <p className="px-3 py-2 text-[11px] text-sandrift">
+                    {slashEmptyReason === "no-skills"
+                      ? "暂无已启用的 Workflow Skill，去设置启用"
+                      : slashEmptyReason === "no-bridge"
+                        ? "技能列表暂不可用，稍后再试"
+                        : "无匹配的 Skill，换个关键词试试"}
+                  </p>
+                )}
                 {slashSkills.map((s, index) => {
                   const active = index === slashActive;
                   return (
@@ -806,6 +882,9 @@ export const KiroComposer = React.memo(function KiroComposer({
                 aria-label="上下文"
                 className="max-h-44 overflow-y-auto overscroll-contain py-1"
               >
+                {mentionOptions.length === 0 && (
+                  <p className="px-3 py-2 text-[11px] text-sandrift">无匹配，换个关键词试试（如课程名/任务名）</p>
+                )}
                 {mentionOptions.map((option, index) => {
                   const active = index === mentionActive;
                   return (
@@ -833,7 +912,25 @@ export const KiroComposer = React.memo(function KiroComposer({
                   );
                 })}
               </div>
+              {mentionTotal > mentionOptions.length && (
+                <p className="px-3 py-1.5 text-[10px] text-sandrift border-t border-line-soft">
+                  还有 {mentionTotal - mentionOptions.length} 项，继续输入精确匹配
+                </p>
+              )}
             </div>
+          )}
+
+          {/* P0：发送禁用首因 inline 行（与 visionWarning 同款位置；此前灰按钮零解释） */}
+          {sendDisabledReason && (
+            <p className="px-3 pt-2 text-[11px] font-semibold text-warning" role="status">
+              {sendDisabledReason}
+            </p>
+          )}
+          {/* P0：上下文预检（粗估；精确值以服务端快照为准，不拦截发送） */}
+          {!sendDisabledReason && contextPrecheck && (
+            <p className="px-3 pt-2 text-[11px] font-semibold text-sandrift" role="status">
+              {contextPrecheck}
+            </p>
           )}
 
           {/* Prompt + Toolbar：统一内部 gutter，prompt 区保持最干净 */}
@@ -890,7 +987,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                 onPaste={handlePaste}
                 rows={1}
                 placeholder="问问 Kiro，比如：今天先做什么…"
-                aria-label="Ask Kiro"
+                aria-label="向 Kiro 提问"
                 className={cn(
                   "relative w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
                   // P2：autoGrow 高度 px 跳变走 control 档过渡（输入增高不再硬跳；reduced-motion 全局兜底）
@@ -1002,6 +1099,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                   inFlight={turnInFlight}
                   onSend={submit}
                   onStop={onStop}
+                  disabledReason={sendDisabledReason}
                 />
               </div>
             </div>
@@ -1009,7 +1107,18 @@ export const KiroComposer = React.memo(function KiroComposer({
         </div>
 
         {/* Composer 下方只保留真正需要用户注意的状态 */}
-        {!configured ? (
+        {/* P0：模型下线一级 CTA（此前警告藏在二级菜单内，写完才发现发不出去） */}
+        {configured && modelUnavailable ? (
+          <div className={cn("flex items-center justify-end gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
+            <span className="text-[11px] font-semibold text-danger">当前模型已下线，发送已置灰</span>
+            <button
+              onClick={() => setOpenMenu("model")}
+              className="flex items-center gap-1 px-2.5 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+            >
+              去切换模型
+            </button>
+          </div>
+        ) : !configured ? (
           <div className={cn("flex items-center justify-end gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
             <button
               onClick={onOpenSettings}

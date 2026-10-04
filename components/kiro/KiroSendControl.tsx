@@ -19,12 +19,15 @@ export function KiroSendControl({
   inFlight,
   onSend,
   onStop,
+  disabledReason,
 }: {
   canSend: boolean;
   preparing: boolean;
   inFlight: boolean;
   onSend: () => void;
   onStop: () => void;
+  /** 禁用原因（idle 态的 title/aria-label；此前恒为“发送”，用户不知为何点不动） */
+  disabledReason?: string | null;
 }) {
   const state: "stop" | "preparing" | "ready" | "idle" = inFlight
     ? "stop"
@@ -35,7 +38,8 @@ export function KiroSendControl({
         : "idle";
 
   const disabled = state === "preparing" || state === "idle";
-  const ariaLabel = state === "stop" ? "停止生成" : state === "preparing" ? "正在准备" : "发送";
+  const idleLabel = state === "idle" && disabledReason ? `发送（${disabledReason}）` : "发送";
+  const ariaLabel = state === "stop" ? "停止生成" : state === "preparing" ? "正在准备" : idleLabel;
 
   return (
     <button
