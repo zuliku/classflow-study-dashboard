@@ -37,20 +37,39 @@ function getProperty(lines: string[], name: string): { head: string; value: stri
   return null;
 }
 
-/** 解析 DTSTART / DTEND 的常见形式（本地时间或 DTSTART;TZID=...: 形式） */
-function parseICSDateTime(value: string): { date: Date; time: string } | null {
-  const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?)?$/.exec(value.trim());
+/**
+ * 解析 DTSTART / DTEND 的常见形式。
+ * - 本地浮动时间（无 Z/无 TZID）：按墙钟直接构造本地 Date（不再误用 Date.UTC，避免跨时区差一天）
+ * - UTC 时间（尾随 Z）：按 UTC 解析后再转本地墙钟（星期按本地星期推算）
+ * - 带 TZID 参数时调用方已剥离参数只剩值：无法精确换算时按浮动时间处理并由调用方 warning（不静默差一天）
+ */
+function parseICSDateTime(value: string): { date: Date; time: string; isUTC: boolean } | null {
+  const raw = value.trim();
+  const isUTC = /[zZ]$/.test(raw);
+  const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?)?[zZ]?$/.exec(raw);
   if (!m) return null;
-  const date = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
   if (m[4] !== undefined) {
-    return { date, time: `${m[4]}:${m[5]}` };
+    const hh = m[4];
+    const mm = m[5];
+    if (isUTC) {
+      const utc = new Date(Date.UTC(y, mo, d, Number(hh), Number(mm), Number(m[6] ?? "0")));
+      const time = `${String(utc.getHours()).padStart(2, "0")}:${String(utc.getMinutes()).padStart(2, "0")}`;
+      return { date: utc, time, isUTC: true };
+    }
+    const date = new Date(y, mo, d, Number(hh), Number(mm));
+    return { date, time: `${hh}:${mm}`, isUTC: false };
   }
-  return { date, time: "" };
+  const date = new Date(y, mo, d);
+  return { date, time: "", isUTC: false };
 }
 
-/** date-fns 风格：周一=1 ... 周日=7 */
+/** date-fns 风格：周一=1 ... 周日=7（本地星期；UTC 事件已在解析时转本地） */
 function dateToDayOfWeek(date: Date): number {
-  return date.getUTCDay() === 0 ? 7 : date.getUTCDay();
+  const dow = date.getDay();
+  return dow === 0 ? 7 : dow;
 }
 
 const ICS_BYDAY_MAP: Record<string, number> = {
@@ -74,7 +93,8 @@ function parseRRULE(value: string): Record<string, string> {
 
 function addMinutes(timeStr: string, minutes: number): string {
   const total = timeToMinutes(timeStr) ?? 0;
-  const m = total + minutes;
+  // 归一化到 00:00–23:59（此前 23:xx + 100m 会生成 "24:xx" 非法时间入库）
+  const m = ((total + minutes) % (24 * 60) + 24 * 60) % (24 * 60);
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
@@ -148,6 +168,10 @@ export function parseICS(icsText: string): ParsedImportResult {
 
     const dtStartProp = getProperty(block, "DTSTART");
     if (dtStartProp) {
+      // TZID 无法精确换算：按浮动墙钟导入并明确提示（此前静默按 UTC 推星期，可能差一天）
+      if (/TZID=/i.test(dtStartProp.head)) {
+        warnings.push(`《${name}》：DTSTART 含时区参数，已按日历墙钟时间导入（跨时区请核对星期）`);
+      }
       const parsed = parseICSDateTime(dtStartProp.value);
       if (parsed) {
         if (dayOfWeek === null) {
@@ -193,8 +217,10 @@ export function parseICS(icsText: string): ParsedImportResult {
 
     let course = courseMap.get(name);
     if (!course) {
+      // Date.now()+idx 高频导入易碰撞 → randomUUID（同文件多事件同毫秒此前会覆盖）
+      const uid = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID().slice(0, 8) : `${Date.now().toString(36)}${idx}`;
       course = {
-        id: `c_ics_${Date.now()}_${idx}`,
+        id: `c_ics_${uid}_${idx}`,
         name,
         code: `ICS-${100 + idx}`,
         teacher: "教务教师",
@@ -211,7 +237,7 @@ export function parseICS(icsText: string): ParsedImportResult {
     }
 
     schedules.push({
-      id: `s_ics_${Date.now()}_${idx}`,
+      id: `s_ics_${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID().slice(0, 8) : `${Date.now().toString(36)}${idx}`}_${idx}`,
       courseId: course.id,
       dayOfWeek,
       startTime,

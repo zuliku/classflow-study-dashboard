@@ -79,17 +79,30 @@ export function killProcessTree(pid: number): Promise<void> {
 interface Accumulator {
   text: string;
   truncated: boolean;
+  /** 增量字节计数（避免每 chunk 对全量 512KB 做 byteLength → O(N²) 主线程阻塞） */
+  bytes: number;
 }
 
 function collect(acc: Accumulator, chunk: string): void {
   if (acc.truncated) return;
   const max = TERMINAL_RUNTIME_MAX_OUTPUT_BYTES;
-  if (Buffer.byteLength(acc.text + chunk, "utf8") > max) {
-    acc.text = acc.text.slice(0, Math.floor(max / 2));
-    acc.truncated = true;
+  const chunkBytes = Buffer.byteLength(chunk, "utf8");
+  if (acc.bytes + chunkBytes <= max) {
+    acc.text += chunk;
+    acc.bytes += chunkBytes;
     return;
   }
-  acc.text += chunk;
+  // 溢出：保留尾部（最新输出最有价值）而非头部一半；按行切分避免半行乱码
+  acc.truncated = true;
+  const keepBytes = Math.floor(max * 0.8);
+  const merged = acc.text + chunk;
+  let cut = merged.length - Math.floor((merged.length * keepBytes) / Math.max(1, acc.bytes + chunkBytes));
+  if (cut < 0) cut = 0;
+  // 尽量从换行处切断
+  const nl = merged.indexOf("\n", cut);
+  if (nl !== -1 && nl - cut < 4096) cut = nl + 1;
+  acc.text = merged.slice(cut);
+  acc.bytes = Buffer.byteLength(acc.text, "utf8");
 }
 
 /**
@@ -121,8 +134,8 @@ export function runTerminalProcess(
   let timedOut = false;
   let timer: NodeJS.Timeout | null = null;
 
-  const stdout: Accumulator = { text: "", truncated: false };
-  const stderr: Accumulator = { text: "", truncated: false };
+  const stdout: Accumulator = { text: "", truncated: false, bytes: 0 };
+  const stderr: Accumulator = { text: "", truncated: false, bytes: 0 };
 
   const emit = (event: DesktopTerminalEvent) => {
     if (settled && event.type !== "exit") return; // late chunk 不发（completed activity 不再被修改）

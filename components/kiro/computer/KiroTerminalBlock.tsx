@@ -88,6 +88,16 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
   const running = !isTerminalActivityTerminal(activity.status);
   const cancelling = stopping;
   const outputRef = useRef<HTMLDivElement | null>(null);
+  const inputSentTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (inputSentTimerRef.current !== null) {
+        window.clearTimeout(inputSentTimerRef.current);
+        inputSentTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // secure input：用户手动输入 → bridgeV2.write（绝不进入模型 context / 对话历史 / audit）
   const onSendInput = async () => {
@@ -101,7 +111,11 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
       await bridgeV2.write({ executionId: activity.executionId, data: payload });
       setInputValue("");
       setInputSent(true);
-      window.setTimeout(() => setInputSent(false), 1200);
+      if (inputSentTimerRef.current !== null) window.clearTimeout(inputSentTimerRef.current);
+      inputSentTimerRef.current = window.setTimeout(() => {
+        inputSentTimerRef.current = null;
+        setInputSent(false);
+      }, 1200);
     } catch {
       /* write 失败（进程已结束等）：静默 */
     } finally {
@@ -113,14 +127,28 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
   const displayLines = showAll ? body : body.slice(-PREVIEW_LINES);
 
   // 输出跟尾：行数变化且用户停在底部才自动跟随（上翻查看旧输出时不抢滚动；纯 DOM，无重渲染）
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // rAF 合并：高频 stdout 每 chunk 一次 layout → 合并到单帧一次读写
+  const followRafRef = useRef<number | null>(null);
   useEffect(() => {
-    const el = outputRef.current;
-    if (!el) return;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
-      el.scrollTop = el.scrollHeight;
-    }
+    if (followRafRef.current !== null) return;
+    followRafRef.current = requestAnimationFrame(() => {
+      followRafRef.current = null;
+      const el = outputRef.current;
+      if (!el) return;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [body.length]);
+  useEffect(() => {
+    return () => {
+      if (followRafRef.current !== null) {
+        cancelAnimationFrame(followRafRef.current);
+        followRafRef.current = null;
+      }
+    };
+  }, []);
   const meta = statusMeta(activity);
   const shellLabel = activity.shell === "powershell" ? "PowerShell" : "命令提示符";
 

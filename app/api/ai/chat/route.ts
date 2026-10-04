@@ -161,7 +161,9 @@ export async function handleChat(req: Request) {
   }
 
   const timeout = parsed.timeoutMs ?? AI.CHAT_TIMEOUT_MS;
-  const { signal } = createTimeoutController(timeout, req.signal);
+  const { signal, done } = createTimeoutController(timeout, req.signal);
+  // P1 定时器泄漏：流正常结束 / 客户端提前断开都要清 timer（此前从未调用 done()）
+  req.signal.addEventListener("abort", () => done(), { once: true });
 
   // Reasoning：客户端只发 effort；server resolve definition → normalize → verified provider options
   // （客户端永远不能注入原始 providerOptions）
@@ -692,8 +694,20 @@ export async function handleChat(req: Request) {
       compacted: overBudget,
     });
 
+    // 包装 guardStream：流结束即 done() 清 timer，避免每次请求泄漏一个定时器到超时
+    // （取消路径由上方 req.signal abort → done() 覆盖；TransformStream 无 cancel 槽位也无泄漏）
+    const guarded = guardStream(result.stream).pipeThrough(
+      new TransformStream({
+        transform(chunk, controller) {
+          controller.enqueue(chunk);
+        },
+        flush() {
+          done();
+        },
+      })
+    );
     const uiStream = toUIMessageStream({
-      stream: guardStream(result.stream),
+      stream: guarded,
       // 多轮 client tool call 时保留同一 assistant message id，避免重复消息
       // UI 连续性 / Message ID / Tool Loop 始终基于真实 originalMessages（不做 compact 替换）
       originalMessages: parsed.messages as never,
@@ -710,6 +724,11 @@ export async function handleChat(req: Request) {
 
     return createUIMessageStreamResponse({ stream: uiStream });
   } catch (err) {
+    try {
+      done();
+    } catch {
+      /* ignore */
+    }
     logProviderError("chat/init", err);
     const aiErr = normalizeAIError(err);
     return Response.json({ code: aiErr.code, message: aiErr.message }, { status: 500 });

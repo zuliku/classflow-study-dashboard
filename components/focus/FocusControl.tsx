@@ -22,6 +22,32 @@ import { MOTION_EXIT_MS } from "@/lib/motion";
  * compact（Desktop MiniCalendar Header 窄空间）：只保留主状态图标
  * （Play / Timer / Pause），隐藏文字与 chevron；点击行为不变（打开 Popover）。
  */
+/** P0 流畅度：每秒 tick 下沉到叶子，避免整颗 FocusControl（含课程/任务 options 全量 map）每秒重渲染 */
+function useNowTick(enabled: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    // 对齐秒边界，减少漂移导致的额外帧
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [enabled]);
+  return now;
+}
+
+function FocusButtonLabel({ active }: { active: FocusSession | null }) {
+  const now = useNowTick(!!active);
+  const clock = active ? deriveFocusClock(active, now) : null;
+  const remainingText = clock ? formatFocusClock(clock.remainingMs) : "";
+  if (!active) return <>开始专注</>;
+  return <>{active.status === "running" ? `${remainingText} · 专注中` : `${remainingText} · 已暂停`}</>;
+}
+
+function FocusRemainingInline({ active }: { active: FocusSession }) {
+  const now = useNowTick(true);
+  const clock = deriveFocusClock(active, now);
+  return <span className="font-mono font-bold text-charcoal tabular-nums">{formatFocusClock(clock.remainingMs)}</span>;
+}
+
 export function FocusControl({ compact = false }: { compact?: boolean }) {
   const focusSessions = useAppStore((s) => s.focusSessions);
   const assignments = useAppStore((s) => s.assignments);
@@ -47,14 +73,18 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
       setPlanned(getDefaultPlanned());
     }
   }, [open]);
-  // 每秒本地刷新（仅显示；不写 Store）
-  const [, setTick] = useState(0);
 
-  useEffect(() => {
-    if (!open && !active) return;
-    const t = window.setInterval(() => setTick(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [open, active]);
+  // 关联对象选项：memo 化，避免父级任何重渲染都 O(n) 重建（之前每秒 tick 重建一次）
+  const targetOptions = useMemo(
+    () => [
+      { value: "none", label: "不关联" },
+      ...courses.map((c) => ({ value: `course:${c.id}`, label: `课程 · ${c.name}` })),
+      ...assignments
+        .filter((a) => a.status !== "completed")
+        .map((a) => ({ value: `assignment:${a.id}`, label: `任务 · ${a.title}` })),
+    ],
+    [courses, assignments]
+  );
 
   // Escape / 点击组件外关闭（不引入全局 overlay stack）
   useEffect(() => {
@@ -72,10 +102,6 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
       document.removeEventListener("pointerdown", onPointerDown);
     };
   }, [open]);
-
-  const now = Date.now();
-  const clock = active ? deriveFocusClock(active, now) : null;
-  const remainingText = clock ? formatFocusClock(clock.remainingMs) : "";
 
   const toastError = (code: string) => {
     pushToast({ type: "warning", message: FOCUS_ERROR_MESSAGES[code] ?? "操作失败，请重试" });
@@ -131,13 +157,6 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
   const snapshotLabel =
     active?.assignmentTitleSnapshot ?? active?.courseNameSnapshot ?? activeAssignment?.title ?? "未关联";
 
-  // 状态由左侧主图标（Play/Timer/Pause）表达；label 不再重复 ● / Ⅱ
-  const buttonLabel = active
-    ? active.status === "running"
-      ? `${remainingText} · 专注中`
-      : `${remainingText} · 已暂停`
-    : "开始专注";
-
   return (
     <div ref={wrapRef} className="relative shrink-0">
       <button
@@ -162,7 +181,7 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
         ) : (
           <Play className={compact ? "w-3.5 h-3.5" : "w-3 h-3"} />
         )}
-        {!compact && buttonLabel}
+        {!compact && <FocusButtonLabel active={active} />}
         {!compact && <ChevronDown className="w-2.5 h-2.5 opacity-60" />}
       </button>
 
@@ -221,18 +240,7 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
 
               <div className="space-y-1">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">关联对象</p>
-                <UISelect
-                  value={target}
-                  onChange={setTarget}
-                  ariaLabel="关联对象"
-                  options={[
-                    { value: "none", label: "不关联" },
-                    ...courses.map((c) => ({ value: `course:${c.id}`, label: `课程 · ${c.name}` })),
-                    ...assignments
-                      .filter((a) => a.status !== "completed")
-                      .map((a) => ({ value: `assignment:${a.id}`, label: `任务 · ${a.title}` })),
-                  ]}
-                />
+                <UISelect value={target} onChange={setTarget} ariaLabel="关联对象" options={targetOptions} />
               </div>
 
               <div className="space-y-1">
@@ -262,7 +270,7 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
                 <p className="text-xs font-bold text-charcoal truncate">{snapshotLabel}</p>
                 {active.note && <p className="text-[10px] text-satin-grey break-words">{active.note}</p>}
                 <p className="text-[10px] text-sandrift">
-                  剩余 <span className="font-mono font-bold text-charcoal tabular-nums">{remainingText}</span>
+                  剩余 <FocusRemainingInline active={active} />
                   {active.status === "paused" && " · 已暂停"}
                 </p>
               </div>

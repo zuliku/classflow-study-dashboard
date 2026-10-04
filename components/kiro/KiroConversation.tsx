@@ -158,9 +158,24 @@ export function KiroConversation({
     setShowScrollBtn((prev) => (prev === shouldShow ? prev : shouldShow));
   }, []);
 
-  const onScroll = () => {
-    syncScrollState();
-  };
+  // P0 流畅度：scroll 事件 60Hz 风暴 → rAF 节流（只置位 + 单帧合并一次 sync）
+  const scrollRafRef = useRef<number | null>(null);
+  const onScroll = React.useCallback(() => {
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      syncScrollState();
+    });
+  }, [syncScrollState]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
+  }, []);
 
   // 单一 rAF scheduler（Task 5）：高度变化只在同一帧合并一次 reconcile；
   // sticky 跟随使用直接 scrollTop 赋值（不做 smooth，避免抖动 / scroll queue）；

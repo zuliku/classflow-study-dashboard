@@ -37,9 +37,26 @@ function ptyOperationError(code: string): Error & { code: string } {
 interface PtySessionRecord {
   sessionId: string;
   term: pty.IPty;
+  /** data 事件 16ms 合并缓冲（ConPTY 高频小 chunk 不再逐个 IPC） */
+  pendingData: string;
+  flushTimer: NodeJS.Timeout | null;
 }
 
 const sessions = new Map<string, PtySessionRecord>();
+const PTY_DATA_COALESCE_MS = 16;
+const PTY_DATA_MAX_BUFFER_CHARS = 32_000;
+
+function flushPtyData(record: PtySessionRecord, onEvent: PtySessionOptions["onEvent"]): void {
+  if (!record.pendingData) {
+    record.flushTimer = null;
+    return;
+  }
+  const data = record.pendingData;
+  record.pendingData = "";
+  record.flushTimer = null;
+  if (!sessions.has(record.sessionId)) return;
+  onEvent({ type: "data", sessionId: record.sessionId, data: sanitizeTerminalChunk(data) });
+}
 
 export function createPtySession(options: PtySessionOptions): string {
   const sessionId = `pty-${randomUUID().slice(0, 8)}`;
@@ -54,14 +71,31 @@ export function createPtySession(options: PtySessionOptions): string {
     cwd: options.cwd,
     env: buildSafeTerminalEnv(process.env) as Record<string, string>,
   });
+  const record: PtySessionRecord = { sessionId, term, pendingData: "", flushTimer: null };
+  sessions.set(sessionId, record);
   term.onData((data: string) => {
-    options.onEvent({ type: "data", sessionId, data: sanitizeTerminalChunk(data) });
+    record.pendingData += data;
+    // 背压：缓冲超限丢弃最旧（保留尾部可读），避免 cat 大文件时内存膨胀
+    if (record.pendingData.length > PTY_DATA_MAX_BUFFER_CHARS) {
+      record.pendingData = record.pendingData.slice(-PTY_DATA_MAX_BUFFER_CHARS);
+    }
+    if (record.flushTimer) return;
+    record.flushTimer = setTimeout(() => flushPtyData(record, options.onEvent), PTY_DATA_COALESCE_MS);
   });
   term.onExit(({ exitCode }: { exitCode: number }) => {
+    if (record.flushTimer) {
+      clearTimeout(record.flushTimer);
+      record.flushTimer = null;
+    }
+    // 先吐尽残留输出再发 exit，保证尾部不丢
+    if (record.pendingData) {
+      const tail = record.pendingData;
+      record.pendingData = "";
+      options.onEvent({ type: "data", sessionId, data: sanitizeTerminalChunk(tail) });
+    }
     sessions.delete(sessionId);
     options.onEvent({ type: "exit", sessionId, exitCode });
   });
-  sessions.set(sessionId, { sessionId, term });
   return sessionId;
 }
 
@@ -85,6 +119,11 @@ export function closePtySession(sessionId: string): void {
   const record = sessions.get(sessionId);
   if (!record) return; // 幂等
   sessions.delete(sessionId);
+  if (record.flushTimer) {
+    clearTimeout(record.flushTimer);
+    record.flushTimer = null;
+  }
+  record.pendingData = "";
   try {
     record.term.kill();
   } catch {
@@ -96,6 +135,11 @@ export function closePtySession(sessionId: string): void {
 export function closeAllPtySessions(): void {
   for (const record of Array.from(sessions.values())) {
     sessions.delete(record.sessionId);
+    if (record.flushTimer) {
+      clearTimeout(record.flushTimer);
+      record.flushTimer = null;
+    }
+    record.pendingData = "";
     try {
       record.term.kill();
     } catch {

@@ -17,7 +17,21 @@ const FOCUSABLE_SELECTOR =
 
 export function getFocusableElements(root: HTMLElement): HTMLElement[] {
   const all = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-  return all.filter((el) => !el.closest("[hidden], [aria-hidden='true']"));
+  return all.filter((el) => {
+    if (el.closest("[hidden], [aria-hidden='true']")) return false;
+    // P1 无障碍：fieldset[disabled] 内仍可被 Tab 到 → 排除（选择器只排除了自身 disabled）
+    if (el.closest("fieldset[disabled]")) return false;
+    // 计算样式隐藏（内联 style="display:none" / visibility:hidden 及 CSS 类隐藏）
+    // 注意：jsdom 无布局（getClientRects 恒为空），不得以 rect/offsetParent 判可见，否则测试与 SSR 全灭；
+    // 仅以计算样式为准，真实浏览器 display:none 也会被 getComputedStyle 捕获。
+    try {
+      const style = typeof getComputedStyle === "function" ? getComputedStyle(el) : null;
+      if (style && (style.visibility === "hidden" || style.display === "none")) return false;
+    } catch {
+      /* jsdom/旧环境无 getComputedStyle：忽略，按可见处理 */
+    }
+    return true;
+  });
 }
 
 export function useFocusTrap(
@@ -34,7 +48,7 @@ export function useFocusTrap(
       if (target && !root.contains(target)) return;
       const items = getFocusableElements(root);
       if (items.length === 0) {
-        e.preventDefault();
+        // P1：空列表不再 preventDefault 锁死键盘（此前 Tab 被吞，用户无法移出）
         return;
       }
       const first = items[0];

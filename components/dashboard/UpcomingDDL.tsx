@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Clock, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
-import { format, formatDistanceToNow, differenceInDays, differenceInHours } from "date-fns";
+import { format, formatDistanceToNow, differenceInCalendarDays, differenceInHours, startOfDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
 import { paginate } from "@/lib/pagination";
@@ -34,8 +34,11 @@ export function UpcomingDDL() {
   const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const [currentPage, setCurrentPage] = useState(1);
-  const today = new Date();
+  // 相对时间 60s tick 驱动今日边界刷新（跨午夜自动换桶）
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
+  // P1 日期桶：按自然日起止归一化（今日已过时刻不再错桶，明日 00:30 不再算今日）
+  const todayStart = useMemo(() => startOfDay(new Date(nowTick)), [nowTick]);
   const upcomingAssignments = useMemo(
     () =>
       [...assignments]
@@ -43,7 +46,7 @@ export function UpcomingDDL() {
           if (a.status === "completed") return false;
           const ddlDate = parseLocalDDL(a.ddl);
           if (!ddlDate) return false;
-          const diff = differenceInDays(ddlDate, today);
+          const diff = differenceInCalendarDays(startOfDay(ddlDate), todayStart);
           return diff >= 0 && diff <= warningDays;
         })
         .sort((a, b) => {
@@ -51,7 +54,7 @@ export function UpcomingDDL() {
           const timeB = parseLocalDDL(b.ddl)?.getTime() ?? 0;
           return timeA - timeB;
         }),
-    [assignments, warningDays]
+    [assignments, warningDays, todayStart]
   );
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -113,9 +116,8 @@ export function UpcomingDDL() {
   }, [upcomingAssignments.length, pageSize, currentPage]);
 
   // 相对时间（“x分钟前/后”）随分钟流逝过期：60s 轻量重渲染刷新文案（与课表 now 指示同频语义）
-  const [, setNowTick] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => setNowTick((v) => v + 1), 60_000);
+    const timer = setInterval(() => setNowTick(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
 
@@ -178,7 +180,7 @@ export function UpcomingDDL() {
               const relativeTime = formatDistanceToNow(ddlDate, { addSuffix: true, locale: zhCN });
               // relative time 仅真正临近（≤24h）时才 danger 强调；否则保持次级信息权重
               // （避免日期 tile / badge / 时间 / 整行同时高饱和红色）
-              const imminent = differenceInHours(ddlDate, today) <= 24;
+              const imminent = differenceInHours(ddlDate, new Date(nowTick)) <= 24;
               return (
                 <div
                   key={task.id}

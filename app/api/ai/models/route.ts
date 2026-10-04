@@ -37,7 +37,16 @@ export async function handleModels(req: Request) {
   let source: "remote" | "registry" = "registry";
 
   if (provider === "opencode-go") {
-    const remote = await fetchOpenCodeGoModels();
+    // P1：远端挂起不再无限转圈——8s 超时 + 失败回落 registry（此前无 timeout/try-catch）
+    let remote: Awaited<ReturnType<typeof fetchOpenCodeGoModels>> = null;
+    try {
+      remote = await Promise.race([
+        fetchOpenCodeGoModels(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+      ]);
+    } catch {
+      remote = null;
+    }
     if (remote && remote.length > 0) {
       // 远端为 availability source：transport / capabilities / 名称以本地注册表为准
       const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));

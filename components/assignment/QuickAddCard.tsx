@@ -30,8 +30,12 @@ export function QuickAddCard({
   defaultCourseId?: string;
   onClose: () => void;
 }) {
-  const { courses, addAssignment, preferences } = useAppStore();
+  // P1 性能：细粒度订阅（此前整 store 订阅，任何业务写都重渲染 QuickAdd）
+  const courses = useAppStore((s) => s.courses);
+  const addAssignment = useAppStore((s) => s.addAssignment);
+  const preferences = useAppStore((s) => s.preferences);
   const pushToast = useToastStore((s) => s.pushToast);
+  const [ddlError, setDdlError] = useState("");
 
   const defaults = getNewTaskDefaults(preferences);
   const [title, setTitle] = useState("");
@@ -60,16 +64,39 @@ export function QuickAddCard({
   const parseEstimate = (): number | undefined =>
     estimatedMinutes.trim() ? normalizeEstimatedMinutes(Number(estimatedMinutes.trim())) : undefined;
 
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+  const validateDDL = (): string | undefined => {
+    if (!ddlEnabled) return undefined;
+    if (!DATE_RE.test(ddlDate || "")) {
+      setDdlError("请选择有效的截止日期");
+      return undefined;
+    }
+    if (!TIME_RE.test(ddlTime || "")) {
+      setDdlError("请选择有效的时间（HH:mm）");
+      return undefined;
+    }
+    setDdlError("");
+    return combineLocalDateTime(ddlDate, ddlTime);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || submitting) return;
+    const ddl = validateDDL();
+    if (ddlEnabled && !ddl) return;
+    const resolvedCourseId = courseId || courses[0]?.id || "";
+    if (!resolvedCourseId) {
+      pushToast({ type: "warning", message: "暂无课程，请先创建课程再添加任务" });
+      return;
+    }
     setSubmitting(true);
     addAssignment({
-      courseId: courseId || courses[0]?.id || "",
+      courseId: resolvedCourseId,
       title: title.trim(),
       description: description.trim(),
       // Task V2：未启用 DDL = 无截止日期（合法状态，不自动生成）
-      ddl: ddlEnabled ? combineLocalDateTime(ddlDate, ddlTime) : undefined,
+      ddl,
       estimatedMinutes: parseEstimate(),
       priority,
       status: defaults.status,
@@ -90,11 +117,13 @@ export function QuickAddCard({
     // Workflow UX V5：草稿 ownership transfer——Quick Add 不提前创建任务，
     // 全部已输入内容经 draft 移交 Full Editor；随后关闭 Capture Surface，
     // 避免 Full Editor 保存后旧草稿残留导致重复创建。
+    // 非法日期不进 draft（Full Editor 内重新选择，避免 "T23:59" 脏数据入库）
+    const draftDdl = ddlEnabled ? validateDDL() ?? undefined : undefined;
     openAssignmentEditor({
       draft: {
         title: title.trim() || undefined,
         courseId: courseId || undefined,
-        ddl: ddlEnabled ? combineLocalDateTime(ddlDate, ddlTime) : undefined,
+        ddl: draftDdl,
         estimatedMinutes: parseEstimate(),
         priority,
         status: defaults.status,
@@ -164,25 +193,41 @@ export function QuickAddCard({
             <input
               type="date"
               value={ddlDate}
-              onChange={(e) => setDdlDate(e.target.value)}
+              onChange={(e) => {
+                setDdlDate(e.target.value);
+                if (ddlError) setDdlError("");
+              }}
               aria-label="截止日期"
+              aria-invalid={!!ddlError}
               className="h-8 px-2 bg-white border border-line-strong rounded-lg text-[11px] font-mono text-charcoal focus:outline-none"
             />
             <input
               type="time"
               value={ddlTime}
-              onChange={(e) => setDdlTime(e.target.value)}
+              onChange={(e) => {
+                setDdlTime(e.target.value);
+                if (ddlError) setDdlError("");
+              }}
               aria-label="截止时间"
+              aria-invalid={!!ddlError}
               className="h-8 px-2 bg-white border border-line-strong rounded-lg text-[11px] font-mono text-charcoal focus:outline-none"
             />
             <button
               type="button"
-              onClick={() => setDdlEnabled(false)}
+              onClick={() => {
+                setDdlEnabled(false);
+                setDdlError("");
+              }}
               aria-label="移除截止时间"
               className="p-1.5 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             >
               <X className="w-3.5 h-3.5" />
             </button>
+            {ddlError && (
+              <span role="alert" className="text-[11px] font-semibold text-danger">
+                {ddlError}
+              </span>
+            )}
           </div>
         ) : (
           <button

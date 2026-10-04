@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useShallow } from "zustand/react/shallow";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { Priority, AssignmentStatus, Assignment } from "@/types";
@@ -79,6 +80,7 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
  * - 已打开时切换任务：outer shell 保持 mounted，仅内容两阶段替换（60ms out + 100ms in）
  */
 export function AssignmentDrawer() {
+  // P1 性能：useShallow 精确订阅（此前无 selector 整 store 订阅，任何 set 都全量重渲染 Drawer）
   const {
     assignments,
     courses,
@@ -108,7 +110,38 @@ export function AssignmentDrawer() {
     setPendingTimelineArrangeAssignmentId,
     pendingFocusCompletionFollowUp,
     setPendingFocusCompletionFollowUp,
-  } = useAppStore();
+  } = useAppStore(
+    useShallow((s) => ({
+      assignments: s.assignments,
+      courses: s.courses,
+      schedules: s.schedules,
+      calendarMarks: s.calendarMarks,
+      semester: s.semester,
+      currentSemesterWeek: s.currentSemesterWeek,
+      setCurrentSemesterWeek: s.setCurrentSemesterWeek,
+      studyBlocks: s.studyBlocks,
+      reminders: s.reminders,
+      selectedAssignmentId: s.selectedAssignmentId,
+      setSelectedAssignmentId: s.setSelectedAssignmentId,
+      setSelectedCourseId: s.setSelectedCourseId,
+      setActiveTab: s.setActiveTab,
+      updateAssignmentStatus: s.updateAssignmentStatus,
+      updateAssignmentProgress: s.updateAssignmentProgress,
+      updateAssignmentPriority: s.updateAssignmentPriority,
+      toggleSubtask: s.toggleSubtask,
+      setAssignmentMaterialIds: s.setAssignmentMaterialIds,
+      deleteAssignment: s.deleteAssignment,
+      restoreAssignment: s.restoreAssignment,
+      focusSessions: s.focusSessions,
+      startFocusSession: s.startFocusSession,
+      pauseFocusSession: s.pauseFocusSession,
+      resumeFocusSession: s.resumeFocusSession,
+      finishFocusSession: s.finishFocusSession,
+      setPendingTimelineArrangeAssignmentId: s.setPendingTimelineArrangeAssignmentId,
+      pendingFocusCompletionFollowUp: s.pendingFocusCompletionFollowUp,
+      setPendingFocusCompletionFollowUp: s.setPendingFocusCompletionFollowUp,
+    }))
+  );
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const handoff = useKiroHandoff();

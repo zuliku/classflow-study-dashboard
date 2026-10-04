@@ -47,24 +47,47 @@ function trimTerminated(activities: TerminalActivity[]): TerminalActivity[] {
 
 let pendingEvents: DesktopTerminalEvent[] = [];
 let flushScheduled = false;
+let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 let versionCounter = 0;
+/** 后台/隐藏窗口 rAF 停摆兜底 + 无界队列上限（后台长任务不再内存膨胀） */
+const TERMINAL_PENDING_MAX = 500;
+const TERMINAL_FLUSH_FALLBACK_MS = 120;
 
 function flushPending() {
   const events = pendingEvents;
   pendingEvents = [];
   flushScheduled = false;
+  if (fallbackTimer) {
+    clearTimeout(fallbackTimer);
+    fallbackTimer = null;
+  }
   if (events.length === 0) return;
   versionCounter += 1;
   useTerminalActivityStore.setState((state) => {
-    let activities = state.activities;
-    for (const event of events) {
-      const idx = activities.findIndex((a) => a.executionId === event.executionId);
-      if (idx === -1) continue; // 孤儿事件（无 activity 记录）：忽略
-      const updated = applyTerminalEvent(activities[idx], event);
-      if (!updated) continue;
-      activities = activities.map((a, i) => (i === idx ? updated : a));
+    // 按 executionId 分组一次 map（此前 k 事件 × n activity 全拷贝）
+    const byId = new Map<string, DesktopTerminalEvent[]>();
+    for (const e of events) {
+      const list = byId.get(e.executionId);
+      if (list) list.push(e);
+      else byId.set(e.executionId, [e]);
     }
-    return { activities, version: versionCounter };
+    let activities = state.activities;
+    let changed = false;
+    const next = activities.map((a) => {
+      const list = byId.get(a.executionId);
+      if (!list) return a;
+      let cur = a;
+      for (const ev of list) {
+        const updated = applyTerminalEvent(cur, ev);
+        if (updated) {
+          cur = updated;
+          changed = true;
+        }
+      }
+      return cur;
+    });
+    if (!changed) return state;
+    return { activities: next, version: versionCounter };
   });
 }
 
@@ -73,6 +96,9 @@ function scheduleFlush() {
   flushScheduled = true;
   if (typeof requestAnimationFrame === "function") {
     requestAnimationFrame(() => flushPending());
+    // rAF 在窗口隐藏/最小化时停摆：120ms 兜底 flush，避免后台输出无限积压
+    if (fallbackTimer) clearTimeout(fallbackTimer);
+    fallbackTimer = setTimeout(() => flushPending(), TERMINAL_FLUSH_FALLBACK_MS);
   } else {
     setTimeout(flushPending, 25);
   }
@@ -97,6 +123,12 @@ export const useTerminalActivityStore = create<TerminalActivityStoreState>()((se
     set({ activities: next, version: versionCounter });
   },
   pushEvent: (event) => {
+    // 有界：超限丢弃最旧 stdout/stderr 事件并保留 started/exit（避免 OOM + 恢复时单帧洪水）
+    if (pendingEvents.length >= TERMINAL_PENDING_MAX) {
+      const keep = pendingEvents.filter((e) => e.type !== "stdout" && e.type !== "stderr").slice(-100);
+      const datas = pendingEvents.filter((e) => e.type === "stdout" || e.type === "stderr").slice(-TERMINAL_PENDING_MAX + 100);
+      pendingEvents = [...keep, ...datas];
+    }
     pendingEvents.push(event);
     scheduleFlush();
   },

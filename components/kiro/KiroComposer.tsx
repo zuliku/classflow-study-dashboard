@@ -270,6 +270,7 @@ export const KiroComposer = React.memo(function KiroComposer({
     !submitting &&
     !preparingVision;
   // Task 07: Slash Skill — 仅显示 enabled skills；仅「输入中的命令」展开（选中后带空格 → 自动折叠）
+  // P1 流畅度：150ms debounce（此前每键一次 bridge.list() 同步读盘，高频输入 /a→/ab 发起 N 次 IPC）
   useEffect(() => {
     const query = parseSlashQuery(text);
     if (query === null) {
@@ -277,26 +278,29 @@ export const KiroComposer = React.memo(function KiroComposer({
       setSlashOpen(false);
       return;
     }
-    const bridge = (window as unknown as { classflowDesktop?: { skills?: { list: () => Promise<{ skills: { name: string; description: string; enabled: boolean; kind?: string }[] }> } } }).classflowDesktop?.skills;
-    if (!bridge) {
-      slashRequestRef.current += 1;
-      setSlashOpen(false);
-      return;
-    }
-    const requestId = (slashRequestRef.current += 1);
-    bridge
-      .list()
-      .then((res) => {
-        // 旧请求晚回直接丢弃（当前输入已变化），否则 /a 的结果会覆盖 /ab 的菜单
-        if (slashRequestRef.current !== requestId) return;
-        // S1：只展示 Workflow Skill（kind 为 canonical 字段；Recipe 不进入 Slash 菜单）
-        const workflows = toSlashSkillOptions(res.skills ?? []);
-        const filtered = filterSlashSkills(workflows, query);
-        setSlashSkills(filtered);
-        setSlashActive(0);
-        setSlashOpen(filtered.length > 0);
-      })
-      .catch(() => setSlashOpen(false));
+    const timer = window.setTimeout(() => {
+      const bridge = (window as unknown as { classflowDesktop?: { skills?: { list: () => Promise<{ skills: { name: string; description: string; enabled: boolean; kind?: string }[] }> } } }).classflowDesktop?.skills;
+      if (!bridge) {
+        slashRequestRef.current += 1;
+        setSlashOpen(false);
+        return;
+      }
+      const requestId = (slashRequestRef.current += 1);
+      bridge
+        .list()
+        .then((res) => {
+          // 旧请求晚回直接丢弃（当前输入已变化），否则 /a 的结果会覆盖 /ab 的菜单
+          if (slashRequestRef.current !== requestId) return;
+          // S1：只展示 Workflow Skill（kind 为 canonical 字段；Recipe 不进入 Slash 菜单）
+          const workflows = toSlashSkillOptions(res.skills ?? []);
+          const filtered = filterSlashSkills(workflows, query);
+          setSlashSkills(filtered);
+          setSlashActive(0);
+          setSlashOpen(filtered.length > 0);
+        })
+        .catch(() => setSlashOpen(false));
+    }, 150);
+    return () => window.clearTimeout(timer);
   }, [text]);
 
   const handleSlashSelect = (name: string) => {

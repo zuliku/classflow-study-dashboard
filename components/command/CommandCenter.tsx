@@ -91,6 +91,8 @@ export function CommandCenter() {
   );
 
   const [query, setQuery] = useState("");
+  // P0 流畅度：输入即时响应光标，搜索用 deferred 值（每键全量 buildPalette 不再阻塞 keystroke）
+  const deferredQuery = React.useDeferredValue(query);
   const [highlighted, setHighlighted] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -188,10 +190,10 @@ export function CommandCenter() {
     [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, calendarMarks, groupProjects, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setSelectedCalendarMarkId, setSelectedGroupProjectId, setPendingGroupTaskTarget, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
   );
 
-  const items = useMemo(() => buildPalette(query, ctx), [query, ctx]);
+  const items = useMemo(() => buildPalette(deferredQuery, ctx), [deferredQuery, ctx]);
 
   // Kiro Handoff：仅在有查询时显示（synthetic row，本地搜索主逻辑不动）
-  const hasQuery = query.trim().length > 0;
+  const hasQuery = deferredQuery.trim().length > 0;
   const kiroHandoffItem: PaletteItem | null = useMemo(
     () =>
       hasQuery
@@ -224,7 +226,7 @@ export function CommandCenter() {
   // 结果变化时高亮回到第一个真实匹配（Kiro 行仅在有真实匹配时不抢占；无匹配时高亮落在 Kiro 行）
   useEffect(() => {
     setHighlighted(Math.min(kiroOffset, displayItems.length - 1));
-  }, [query, searchModalView, kiroOffset, displayItems.length]);
+  }, [deferredQuery, searchModalView, kiroOffset, displayItems.length]);
 
   // 高亮行滚动跟随（nearest：只在超出可视区时滚动，不抢夺页面滚动）
   // 必须在 `if (!mounted) return null` 之前声明：Hook 顺序不能随 mounted 变化
@@ -238,6 +240,30 @@ export function CommandCenter() {
       }
     }
   }, [highlighted]);
+
+  // displayItems key → 全局下标（此前 renderRows 内 indexOf 全量扫 = O(n²)）
+  // 必须在 early-return 之前声明，否则 mounted 切换时 Hook 数量变化直接炸（Rendered more hooks）
+  const displayIndexByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    displayItems.forEach((it, i) => m.set(it.key, i));
+    return m;
+  }, [displayItems]);
+
+  // 保持分组顺序（单遍分组，避免每组一次 filter = O(g·n)）；同样必须在 early-return 之前
+  const renderedGroups = useMemo(() => {
+    const order: string[] = [];
+    const buckets = new Map<string, PaletteItem[]>();
+    for (const it of items) {
+      let bucket = buckets.get(it.group);
+      if (!bucket) {
+        bucket = [];
+        buckets.set(it.group, bucket);
+        order.push(it.group);
+      }
+      bucket.push(it);
+    }
+    return order.map((g) => ({ g, items: buckets.get(g) ?? [] }));
+  }, [items]);
 
   if (!mounted) return null;
 
@@ -296,13 +322,13 @@ export function CommandCenter() {
   // 只有两种 scope 同时存在时才显示二级标题，单一 scope 保持简洁
   const renderGroup = (group: string, groupItems: PaletteItem[]) => {
     if (groupItems.length === 0) return null;
-    const firstGlobalIndex = displayItems.findIndex((it) => it.group === group);
+    const firstGlobalIndex = displayIndexByKey.get(groupItems[0]?.key ?? "") ?? 0;
     const hasEntity = groupItems.some((it) => it.contextScope === "entity");
     const hasWorkspace = groupItems.some((it) => it.contextScope === "workspace");
     const splitContext = group === "context" && hasEntity && hasWorkspace;
     const renderRows = (rows: PaletteItem[]) =>
       rows.map((item) => {
-        const globalIndex = displayItems.indexOf(item);
+        const globalIndex = displayIndexByKey.get(item.key) ?? 0;
         const isHighlighted = globalIndex === highlighted;
         const Icon = item.icon;
         return (
@@ -373,11 +399,6 @@ export function CommandCenter() {
       </div>
     );
   };
-
-  // 保持分组顺序，但组间插分隔线
-  const groups: string[] = [];
-  for (const it of items) if (!groups.includes(it.group)) groups.push(it.group);
-  const renderedGroups = groups.map((g) => ({ g, items: items.filter((it) => it.group === g) }));
 
   return (
     <div

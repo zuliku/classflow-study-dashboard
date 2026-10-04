@@ -14,7 +14,7 @@ import { KiroMenuPanel } from "@/components/kiro/KiroMenu";
  * 单行结构（标题 + 右侧时间 + 当前徽标 + hover 菜单），时间不再独占第二行造成整列重复噪音；
  * 标题 + 更新时间 + 当前 Thread active + hover 菜单（重命名 / 删除）+ 行内重命名。
  */
-export function KiroThreadRow({
+export const KiroThreadRow = React.memo(function KiroThreadRow({
   record,
   isCurrent,
   onOpen,
@@ -158,4 +158,4 @@ export function KiroThreadRow({
       </div>
     </div>
   );
-}
+});
