@@ -685,6 +685,11 @@ export const KiroComposer = React.memo(function KiroComposer({
           locked={currentTurnScopeLocked}
         />
 
+        {/* P0：发送落点播报（视觉 pulse + 读屏确认；此前弱视用户感知不到“已发送”） */}
+        <span role="status" aria-live="polite" className="sr-only">
+          {commitPulse ? "已发送，Kiro 正在处理" : ""}
+        </span>
+
         {/* Composer Surface：Attachment Shelf（次级层） + Prompt + Toolbar（主层）。
             focus 仅保留 border 变色（无阴影 / 无浮起，输入时画面稳定） */}
         <div
@@ -1100,6 +1105,8 @@ export const KiroComposer = React.memo(function KiroComposer({
                   onSend={submit}
                   onStop={onStop}
                   disabledReason={sendDisabledReason}
+                  // P0：准备中可取消（世代令牌作废在途链，不留半吊子消息）
+                  onCancelPreparing={onStop}
                 />
               </div>
             </div>

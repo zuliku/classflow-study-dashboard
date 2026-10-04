@@ -1197,6 +1197,8 @@ export function useKiroChat({
   const pendingAutoContinueRef = useRef(false);
   /** 用户 Stop 的 turn message id：其遗留的 pending tool part 不再视为 in-flight */
   const stoppedTurnMessageIdRef = useRef<string | null>(null);
+  /** P0：preflight 世代（Stop 递增作废在途准备链；sendMessage 前校验，过期直接丢弃） */
+  const preflightGenerationRef = useRef(0);
 
   const consumeUndo = useCallback((toolCallId: string) => {
     const entry = undoRegistryRef.current.get(toolCallId);
@@ -3067,6 +3069,8 @@ export function useKiroChat({
       // P0：新 Turn 清 Stop 标记（此前只在 edit/new/load 清，正常发送不清 → 首轮工具结果被静默丢弃卡 awaiting-tool-result）
       stoppedTurnMessageIdRef.current = null;
       userStopSuppressTimeoutRef.current = false;
+      // P0：preflight 世代令牌（Stop/新发送递增；await 链后校验，过期直接丢弃不再 sendMessage）
+      const preflightGen = ++preflightGenerationRef.current;
       readCounterRef.current = 0;
       documentReadCounterRef.current = 0;
       writeCounterRef.current = 0;
@@ -3510,6 +3514,11 @@ export function useKiroChat({
         }
       }
 
+      // P0：preflight 完成后校验世代（Stop/新发送已作废本链 → 静默丢弃，不 sendMessage、不留半吊子 user 消息）
+      if (preflightGen !== preflightGenerationRef.current) {
+        setTurnIntentFrozen(false);
+        return false;
+      }
       chatSendMessage(
         { text: v, files },
         { body: requestBody() }
@@ -3719,6 +3728,7 @@ export function useKiroChat({
   );
 
   const newChat = useCallback(() => {
+    preflightGenerationRef.current += 1;
     clearComputerSessionState(false);
     chat.setMessages([]);
     readCounterRef.current = 0;
@@ -3803,6 +3813,7 @@ export function useKiroChat({
       viewCacheRef.current.clear();
       liveTurnCommitsRef.current.clear();
       stoppedTurnMessageIdRef.current = null;
+      preflightGenerationRef.current += 1;
       pendingAutoContinueRef.current = false;
       resetDocumentFailureFuse();
       readCounterRef.current = 0;
@@ -4067,6 +4078,8 @@ export function useKiroChat({
   /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled；
    *  Desktop Terminal V1：立即 cancel 所有活跃 terminal process tree（bridge.cancel；每个 execution 一次） */
   const handleStop = useCallback(() => {
+    // P0：作废在途 preflight（准备链 await 后校验丢弃，preparing 卡住可点取消）
+    preflightGenerationRef.current += 1;
     pendingExecutionsRef.current.clear();
     // plan-approve 偏离门：Stop 遗弃未决策 deviation 标记（不记偏离）
     pendingDeviationApprovalsRef.current.clear();

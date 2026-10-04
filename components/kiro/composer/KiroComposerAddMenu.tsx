@@ -161,6 +161,7 @@ export function KiroComposerAddMenu({
         role="menuitem"
         disabled={scopeLocked}
         onClick={() => pickFiles(".pdf,.docx,.txt,.md", fileRef)}
+        title={scopeLocked ? "当前 Turn 已冻结，下一条消息可改" : undefined}
         className={ROOT_ROW}
       >
         <Paperclip className="w-4 h-4 text-sandrift shrink-0" />
@@ -171,20 +172,32 @@ export function KiroComposerAddMenu({
         role="menuitem"
         disabled={scopeLocked}
         onClick={() => pickFiles("image/png,image/jpeg,image/webp,.jpg,.jpeg,.png,.webp", imageRef)}
+        title={scopeLocked ? "当前 Turn 已冻结，下一条消息可改" : undefined}
         className={ROOT_ROW}
       >
         <ImageIcon className="w-4 h-4 text-sandrift shrink-0" />
         添加图片
       </button>
+      {/* P1：无课程时仍可点进资料视图看空态（此前直接灰掉，新用户不知要先建课） */}
       <button
         type="button"
         role="menuitem"
-        disabled={scopeLocked || courses.length === 0}
+        disabled={scopeLocked}
         onClick={() => setView("materials")}
+        title={
+          scopeLocked
+            ? "当前 Turn 已冻结，下一条消息可改"
+            : courses.length === 0
+              ? "暂无课程，先去创建课程再添加资料"
+              : undefined
+        }
         className={ROOT_ROW}
       >
         <FolderOpen className="w-4 h-4 text-sandrift shrink-0" />
-        <span className="min-w-0 flex-1 truncate">课程资料</span>
+        <span className="min-w-0 flex-1 truncate">
+          课程资料
+          {courses.length === 0 && <span className="text-sandrift font-normal">（暂无课程）</span>}
+        </span>
         <ChevronRight className="w-3.5 h-3.5 text-sandrift shrink-0" />
       </button>
       <button
@@ -192,6 +205,7 @@ export function KiroComposerAddMenu({
         role="menuitem"
         disabled={scopeLocked}
         onClick={() => setView("context")}
+        title={scopeLocked ? "当前 Turn 已冻结，下一条消息可改" : undefined}
         className={ROOT_ROW}
       >
         <AtSign className="w-4 h-4 text-sandrift shrink-0" />

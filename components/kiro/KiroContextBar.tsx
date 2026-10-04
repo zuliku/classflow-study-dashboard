@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { BookOpen, CalendarClock, ClipboardCheck, FileText, Users, X } from "lucide-react";
 import { KiroContextRef } from "@/lib/ai/context/types";
 import {
+  describeKiroContextRef,
   formatKiroContextDisplayLabel,
   getKiroContextVisualRole,
   splitKiroContextsForDisplay,
@@ -145,9 +146,14 @@ export function KiroContextBar({
                 "group inline-flex items-center gap-1.5 pl-2 pr-1 h-7 max-w-[220px] rounded-full border border-line-soft bg-pastel-mint/55 text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors shrink-0",
                 enteringContextKeys.has(c.key) && "animate-enter"
               )}
+              title={describeKiroContextRef(c)}
             >
               <Icon className="w-3.5 h-3.5 text-sandrift shrink-0" />
               <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
+              {/* P1：自动携带小标（此前自动/手动视觉几乎无差，用户不敢删也不敢留） */}
+              <span className="shrink-0 text-[9px] font-bold text-sandrift/80 rounded-full bg-white/60 px-1">
+                自动
+              </span>
               {removeButton(c, true)}
             </span>
           </ExitCollapse>
@@ -157,15 +163,16 @@ export function KiroContextBar({
       {/* Manual Token：用户显式 @ / Ask Kiro 实体入口（无图标，× 清晰）；移除走原位 collapse */}
       {visibleManual.map((c) => (
         <ExitCollapse key={c.key} axis="horizontal" exiting={leavingKeys.has(c.key)} className="shrink-0">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 pl-2.5 pr-1 h-7 max-w-[200px] rounded-full bg-alabaster/70 border border-line text-[11px] font-semibold text-charcoal shrink-0",
-              enteringContextKeys.has(c.key) && "animate-enter"
-            )}
-          >
-            <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
-            {removeButton(c, false)}
-          </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 pl-2.5 pr-1 h-7 max-w-[200px] rounded-full bg-alabaster/70 border border-line text-[11px] font-semibold text-charcoal shrink-0",
+                enteringContextKeys.has(c.key) && "animate-enter"
+              )}
+              title={describeKiroContextRef(c)}
+            >
+              <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
+              {removeButton(c, false)}
+            </span>
         </ExitCollapse>
       ))}
 

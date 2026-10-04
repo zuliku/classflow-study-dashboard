@@ -43,6 +43,20 @@ export function splitKiroContextsForDisplay(
   return { visibleAmbient, visibleManual, overflow };
 }
 
+/** P1：chip title 用来源说明（此前 hover 只有 label，用户不知自动带了什么、不敢删） */
+export function describeKiroContextRef(ref: KiroContextRef): string {
+  const kindName: Record<KiroContextRef["kind"], string> = {
+    week: "时间范围",
+    course: "课程",
+    assignment: "任务",
+    "group-project": "小组项目",
+    material: "课程资料",
+    artifact: "工作区文件",
+  };
+  const origin = ref.source === "auto" ? "自动携带" : ref.source === "manual" ? "手动添加" : "入口添加";
+  return `${origin} · ${kindName[ref.kind] ?? ref.kind} · ${ref.label}`;
+}
+
 /** 展示用 label 轻量规范化（只影响 UI，绝不改传给模型的 label）。无法可靠识别时原样返回。 */
 export function formatKiroContextDisplayLabel(ref: KiroContextRef): string {
   if (ref.kind === "week") {

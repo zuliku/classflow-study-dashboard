@@ -20,6 +20,7 @@ export function KiroSendControl({
   onSend,
   onStop,
   disabledReason,
+  onCancelPreparing,
 }: {
   canSend: boolean;
   preparing: boolean;
@@ -28,6 +29,8 @@ export function KiroSendControl({
   onStop: () => void;
   /** 禁用原因（idle 态的 title/aria-label；此前恒为“发送”，用户不知为何点不动） */
   disabledReason?: string | null;
+  /** 准备中取消（preparing 卡住可打断；缺失则 preparing 保持纯 loading） */
+  onCancelPreparing?: () => void;
 }) {
   const state: "stop" | "preparing" | "ready" | "idle" = inFlight
     ? "stop"
@@ -37,15 +40,25 @@ export function KiroSendControl({
         ? "ready"
         : "idle";
 
-  const disabled = state === "preparing" || state === "idle";
+  // P0：准备中可取消（此前 preparing 转菊花无处可点，卡住只能干等）
+  const cancellablePreparing = state === "preparing" && !!onCancelPreparing;
+  const disabled = state === "idle" || (state === "preparing" && !onCancelPreparing);
   const idleLabel = state === "idle" && disabledReason ? `发送（${disabledReason}）` : "发送";
-  const ariaLabel = state === "stop" ? "停止生成" : state === "preparing" ? "正在准备" : idleLabel;
+  const ariaLabel =
+    state === "stop"
+      ? "停止生成"
+      : cancellablePreparing
+        ? "取消准备"
+        : state === "preparing"
+          ? "正在准备"
+          : idleLabel;
 
   return (
     <button
       type="button"
       onClick={() => {
         if (state === "stop") onStop();
+        else if (cancellablePreparing) onCancelPreparing?.();
         else if (state === "ready") onSend();
       }}
       disabled={disabled}
@@ -79,7 +92,9 @@ export function KiroSendControl({
         className={cn(
           "absolute inset-0 flex items-center justify-center",
           "transition-[opacity,transform] duration-[var(--kiro-motion-control,var(--motion-snap))] ease-[var(--ease-standard)]",
-          state === "preparing" ? "opacity-100 scale-100" : "opacity-0 scale-[0.82] pointer-events-none"
+          state === "preparing" && !cancellablePreparing
+            ? "opacity-100 scale-100"
+            : "opacity-0 scale-[0.82] pointer-events-none"
         )}
       >
         <Loader2 className="w-4 h-4 animate-spin" />
@@ -90,7 +105,9 @@ export function KiroSendControl({
         className={cn(
           "absolute inset-0 flex items-center justify-center",
           "transition-[opacity,transform] duration-[var(--kiro-motion-control,var(--motion-snap))] ease-[var(--ease-standard)]",
-          state === "stop" ? "opacity-100 scale-100" : "opacity-0 scale-[0.82] pointer-events-none"
+          state === "stop" || cancellablePreparing
+            ? "opacity-100 scale-100"
+            : "opacity-0 scale-[0.82] pointer-events-none"
         )}
       >
         <Square className="w-3.5 h-3.5 fill-current" />

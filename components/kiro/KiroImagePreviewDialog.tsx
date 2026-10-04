@@ -46,6 +46,8 @@ export function KiroImagePreviewDialog({
   const [index, setIndex] = useState(() => Math.max(0, initialIndex ?? 0));
   const current = gallery ? gallery[index] : source;
   const [url, setUrl] = useState<string | null>(null);
+  // P0：图片加载失败态（此前 createObjectURL 失败直接 return null 消失，img 坏图只剩空白 viewport，用户以为卡死）
+  const [loadError, setLoadError] = useState(false);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
 
@@ -57,6 +59,7 @@ export function KiroImagePreviewDialog({
 
   // ---- Object URL lifecycle：current source 变化 → 旧 revoke + 新 create ----
   useEffect(() => {
+    setLoadError(false);
     if (!currentSource) {
       setUrl(null);
       return;
@@ -123,7 +126,9 @@ export function KiroImagePreviewDialog({
     };
   }, [currentSource, onClose, step]);
 
-  if (!currentSource || !url) return null;
+  // P0：URL 创建失败也进对话框错误态（此前直接 return null 消失，用户盲按 Esc）
+  if (!currentSource) return null;
+  const urlFailed = !url;
 
   const total = gallery?.length ?? 1;
   const shownIndex = gallery ? safeIndex : 0;
@@ -190,12 +195,27 @@ export function KiroImagePreviewDialog({
           className="overflow-auto rounded-2xl bg-white shadow-card border border-white/10"
           style={{ maxHeight: "calc(86dvh - 44px)" }}
         >
-          <img
-            data-testid="kiro-image-preview-image"
-            src={url}
-            alt={currentSource.name ?? "截图预览"}
-            className="block h-auto max-w-full mx-auto"
-          />
+          {loadError || urlFailed ? (
+            <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
+              <p className="text-xs font-bold text-charcoal">原图加载失败</p>
+              <p className="text-[11px] text-sandrift">文件可能已损坏或过大，关闭后重试</p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="mt-1 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          ) : (
+            <img
+              data-testid="kiro-image-preview-image"
+              src={url}
+              alt={currentSource.name ?? "截图预览"}
+              onError={() => setLoadError(true)}
+              className="block h-auto max-w-full mx-auto"
+            />
+          )}
         </div>
       </div>
     </div>,
