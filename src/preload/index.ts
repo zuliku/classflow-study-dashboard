@@ -126,14 +126,49 @@ const INVOKE_TIMEOUTS_MS: Record<string, number> = {
  * - 这里解析并重构为 { code, message? }，保证 Web 侧（lib/desktop/bridge.ts）
  *   读到的 err.code 就是合同定义的错误码
  */
+/** P2：幂等读通道单飞（slash 每键 bridge.list() 等高频并发同参去重；写通道不进单飞） */
+const SINGLE_FLIGHT_CHANNELS = new Set([
+  "bridge:skill:list",
+  "bridge:channels:list",
+  "bridge:mcp:list",
+  "bridge:computer:capabilities",
+  "bridge:computer:listWindows",
+  "bridge:fs:list",
+  "bridge:fs:stat",
+]);
+const inflightInvokes = new Map<string, Promise<unknown>>();
+function inflightKey(channel: string, input: unknown): string {
+  try {
+    return `${channel}::${JSON.stringify(input ?? null).slice(0, 512)}`;
+  } catch {
+    return `${channel}::unserializable`;
+  }
+}
 async function invokeBridge(channel: string, input: unknown): Promise<unknown> {
   const timeoutMs = INVOKE_TIMEOUTS_MS[channel];
   const rawInvoke = async (): Promise<unknown> => {
-    try {
-      return await ipcRenderer.invoke(channel, input);
-    } catch (err) {
-      throw normalizeInvokeError(err);
+    // 单飞只拦并发同参（串行调用仍每次真实 IPC，不引入 stale）
+    if (!SINGLE_FLIGHT_CHANNELS.has(channel)) {
+      try {
+        return await ipcRenderer.invoke(channel, input);
+      } catch (err) {
+        throw normalizeInvokeError(err);
+      }
     }
+    const key = inflightKey(channel, input);
+    const existing = inflightInvokes.get(key);
+    if (existing) return existing;
+    const p = (async () => {
+      try {
+        return await ipcRenderer.invoke(channel, input);
+      } catch (err) {
+        throw normalizeInvokeError(err);
+      } finally {
+        inflightInvokes.delete(key);
+      }
+    })();
+    inflightInvokes.set(key, p);
+    return p;
   };
   if (!timeoutMs) return rawInvoke();
   let timer: ReturnType<typeof setTimeout> | null = null;

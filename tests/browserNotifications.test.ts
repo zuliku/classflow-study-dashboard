@@ -17,7 +17,7 @@ describe("browserNotifications bridge（SSR 安全）", () => {
     expect(isBrowserNotificationSupported()).toBe(false);
     expect(
       showBrowserReminderNotification({ title: "t", body: "b", reminderId: "r1" })
-    ).toBe(false);
+    ).toBe("unsupported");
   });
 
   it("permission denied → 不 show", () => {
@@ -33,7 +33,7 @@ describe("browserNotifications bridge（SSR 安全）", () => {
     const win = { Notification: FakeNotification } as unknown as Window & typeof globalThis;
     (globalThis as Record<string, unknown>).window = win;
 
-    expect(showBrowserReminderNotification({ title: "t", body: "b", reminderId: "r1" })).toBe(false);
+    expect(showBrowserReminderNotification({ title: "t", body: "b", reminderId: "r1" })).toBe("denied");
     expect(calls).toHaveLength(0);
   });
 
@@ -54,7 +54,7 @@ describe("browserNotifications bridge（SSR 安全）", () => {
     (globalThis as Record<string, unknown>).window = win;
 
     const ok = showBrowserReminderNotification({ title: "作业提醒", body: "距离截止还有 1 小时", reminderId: "r1" });
-    expect(ok).toBe(true);
+    expect(ok).toBe("sent");
     expect(instance).not.toBeNull();
     expect(instance!.title).toBe("作业提醒");
     expect(instance!.options.body).toBe("距离截止还有 1 小时");

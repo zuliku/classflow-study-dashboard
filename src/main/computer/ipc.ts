@@ -74,10 +74,53 @@ const UNAVAILABLE_CAPABILITIES: ClassFlowDesktopComputerCapabilities = {
   appControl: false,
 };
 
-/** Session 事件 → 所有 renderer 窗口（已脱敏；UI-only） */
+/** P2：session → owner 窗优先（此前每次 touch 全窗口广播，主窗+Mini 全收；touch 已 16ms 合并，此处再定向） */
+const sessionOwner = new Map<string, number>();
+function noteSessionOwner(input: unknown, senderId: number): void {
+  try {
+    const id =
+      (input as { sessionId?: unknown })?.sessionId ??
+      (input as { observationId?: unknown })?.observationId;
+    if (typeof id === "string" && id.length > 0 && id.length <= 128) {
+      sessionOwner.set(id, senderId);
+      if (sessionOwner.size > 200) {
+        const oldest = sessionOwner.keys().next().value;
+        if (oldest) sessionOwner.delete(oldest);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
 function broadcastSessionEvent(event: unknown): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue;
+  const sessionId = (event as { sessionId?: unknown })?.sessionId;
+  const ownerId = typeof sessionId === "string" ? sessionOwner.get(sessionId) : undefined;
+  const windows = BrowserWindow.getAllWindows().filter((w) => {
+    try {
+      return !w.isDestroyed();
+    } catch {
+      return false;
+    }
+  });
+  // owner 优先单发；未知 owner/owner 已关闭才回退全播（Mini 按需订阅语义保留）
+  if (ownerId !== undefined) {
+    const owner = windows.find((w) => {
+      try {
+        return w.webContents.id === ownerId;
+      } catch {
+        return false;
+      }
+    });
+    if (owner) {
+      try {
+        owner.webContents.send("bridge:computer:session-event", event);
+        return;
+      } catch {
+        /* 回退全播 */
+      }
+    }
+  }
+  for (const window of windows) {
     try {
       window.webContents.send("bridge:computer:session-event", event);
     } catch {
@@ -107,6 +150,11 @@ export function registerComputerIpc(opts?: ComputerIpcOptions): void {
     "bridge:computer:observe",
     wrap("bridge:computer:observe", async (_event, input: unknown) => {
       try {
+        try {
+          noteSessionOwner(input, _event.sender.id);
+        } catch {
+          /* ignore */
+        }
         return await (await getDesktopObservationRuntime()).observe(input);
       } catch (err) {
         throw encodeBridgeError(err);
@@ -129,6 +177,11 @@ export function registerComputerIpc(opts?: ComputerIpcOptions): void {
     "bridge:computer:action",
     wrap("bridge:computer:action", async (_event, input: unknown) => {
       try {
+        try {
+          noteSessionOwner(input, _event.sender.id);
+        } catch {
+          /* ignore */
+        }
         return await (await getDesktopObservationRuntime()).action(input);
       } catch (err) {
         throw encodeBridgeError(err);

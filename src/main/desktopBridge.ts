@@ -91,6 +91,22 @@ function requireWritable(grant: Grant): boolean {
  * - 已存在段逐级 realpath：symlink / junction / reparse point 逃逸 → null
  * - 不存在段直接拼接（新创建，无 reparse 风险）
  */
+/** P2：realpath 结果小缓存（授权目录内已存在路径的 symlink 结构稳定；30s TTL 界定残余 TOCTOU 窗口） */
+const REALPATH_CACHE_MAX = 1000;
+const REALPATH_CACHE_TTL_MS = 30_000;
+const realpathCache = new Map<string, { real: string; at: number }>();
+function cachedRealpath(p: string): string {
+  const hit = realpathCache.get(p);
+  if (hit && Date.now() - hit.at < REALPATH_CACHE_TTL_MS) return hit.real;
+  const real = realpathSync(p);
+  if (realpathCache.size >= REALPATH_CACHE_MAX) {
+    const oldest = realpathCache.keys().next().value;
+    if (oldest) realpathCache.delete(oldest);
+  }
+  realpathCache.set(p, { real, at: Date.now() });
+  return real;
+}
+
 function resolveWithinRoot(root: string, rel: string): string | null {
   if (typeof rel !== "string") return null;
   const normalized = rel.replace(/\\/g, "/");
@@ -104,7 +120,7 @@ function resolveWithinRoot(root: string, rel: string): string | null {
     for (let i = 0; i < parts.length; i++) {
       const next = join(built, parts[i]);
       if (existsSync(next)) {
-        const real = realpathSync(next);
+        const real = cachedRealpath(next);
         if (!isInside(real, root)) return null; // symlink/junction 逃逸
         built = real;
       } else {

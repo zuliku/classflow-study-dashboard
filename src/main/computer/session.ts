@@ -564,25 +564,43 @@ export class DesktopControlSessionStore {
     this.touch(record, now);
   }
 
+  /** P2：touch 16ms 合并（一次 action 触发 6-8 次 emit；此前同步直发，expect 轮询期风暴） */
+  private touchDirty = new Set<string>();
+  private touchTimer: ReturnType<typeof setTimeout> | null = null;
+  private flushTouch(): void {
+    this.touchTimer = null;
+    if (this.touchDirty.size === 0) return;
+    const ids = [...this.touchDirty];
+    this.touchDirty.clear();
+    for (const id of ids) {
+      const record = this.sessions.get(id);
+      if (!record) continue;
+      this.emitter?.({
+        type: "session",
+        sessionId: record.id,
+        state: record.state,
+        appName: record.appName,
+        windowTitle: record.windowTitle,
+        actionLabel: record.actionLabel,
+        actions: record.actions,
+        observations: record.observations,
+        updatedAt: record.updatedAt,
+        goal: record.goal,
+        plan: [...record.plan],
+        stepIndex: record.stepIndex,
+        reflectionRequired: record.reflectionRequired,
+        appProfile: record.appProfile,
+        failureReason: record.failureReason,
+      });
+    }
+  }
+
   private touch(record: SessionRecord, now: number): void {
     record.updatedAt = now;
-    this.emitter?.({
-      type: "session",
-      sessionId: record.id,
-      state: record.state,
-      appName: record.appName,
-      windowTitle: record.windowTitle,
-      actionLabel: record.actionLabel,
-      actions: record.actions,
-      observations: record.observations,
-      updatedAt: now,
-      goal: record.goal,
-      plan: [...record.plan],
-      stepIndex: record.stepIndex,
-      reflectionRequired: record.reflectionRequired,
-      appProfile: record.appProfile,
-      failureReason: record.failureReason,
-    });
+    if (!this.emitter) return;
+    this.touchDirty.add(record.id);
+    if (this.touchTimer) return;
+    this.touchTimer = setTimeout(() => this.flushTouch(), 16);
   }
 
   private toStatus(record: SessionRecord, now: number): DesktopControlSessionStatus {

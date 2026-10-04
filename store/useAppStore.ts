@@ -3061,6 +3061,14 @@ export const useAppStore = create<AppState>()(
             error
           );
         }
+        // P1 水合收敛：week/视图 seed/自动提醒 reconcile 等水合后一次性初始化
+        //（此前模块尾 import 时抢跑，覆盖水合值并重复生成 auto Reminder；
+        // zustand v4 无 onFinishHydration，用 onRehydrateStorage 回调承载，成功/失败都收敛一次）
+        try {
+          applyStartupCalibration();
+        } catch {
+          /* 启动校正失败不阻塞主流程 */
+        }
       },
       // zustand 在存储为空时也会调用 merge（migratedState=undefined），
       // 此时必须原样保留 currentState（初始演示数据），不能把 undefined 清洗成空数组；
@@ -3082,7 +3090,11 @@ export const useAppStore = create<AppState>()(
 // Settings V3：任务工作区视图不持久化，每次打开按「默认任务视图」偏好 seed。
 // P2：首次上线 backfill + 每次 hydrate 的一次性幂等自动提醒 reconcile
 //（用户无需打开 Reminder Center；重复 hydrate/reload 不产生重复 auto）。
-{
+// P1：水合后执行（onFinishHydration 主路径；此处保留同步兜底，供 persist 不可用/测试环境）。
+let startupCalibrated = false;
+function applyStartupCalibration(): void {
+  if (startupCalibrated) return;
+  startupCalibrated = true;
   const state = useAppStore.getState();
   const week = Math.min(
     Math.max(getSemesterWeek(new Date(), state.semester), 1),
@@ -3101,6 +3113,18 @@ export const useAppStore = create<AppState>()(
     assignmentWorkspaceView: state.preferences.defaultTaskWorkspaceView,
     reminders,
   });
+}
+{
+  // persist 可用时等 onFinishHydration；不可用（测试/SSR）时同步兜底一次
+  try {
+    const persist = (useAppStore as unknown as { persist?: { hasHydrated?: () => boolean } }).persist;
+    if (!persist || persist.hasHydrated?.()) {
+      applyStartupCalibration();
+    }
+    // 未水合：onFinishHydration 回调负责；此处不抢跑
+  } catch {
+    applyStartupCalibration();
+  }
 }
 
 // 跨窗口收敛：他窗写入同 key 后去抖 rehydrate（单窗口写时无 storage 事件，零开销）

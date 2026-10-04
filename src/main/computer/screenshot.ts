@@ -44,12 +44,22 @@ function normalizeTitle(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+/** P2：截图 500ms LRU（expect 轮询 300ms 间隔连续 getSources 全量缩略图；UIA 保持每次新鲜，仅截图复用） */
+const SCREENSHOT_CACHE_TTL_MS = 500;
+const screenshotCache = new Map<string, { at: number; shot: NativeScreenshot }>();
+function screenshotCacheKey(input: CaptureScreenshotInput): string {
+  return `${input.target}::${(input.windowTitle ?? "").toLowerCase().slice(0, 80)}`;
+}
+
 /**
  * 采集截图；失败 / 无可用 source → null（调用方降级为无截图观察）。
  */
 export async function captureDesktopScreenshot(
   input: CaptureScreenshotInput
 ): Promise<NativeScreenshot | null> {
+  const key = screenshotCacheKey(input);
+  const hit = screenshotCache.get(key);
+  if (hit && Date.now() - hit.at < SCREENSHOT_CACHE_TTL_MS) return hit.shot;
   let sources: Electron.DesktopCapturerSource[];
   try {
     sources = await desktopCapturer.getSources({
@@ -95,7 +105,7 @@ export async function captureDesktopScreenshot(
   }
   if (jpeg.length > MAX_SCREENSHOT_BYTES) return null;
 
-  return {
+  const shot: NativeScreenshot = {
     mimeType: "image/jpeg",
     dataUrl: `data:image/jpeg;base64,${jpeg.toString("base64")}`,
     width: size.width,
@@ -103,4 +113,7 @@ export async function captureDesktopScreenshot(
     bytes: jpeg.length,
     capturedAt: new Date().toISOString(),
   };
+  if (screenshotCache.size > 8) screenshotCache.clear();
+  screenshotCache.set(key, { at: Date.now(), shot });
+  return shot;
 }

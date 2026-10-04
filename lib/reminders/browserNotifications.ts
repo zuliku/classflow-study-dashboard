@@ -53,16 +53,20 @@ export async function requestBrowserNotificationPermission(): Promise<
   }
 }
 
-/** 发送系统通知：仅 permission === "granted" 时执行；失败静默返回 false（站内提醒不受影响） */
+/** P2：发送结果显式区分（此前 denied/default/异常全静默 false，用户误以为已开启） */
+export type BrowserNotifyResult = "sent" | "denied" | "not-granted" | "unsupported" | "error";
+/** 发送系统通知：仅 permission === "granted" 时执行；站内提醒不受影响（调用方按结果给引导） */
 export function showBrowserReminderNotification(input: {
   title: string;
   body: string;
   reminderId: string;
   /** 系统通知点击回调（由 Runtime 注入 target navigation；bridge 保持通用，不 import store） */
   onClick?: () => void;
-}): boolean {
+}): BrowserNotifyResult {
   const api = notificationApi();
-  if (!api || api.permission !== "granted") return false;
+  if (!api) return "unsupported";
+  if (api.permission === "denied") return "denied";
+  if (api.permission !== "granted") return "not-granted";
   try {
     const n = new api(input.title, {
       body: input.body,
@@ -75,8 +79,17 @@ export function showBrowserReminderNotification(input: {
       input.onClick?.();
       n.close();
     };
-    return true;
+    return "sent";
   } catch {
-    return false;
+    return "error";
   }
+}
+/** boolean 兼容垫片（存量调用方未迁移前保持可用） */
+export function showBrowserReminderNotificationBool(input: {
+  title: string;
+  body: string;
+  reminderId: string;
+  onClick?: () => void;
+}): boolean {
+  return showBrowserReminderNotification(input) === "sent";
 }

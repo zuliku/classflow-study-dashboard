@@ -161,12 +161,17 @@ export function TimetableGrid({
 
   // Task 7：当前教学周的有效课程 = base + move + extra occurrences（唯一 Source of Truth：
   // cancel 消失 / move 显示目标位 / extra 出现；isScheduleActive 由 resolver 统一尊重）
-  const activeSchedules = resolveCourseOccurrencesForWeek({
-    schedules,
-    overrides: scheduleOccurrenceOverrides,
-    week: currentSemesterWeek,
-    totalWeeks: semester.totalWeeks,
-  });
+  // P2：memo 化（此前 30s tick 每次全量重算；仅周/课表/覆盖变化才重算）
+  const activeSchedules = React.useMemo(
+    () =>
+      resolveCourseOccurrencesForWeek({
+        schedules,
+        overrides: scheduleOccurrenceOverrides,
+        week: currentSemesterWeek,
+        totalWeeks: semester.totalWeeks,
+      }),
+    [schedules, scheduleOccurrenceOverrides, currentSemesterWeek, semester.totalWeeks]
+  );
 
   // 今天 / 当前周（今天列 tint + 实时 Now Indicator）
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -197,7 +202,10 @@ export function TimetableGrid({
 
   // 统一冲突定义（与导入器一致）：星期相同 + 时间重叠 + 至少一个共同生效教学周；
   // ignoreSameCourse：同一门课内部时段重叠不标冲突（连堂/同课多节属该课程自身安排）
-  const conflicts = findScheduleConflicts(activeSchedules, { ignoreSameCourse: true });
+  const conflicts = React.useMemo(
+    () => findScheduleConflicts(activeSchedules, { ignoreSameCourse: true }),
+    [activeSchedules]
+  );
   const firstConflict = conflicts[0];
   // 横幅退场播 stale 快照（DisclosureRegion 卸载延迟期内 conflicts 已空，直接解引用会崩）
   const lastConflictsRef = useRef<ScheduleConflict[]>([]);

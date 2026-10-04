@@ -787,13 +787,15 @@ export class DesktopObservationRuntime {
         ? record.elementRefs.get(expectation.elementDisappears.elementId)?.nativeRef ?? null
         : null;
 
-    const observeOnce = async () => {
+    const observeOnce = async (reduced = false) => {
       // 后台模式：复核观察强制去截图——遮挡窗口标题匹配失败时会降级拍主屏
       // （错误像素比没截图更有害）；UIA 树复读足以支撑 element/title 类 expect。
       // Phase 2（PrintWindow）hwnd 精确捕获补齐如下。
+      // P2：expect 中间轮询降级（无截图纯 UIA 复核，仅最后一轮补全量；此前每轮全量截图+UIA，5x 放大）
       const observation = await this.observe({
         ...record.request,
         ...(input.background === true ? { includeScreenshot: false } : {}),
+        ...(reduced ? { includeScreenshot: false } : {}),
         ...(record.sessionId ? { sessionId: record.sessionId } : {}),
       });
       // Phase 2：后台 hwnd 精确截图（遮挡 OK，最小化不行；任何失败 → 无截图证据，
@@ -817,12 +819,14 @@ export class DesktopObservationRuntime {
     if (expectConfigured && expectation) {
       const deadline = started + ADAPTIVE_SETTLE_TIMEOUT_MS;
       await this.deps.sleep(ADAPTIVE_SETTLE_FIRST_MS);
-      ({ observation: nextObservation, record: nextRecord } = await observeOnce());
+      ({ observation: nextObservation, record: nextRecord } = await observeOnce(false));
       verification = this.evaluateExpectation(expectation, nextObservation, nextRecord, disappearedNativeRef);
       while (!verification.passed && this.deps.now() < deadline) {
         this.assertSessionUsable(input.sessionId);
         await this.deps.sleep(ADAPTIVE_SETTLE_POLL_MS);
-        ({ observation: nextObservation, record: nextRecord } = await observeOnce());
+        // 距 deadline > 400ms 的中间轮纯 UIA（省截图），最后一轮全量补证据
+        const reduced = deadline - this.deps.now() > 400;
+        ({ observation: nextObservation, record: nextRecord } = await observeOnce(reduced));
         verification = this.evaluateExpectation(expectation, nextObservation, nextRecord, disappearedNativeRef);
       }
     } else {

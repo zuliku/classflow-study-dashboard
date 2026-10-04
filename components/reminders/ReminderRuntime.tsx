@@ -19,6 +19,7 @@ import { showBrowserReminderNotification } from "@/lib/reminders/browserNotifica
 import { navigateReminderTarget } from "@/lib/reminders/reminderNavigation";
 import { isWithinDoNotDisturbWindow } from "@/lib/reminders/doNotDisturb";
 import { playReminderSound } from "@/lib/reminders/reminderSound";
+import { useToastStore } from "@/store/useToastStore";
 
 /**
  * Reminder Local Runtime（Task 7G-A2）：无视觉 DOM（return null）。
@@ -31,6 +32,7 @@ import { playReminderSound } from "@/lib/reminders/reminderSound";
 
 export function ReminderRuntime() {
   const timerRef = useRef<number | null>(null);
+  const notifiedDeniedRef = useRef(false);
   const initializedRef = useRef(false);
   // Task 7G-C：booting → initial-reconcile → running（phase guard 防止历史 overdue 绕过 missed policy）
   const phaseRef = useRef<ReminderRuntimePhase>("booting");
@@ -82,12 +84,24 @@ export function ReminderRuntime() {
         } catch {}
       }
       if (!isDnd && prefs.browserNotificationsEnabled) {
-        showBrowserReminderNotification({
+        const result = showBrowserReminderNotification({
           title: current.title,
           body: getReminderDeliverySubtitle(current),
           reminderId: current.id,
           onClick: buildNotificationOnClick(current),
         });
+        // P2：denied 只引导一次（此前静默 false，用户误以为已开启）
+        if (result === "denied" && !notifiedDeniedRef.current) {
+          notifiedDeniedRef.current = true;
+          try {
+            useToastStore.getState().pushToast({
+              type: "warning",
+              message: "系统已阻止通知权限，请在系统设置中允许后才能收到系统提醒（站内提醒不受影响）",
+            });
+          } catch {
+            /* toast 失败不影响主流程 */
+          }
+        }
       }
       return true;
     },
