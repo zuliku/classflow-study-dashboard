@@ -19,7 +19,10 @@ export function formatApprovalCountdown(ms: number): string {
 
 export function ApprovalCountdown({ testid }: { testid?: string }) {
   const deadlineAt = useKiroComputerRuntimeStore((s) => s.approvalDeadlineAt);
+  const setApprovalDeadlineAt = useKiroComputerRuntimeStore((s) => s.setApprovalDeadlineAt);
   const [, force] = React.useReducer((x: number) => x + 1, 0);
+  // 每个 deadline 只可续期一次（换新审批 deadline 变化即重置）
+  const [extendedFor, setExtendedFor] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     if (deadlineAt == null || deadlineAt - Date.now() <= 0) return;
@@ -31,20 +34,38 @@ export function ApprovalCountdown({ testid }: { testid?: string }) {
   const remaining = deadlineAt - Date.now();
   if (remaining <= 0) return null;
   const urgent = remaining <= 30_000;
+  const canExtend = remaining <= 60_000 && extendedFor !== deadlineAt;
 
   return (
-    <p
-      role="timer"
-      data-testid={testid ?? "approval-countdown"}
-      className={cn(
-        // tabular-nums + 右对齐占位：每秒跳变不抖宽度；颜色切换走 fast 过渡
-        "text-[10px] leading-relaxed tabular-nums transition-colors duration-[var(--motion-fast)]",
-        urgent ? "font-bold text-danger" : "text-sandrift"
+    <div className="flex items-center gap-2">
+      <p
+        role="timer"
+        data-testid={testid ?? "approval-countdown"}
+        className={cn(
+          // tabular-nums + 右对齐占位：每秒跳变不抖宽度；颜色切换走 fast 过渡
+          "text-[10px] leading-relaxed tabular-nums transition-colors duration-[var(--motion-fast)]",
+          urgent ? "font-bold text-danger" : "text-sandrift"
+        )}
+        // P0：说清后果（此前只倒数不说超时会怎样，用户 hasty-allow 点错）
+        title="超时按拒绝处理，任务中断，可继续对话换种方式"
+      >
+        {urgent
+          ? `${formatApprovalCountdown(remaining)}后自动取消（按拒绝处理）`
+          : `${formatApprovalCountdown(remaining)}内未决定将自动取消（按拒绝处理）`}
+      </p>
+      {canExtend && (
+        <button
+          type="button"
+          onClick={() => {
+            setApprovalDeadlineAt(Date.now() + 60_000);
+            setExtendedFor(deadlineAt);
+          }}
+          title="延长 1 分钟，每个审批只能延长一次"
+          className="shrink-0 text-[10px] font-semibold text-satin-grey underline underline-offset-2 hover:text-charcoal transition-colors"
+        >
+          延长 1 分钟
+        </button>
       )}
-    >
-      {urgent
-        ? `${formatApprovalCountdown(remaining)}后自动取消`
-        : `${formatApprovalCountdown(remaining)}内未决定将自动取消`}
-    </p>
+    </div>
   );
 }

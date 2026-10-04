@@ -23,6 +23,19 @@ export const COMPUTER_APPROVAL_DECISION_LABELS: Record<ComputerApprovalDecision,
   "allow-workspace": "此 Workspace 始终允许",
 };
 
+/**
+ * 决策授权范围说明（按钮下小字；用户此前不敢用“始终允许”/用了又担心敞口）。
+ * - allow-once：精确绑定本次请求（终端还绑定 shell/cwd/命令指纹），换命令需重新审批
+ * - allow-session：仅本次会话内同类操作有效，停止/新建对话即失效
+ * - allow-workspace：此工作区内同类操作有效，可在设置中撤销
+ */
+export const COMPUTER_APPROVAL_DECISION_HINTS: Record<ComputerApprovalDecision, string> = {
+  deny: "拒绝本次操作，任务中断，可继续对话换种方式",
+  "allow-once": "仅对本次操作有效，换命令需重新审批",
+  "allow-session": "仅本次会话有效，停止或新建对话后失效",
+  "allow-workspace": "此工作区内同类操作有效，可在设置中撤销",
+};
+
 export interface ComputerApprovalPresentation {
   /** 「Kiro 准备执行 / 准备运行命令 / 准备修改…」 */
   title: string;
@@ -90,7 +103,10 @@ export function getComputerApprovalPresentation(
     const target = gui.targetLabel ? `「${gui.targetLabel}」` : "";
     const warnings: string[] = [];
     if (gui.riskLevel !== "normal" && gui.riskReason) warnings.push(gui.riskReason);
-    if (gui.coordinateFallback) warnings.push("请确认操作位置");
+    // 定位不确定是最高频的误操作源：点名“未能精确定位”，要求目检而非泛泛确认
+    if (gui.coordinateFallback) warnings.push("定位不确定：未能精确定位控件，批准前请目检目标是否正确");
+    // 敏感输入：明确告知已隐藏，打消“批准会泄露密码”的顾虑
+    if (gui.riskLevel === "sensitive" && !gui.textPreview) warnings.push("敏感输入已隐藏，批准不会泄露原文");
     // 后台静默模式：用户看不到实时界面（仅执行记录/审计可查），属监督缺失风险，必警告；
     // 不改变 highRisk 分级（分级只读 Runtime 定级）。
     if (request.background === true) {
@@ -111,10 +127,11 @@ export function getComputerApprovalPresentation(
 
   if (request.capability === "shell.execute") {
     const warnings: string[] = [];
+    // 分级解释：删/提权 impact 一句话（此前只有半句警告，小白无法决策；normal 保持零打扰）
     if (request.terminalRisk === "destructive") {
-      warnings.push("此命令可能删除或不可逆修改文件。");
+      warnings.push("此命令可能删除或不可逆修改文件，操作不可撤销，批准前请确认命令内容。");
     } else if (request.terminalRisk === "privileged") {
-      warnings.push("此命令需要更高权限。");
+      warnings.push("此命令需要更高权限，执行范围超出普通文件操作，请确认命令来源可信。");
     }
     return {
       title: "Kiro 准备运行命令",
@@ -129,6 +146,9 @@ export function getComputerApprovalPresentation(
     };
   }
 
+  // 删除是最高频的高危误批：点名不可恢复（此前 warnings 为空，只有标题“准备删除”）
+  const fileWarnings: string[] =
+    request.capability === "fs.delete" ? ["删除后不可恢复，请确认文件范围无误。"] : [];
   return {
     title: fileTitle(request),
     primary: request.resourceLabel,
@@ -136,7 +156,7 @@ export function getComputerApprovalPresentation(
       request.rootLabel ? `${request.workspaceLabel} / ${request.rootLabel}` : request.workspaceLabel,
       fileOperationLabel(request),
     ].filter(Boolean),
-    warnings: [],
+    warnings: fileWarnings,
     highRisk: isComputerApprovalHighRisk(request),
   };
 }

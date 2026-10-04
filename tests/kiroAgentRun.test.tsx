@@ -250,7 +250,7 @@ describe("Agent Run 显示条件与 Header", () => {
     expect(q('[data-testid="kiro-agent-run-header"]')!.textContent).toContain("正在操作电脑");
   });
 
-  it("running 时显示停止入口；点击触发 canonical Stop；waiting-approval 不显示停止", async () => {
+  it("running/waiting-approval 时显示停止入口；点击触发 canonical Stop（等待确认时为拒绝并停止）", async () => {
     const onStop = vi.fn();
     await render(messageNode({ onStop }));
     const stop = q('[data-testid="kiro-agent-run-stop"]');
@@ -266,7 +266,9 @@ describe("Agent Run 显示条件与 Header", () => {
         approval: { request: approval(), queueLength: 1, onDecision: vi.fn() },
       })
     );
-    expect(q('[data-testid="kiro-agent-run-stop"]')).toBeNull();
+    const stopWaiting = q('[data-testid="kiro-agent-run-stop"]');
+    expect(stopWaiting).toBeTruthy();
+    expect(stopWaiting!.textContent).toContain("拒绝并停止");
   });
 });
 

@@ -23,6 +23,23 @@ const TOOL_ROW_BODY =
  * 期间绝不重渲染。comparator 只比较影响显示的可变字段（id/status/headline/label/
  * safeDetails 逐项），local open disclosure state 不受影响（memo 只跳过 render）。
  */
+/** P0：working 心跳（本地 tick 隔离在叶子；block 无时间戳，用首渲染时刻起算，长任务不再像死锁） */
+function WorkingElapsed() {
+  const [now, setNow] = useState(() => Date.now());
+  const startedRef = React.useRef(now);
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const secs = Math.max(0, Math.round((now - startedRef.current) / 1000));
+  if (secs < 5) return null;
+  return (
+    <span className="shrink-0 text-[10px] tabular-nums text-sandrift" title={secs > 30 ? "仍在进行，可继续等待或停止本轮" : undefined}>
+      {secs > 30 ? `仍在进行 · ${secs}s` : `${secs}s`}
+    </span>
+  );
+}
+
 const KiroToolRow = React.memo(function KiroToolRow({ block }: { block: ToolBlock }) {
   bumpStreamPerfKeyed("toolRowRenders", block.id);
   bumpStreamPerf("toolRowRendersTotal");
@@ -48,6 +65,7 @@ const KiroToolRow = React.memo(function KiroToolRow({ block }: { block: ToolBloc
     <>
       {icon}
       <span className="truncate">{block.headline ?? block.label}</span>
+      {working && <WorkingElapsed />}
       {expandable && (
         <ChevronDown
           className={cn(

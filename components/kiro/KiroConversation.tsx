@@ -56,6 +56,7 @@ export function KiroConversation({
   approvalOwnerMessageId,
   pendingQueueLength,
   onApprovalDecision,
+  onBulkDecision,
   desktopPaused,
   onStop,
   onReviewComputerTask,
@@ -87,6 +88,7 @@ export function KiroConversation({
   approvalOwnerMessageId?: string | null;
   pendingQueueLength?: number;
   onApprovalDecision?: (approvalId: string, decision: ComputerApprovalDecision) => void;
+  onBulkDecision?: (decision: ComputerApprovalDecision) => void;
   /** P4：Desktop GUI Session 暂停（只影响 live run） */
   desktopPaused?: boolean;
   /** P4：Run Header 停止入口（canonical Stop） */
@@ -146,9 +148,10 @@ export function KiroConversation({
             request: pendingApproval,
             queueLength: pendingQueueLength ?? 1,
             onDecision: onApprovalDecision,
+            onBulkDecision,
           }
         : null,
-    [pendingApproval, pendingQueueLength, onApprovalDecision]
+    [pendingApproval, pendingQueueLength, onApprovalDecision, onBulkDecision]
   );
 
   /** 统一滚动状态同步（scroll 事件 / 内容高度变化共用） */

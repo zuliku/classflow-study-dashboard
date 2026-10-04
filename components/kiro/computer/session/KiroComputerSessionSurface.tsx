@@ -111,11 +111,26 @@ export function KiroComputerSessionSurface({
             currentStep={progress.currentStep}
           />
 
-          {/* failed：只展示 Main 已 sanitized 的短句（绝不回显 raw exception / stack） */}
+          {/* failed：Main 已 sanitized 的短句 + 恢复出口（此前红色即终点，只能重打字） */}
           {state === "failed" && failureReason && (
-            <p data-testid="computer-session-failure" className="pl-3.5 text-[10px] text-danger animate-enter">
-              {failureReason}
-            </p>
+            <div data-testid="computer-session-failure" className="pl-3.5 animate-enter space-y-1">
+              <p className="text-[10px] text-danger">{failureReason}</p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard
+                      ?.writeText(failureReason)
+                      .then(() => pushToast({ message: "已复制错误详情" }))
+                      .catch(() => pushToast({ message: "复制失败", type: "warning" }));
+                  }}
+                  className="text-[10px] font-semibold text-satin-grey underline underline-offset-2 hover:text-charcoal transition-colors"
+                >
+                  复制错误详情
+                </button>
+                <span className="text-[10px] text-sandrift">换种说法再试一次，或去 Composer 调整后重发</span>
+              </div>
+            </div>
           )}
 
           {showReflection && (

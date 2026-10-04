@@ -129,7 +129,9 @@ describe("P5 Surface — 显示条件与文案", () => {
     const header = q('[data-testid="kiro-computer-session-header"]')!;
     expect(header.textContent).toContain("电脑操作已停止");
     expect(header.getAttribute("data-tone")).toBe("danger");
-    expect(q('[data-testid="computer-session-failure"]')!.textContent).toBe("已达到本会话操作次数上限");
+    expect(q('[data-testid="computer-session-failure"]')!.textContent).toContain("已达到本会话操作次数上限");
+    // 失败恢复出口：复制错误详情可点
+    expect(q('[data-testid="computer-session-failure"]')!.textContent).toContain("复制错误详情");
 
     seedSession("cancelled");
     await renderSurface();

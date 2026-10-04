@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { ComputerApprovalRequest, ComputerApprovalDecision } from "@/lib/ai/computer/approval";
 import {
+  COMPUTER_APPROVAL_DECISION_HINTS,
   COMPUTER_APPROVAL_DECISION_LABELS,
   getComputerApprovalPresentation,
 } from "@/lib/ai/ui/computerApprovalPresentation";
@@ -125,6 +126,7 @@ export function ComputerApprovalDialog({
               className="w-full justify-center"
               disabled={busy}
               onClick={() => decide(d)}
+              title={COMPUTER_APPROVAL_DECISION_HINTS[d]}
               data-testid={`approval-${d}`}
             >
               {COMPUTER_APPROVAL_DECISION_LABELS[d]}

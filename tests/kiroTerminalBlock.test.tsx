@@ -85,7 +85,8 @@ describe("KiroTerminalBlock", () => {
       />
     );
     expect(screen.getByText("运行失败")).toBeTruthy();
-    expect(screen.queryByText(/exit 1/)).toBeNull();
+    // 非 0 exitCode 在 header 明示（失败可行动；0 仍隐藏）
+    expect(screen.getByText(/exit 1/)).toBeTruthy();
     // card 自身不带 danger 边框/背景（只有文本 tone）
     expect(container.firstElementChild?.className).not.toMatch(/bg-danger|border-danger/);
   });

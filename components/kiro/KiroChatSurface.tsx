@@ -289,6 +289,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
             approvalOwnerMessageId={approvalOwnerMessageId}
             pendingQueueLength={pendingQueueLength}
             onApprovalDecision={handleApprovalDecision}
+            onBulkDecision={handleBulkDecision}
             desktopPaused={desktopSessionPaused}
             onStop={chat.stop}
             onReviewComputerTask={setReviewTaskId}

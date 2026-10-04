@@ -80,6 +80,17 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  // P0：失败/超时/等待输入自动展开（此前默认折叠，失败要两次点击才看到错；用户手动收起后不再强弹）
+  const autoExpandedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      (activity.status === "failed" || activity.status === "timed-out" || activity.status === "waiting-input") &&
+      autoExpandedForRef.current !== activity.status
+    ) {
+      autoExpandedForRef.current = activity.status;
+      setExpanded(true);
+    }
+  }, [activity.status]);
   const [stopping, setStopping] = useState(false);
   const [inputOpen, setInputOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -123,8 +134,13 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
     }
   };
 
-  const body = [...activity.stdoutLines, ...activity.stderrLines.map((l) => `  ${l}`)];
+  // P0：stderr 独立着色（此前与 stdout 缩进混同灰字，报错与普通输出混一起无法行动）
+  const stderrCount = activity.stderrLines.length;
+  const body = [...activity.stdoutLines, ...activity.stderrLines];
+  const stderrStart = body.length - stderrCount;
   const displayLines = showAll ? body : body.slice(-PREVIEW_LINES);
+  const displayStart = showAll ? 0 : Math.max(0, body.length - PREVIEW_LINES);
+  const isStderrLine = (displayIdx: number) => displayStart + displayIdx >= stderrStart;
 
   // 输出跟尾：行数变化且用户停在底部才自动跟随（上翻查看旧输出时不抢滚动；纯 DOM，无重渲染）
   // rAF 合并：高频 stdout 每 chunk 一次 layout → 合并到单帧一次读写
@@ -176,10 +192,23 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
         <span className="text-[10px] text-satin-grey tabular-nums shrink-0 ml-1">
           <TerminalElapsed activity={activity} />
         </span>
-        <span className={cn("text-[10px] flex items-center gap-1 shrink-0 ml-1", meta.tone)}>
+        <span
+          className={cn(
+            "text-[10px] flex items-center gap-1 shrink-0 ml-1",
+            meta.tone,
+            // P0：等待输入在 Header 冒泡呼吸（此前只在折叠区内，用户错过输入时机）
+            activity.waitingForInput && "animate-pulse font-bold"
+          )}
+        >
           {meta.icon}
           {meta.label}
         </span>
+        {/* P0：终态显示 exitCode（此前只参与 memo 比较从未渲染，失败无从下手） */}
+        {!running && activity.exitCode !== null && activity.exitCode !== 0 && (
+          <span className="text-[10px] tabular-nums text-danger shrink-0" title="进程退出码，非 0 即失败">
+            exit {activity.exitCode}
+          </span>
+        )}
         {running && (
           <button
             type="button"
@@ -277,7 +306,16 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
           >
             {/* index key 刻意：滑动窗口追加语义，行就地更新文本不 remount（稳定 key 会导致滚动闪变） */}
             {displayLines.map((line, i) => (
-              <div key={i} className={cn(line.startsWith("  ") ? "text-satin-grey" : "text-charcoal")}>
+              <div
+                key={i}
+                className={cn(
+                  isStderrLine(i)
+                    ? "text-danger"
+                    : line.startsWith("  ") || line.startsWith("\t")
+                      ? "text-satin-grey"
+                      : "text-charcoal"
+                )}
+              >
                 {line}
               </div>
             ))}

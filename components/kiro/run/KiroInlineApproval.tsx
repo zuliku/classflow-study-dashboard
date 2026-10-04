@@ -3,6 +3,7 @@
 import React from "react";
 import { ComputerApprovalDecision, ComputerApprovalRequest } from "@/lib/ai/computer/approval";
 import {
+  COMPUTER_APPROVAL_DECISION_HINTS,
   COMPUTER_APPROVAL_DECISION_LABELS,
   getComputerApprovalPresentation,
 } from "@/lib/ai/ui/computerApprovalPresentation";
@@ -23,10 +24,13 @@ export function KiroInlineApproval({
   request,
   queueLength,
   onDecision,
+  onBulkDecision,
 }: {
   request: ComputerApprovalRequest;
   queueLength?: number;
   onDecision: (approvalId: string, decision: ComputerApprovalDecision) => void;
+  /** 队列批量允许（与 fallback Dialog 同语义；缺失则不渲染批量键） */
+  onBulkDecision?: (decision: ComputerApprovalDecision) => void;
 }) {
   const [busy, setBusy] = React.useState(false);
 
@@ -97,6 +101,7 @@ export function KiroInlineApproval({
             data-testid={`approval-${decision}`}
             disabled={busy}
             onClick={() => decide(decision)}
+            title={COMPUTER_APPROVAL_DECISION_HINTS[decision]}
             className={cn(
               "h-8 px-3 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
               decision === "deny"
@@ -109,6 +114,23 @@ export function KiroInlineApproval({
             {COMPUTER_APPROVAL_DECISION_LABELS[decision]}
           </button>
         ))}
+        {/* P0：队列批量键（此前 Inline 无批量，5 个文件改动连点 5 次倒计时；仅 allow-once 全允许时出现） */}
+        {(queueLength ?? 1) > 1 && onBulkDecision && request.allowedDecisions.includes("allow-once") && (
+          <button
+            type="button"
+            data-testid="approval-bulk-allow-once"
+            disabled={busy}
+            onClick={() => {
+              if (busy) return;
+              setBusy(true);
+              onBulkDecision("allow-once");
+            }}
+            title="队列中剩余审批一次全部允许（仅本次操作有效）"
+            className="h-8 px-3 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-line-strong bg-surface text-charcoal hover:border-charcoal"
+          >
+            批量允许这一次（{queueLength} 项）
+          </button>
+        )}
       </div>
     </section>
   );

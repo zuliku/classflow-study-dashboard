@@ -17,6 +17,7 @@ export interface KiroAgentRunApprovalBinding {
   request: ComputerApprovalRequest;
   queueLength: number;
   onDecision: (approvalId: string, decision: ComputerApprovalDecision) => void;
+  onBulkDecision?: (decision: ComputerApprovalDecision) => void;
 }
 
 /** GUI 工具（用于「正在操作电脑」Header 文案） */
@@ -115,6 +116,7 @@ export function KiroAgentRun({
           request={approval.request}
           queueLength={approval.queueLength}
           onDecision={approval.onDecision}
+          onBulkDecision={approval.onBulkDecision}
         />
       )}
     </div>

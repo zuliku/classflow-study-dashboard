@@ -227,7 +227,11 @@ describe("Approval Presentation（Inline / fallback Dialog 共用）", () => {
         },
       })
     );
-    expect(p.warnings).toEqual(["可能发送敏感内容", "请确认操作位置"]);
+    expect(p.warnings).toEqual([
+      "可能发送敏感内容",
+      "定位不确定：未能精确定位控件，批准前请目检目标是否正确",
+      "敏感输入已隐藏，批准不会泄露原文",
+    ]);
     expect(p.highRisk).toBe(true);
     expect(JSON.stringify(p)).not.toContain("UIA");
   });
@@ -280,7 +284,7 @@ describe("Approval Presentation（Inline / fallback Dialog 共用）", () => {
     expect(p.primary).toBe("PowerShell");
     expect(p.meta).toEqual(["工作目录 /src", "ClassFlow Desktop"]);
     expect(p.command).toBe("npm test");
-    expect(p.warnings).toEqual(["此命令可能删除或不可逆修改文件。"]);
+    expect(p.warnings).toEqual(["此命令可能删除或不可逆修改文件，操作不可撤销，批准前请确认命令内容。"]);
     expect(p.highRisk).toBe(true);
   });
 

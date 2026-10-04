@@ -75,7 +75,9 @@ export function KiroAgentRunHeader({
           aria-hidden="true"
         />
       </button>
-      {status === "running" && onStop && <KiroAgentRunControls onStop={onStop} />}
+      {/* P0：Stop 在等待确认/暂停/整理时同样常驻（此前仅 running 有，最想停时没按钮，只能被迫先决策） */}
+      {(status === "running" || status === "waiting-approval" || status === "paused" || status === "composing") &&
+        onStop && <KiroAgentRunControls onStop={onStop} stopLabel={status === "waiting-approval" ? "拒绝并停止" : undefined} />}
     </div>
   );
 }
