@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" }) {
   const runtime = useKiroRuntime();
   const { chat, attachments, activeRefs, removeContext, addManualContext } = runtime;
-  const { suggestionsKind, suggestionsGen, lastUserTurnGen, emptyIntroGeneration } = useKiroSessionMeta();
+  const { suggestionsKind, suggestionsGen, lastUserTurnGen, emptyIntroGeneration, currentConversationId } = useKiroSessionMeta();
   const { claimEmptyIntro, newChat } = useKiroSessionActions();
   const compact = variant === "sidecar";
 
@@ -53,8 +53,15 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   })();
 
   // Computer Agent Part 3：审批对话框 + 更改审查（runtime store 只存展示状态）
-  const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
+  const rawPendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
   const pendingQueueLength = useKiroComputerRuntimeStore((s) => s.pendingQueueLength);
+  // P0：审批只在归属会话展示（stamped conversationId 与当前不一致 → 隐藏不断队列；切回原对话重现。
+  // 未 stamp 的历史审批恒展示，避免无处可点卡死）。
+  const pendingApproval =
+    rawPendingApproval &&
+    (rawPendingApproval.conversationId == null || rawPendingApproval.conversationId === currentConversationId)
+      ? rawPendingApproval
+      : null;
   const setPendingApproval = useKiroComputerRuntimeStore((s) => s.setPendingApproval);
   const reviewTaskId = useKiroComputerRuntimeStore((s) => s.reviewTaskId);
   const setReviewTaskId = useKiroComputerRuntimeStore((s) => s.setReviewTaskId);

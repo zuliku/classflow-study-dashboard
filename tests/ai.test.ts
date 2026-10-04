@@ -391,7 +391,9 @@ describe("AI Error 归一化", () => {
     expect(normalizeAIError({ statusCode: 415 }).code).toBe("INVALID_PROVIDER_REQUEST");
     expect(normalizeAIError({ statusCode: 422 }).code).toBe("INVALID_PROVIDER_REQUEST");
     // 用户 UI 展示安全自然语言，不含 Provider 细节
-    expect(normalizeAIError({ statusCode: 400 }).message).toBe("当前模型请求格式不兼容，请更换模型或稍后重试。");
+    expect(normalizeAIError({ statusCode: 400 }).message).toBe(
+      "当前模型不支持此次请求（如推理+工具组合），请更换支持工具的模型、调低推理强度，或去设置检查。"
+    );
   });
 
   it("Provider 错误体（APICallError.responseBody）：按 error.code 稳定区分", () => {

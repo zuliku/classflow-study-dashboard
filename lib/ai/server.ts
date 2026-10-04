@@ -134,8 +134,9 @@ export function validateAIChatBody(body: unknown): {
 export function createTimeoutController(ms: number, external: AbortSignal): { signal: AbortSignal; done: () => void } {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new DOMException("timeout", "TimeoutError")), ms);
-  if (external.aborted) controller.abort();
-  external.addEventListener("abort", () => controller.abort(), { once: true });
+  // P0：透传外部 abort 原因（此前原因丢失，用户主动 Stop 与超时在下游无法区分，Stop 后误报超时红条）
+  if (external.aborted) controller.abort(external.reason);
+  external.addEventListener("abort", () => controller.abort(external.reason), { once: true });
   return {
     signal: controller.signal,
     done: () => clearTimeout(timer),

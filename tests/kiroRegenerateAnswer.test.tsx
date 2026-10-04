@@ -100,7 +100,9 @@ describe("空终答追答接线守卫（源码锁定）", () => {
   const route = read("app/api/ai/chat/route.ts");
 
   it("Surface 下发追答入口；hook 暴露 regenerateAnswer + view 层判定", () => {
-    expect(surface).toContain("onRegenerateAnswer={() => void chat.regenerateAnswer()}");
+    // Surface 经 useCallback 转发（in-flight 门在 hook 内；语义与直发一致）
+    expect(surface).toContain("handleRegenerateAnswer");
+    expect(surface).toContain("onRegenerateAnswer={handleRegenerateAnswer}");
     expect(hook).toContain("const regenerateAnswer = useCallback(");
     // 判定在 view 构建层（parts 可见；Surface 的 chat.messages 是 view，无 parts）
     expect(hook).toContain("messageNeedsAnswerRetry(m) ? { needsAnswerRetry: true as const } : {}");

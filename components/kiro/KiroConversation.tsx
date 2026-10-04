@@ -64,6 +64,7 @@ export function KiroConversation({
   onCancelPlan,
   onRegenerateAnswer,
   onNewChat,
+  preparingSend,
 }: {
   messages: KiroChatMessageView[];
   error: AIError | null;
@@ -76,6 +77,8 @@ export function KiroConversation({
   compact?: boolean;
   /** 整个 Agent Turn 是否仍在进行（turnExecution !== settled；含 awaiting-tool-result / awaiting-continuation）——决定最后一条消息的操作栏时机 */
   turnInFlight: boolean;
+  /** preflight 准备中（intent 冻结 + 上下文/附件并行准备，turnInFlight 尚为 false）：会话区给即时反馈，避免“点了没反应” */
+  preparingSend?: boolean;
   /** 当前 Turn 的文档来源（Citation 渲染；live 消息用；不含正文） */
   sources?: KiroSourceMeta[];
   /** P4：待决策审批（只注入 owning task 行；orphan 由 ChatSurface fallback Dialog 承接） */
@@ -255,8 +258,9 @@ export function KiroConversation({
   // 首 token 前占位：turn in-flight 且当前没有任何可见 Assistant（content / worklog / action / computer task）。
   // V4.6：空 assistant message 存在时由同一 message id 的 row 承担 pending shell（outer 不 remount）；
   // fallback Pending 只在「尚无 assistant message」时显示（避免双 Logo）。
+  // P0：preflight（preparingSend）同样给反馈——此前点发送后数秒对话区零变化，用户以为没点中而重发。
   const lastMsg = messages[messages.length - 1];
-  const showPending = turnInFlight && lastMsg?.role !== "assistant";
+  const showPending = (turnInFlight || !!preparingSend) && lastMsg?.role !== "assistant";
 
   return (
     // Outer Viewport Wrapper：负责浮层定位；Scroll Container 独立承担滚动（Task 6B-A）
@@ -321,18 +325,22 @@ export function KiroConversation({
               >
                 <p className="text-xs font-bold text-danger">这次没能生成回复</p>
                 <p className="text-[11px] text-satin-grey leading-relaxed">
-                  {error.message || AI_ERROR_MESSAGES[error.code]}
+                  {/* P0：友好文案优先（此前服务端透传的 provider 英文原串优先上屏，与中文语境断裂） */}
+                  {AI_ERROR_MESSAGES[error.code] || error.message}
                 </p>
                 <div className="flex items-center gap-2 pt-0.5">
-                  <button
-                    onClick={onRetry}
-                    className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    重试
-                  </button>
-                  {/* 超预算：原样重试必然再败，给一键新建对话出口（provider 未传时不渲染） */}
-                  {error.code === "CONTEXT_TOO_LARGE" && onNewChat && (
+                  {/* P0：Key 错/模型下线时原样重试必败 → 隐藏重试，主按钮去设置 */}
+                  {error.code !== "INVALID_API_KEY" && error.code !== "MODEL_NOT_FOUND" && (
+                    <button
+                      onClick={onRetry}
+                      className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      重试
+                    </button>
+                  )}
+                  {/* 超预算/超时：原样重试必然再败或需新起，给一键新建对话出口（provider 未传时不渲染） */}
+                  {(error.code === "CONTEXT_TOO_LARGE" || error.code === "TIMEOUT") && onNewChat && (
                     <button
                       onClick={onNewChat}
                       className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-semibold text-satin-grey bg-surface border border-line hover:text-charcoal hover:border-line-strong transition-colors"
@@ -495,6 +503,16 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
     !hasComputerTask &&
     !hasExecutionPlan
   ) {
+    // P0：settled/已停止的空行不再转圈（此前 Stop 后无可见 part 仍显示“正在准备”+spin，用户以为还在跑）
+    if (!runLive) {
+      return (
+        <KiroAssistantShell testid="kiro-assistant-pending" messageId={view.id}>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-sandrift">已停止，未生成内容</span>
+          </div>
+        </KiroAssistantShell>
+      );
+    }
     return (
       <KiroAssistantShell testid="kiro-assistant-pending" messageId={view.id}>
         <div className="flex items-center gap-1.5">

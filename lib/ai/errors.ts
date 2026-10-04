@@ -26,16 +26,16 @@ export class AIError extends Error {
 
 /** 错误 → 友好文案（UI 直接使用） */
 export const AI_ERROR_MESSAGES: Record<AIErrorCode, string> = {
-  INVALID_API_KEY: "API Key 无效，请在设置中检查。",
-  MODEL_NOT_FOUND: "模型不可用，请在设置中选择其他模型。",
-  MODEL_UNAVAILABLE: "当前模型已不可用，请重新选择。",
-  UNSUPPORTED_TRANSPORT: "当前模型使用的接口暂未支持。",
+  INVALID_API_KEY: "API Key 无效，请去设置检查 Key 是否填写正确。",
+  MODEL_NOT_FOUND: "该模型已下线或不可用，发送已置灰，请去设置重新选择模型。",
+  MODEL_UNAVAILABLE: "当前模型暂时不可用，请稍后重试或重新选择。",
+  UNSUPPORTED_TRANSPORT: "当前模型的接口类型暂不支持，请换一个模型。",
   RATE_LIMITED: "请求过于频繁，请稍后再试。",
   TIMEOUT: "刚才超时了，请再试一次；一直超时可以缩短问题或新建对话。",
   PROVIDER_UNAVAILABLE: "服务无法连接，请检查网络或稍后再试。",
   INVALID_PROVIDER_RESPONSE: "服务返回异常，请稍后再试。",
-  INVALID_PROVIDER_REQUEST: "当前模型请求格式不兼容，请更换模型或稍后重试。",
-  INVALID_CUSTOM_URL: "自定义服务地址无效。",
+  INVALID_PROVIDER_REQUEST: "当前模型不支持此次请求（如推理+工具组合），请更换支持工具的模型、调低推理强度，或去设置检查。",
+  INVALID_CUSTOM_URL: "自定义服务地址无效，请去设置检查地址是否填写正确。",
   CONTEXT_TOO_LARGE: "当前对话内容较长，Kiro 已尝试压缩上下文。可以新建对话后继续。",
   UNKNOWN: "没能完成这次回复，请再试一次；一直不行可以新建对话或检查 AI 设置。",
 };

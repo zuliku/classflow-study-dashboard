@@ -29,6 +29,11 @@ export interface ComputerApprovalRequest {
   id: string;
   toolCallId: string;
   taskId: string;
+  /**
+   * P0：审批归属会话快照（创建时刻的 conversationId；null/缺失 = 历史数据，恒展示以免审批无处可点）。
+   * ChatSurface 只渲染与当前会话一致的审批——A 对话的删文件审批绝不弹到 B 对话造成误批。
+   */
+  conversationId?: string | null;
   capability: ComputerCapability;
   risk: ComputerRisk;
   workspaceId: string;

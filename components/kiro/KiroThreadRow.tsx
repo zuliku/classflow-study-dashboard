@@ -43,8 +43,15 @@ export const KiroThreadRow = React.memo(function KiroThreadRow({
     setEditing(false);
   };
 
+  // P0：删除加确认（此前 More→删除误触即永久丢失，无 Undo；与删项目/清空全部同语言）
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const deleteRow = () => {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
     setMenuOpen(false);
+    setConfirmingDelete(false);
     void session.deleteConversation(record.id);
     pushToast({ message: "对话已删除" });
   };
@@ -121,6 +128,7 @@ export const KiroThreadRow = React.memo(function KiroThreadRow({
           onClick={(e) => {
             e.stopPropagation();
             setMenuOpen((v) => !v);
+            setConfirmingDelete(false);
           }}
           aria-label={`对话 ${record.title} 更多操作`}
           aria-expanded={menuOpen}
@@ -135,6 +143,7 @@ export const KiroThreadRow = React.memo(function KiroThreadRow({
               onClick={(e) => {
                 e.stopPropagation();
                 setMenuOpen(false);
+                setConfirmingDelete(false);
                 setEditing(true);
                 setEditText(record.title);
               }}
@@ -149,10 +158,11 @@ export const KiroThreadRow = React.memo(function KiroThreadRow({
                 e.stopPropagation();
                 deleteRow();
               }}
+              aria-label={confirmingDelete ? `确认删除对话 ${record.title}（不可恢复）` : `删除对话 ${record.title}`}
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left font-semibold text-danger hover:bg-danger-bg transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              删除
+              {confirmingDelete ? "确认删除？" : "删除"}
             </button>
         </KiroMenuPanel>
       </div>

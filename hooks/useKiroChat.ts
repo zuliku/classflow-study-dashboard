@@ -2008,6 +2008,7 @@ export function useKiroChat({
   /** 显示下一个 pending approval（队列单例展示；可执行请求仍留在 refs） */
   const advancePendingApproval = useCallback(() => {
     const next = pendingExecutionsRef.current.values().next().value as PendingComputerExecution | undefined;
+    // P0： stamped 会话归属（创建时已 stamp，此处透传；跨对话切回后审批重现而非丢失）
     setPendingApproval(next ? next.request : null);
     // S-fix（P0-2）：队列见底 → 快照同步清理（超时 effect 只写不删，此处是唯一的“无展示”收口）
     if (!next) clearPendingApprovalSnapshot();
@@ -2023,10 +2024,12 @@ export function useKiroChat({
       input: unknown,
       frozenSnapshot: KiroComputerTurnSnapshot
     ) => {
-      pendingExecutionsRef.current.set(request.id, { request, toolName, toolCallId, input, frozenSnapshot });
+      // P0：审批 stamped 当前会话（切对话后旧审批不再弹到新对话误批；切回后按 stamp 重现）
+      const stamped: ComputerApprovalRequest = { ...request, conversationId: conversationIdRef.current };
+      pendingExecutionsRef.current.set(stamped.id, { request: stamped, toolName, toolCallId, input, frozenSnapshot });
       setPendingQueueLength(pendingExecutionsRef.current.size);
       if (!useKiroComputerRuntimeStore.getState().pendingApproval) {
-        setPendingApproval(request);
+        setPendingApproval(stamped);
       }
       const task = tasksRef.current.get(request.taskId);
       if (task) {
@@ -3061,6 +3064,9 @@ export function useKiroChat({
     async (text: string, turnAttachments: KiroAttachment[], opts?: { textOnlyAnswer?: boolean }): Promise<boolean> => {
       const v = text.trim();
       if (!v || !enabled) return false;
+      // P0：新 Turn 清 Stop 标记（此前只在 edit/new/load 清，正常发送不清 → 首轮工具结果被静默丢弃卡 awaiting-tool-result）
+      stoppedTurnMessageIdRef.current = null;
+      userStopSuppressTimeoutRef.current = false;
       readCounterRef.current = 0;
       documentReadCounterRef.current = 0;
       writeCounterRef.current = 0;
@@ -3520,6 +3526,17 @@ export function useKiroChat({
     [sendWithAttachments, attachments]
   );
 
+  // retry/newChat/loadConversation 使用稳定子项时，必须经 ref 读取最新 chat
+  // （否则闭包会捕获创建时刻的旧 messages / 旧 regenerate）
+  // P0：ref 提前声明（editAndResend 经 ref 读最新 turn 状态，不再依赖过期闭包的 turnInFlight）
+  const latestChatRef = useRef(chat);
+  latestChatRef.current = chat;
+  // 收件箱处理器同样经 ref 读最新发送入口与 turn 状态（effect 只订阅一次，不 stale）
+  const sendWithAttachmentsRef = useRef(sendWithAttachments);
+  sendWithAttachmentsRef.current = sendWithAttachments;
+  const turnInFlightRef = useRef(turnInFlight);
+  turnInFlightRef.current = turnInFlight;
+
   /**
    * Task 7：编辑 User Message 并重新发送（不做 conversation branch）。
    * 提交时重新做全部 guard（不能只信 UI）：trim / 空文本 / 内容未变 / in-flight / target 附件 / suffix write。
@@ -3530,6 +3547,8 @@ export function useKiroChat({
     async (messageId: string, text: string): Promise<boolean> => {
       const v = text.trim();
       if (!v || !enabled) return false;
+      // P0：读 ref 最新值（此前闭包 turnInFlight 过期，工具间隙可误触重发删 suffix 丢上下文）
+      if (turnInFlightRef.current) return false;
       const all = latestChatRef.current.messages as UIMessage[];
       const targetIdx = all.findIndex((m) => m.id === messageId && m.role === "user");
       const target = targetIdx === -1 ? null : all[targetIdx];
@@ -3537,7 +3556,7 @@ export function useKiroChat({
       if (target && v === targetText.trim()) return true; // 内容未变：不请求模型
 
       // Streaming UX V3：真实 turn lifecycle 决定可编辑性（awaiting-tool-result / awaiting-continuation 同样锁定）
-      const inFlight = turnInFlight;
+      const inFlight = turnInFlightRef.current;
       const suffix = targetIdx >= 0 ? all.slice(targetIdx) : [];
       // target 附件：live → snapshot queue 对应项；restored → restoredAttachmentsRef
       let targetHasAttachments = false;
@@ -3598,18 +3617,14 @@ export function useKiroChat({
     [enabled, chat, sendWithAttachments]
   );
 
-  // retry/newChat/loadConversation 使用稳定子项时，必须经 ref 读取最新 chat
-  // （否则闭包会捕获创建时刻的旧 messages / 旧 regenerate）
-  const latestChatRef = useRef(chat);
-  latestChatRef.current = chat;
-  // 收件箱处理器同样经 ref 读最新发送入口与 turn 状态（effect 只订阅一次，不 stale）
-  const sendWithAttachmentsRef = useRef(sendWithAttachments);
-  sendWithAttachmentsRef.current = sendWithAttachments;
-  const turnInFlightRef = useRef(turnInFlight);
-  turnInFlightRef.current = turnInFlight;
-
   const retry = useCallback(() => {
     if (!enabled) return;
+    // P0：in-flight 守卫（此前 preflight/流式中可点，触发双流交错；且受 Stop 毒化）
+    if (turnInFlightRef.current) {
+      pushToast({ message: "Kiro 正在处理中，请稍候。", type: "info" });
+      return;
+    }
+    stoppedTurnMessageIdRef.current = null;
     const c = latestChatRef.current;
     // Defense in depth：含 Write Tool 的轮次或历史恢复轮次禁止 regenerate（即使 UI 误调用）
     if (!lastTurnCanRegenerate(c.messages)) {
@@ -3660,6 +3675,11 @@ export function useKiroChat({
    */
   const regenerateAnswer = useCallback(() => {
     if (!enabled) return Promise.resolve(false);
+    // P0：in-flight 守卫（空终答按钮在 preparingSend 时仍可点，与 preflight 并发双流）
+    if (turnInFlightRef.current) {
+      pushToast({ message: "Kiro 正在处理中，请稍候。", type: "info" });
+      return Promise.resolve(false);
+    }
     const c = latestChatRef.current;
     const lastAssistant = [...c.messages].reverse().find((m) => m.role === "assistant");
     if (!lastAssistant || !messageNeedsAnswerRetry(lastAssistant)) {
@@ -3857,7 +3877,17 @@ export function useKiroChat({
     setSources(next);
   }, [chat.messages]);
 
-  const normalizedError: AIError | null = chat.error ? normalizeAIError(chat.error) : null;
+  // P0：用户主动 Stop 触发的 abort 不得报超时红条（server 已透传 abort 原因，但 SDK 仍以 AbortError 结算；此处按 Stop 意图抑制）
+  const userStopSuppressTimeoutRef = useRef(false);
+  useEffect(() => {
+    if (!chat.error) userStopSuppressTimeoutRef.current = false;
+  }, [chat.error]);
+  const normalizedError: AIError | null = (() => {
+    if (!chat.error) return null;
+    const err = normalizeAIError(chat.error);
+    if (err.code === "TIMEOUT" && userStopSuppressTimeoutRef.current) return null;
+    return err;
+  })();
   const streaming = chat.status === "streaming" || chat.status === "submitted";
 
   const activity = useMemo(
@@ -4005,9 +4035,10 @@ export function useKiroChat({
             .slice(idx + 1)
             .filter((s) => isRestoredMessage(s) && (restoredActionsRef.current.get(s.id)?.length ?? 0) > 0)
             .map((s) => s.id),
-          streaming,
+          // P0：用真实 turn lifecycle（此前只传 submitted/streaming，awaiting-tool-result/awaiting-continuation 间隙可误触编辑重发丢上下文）
+          streaming: turnExecution !== "settled",
         });
-        view = { ...view, canEdit: !streaming && blockReason === null, editDisabledReason: blockReason ?? undefined };
+        view = { ...view, canEdit: turnExecution === "settled" && blockReason === null, editDisabledReason: blockReason ?? undefined };
         needsAttach = true;
       }
       // 附加后的对象写回缓存（下一 token 直接复用，避免每次重建）
@@ -4048,6 +4079,8 @@ export function useKiroChat({
     // 用户 Stop：该 turn 遗留的 pending tool part 不再视为 in-flight（真 settled）
     const lastMsg = latestChatRef.current.messages[latestChatRef.current.messages.length - 1] as UIMessage | undefined;
     stoppedTurnMessageIdRef.current = lastMsg?.role === "assistant" ? lastMsg.id : null;
+    // P0：Stop 引发的 abort 不得上屏为超时红条（新 Turn/错误消失时复位）
+    userStopSuppressTimeoutRef.current = true;
     pendingAutoContinueRef.current = false;
     const task = activeTaskRef.current;
     if (task && (task.status === "awaiting_permission" || task.status === "running")) {
