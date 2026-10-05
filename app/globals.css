@@ -1760,6 +1760,38 @@ div[data-geometry-interacting] {
   box-shadow: none !important;
 }
 
+/* P1：模式切换柔切（空态 logo/标题 + 聊天框描边；只播 transform/opacity/描边色，零布局位移） */
+@keyframes kiro-mode-swap {
+  from {
+    opacity: 0.3;
+    transform: translateY(5px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.kiro-mode-swap {
+  animation: kiro-mode-swap 260ms var(--ease-standard);
+}
+@keyframes kiro-mode-flash {
+  0% {
+    border-color: #a48f82;
+  }
+  100% {
+    border-color: rgba(205, 185, 171, 0.72);
+  }
+}
+.kiro-mode-flash {
+  animation: kiro-mode-flash 380ms var(--ease-standard);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kiro-mode-swap,
+  .kiro-mode-flash {
+    animation: none;
+  }
+}
+
 /* P1：Inspector 来源定位闪光（滚动到引用后 1.2s 描边提示，JS 侧超时摘除） */
 @keyframes kiro-citation-flash {
   0%, 100% {

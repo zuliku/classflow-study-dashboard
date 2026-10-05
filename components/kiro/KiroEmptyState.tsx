@@ -2,6 +2,7 @@
 
 import React from "react";
 import { CalendarCheck, ListChecks, BookOpen } from "lucide-react";
+import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useAppStore } from "@/store/useAppStore";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,27 @@ export function KiroEmptyState({
   const assignments = useAppStore((s) => s.assignments);
   const schedules = useAppStore((s) => s.schedules);
   const hasData = courses.length > 0 || assignments.length > 0 || schedules.length > 0;
+  // P1：模式切换品牌柔切（只播 transform/opacity，logo 与标题位置零位移；首挂载不播）
+  const computerEnabled = useKiroComputerStore((s) => s.computerEnabled);
+  const [modeSwapping, setModeSwapping] = React.useState(false);
+  const prevModeRef = React.useRef(computerEnabled);
+  const swapTimerRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (prevModeRef.current === computerEnabled) return;
+    prevModeRef.current = computerEnabled;
+    setModeSwapping(true);
+    if (swapTimerRef.current !== null) window.clearTimeout(swapTimerRef.current);
+    swapTimerRef.current = window.setTimeout(() => {
+      swapTimerRef.current = null;
+      setModeSwapping(false);
+    }, 300);
+  }, [computerEnabled]);
+  React.useEffect(
+    () => () => {
+      if (swapTimerRef.current !== null) window.clearTimeout(swapTimerRef.current);
+    },
+    []
+  );
 
   // P0 产品化：有数据时只留最高频两项（此前 4 chip 挤占 hero 呼吸感；无数据新手保留 3 项发现入口）
   const suggestions = hasData
@@ -49,7 +71,10 @@ export function KiroEmptyState({
         compact ? "justify-start px-3 pt-10" : "justify-center px-4 py-8"
       )}
     >
-      <div data-kiro-empty-logo className={cn(playIntro && "kiro-empty-logo-intro")}>
+      <div
+        data-kiro-empty-logo
+        className={cn(playIntro && "kiro-empty-logo-intro", modeSwapping && "kiro-mode-swap")}
+      >
         <KiroMark size={compact ? "md" : "lg"} />
       </div>
       {/* P0 产品化：hero 问句（参考 Codex 中央大问句；单行护栏保持，不加副文案） */}
@@ -58,7 +83,8 @@ export function KiroEmptyState({
         className={cn(
           "font-bold tracking-tight text-charcoal mt-4",
           compact ? "text-xl" : "text-[28px] md:text-[32px] leading-tight mt-5",
-          playIntro && "kiro-empty-title-intro"
+          playIntro && "kiro-empty-title-intro",
+          modeSwapping && "kiro-mode-swap"
         )}
       >
         今天想先处理什么？

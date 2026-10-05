@@ -167,6 +167,26 @@ export const KiroComposer = React.memo(function KiroComposer({
 }) {
   const [text, setText] = useState("");
   const [openMenu, setOpenMenu] = useState<ComposerMenu>(null);
+  // P1：模式切换聊天框描边提示（只动描边色，框体零位移；首挂载不播）
+  const [modeFlash, setModeFlash] = useState(false);
+  const prevComputerRef = useRef(computerEnabled);
+  const modeFlashTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevComputerRef.current === computerEnabled) return;
+    prevComputerRef.current = computerEnabled;
+    setModeFlash(true);
+    if (modeFlashTimerRef.current !== null) window.clearTimeout(modeFlashTimerRef.current);
+    modeFlashTimerRef.current = window.setTimeout(() => {
+      modeFlashTimerRef.current = null;
+      setModeFlash(false);
+    }, 400);
+  }, [computerEnabled]);
+  useEffect(
+    () => () => {
+      if (modeFlashTimerRef.current !== null) window.clearTimeout(modeFlashTimerRef.current);
+    },
+    []
+  );
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [slashSkills, setSlashSkills] = useState<{ name: string; description: string }[]>([]);
@@ -697,6 +717,8 @@ export const KiroComposer = React.memo(function KiroComposer({
           className={cn(
             // P0 产品化：大圆角卡片（参考 Codex composer 卡片）
             "bg-surface border border-line-strong rounded-[20px] shadow-subtle",
+            // P1：模式切换描边提示（一次性动画，结束自动回到常态）
+            modeFlash && "kiro-mode-flash",
             "focus-within:border-sandrift",
             "transition-[border-color,transform] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
             // P3 发送时刻轻 press（只响应提交瞬间，不随输入改变形状）

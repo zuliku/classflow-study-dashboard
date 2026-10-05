@@ -131,7 +131,8 @@ export function KiroComposerAccessControl({
         )}
       >
         <ShieldCheck className="w-4 h-4 shrink-0" />
-        {!compact && <span className="truncate max-w-[110px]">{copy.label}</span>}
+        {/* P1：label 固定最小宽（模式切换“仅对话↔自动执行”字数不同，定宽后工具栏零位移） */}
+        {!compact && <span className="truncate min-w-[56px] text-center max-w-[110px]">{copy.label}</span>}
         {warning && <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" aria-hidden="true" />}
       </button>
 
