@@ -1019,7 +1019,8 @@ export const KiroComposer = React.memo(function KiroComposer({
                 className={cn(
                   "relative w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
                   // P2：autoGrow 高度 px 跳变走 control 档过渡（输入增高不再硬跳；reduced-motion 全局兜底）
-                  "transition-[height] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+                  // P1：min-height 同步进过渡——模式切换 0↔64px 线性伸缩，不再硬跳
+                  "transition-[height,min-height] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
                   // Computer Agent ON：输入区稳定最低高度（desktop 64 / compact 44），不随 context strip 压缩
                   computerEnabled && (compact ? "min-h-[44px]" : "min-h-[64px]")
                 )}

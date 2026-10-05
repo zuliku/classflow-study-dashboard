@@ -1762,13 +1762,12 @@ div[data-geometry-interacting] {
 
 /* P1：模式切换柔切（空态 logo/标题 + 聊天框描边；只播 transform/opacity/描边色，零布局位移） */
 @keyframes kiro-mode-swap {
+  /* P1：纯透明度柔切——品牌区固定位置零位移（此前 translate/scale 会让 logo 看似移动） */
   from {
-    opacity: 0.3;
-    transform: translateY(5px) scale(0.985);
+    opacity: 0.35;
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 .kiro-mode-swap {
