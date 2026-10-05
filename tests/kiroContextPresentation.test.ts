@@ -73,8 +73,24 @@ describe("splitKiroContextsForDisplay", () => {
       [manual1(), autoWeek(), autoCourse(), manual2()],
       false
     );
-    expect(visibleAmbient.map((c) => c.key)).toEqual(["auto-week-current"]);
+    // Desktop ambient 上限 2：week 置顶 + course 同显
+    expect(visibleAmbient.map((c) => c.key)).toEqual(["auto-week-current", "auto-course-c1"]);
     expect(visibleManual.map((c) => c.key)).toEqual(["m1", "m2"]);
+    expect(overflow).toHaveLength(0);
+  });
+
+  it("week 置顶：构建顺序课程在前时，本周仍可见（此前被挤进 +N 胶囊消失）", () => {
+    const { visibleAmbient, overflow } = splitKiroContextsForDisplay(
+      [autoCourse(), autoWeek()],
+      false
+    );
+    expect(visibleAmbient.map((c) => c.key)).toEqual(["auto-week-current", "auto-course-c1"]);
+    expect(overflow).toHaveLength(0);
+  });
+
+  it("compact 仍 ambient 1：week 置顶，课程进 overflow", () => {
+    const { visibleAmbient, overflow } = splitKiroContextsForDisplay([autoCourse(), autoWeek()], true);
+    expect(visibleAmbient.map((c) => c.key)).toEqual(["auto-week-current"]);
     expect(overflow.map((c) => c.key)).toEqual(["auto-course-c1"]);
   });
 
