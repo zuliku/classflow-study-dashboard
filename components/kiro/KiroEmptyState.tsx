@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CalendarCheck, ListChecks, BookOpen, TrendingUp } from "lucide-react";
+import { CalendarCheck, ListChecks, BookOpen } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { cn } from "@/lib/utils";
@@ -29,12 +29,11 @@ export function KiroEmptyState({
   const schedules = useAppStore((s) => s.schedules);
   const hasData = courses.length > 0 || assignments.length > 0 || schedules.length > 0;
 
+  // P0 产品化：有数据时只留最高频两项（此前 4 chip 挤占 hero 呼吸感；无数据新手保留 3 项发现入口）
   const suggestions = hasData
     ? [
         { icon: CalendarCheck, label: "帮我规划今天" },
         { icon: ListChecks, label: "查看最近 DDL" },
-        { icon: BookOpen, label: "看看我明天有什么课" },
-        { icon: TrendingUp, label: "分析本周学习负担" },
       ]
     : [
         { icon: BookOpen, label: "我该怎么开始记课程和作业？" },
@@ -53,11 +52,12 @@ export function KiroEmptyState({
       <div data-kiro-empty-logo className={cn(playIntro && "kiro-empty-logo-intro")}>
         <KiroMark size={compact ? "md" : "lg"} />
       </div>
+      {/* P0 产品化：hero 问句（参考 Codex 中央大问句；单行护栏保持，不加副文案） */}
       <h2
         data-kiro-empty-title
         className={cn(
-          "text-base font-bold text-charcoal mt-4",
-          compact ? "" : "text-lg mt-5",
+          "font-bold tracking-tight text-charcoal mt-4",
+          compact ? "text-xl" : "text-[28px] md:text-[32px] leading-tight mt-5",
           playIntro && "kiro-empty-title-intro"
         )}
       >

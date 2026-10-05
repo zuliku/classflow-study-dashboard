@@ -1,0 +1,84 @@
+"use client";
+
+import React from "react";
+import { cn } from "@/lib/utils";
+
+export type KiroModeCapsuleMode = "chat" | "work";
+
+const SEGMENTS: { mode: KiroModeCapsuleMode; label: string; hint: string }[] = [
+  { mode: "chat", label: "聊天", hint: "纯聊天，不使用 Computer 工具" },
+  { mode: "work", label: "工作", hint: "Agent 模式，授权策略在下方聊天框调整" },
+];
+
+/**
+ * Kiro 模式胶囊（P1 产品化，参考 Codex 顶部“聊天 / 工作”分段）：
+ * - 两段直选：聊天 = 纯聊天（Computer 关闭）；工作 = Agent 模式（Computer 开启，
+ *   恢复既有 AgentMode；细粒度授权在下方聊天框的访问菜单调整）
+ * - 模型信息不在此展示（Composer 模型胶囊保留厂商图标，避免重复）
+ * - Turn 运行中切到聊天禁用（改当前 Turn scope），切到工作常开（下一 Turn 生效）。
+ */
+export function KiroModeCapsule({
+  active,
+  turnInFlight,
+  onSelect,
+}: {
+  active: KiroModeCapsuleMode;
+  turnInFlight?: boolean;
+  onSelect: (mode: KiroModeCapsuleMode) => void;
+}) {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [pill, setPill] = React.useState<{ left: number; width: number } | null>(null);
+  // 滑动指示条：测量激活段位置，transform 位移（只动合成层，不触发布局，胶囊/聊天框/logo 零位移）
+  React.useLayoutEffect(() => {
+    const container = containerRef.current;
+    const activeBtn = container?.querySelector('[aria-pressed="true"]');
+    if (!container || !(activeBtn instanceof HTMLElement)) return;
+    const c = container.getBoundingClientRect();
+    const b = activeBtn.getBoundingClientRect();
+    if (b.width === 0) return;
+    setPill((prev) => {
+      const next = { left: b.left - c.left, width: b.width };
+      if (prev && prev.left === next.left && prev.width === next.width) return prev;
+      return next;
+    });
+  }, [active]);
+  return (
+    <div
+      ref={containerRef}
+      role="group"
+      aria-label="模式"
+      data-testid="kiro-mode-capsule"
+      className="relative inline-flex items-center rounded-full border border-line bg-surface p-0.5 shadow-subtle"
+    >
+      {pill && (
+        <span
+          aria-hidden="true"
+          className="absolute top-0.5 bottom-0.5 rounded-full bg-charcoal shadow-subtle transition-[left,width] duration-200 ease-[var(--ease-standard)]"
+          style={{ left: pill.left, width: pill.width }}
+        />
+      )}
+      {SEGMENTS.map((s) => {
+        const isActive = s.mode === active;
+        const locked = !!turnInFlight && s.mode === "chat";
+        return (
+          <button
+            key={s.mode}
+            type="button"
+            onClick={() => {
+              if (!locked) onSelect(s.mode);
+            }}
+            disabled={locked}
+            aria-pressed={isActive}
+            title={locked ? "当前 Turn 运行中，下一条消息可改" : s.hint}
+            className={cn(
+              "relative z-10 h-7 px-4 rounded-full text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              isActive ? "text-white" : "text-sandrift hover:text-charcoal"
+            )}
+          >
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

@@ -11,6 +11,7 @@ import { findApprovalOwnerMessageId } from "@/lib/ai/ui/kiroAgentRun";
 import type { ComputerApprovalDecision } from "@/lib/ai/computer/approval";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
+import { KiroModeCapsule, KiroModeCapsuleMode } from "@/components/kiro/KiroModeCapsule";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
@@ -242,6 +243,19 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
     (decision: ComputerApprovalDecision) => void resolveBulkApproval(decision),
     [resolveBulkApproval]
   );
+  // P1 产品化：模式胶囊两段（聊天 = 纯聊天关 Computer；工作 = Agent 开 Computer，恢复既有 mode；
+  // 细粒度授权去下方聊天框访问菜单调整，胶囊不复制该逻辑）
+  const capsuleActive: KiroModeCapsuleMode = computerEnabled ? "work" : "chat";
+  const handleCapsuleSelect = useCallback(
+    (mode: KiroModeCapsuleMode) => {
+      if (mode === "chat") {
+        handleToggleComputer(false);
+        return;
+      }
+      if (!computerEnabled) handleToggleComputer(true);
+    },
+    [computerEnabled, handleToggleComputer]
+  );
   const handleReviewDialogOpenChange = useCallback(
     (open: boolean) => {
       if (!open) setPendingApproval(null);
@@ -258,8 +272,17 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
       )}
       style={{ "--kiro-output-font-size": `${outputFontSize}px` } as React.CSSProperties}
     >
+      {/* P1 产品化：模式胶囊（参考 Codex 顶部“聊天 / 工作”分段；模型信息只在 Composer，顶部不重复） */}
+      <div className="shrink-0 hidden md:flex justify-center pt-1">
+        <KiroModeCapsule
+          active={capsuleActive}
+          turnInFlight={chat.turnInFlight}
+          onSelect={handleCapsuleSelect}
+        />
+      </div>
+
       {/* P5：Desktop Session Control Surface（Workspace / Sidecar 共用；位于 Conversation
-          可滚动区之外、Composer 之上；没有真实 session → 不渲染） */}
+           可滚动区之外、Composer 之上；没有真实 session → 不渲染） */}
       <KiroComputerSessionSurface variant={variant} />
 
       {/* Motion V1：main content stage —— Empty 为 absolute presence overlay（exit 不占 flex 布局，

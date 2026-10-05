@@ -103,6 +103,7 @@ export function KiroNavigatorHome({
             <section aria-label="项目">
               <KiroNavigatorSectionHeader
                 label="项目"
+                count={projects.length}
                 action={
                   <button
                     type="button"
@@ -135,7 +136,7 @@ export function KiroNavigatorHome({
             </section>
 
             <section aria-label="最近对话" className="mt-2">
-              <KiroNavigatorSectionHeader label="最近" />
+              <KiroNavigatorSectionHeader label="最近" count={threads.length} />
               {visibleThreads.length === 0 ? (
                 <p className="px-1.5 py-4 text-center text-[11px] text-sandrift">暂无历史对话</p>
               ) : searching ? (

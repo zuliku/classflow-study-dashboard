@@ -695,7 +695,8 @@ export const KiroComposer = React.memo(function KiroComposer({
         <div
           data-testid="kiro-composer-surface"
           className={cn(
-            "bg-surface border border-line-strong rounded-2xl shadow-subtle",
+            // P0 产品化：大圆角卡片（参考 Codex composer 卡片）
+            "bg-surface border border-line-strong rounded-[20px] shadow-subtle",
             "focus-within:border-sandrift",
             "transition-[border-color,transform] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
             // P3 发送时刻轻 press（只响应提交瞬间，不随输入改变形状）
@@ -991,7 +992,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 rows={1}
-                placeholder="问问 Kiro，比如：今天先做什么…"
+                placeholder="使用 Kiro"
                 aria-label="向 Kiro 提问"
                 className={cn(
                   "relative w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
@@ -1025,7 +1026,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                     <Plus className="w-4 h-4" />
                   </button>
                   {/* 常挂载受控 presence（与 Access/Model 等一致）：外层硬条件会截断退出动画 */}
-                  <PopoverPanel open={openMenu === "add"} placement="top-start" motionProfile="kiro" className="w-60">
+                    <PopoverPanel open={openMenu === "add"} placement="top-start" motionProfile="kiro" className="w-60">
                       <KiroComposerAddMenu
                         scopeLocked={currentTurnScopeLocked}
                         preferencesLocked={nextTurnPreferencesLocked}
@@ -1114,18 +1115,27 @@ export const KiroComposer = React.memo(function KiroComposer({
         </div>
 
         {/* Composer 下方只保留真正需要用户注意的状态 */}
-        {/* P0：模型下线一级 CTA（此前警告藏在二级菜单内，写完才发现发不出去） */}
-        {configured && modelUnavailable ? (
-          <div className={cn("flex items-center justify-end gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
-            <span className="text-[11px] font-semibold text-danger">当前模型已下线，发送已置灰</span>
-            <button
-              onClick={() => setOpenMenu("model")}
-              className="flex items-center gap-1 px-2.5 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
-            >
-              去切换模型
-            </button>
+        {/* 模型下线 CTA：常驻挂载 + 高度过渡（模型切换时只伸缩不跳变，下方内容零位移） */}
+        <div
+          className={cn(
+            "grid transition-[grid-template-rows,opacity] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+            configured && modelUnavailable ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          )}
+        >
+          <div className="overflow-hidden min-h-0">
+            <div className={cn("flex items-center justify-end gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
+              <span className="text-[11px] font-semibold text-danger">当前模型已下线，发送已置灰</span>
+              <button
+                onClick={() => setOpenMenu("model")}
+                tabIndex={configured && modelUnavailable ? undefined : -1}
+                className="flex items-center gap-1 px-2.5 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint transition-colors"
+              >
+                去切换模型
+              </button>
+            </div>
           </div>
-        ) : !configured ? (
+        </div>
+        {!configured ? (
           <div className={cn("flex items-center justify-end gap-2 mt-2", compact ? "px-0" : "px-0.5")}>
             <button
               onClick={onOpenSettings}

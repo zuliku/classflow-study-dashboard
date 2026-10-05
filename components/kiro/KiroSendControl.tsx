@@ -66,8 +66,11 @@ export function KiroSendControl({
       title={ariaLabel}
       data-send-state={state}
       className={cn(
-        "ux-press relative w-9 h-9 shrink-0 rounded-full bg-charcoal text-white transition-[opacity,background-color] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
-        state === "idle" ? "opacity-40 cursor-not-allowed" : "hover:bg-black",
+        // P0 产品化：idle 为描边幽灵态（此前 charcoal 40% 实心，与可点态过近）
+        "ux-press relative w-9 h-9 shrink-0 rounded-full transition-[opacity,background-color] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+        state === "idle"
+          ? "bg-transparent border border-line-strong text-sandrift cursor-not-allowed"
+          : "bg-charcoal text-white hover:bg-black",
         // Motion V1：canSend false→true 激活（opacity .4→1 + scale .96→1，只响应 boolean 状态变化）
         state === "ready" && "kiro-send-activate"
       )}

@@ -407,6 +407,7 @@ export function KiroNavigator() {
                 type="button"
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-label="对话更多操作"
+                title="对话更多操作"
                 aria-expanded={moreOpen}
                 className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
               >

@@ -115,13 +115,19 @@ export function KiroComposerAccessControl({
         className={cn(
           "flex items-center h-9 rounded-xl text-[11px] font-semibold transition-colors min-w-0",
           compact ? "w-9 justify-center" : "gap-1.5 px-2.5",
-          danger
+          // P0 产品化：完全访问（workspace 已配）用橙色一眼可判（参考 Codex“完全访问”橙）；
+          // 未配 workspace 的自动执行保持克制 danger 语义
+          danger && workspaceConfigured && !warning
             ? open
-              ? "bg-danger/10 text-danger"
-              : "text-danger bg-danger/5 hover:bg-danger/10"
-            : open
-              ? "bg-alabaster text-charcoal"
-              : "text-sandrift hover:bg-alabaster hover:text-charcoal"
+              ? "bg-[#FFF1E6] text-[#C2410C]"
+              : "text-[#C2410C] bg-[#FFF7ED] hover:bg-[#FFF1E6]"
+            : danger
+              ? open
+                ? "bg-danger/10 text-danger"
+                : "text-danger bg-danger/5 hover:bg-danger/10"
+              : open
+                ? "bg-alabaster text-charcoal"
+                : "text-sandrift hover:bg-alabaster hover:text-charcoal"
         )}
       >
         <ShieldCheck className="w-4 h-4 shrink-0" />

@@ -253,7 +253,8 @@ describe("Kiro Composer — Access", () => {
     rerender({ computerEnabled: true, agentMode: "workspace-auto" });
     const auto = q('[data-testid="kiro-composer-access"]')!;
     expect(auto.textContent).toContain("自动执行");
-    expect(auto.className).toContain("text-danger");
+    // workspace 已配 → 完全访问橙一眼可判（未配 workspace 时保持 danger 红）
+    expect(auto.className).toContain("text-[#C2410C]");
   });
 
   it("菜单：模式选择回调 / 工作范围 + warning / 权限摘要 / 管理入口", async () => {

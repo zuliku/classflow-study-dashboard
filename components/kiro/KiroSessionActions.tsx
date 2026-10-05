@@ -102,6 +102,15 @@ export function KiroSessionActions({
           <MoreHorizontal className="w-4 h-4" />
         </button>
           <KiroMenuPanel open={more.open} placement="bottom-end">
+            {/* P1 产品化：Workspace 也有新对话入口（此前只在 sidecar，超预算用户在桌面端找不到出口） */}
+            {variant === "workspace" && (
+              <KiroMenuItem
+                icon={Plus}
+                label="新对话"
+                disabled={sessionMeta.conversationTransitioning}
+                onClick={newChat}
+              />
+            )}
             {variant === "workspace" ? (
               /* 历史记录仅移动端可见；其专属 divider 与它同响应式可见性——
                  desktop（>=md）两者都不可见，菜单顶部第一个可见元素恒为「复制全部对话」 */

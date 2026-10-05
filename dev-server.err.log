@@ -1,0 +1,42 @@
+store/useDesktopSessionStore.ts (1:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+store/useDesktopSessionStore.ts (1:0): Module level directives cause errors when bundled, "use client" in "store/useDesktopSessionStore.ts" was ignored.
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/security/invocationTrust.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/app/api/ai/chat/route.ts, D:/桌面/vibe coding idea/classflow/app/api/ai/memory-rerank/route.ts, D:/桌面/vibe coding idea/classflow/app/api/ai/reply-draft/route.ts, D:/桌面/vibe coding idea/classflow/src/main/mcp/ipc.ts, D:/桌面/vibe coding idea/classflow/src/main/mcp/ipc.ts but also statically imported by D:/桌面/vibe coding idea/classflow/app/api/ai/reply-draft/route.ts, D:/桌面/vibe coding idea/classflow/src/main/security/invocationIpc.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/terminalSessionRuntime.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/index.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/desktopBridge.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/desktopBridge.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/computer/runtime.ts, D:/桌面/vibe coding idea/classflow/src/main/index.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/index.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/computer/upload.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/computer/runtime.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/computer/runtime.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/secrets/secretRuntime.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/mcp/manager.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/channels/email/gmail/tokenProvider.ts, D:/桌面/vibe coding idea/classflow/src/main/channels/manager.ts, D:/桌面/vibe coding idea/classflow/src/main/mcp/connection.ts, D:/桌面/vibe coding idea/classflow/src/main/secrets/secretIpc.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/lib/ai/skills/registry.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/app/api/ai/chat/route.ts but also statically imported by D:/桌面/vibe coding idea/classflow/lib/ai/skills/activation.ts, D:/桌面/vibe coding idea/classflow/lib/ai/skills/catalog.ts, D:/桌面/vibe coding idea/classflow/src/main/skills/skillIpc.ts, D:/桌面/vibe coding idea/classflow/src/main/skills/skillStore.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/skills/skillStore.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/app/api/ai/chat/route.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/skills/skillIpc.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/lib/ai/skills/activation.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/app/api/ai/chat/route.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/skills/skillIpc.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/mcp/manager.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/index.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/mcp/ipc.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/channels/email/config.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/channels/manager.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/channels/manager.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/channels/outbound/replyContextStore.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/channels/manager.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/channels/email/gmail/adapter.ts, D:/桌面/vibe coding idea/classflow/src/main/channels/email/qqmail/adapter.ts, D:/桌面/vibe coding idea/classflow/src/main/channels/outbound/outboundManager.ts, D:/桌面/vibe coding idea/classflow/src/main/channels/qq/adapter.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/channels/inboxPublisher.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/index.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/channels/inboxSink.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) D:/桌面/vibe coding idea/classflow/src/main/channels/manager.ts is dynamically imported by D:/桌面/vibe coding idea/classflow/src/main/index.ts, D:/桌面/vibe coding idea/classflow/src/main/index.ts but also statically imported by D:/桌面/vibe coding idea/classflow/src/main/channels/ipc.ts, D:/桌面/vibe coding idea/classflow/src/main/channels/outbound/outboundManager.ts, dynamic import will not move module into another chunk.
+[39m
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.

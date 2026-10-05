@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { PanelRight } from "lucide-react";
+import { PanelRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KiroSessionActions } from "@/components/kiro/KiroSessionActions";
 import { KiroRecentArtifactsPopover } from "@/components/kiro/computer/KiroRecentArtifactsPopover";
@@ -56,6 +56,17 @@ export function KiroHeader({
       </h2>
 
       <div className="flex items-center gap-1.5 shrink-0">
+        {/* P1 产品化：Header 常驻新对话（此前只在 sidecar More / 导航 Home，桌面端可发现性断裂） */}
+        <button
+          type="button"
+          onClick={onNewChat}
+          aria-label="新对话"
+          title="新对话"
+          data-testid="kiro-header-new-chat"
+          className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
         {/* Kiro Inspector 开关（xl+；参考 Codex 的右侧面板 toggle） */}
         {onToggleInspector && (
           <button

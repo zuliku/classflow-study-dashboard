@@ -91,14 +91,22 @@ export function KiroNavigatorProjectRow({
 /** 区块标题（项目 / 最近）：大写微标题（uppercase + tracking），与内容字重/颜色拉开层级 */
 export function KiroNavigatorSectionHeader({
   label,
+  count,
   action,
 }: {
   label: string;
+  /** P2 产品化：分组计数（项目 n / 对话 n，一眼可判规模） */
+  count?: number;
   action?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-1 px-1.5 pt-1 pb-1">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift">
+        {label}
+        {typeof count === "number" && count > 0 && (
+          <span className="ml-1 font-semibold normal-case tracking-normal">· {count}</span>
+        )}
+      </p>
       {action}
     </div>
   );
