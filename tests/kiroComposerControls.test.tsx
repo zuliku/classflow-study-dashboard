@@ -442,7 +442,7 @@ describe("Kiro Composer — Reasoning / Model", () => {
 
   it("S-fix 模型不可用时发送前即禁用（不再白等一轮 MODEL_NOT_FOUND）", async () => {
     await renderComposer({ modelUnavailable: true, activeModelName: "模型不可用" });
-    const ta = q('textarea[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
+    const ta = q('textarea[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
       setter?.call(ta, "帮我总结");
@@ -494,7 +494,7 @@ describe("Kiro Composer — 回归", () => {
     (window as unknown as { classflowDesktop?: unknown }).classflowDesktop = {
       skills: { list: async () => ({ skills: [{ name: "doc", description: "文档", enabled: true, kind: "workflow" }] }) },
     };
-    const ta = q('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, "/d");
       ta.dispatchEvent(new Event("input", { bubbles: true }));
@@ -545,7 +545,7 @@ describe("Kiro Composer — 回归", () => {
 
 describe("Kiro Composer — @ mention（对标 Slash）", () => {
   async function typeText(value: string) {
-    const ta = q('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, value);
       ta.dispatchEvent(new Event("input", { bubbles: true }));
@@ -554,7 +554,7 @@ describe("Kiro Composer — @ mention（对标 Slash）", () => {
   }
 
   async function pressKey(key: string) {
-    const ta = q('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     await act(async () => {
       ta.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
     });
@@ -574,7 +574,7 @@ describe("Kiro Composer — @ mention（对标 Slash）", () => {
     expect(handlers.onAddContext).toHaveBeenCalledWith(
       expect.objectContaining({ key: "manual-course-c1", kind: "course" })
     );
-    const ta = q('[aria-label="向 Kiro 提问"]') as HTMLTextAreaElement;
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
     expect(ta.value).toBe("帮我看下@中级计量经济学（王老师） ");
     // 尾随空格 = 完成态：先播退出过渡（非硬切），再延迟卸载（退出 timer 是真时钟，直接等）
     const closing = q('[data-testid="kiro-mention-menu"]') as HTMLElement;
