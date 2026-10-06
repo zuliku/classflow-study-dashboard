@@ -99,6 +99,8 @@ export function KiroNavigator() {
   const expandedPresence = usePresence(expanded, KIRO_MOTION_MS.popoverExit);
   // 折叠层退出时内部按钮不可聚焦（absolute 残留层，pointer-events-none 拦不住 Tab）
   const collapsedInertRef = useInertOnHidden<HTMLDivElement>(!collapsedPresence.visible);
+  // 展开层收起时同样不可聚焦，避免 Tab 掉进不可见面板
+  const expandedInertRef = useInertOnHidden<HTMLDivElement>(!expanded);
 
   const goToView = useCallback((next: NavigatorView) => {
     const prev = viewRef.current;
@@ -111,30 +113,34 @@ export function KiroNavigator() {
   // ---- Lazy load：collapsed 不读 DB；首次 expanded 并行读取 History + Projects；版本变化刷新 ----
   const loadedProjectsVersionRef = useRef(-1);
   const loadedHistoryVersionRef = useRef(-1);
+  const loadNavigatorData = useCallback(async () => {
+    const projectsVersion = meta.projectsVersion;
+    const historyVersion = meta.historyVersion;
+    try {
+      const [projectList, threadList] = await Promise.all([
+        listKiroProjects(),
+        listConversations(),
+      ]);
+      loadedProjectsVersionRef.current = projectsVersion;
+      loadedHistoryVersionRef.current = historyVersion;
+      setProjects(projectList);
+      setThreads(threadList);
+    } catch {
+      pushToast({
+        message: "导航数据加载失败，请重试",
+        type: "error",
+        actionLabel: "重试",
+        onAction: () => void loadNavigatorData(),
+      });
+    }
+  }, [meta.projectsVersion, meta.historyVersion, pushToast]);
   useEffect(() => {
     if (!expanded) return;
     const needProjects = loadedProjectsVersionRef.current !== meta.projectsVersion;
     const needThreads = loadedHistoryVersionRef.current !== meta.historyVersion;
     if (!needProjects && !needThreads) return;
-    loadedProjectsVersionRef.current = meta.projectsVersion;
-    loadedHistoryVersionRef.current = meta.historyVersion;
-    let cancelled = false;
-    void Promise.all([
-      needProjects ? listKiroProjects() : Promise.resolve(null),
-      needThreads ? listConversations() : Promise.resolve(null),
-    ])
-      .then(([projectList, threadList]) => {
-        if (cancelled) return;
-        if (projectList) setProjects(projectList);
-        if (threadList) setThreads(threadList);
-      })
-      .catch(() => {
-        if (!cancelled) pushToast({ message: "导航数据加载失败，请重试", type: "error" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [expanded, meta.projectsVersion, meta.historyVersion, pushToast]);
+    void loadNavigatorData();
+  }, [expanded, meta.projectsVersion, meta.historyVersion, loadNavigatorData]);
 
   const collapse = useCallback(() => {
     setExpanded(false);
@@ -421,6 +427,7 @@ export function KiroNavigator() {
         {/* Expanded layer：Home / Project Detail / Form / Add-Conversation（同一 shell 内切换） */}
         {expandedPresence.mounted && (
           <div
+            ref={expandedInertRef}
             role="dialog"
             aria-label="对话"
             data-layer="expanded"

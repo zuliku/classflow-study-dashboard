@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { History } from "lucide-react";
 import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
 import { useConfirmStore } from "@/store/useConfirmStore";
+import { useToastStore } from "@/store/useToastStore";
 import {
   countLearningHistoryEvents,
   getLearningHistoryCoverage,
@@ -23,10 +24,13 @@ export function LearningHistorySettings() {
   const [coverage, setCoverage] = useState<LearningHistoryCoverage | null>(null);
   const [count, setCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [clearing, setClearing] = useState(false);
   const confirmRequest = useConfirmStore((s) => s.confirm);
+  const pushToast = useToastStore((s) => s.pushToast);
 
   const refresh = async () => {
+    setLoadFailed(false);
     try {
       const [c, n] = await Promise.all([
         getLearningHistoryCoverage(),
@@ -35,7 +39,8 @@ export function LearningHistorySettings() {
       setCoverage(c);
       setCount(n);
     } catch {
-      // History best effort：失败保持 loading 态不闪 0
+      // History best effort：失败不闪 0，露出可重试的错误态
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -55,10 +60,16 @@ export function LearningHistorySettings() {
       onConfirm: () => {
         setClearing(true);
         clearLearningHistoryForUser();
-        void flushLearningHistoryQueue().then(async () => {
-          setClearing(false);
-          await refresh();
-        });
+        void flushLearningHistoryQueue()
+          .then(async () => {
+            await refresh();
+          })
+          .catch(() => {
+            pushToast({ message: "清除失败，请重试。", type: "error" });
+          })
+          .finally(() => {
+            setClearing(false);
+          });
       },
     });
   };
@@ -69,16 +80,18 @@ export function LearningHistorySettings() {
       description={
         loading
           ? "加载中…"
-          : count === null
-            ? "用于学习洞察（工作区与 Kiro）。"
-            : count === 0
-              ? "0 条历史事件 · 从今天起重新记录"
-              : `${formatDate(coverage?.historyStartedAt ?? Date.now())} 起记录 · ${count.toLocaleString()} 条历史事件 · 用于学习洞察（工作区与 Kiro）。`
+          : loadFailed
+            ? "历史记录加载失败，请重试。"
+            : count === null
+              ? "用于学习洞察（工作区与 Kiro）。"
+              : count === 0
+                ? "0 条历史事件 · 从今天起重新记录"
+                : `${formatDate(coverage?.historyStartedAt ?? Date.now())} 起记录 · ${count.toLocaleString()} 条历史事件 · 用于学习洞察（工作区与 Kiro）。`
       }
       icon={<History className="w-3.5 h-3.5 text-[#A48F82]" />}
-      actionLabel={clearing ? "清除中…" : "清除学习历史"}
+      actionLabel={clearing ? "清除中…" : loadFailed ? "重新加载" : "清除学习历史"}
       variant="secondary"
-      onAction={handleClear}
+      onAction={loadFailed && !clearing ? () => void refresh() : handleClear}
       actionTestid="clear-learning-history"
     />
   );

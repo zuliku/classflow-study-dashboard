@@ -92,6 +92,20 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
     }
   }, [activity.status]);
   const [stopping, setStopping] = useState(false);
+  const stoppingTimerRef = useRef<number | null>(null);
+  const clearStoppingTimer = () => {
+    if (stoppingTimerRef.current !== null) {
+      window.clearTimeout(stoppingTimerRef.current);
+      stoppingTimerRef.current = null;
+    }
+  };
+  // 停止兜底：activity 落终态即解锁，避免 bridge.cancel 丢包导致永久“正在停止”
+  useEffect(() => {
+    if (isTerminalActivityTerminal(activity.status)) {
+      clearStoppingTimer();
+      setStopping(false);
+    }
+  }, [activity.status]);
   const [inputOpen, setInputOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [inputBusy, setInputBusy] = useState(false);
@@ -107,6 +121,7 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
         window.clearTimeout(inputSentTimerRef.current);
         inputSentTimerRef.current = null;
       }
+      clearStoppingTimer();
     };
   }, []);
 
@@ -171,12 +186,22 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
   const onStop = async () => {
     if (cancelling) return;
     setStopping(true);
+    // 3s 兜底解锁：与 useKiroComputerSessionActions STOPPING_FALLBACK_MS 对齐
+    clearStoppingTimer();
+    stoppingTimerRef.current = window.setTimeout(() => {
+      stoppingTimerRef.current = null;
+      setStopping(false);
+    }, 3000);
     const bridge = getClassFlowDesktopTerminalBridge();
-    if (!bridge) return;
+    if (!bridge) {
+      clearStoppingTimer();
+      setStopping(false);
+      return;
+    }
     try {
       await bridge.cancel({ executionId: activity.executionId });
     } catch {
-      /* cancel 失败：executor registry / timeout 兜底 */
+      /* cancel 失败：executor registry / timeout 兜底，timer 会解锁 */
     }
   };
 

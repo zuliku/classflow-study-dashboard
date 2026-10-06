@@ -1164,6 +1164,7 @@ export const useAppStore = create<AppState>()(
         // History：业务数据整体清空 → 重置 History（新 historyStartedAt；FocusSession 也清空 → 允许 backfill）
         resetLearningHistoryForDomainReset();
         // 清空业务数据；保留 userProfile / semester / preferences
+        // 作息表属于学习数据域，一并清空避免旧方案残留
         set({
           courses: [],
           schedules: [],
@@ -1174,6 +1175,8 @@ export const useAppStore = create<AppState>()(
           reminders: [],
           focusSessions: [],
           scheduleOccurrenceOverrides: [],
+          bellSchedules: [],
+          activeBellScheduleId: null,
           currentSemesterWeek: Math.min(
             Math.max(getSemesterWeek(new Date(), get().semester), 1),
             get().semester.totalWeeks
@@ -1209,6 +1212,8 @@ export const useAppStore = create<AppState>()(
           reminders: [],
           focusSessions: [],
           scheduleOccurrenceOverrides: [],
+          bellSchedules: [],
+          activeBellScheduleId: null,
           semester: createDefaultSemester(),
           currentSemesterWeek: 1,
           assignmentTimeSlice: "all",

@@ -3103,6 +3103,7 @@ export function useKiroChat({
       } catch {
         activeInvocationIdRef.current = null;
         pushToast({ message: "准备失败了，请重试；一直不行请重启应用。" });
+        setTurnIntentFrozen(false);
         return false;
       }
 

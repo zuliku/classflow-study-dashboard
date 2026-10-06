@@ -229,6 +229,7 @@ export const useKiroComputerStore = create<KiroComputerState>()(
         terminalEnabled: state.terminalEnabled,
         desktopControlEnabled: state.desktopControlEnabled,
         desktopActionEnabled: state.desktopActionEnabled,
+        desktopClipboardEnabled: state.desktopClipboardEnabled,
         backgroundEnabled: state.backgroundEnabled,
         workspaces: state.workspaces,
         // 只持久化 persistent rules；session rules 仅内存
