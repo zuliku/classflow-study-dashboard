@@ -911,7 +911,9 @@ export function TimelineWorkspace() {
             data-testid="study-block-ghost"
             className={cn(
               "absolute left-1 right-1 z-[4] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
-              "transition-[top,background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
+              // 跟手 Ghost：top 逐帧更新必须 1:1（过渡会永远追赶+布局重排，发沉）；
+              // 只过渡颜色/透明度（valid / overlap 切换）
+              "transition-[background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
               !studyDrag.valid
                 ? "border-danger/60 bg-danger-bg/40"
                 : studyDrag.courseOverlaps.length > 0

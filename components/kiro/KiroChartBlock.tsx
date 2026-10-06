@@ -5,6 +5,8 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { Copy, Check, BarChart3 } from "lucide-react";
 import { copyTextToClipboard } from "@/lib/ai/share";
 import { useToastStore } from "@/store/useToastStore";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { MOTION_MS } from "@/lib/motion";
 
 const COLORS = ["#313032", "#CDB9AB", "#8A7D6B", "#E8E0D5", "#6e7781", "#0550ae", "#1a7f37", "#8250df"];
 
@@ -30,6 +32,9 @@ export const KiroChartBlock = React.memo(function KiroChartBlock({
 }) {
   const [copied, setCopied] = React.useState(false);
   const pushToast = useToastStore((s) => s.pushToast);
+  // reduced-motion 门控：与 StudyLoadChart / LearningTrendChart 同一范本
+  //（此前 Bar/Line/Pie 全量播放，系统偏好减少动效时仍 200ms+ 全布局）
+  const reducedMotion = useEffectiveReducedMotion();
   const copyTimerRef = React.useRef<number | null>(null);
   React.useEffect(() => {
     return () => {
@@ -108,19 +113,19 @@ export const KiroChartBlock = React.memo(function KiroChartBlock({
                   <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: "#676266" }} axisLine={{ stroke: "#E8E0D5" }} />
                   <YAxis tick={{ fontSize: 11, fill: "#676266" }} axisLine={{ stroke: "#E8E0D5" }} />
                   <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E8E0D5" }} />
-                  <Bar dataKey={yKey} fill="#313032" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey={yKey} fill="#313032" radius={[8, 8, 0, 0]} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : MOTION_MS.data} />
                 </BarChart>
               ) : type === "line" ? (
                 <LineChart data={data}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E8E0D5" />
-                  <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: "#676266" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "#676266" }} />
+                  <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: "#676266" }} axisLine={{ stroke: "#E8E0D5" }} />
+                  <YAxis tick={{ fontSize: 11, fill: "#676266" }} axisLine={{ stroke: "#E8E0D5" }} />
                   <Tooltip />
-                  <Line type="monotone" dataKey={yKey} stroke="#313032" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey={yKey} stroke="#313032" strokeWidth={2} dot={{ r: 3 }} isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : MOTION_MS.data} />
                 </LineChart>
               ) : (
                 <PieChart>
-                  <Pie data={data} dataKey={yKey} nameKey={nameKey} cx="50%" cy="50%" outerRadius={90} label>
+                  <Pie data={data} dataKey={yKey} nameKey={nameKey} cx="50%" cy="50%" outerRadius={90} label isAnimationActive={!reducedMotion} animationDuration={reducedMotion ? 0 : MOTION_MS.data}>
                     {data.map((_: any, i: number) => (
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
                     ))}

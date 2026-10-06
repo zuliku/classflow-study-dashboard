@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /** Gallery 项：runtime File（调用方从 Live Image Source Registry 解析；绝不落历史） */
 export interface KiroImagePreviewSource {
@@ -50,12 +51,16 @@ export function KiroImagePreviewDialog({
   const [loadError, setLoadError] = useState(false);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const safeIndex = (() => {
     if (!gallery) return 0;
     return Math.min(Math.max(index, 0), gallery.length - 1);
   })();
   const currentSource = gallery ? gallery[safeIndex] : source;
+  // S2-1 焦点陷阱：aria-modal 已声明，Tab 不得逃逸到背后页面（此前缺 trap）；
+  // 与 Dialog/Drawer 同一 useFocusTrap 语义
+  const trapTab = useFocusTrap(panelRef, !!currentSource);
 
   // ---- Object URL lifecycle：current source 变化 → 旧 revoke + 新 create ----
   useEffect(() => {
@@ -136,15 +141,18 @@ export function KiroImagePreviewDialog({
   return createPortal(
     <div
       data-testid="kiro-image-preview"
+      ref={panelRef}
+      onKeyDown={trapTab}
       className="fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[80] flex items-center justify-center p-4 md:p-8"
       role="dialog"
       aria-modal="true"
       aria-label={currentSource.name ? `查看原图：${currentSource.name}` : "查看原图"}
     >
-      {/* Backdrop — minimal enter fade (exit snap acceptable for z-80 preview) */}
+      {/* Backdrop — minimal enter fade（exit snap acceptable for z-80 preview）；
+          纯 dim 无 blur（blur 配透明度动画是逐帧重模糊的已知卡顿源） */}
       <div
         data-testid="kiro-image-preview-backdrop"
-        className="absolute inset-0 bg-charcoal/60 backdrop-blur-[2px] animate-enter"
+        className="absolute inset-0 bg-charcoal/60 animate-enter"
         onClick={onClose}
       />
 

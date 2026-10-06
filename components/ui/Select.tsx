@@ -308,7 +308,9 @@ export function UISelect<T extends string | number>({
             }}
             className={cn(
               "overflow-y-auto overflow-x-clip scrollbar-none rounded-lg border border-line bg-surface shadow-card py-1 pointer-events-auto",
-              "transition-opacity transition-transform ease-[var(--ease-standard)]",
+              // opacity + transform 同一 transition-property（此前 transition-opacity + transition-transform
+              // 两条声明打架，只有一个生效，opacity 无过渡直接闪现）
+              "transition-[opacity,transform] ease-[var(--ease-standard)]",
               // enter = --motion-fast；exit = --motion-exit-fast（更快）+ 加速离场，与 presence unmount 同源对应
               visible
                 ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]"

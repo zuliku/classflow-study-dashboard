@@ -170,7 +170,9 @@ export function TimelineKeyLane({
               )}
             >
               {allDays.length > 0 && (
-                <div className="absolute left-0.5 right-0.5 top-1 space-y-0.5">
+                // 全天行随 lane 高度 64↔78px 同步淡入（高度本身可插值，过渡保留；
+                // 内容此前瞬间弹出，与高度动画脱节致整列一抖）
+                <div className="absolute left-0.5 right-0.5 top-1 space-y-0.5 ux-fade">
                   {allDays.slice(0, 2).map((it) => (
                     <AllDayMark
                       key={it.id}

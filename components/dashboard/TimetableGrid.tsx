@@ -950,8 +950,8 @@ export function TimetableGrid({
                               aria-hidden="true"
                               className={cn(
                                 "absolute left-0.5 right-0.5 rounded-xl p-1.5 border-2 border-dashed pointer-events-none flex flex-col justify-between overflow-hidden z-10",
-                                // 15min 吸附 settle + valid/conflict 颜色过渡：短、可中断（100ms），跟手优先
-                                "transition-[top,height,background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
+                                // 跟手 Ghost：top/height 逐帧更新必须 1:1，只过渡颜色/透明度
+                                "transition-[background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
                                 invalid
                                   ? "bg-danger-bg border-danger-border"
                                   : "bg-white/85 border-line-strong"

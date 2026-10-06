@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown, GripVertical, CalendarPlus } from "lucide-react";
 import { Assignment } from "@/types";
 import { usePresence } from "@/lib/usePresence";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,31 @@ export function TimelineUnscheduledShelf({
   const [expanded, setExpanded] = useState(false);
   // 面板级 presence：最后一个待安排被安排后淡出再卸载（panel 档退出），不整块硬消失
   const { mounted, visible } = usePresence(assignments.length > 0, MOTION_EXIT_MS.panel);
+  // 展开/收起高度 FLIP：单行横向 ↔ 多行换行的高度差无法用 CSS 过渡（auto 不可插值，
+  // 此前 transition-[height] + key 重挂载双双失效）；改用实测高度 WAAPI 补间，
+  // reduced-motion 下直接落位
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const fromHeightRef = useRef(0);
+  const reducedMotion = useEffectiveReducedMotion();
+  const toggleExpanded = () => {
+    const el = listRef.current;
+    if (el) fromHeightRef.current = el.offsetHeight;
+    setExpanded((v) => !v);
+  };
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el || reducedMotion) return;
+    const from = fromHeightRef.current;
+    fromHeightRef.current = 0;
+    const to = el.offsetHeight;
+    if (!from || Math.abs(to - from) < 2) return;
+    // 与 --motion-base（180ms）/ --ease-standard 同源（WAAPI 不解析 var()，此处抄值并注明）
+    const anim = el.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      duration: 180,
+      easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+    });
+    return () => anim.cancel();
+  }, [expanded, reducedMotion]);
   if (!mounted) return null;
 
   const ddlText = (a: Assignment): string => {
@@ -56,7 +82,7 @@ export function TimelineUnscheduledShelf({
           待安排 {assignments.length}
         </span>
         <button
-          onClick={() => setExpanded((v) => !v)}
+          onClick={toggleExpanded}
           aria-expanded={expanded}
           className="flex items-center gap-0.5 text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
         >
@@ -71,12 +97,12 @@ export function TimelineUnscheduledShelf({
         </button>
       </div>
 
-      {/* 默认单行横向滚动；展开后允许换行（模式切换 key + 淡入；
-          高度翻倍处加 min-h 兜底 + 高度过渡，chip 重排不再硬顶下方内容） */}
+      {/* 默认单行横向滚动；展开后允许换行（高度差由 WAAPI FLIP 补间，下方内容平滑让位；
+          此前 key 切换重挂载 + transition-[height] 对 auto 无效，整排硬跳） */}
       <div
-        key={expanded ? "wrap" : "row"}
+        ref={listRef}
         className={cn(
-          "ux-fade flex gap-1.5 min-h-7 transition-[height] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+          "flex gap-1.5 min-h-7",
           expanded ? "flex-wrap" : "flex-nowrap items-center overflow-x-auto kiro-attachment-tray"
         )}
       >

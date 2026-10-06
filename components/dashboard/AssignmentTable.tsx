@@ -954,7 +954,8 @@ export function AssignmentTable({
             "fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2 flex items-center gap-2 text-xs transition-[opacity,transform]",
             bulkBarPresence.visible
               ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]"
-              : "opacity-0 translate-y-2 pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+              // 进退对称：退出同为 1 格位移 + 加速离场（此前 y-2 落下发飘）
+              : "opacity-0 translate-y-1 pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
           )}
         >
           <span className="font-bold text-charcoal px-1">
@@ -992,7 +993,8 @@ export function AssignmentTable({
                 "fixed bottom-16 left-1/2 -translate-x-1/2 z-50 w-72 bg-surface border border-line-strong rounded-xl shadow-card p-3 space-y-2.5 text-xs transition-[opacity,transform]",
                 bulkDdlPresence.visible
                   ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]"
-                  : "opacity-0 translate-y-2 pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+                  // 与 BulkBar 同一进退语言：退出 1 格位移 + 加速离场
+                  : "opacity-0 translate-y-1 pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
               )}
             >
               <div className="flex items-center justify-between">

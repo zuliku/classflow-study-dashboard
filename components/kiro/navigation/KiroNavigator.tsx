@@ -441,12 +441,13 @@ export function KiroNavigator() {
                 : "opacity-0 -translate-x-[3px] pointer-events-none duration-[var(--kiro-motion-popover-exit,120ms)] ease-[var(--ease-exit)]"
             )}
           >
-            <div
-              className={cn(
-                "shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-surface",
-                "transition-opacity ease-[var(--ease-standard)]",
-                expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-0,55ms)]" : "opacity-0"
-              )}
+              <div
+                className={cn(
+                  "shrink-0 flex items-center justify-between gap-2 px-2.5 py-2.5 border-b border-line bg-surface",
+                  "transition-opacity ease-[var(--ease-standard)]",
+                  // 进退对称：退出同样 150ms + 加速离场（此前退出无 duration，近似瞬切，与面板滑出脱节）
+                  expanded ? "opacity-100 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-0,55ms)]" : "opacity-0 duration-[var(--kiro-motion-popover-exit,120ms)] ease-[var(--ease-exit)]"
+                )}
             >
               <div className="flex items-center gap-2 min-w-0 group/plate">
                 <KiroNavigatorPlate size="sm" status={runtimeStatus} emphasized />
