@@ -190,6 +190,9 @@ const REAL_ADD_STUDY_BLOCK = useAppStore.getState().addStudyBlock;
 
 beforeEach(() => {
   cleanup();
+  // Toast 跨用例隔离：同文案 2s 去重 + 队列上限会让后用例拿到过期 toast 的闭包
+  //（Undo 用例曾因此抓到上一个 move 用例的撤销 toast，导致恢复落空）
+  useToastStore.setState({ toasts: [] });
   const prefs = useAppStore.getState().preferences;
   useAppStore.setState({
     courses: [COURSE_JL],

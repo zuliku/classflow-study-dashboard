@@ -6,6 +6,7 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "react";
+import { waitFor } from "@testing-library/react";
 import { createRoot, type Root } from "react-dom/client";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
 import { useAppStore } from "@/store/useAppStore";
@@ -499,7 +500,10 @@ describe("Kiro Composer — 回归", () => {
       ta.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await flush();
-    expect(q('[data-testid="skill-slash-menu"]')).toBeTruthy();
+    // slash 菜单经 deferred 输入过滤（并发渲染非单微任务可达），等待出现而非同步断言
+    await waitFor(() => {
+      expect(q('[data-testid="skill-slash-menu"]')).toBeTruthy();
+    });
 
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, "你好");

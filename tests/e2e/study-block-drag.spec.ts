@@ -81,7 +81,7 @@ test("StudyBlock drag：周一 13:00 → 周五 18:00–19:00；Undo 恢复", as
   expect(restored).toContain("14:00");
 });
 
-test("StudyBlock drag 冲突：拖到课程时段 → danger ghost + Store 不变", async ({ page }) => {
+test("StudyBlock drag 冲突：拖到另一学习计划 → danger ghost + Store 不变", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
 
@@ -97,6 +97,7 @@ test("StudyBlock drag 冲突：拖到课程时段 → danger ghost + Store 不�
     const parsed = JSON.parse(raw);
     parsed.state.studyBlocks = [
       { id: "sb-e2e-2", title: "数据结构复习", date, startTime: "13:00", endTime: "14:00", source: "manual" },
+      { id: "sb-e2e-3", title: "占位学习计划", date, startTime: "09:00", endTime: "10:00", source: "manual" },
     ];
     localStorage.setItem("classflow-storage-v2", JSON.stringify(parsed));
   }, mondayStr);
@@ -106,13 +107,13 @@ test("StudyBlock drag 冲突：拖到课程时段 → danger ghost + Store 不�
   await page.locator("aside").first().getByRole("button", { name: "时间表" }).first().click();
   await page.waitForTimeout(800);
 
-  const block = page.getByTestId("timeline-study-block").first();
+  const block = page.locator('[data-testid="timeline-study-block"][title*="13:00"]');
   const bBox = await block.boundingBox();
   const day1 = page.locator('[data-timetable-day="1"]').first();
   const dayBox = await day1.boundingBox();
   if (!bBox || !dayBox) throw new Error("timeline geometry unavailable");
-  // 目标 09:00（mockData 周一 08:00–09:40 有课 → 冲突）
-  const targetY = dayBox.y + ((9 - 8) / 13) * dayBox.height;
+  // 目标 09:30 指针（grab 中心偏移 30min → candidate 09:00–10:00，正压 sb-e2e-3 → 硬冲突）
+  const targetY = dayBox.y + ((9.5 - 8) / 13) * dayBox.height;
 
   await page.mouse.move(bBox.x + bBox.width / 2, bBox.y + bBox.height / 2);
   await page.mouse.down();
@@ -132,6 +133,61 @@ test("StudyBlock drag 冲突：拖到课程时段 → danger ghost + Store 不�
   expect(sb?.startTime).toBe("13:00");
   expect(sb?.endTime).toBe("14:00");
   await expect(page.getByText(/时间冲突|重叠/).first()).toBeVisible();
+});
+
+test("StudyBlock drag 课程重叠是 soft：ghost 非 danger，落库并提示重叠", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const dow = now.getDay() === 0 ? 7 : now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (dow - 1));
+  const mondayStr = `${monday.getFullYear()}-${pad2(monday.getMonth() + 1)}-${pad2(monday.getDate())}`;
+  await page.evaluate((date) => {
+    const raw = localStorage.getItem("classflow-storage-v2");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    parsed.state.studyBlocks = [
+      { id: "sb-e2e-4", title: "数据结构复习", date, startTime: "13:00", endTime: "14:00", source: "manual" },
+    ];
+    localStorage.setItem("classflow-storage-v2", JSON.stringify(parsed));
+  }, mondayStr);
+  await page.reload();
+  await page.waitForTimeout(800);
+
+  await page.locator("aside").first().getByRole("button", { name: "时间表" }).first().click();
+  await page.waitForTimeout(800);
+
+  const block = page.getByTestId("timeline-study-block").first();
+  const bBox = await block.boundingBox();
+  const day1 = page.locator('[data-timetable-day="1"]').first();
+  const dayBox = await day1.boundingBox();
+  if (!bBox || !dayBox) throw new Error("timeline geometry unavailable");
+  // 目标 10:30 指针（candidate 10:00–11:00，只压 mockData 周一 10:00–11:40 课程 → soft overlap，可落）
+  const targetY = dayBox.y + ((10.5 - 8) / 13) * dayBox.height;
+
+  await page.mouse.move(bBox.x + bBox.width / 2, bBox.y + bBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(dayBox.x + dayBox.width / 2, targetY, { steps: 4 });
+  await expect(page.getByTestId("study-block-ghost")).toBeVisible();
+  const ghostClass = await page.getByTestId("study-block-ghost").getAttribute("class");
+  // soft overlap：非 danger（石色提示），允许落库
+  expect(ghostClass).not.toContain("danger");
+  expect(ghostClass).toContain("stone-beige");
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+
+  // 落库成功且 toast 带重叠后缀
+  const sb = await page.evaluate(() => {
+    const raw = localStorage.getItem("classflow-storage-v2") ?? "";
+    const b = JSON.parse(raw).state.studyBlocks.find((x: { id: string }) => x.id === "sb-e2e-4");
+    return { startTime: b?.startTime, endTime: b?.endTime };
+  });
+  expect(sb?.startTime).toBe("10:00");
+  expect(sb?.endTime).toBe("11:00");
+  await expect(page.getByText(/时间重叠/).first()).toBeVisible();
 });
 
 test("Unscheduled 任务拖入时间表：创建 1h StudyBlock（周五 18:00–19:00）；Undo 回到 Shelf", async ({ page }) => {
