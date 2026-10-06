@@ -4,6 +4,7 @@ import React, { useEffect, useRef } from "react";
 import { X, BookOpen, CheckCircle2, Clock, Flag, ListChecks, CalendarClock, Tags } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { hasAnyOverlay } from "@/lib/overlayStack";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { getPriorityMeta } from "@/lib/utils";
@@ -35,6 +36,8 @@ export function AssignmentPeekPanel() {
   // Motion Contract（BUG-072 修正）：入场 --motion-panel(230)；退场对齐 Drawer 家族
   // exit-panel(160) —— presence 窗口与 CSS 退出过渡同源，不再借用入场档当卸载窗口。
   const { mounted, visible } = usePresence(!!liveAssignment, MOTION_EXIT_MS.panel);
+  // 退出 160ms 内面板仍挂载：仅 pointer-events 不够，inert 挡住 Tab（OverlayLayer 同模式）
+  const peekInertRef = useInertOnHidden<HTMLElement>(!visible);
   const peekOpen = !!liveAssignment;
   // 退出窗口播 stale 快照：assignment 置空瞬间直接 return 会截断退出动画（此前硬卸）
   const lastAssignmentRef = useRef<typeof liveAssignment>(null);
@@ -93,6 +96,7 @@ export function AssignmentPeekPanel() {
   return (
     <aside
       data-testid="assignment-peek"
+      ref={peekInertRef}
       aria-label="任务快速预览"
       className={cn(
         "fixed right-0 top-24 bottom-24 w-80 max-w-[calc(100vw-24px)] z-30 bg-surface border-l border-line shadow-drawer rounded-l-2xl flex flex-col overflow-hidden ux-drawer-panel",

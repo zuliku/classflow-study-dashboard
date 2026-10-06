@@ -10,6 +10,7 @@ import { FOCUS_ERROR_MESSAGES, FOCUS_PRESETS, formatFocusClock } from "@/lib/foc
 import { cn } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 
 /**
@@ -62,6 +63,8 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   // popover 对称进退（fast 档；此前关闭直接卸载无退出，Idle/Running 整块换体硬切）
   const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.fast);
+  // 退出 110ms 内浮层仍挂载：inert 挡住 Tab（pointer-events 拦不住键盘）
+  const popoverInertRef = useInertOnHidden<HTMLDivElement>(!visible);
   const getDefaultPlanned = () => String(useAppStore.getState().preferences.focusDefaultMinutes);
   const [planned, setPlanned] = useState(getDefaultPlanned);
   const [target, setTarget] = useState("none");
@@ -191,6 +194,7 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
       {mounted && (
         <div
           data-testid="focus-popover"
+          ref={popoverInertRef}
           role="dialog"
           aria-label="专注设置"
           className={cn(

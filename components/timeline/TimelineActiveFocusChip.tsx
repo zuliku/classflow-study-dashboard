@@ -5,6 +5,7 @@ import { Pause, Timer } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useFocusClock } from "@/hooks/useFocusClock";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,8 @@ export function TimelineActiveFocusChip({ quiet = false }: { quiet?: boolean }) 
   // 进退场 presence（fast 档）：出现/消失做 opacity + 轻 scale，不再挤压 Header 布局；
   // 退出 110ms 内保留最后一次快照内容（仅视觉淡出，不读新 store）。
   const { mounted, visible } = usePresence(!!active, MOTION_EXIT_MS.fast);
+  // 退出 110ms 内仍挂载：pointer-events 不够，inert 挡住 Tab（button 本身可聚焦）
+  const chipInertRef = useInertOnHidden<HTMLButtonElement>(!visible);
   const snapshotRef = useRef<{
     running: boolean;
     remainingText: string;
@@ -88,6 +91,7 @@ export function TimelineActiveFocusChip({ quiet = false }: { quiet?: boolean }) 
   return (
     <button
       type="button"
+      ref={chipInertRef}
       data-testid="timeline-active-focus-chip"
       onClick={shownInteractive ? shownOpen : undefined}
       disabled={!shownInteractive}

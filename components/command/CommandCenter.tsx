@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useShallow } from "zustand/react/shallow";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { useFocusTrap } from "@/lib/useFocusTrap";
@@ -131,6 +132,8 @@ export function CommandCenter() {
   const { mounted, visible } = usePresence(isSearchModalOpen, MOTION_EXIT_MS.base);
   const exitDurationStyle = visible ? undefined : { transitionDuration: `${MOTION_EXIT_MS.base}ms` };
   useRestoreFocus(isSearchModalOpen);
+  // 退出 150ms 内面板仍挂载：trap 随 semantic 关闭已释放，inert 挡住 Tab（OverlayLayer 同模式）
+  const panelInertRef = useInertOnHidden<HTMLDivElement>(!visible);
 
   // Overlay 栈 + Esc（仅最上层）
   useEffect(() => {
@@ -419,7 +422,10 @@ export function CommandCenter() {
     >
       <div
         data-testid="command-center"
-        ref={panelRef}
+        ref={(el) => {
+          panelRef.current = el;
+          panelInertRef(el);
+        }}
         onKeyDown={trapTab}
         className={cn(
           "w-full max-w-[680px] bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col",

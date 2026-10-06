@@ -1007,7 +1007,7 @@ export function TimetableGrid({
             })}
             {/* 本周零排课空态：网格线之上居中引导（z-10，不挡拖拽 ghost z-20）；有排课即消失 */}
             {activeSchedules.length === 0 && (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-surface/70 backdrop-blur-[1px] rounded-xl ux-fade">
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-surface/70 rounded-xl ux-fade">
                 <CalendarPlus className="w-8 h-8 text-sandrift" strokeWidth={1.5} />
                 <p className="text-xs font-bold text-charcoal">本周暂无课程</p>
                 <div className="flex items-center gap-2">
