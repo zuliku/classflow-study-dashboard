@@ -99,7 +99,15 @@ export function MiniChatRelayHost() {
         const done = (result: unknown) => {
           try {
             getClassFlowDesktopMiniBridge()?.completeRemoteSend(result);
-          } catch {}
+          } catch {
+            // 回执丢失 = 迷你窗侧发送挂起：重试一次；仍失败则放弃（主窗已落库，
+            // 不重发避免重复，迷你窗侧由自身超时兜底）
+            try {
+              getClassFlowDesktopMiniBridge()?.completeRemoteSend(result);
+            } catch {
+              /* 主窗已落库，仅丢回执 */
+            }
+          }
         };
         if (!requestId) return;
         const live = liveRef.current;

@@ -96,13 +96,18 @@ export function MiniChatApp() {
       .then((s) => {
         if (!cancelled && s && typeof s === "object") setSnapshot(s as MiniChatSnapshot);
       })
-      .catch(() => {});
+      // 首屏快照失败必须可见：否则空白 + 状态错且无感知
+      .catch(() => {
+        if (!cancelled) setNotice("迷你窗状态同步失败，显示可能不是最新，可关闭重开。");
+      });
     mini
       .isAlwaysOnTop()
       .then((r) => {
         if (!cancelled) setOnTop((r as { onTop?: boolean })?.onTop !== false);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setNotice("迷你窗置顶状态读取失败，可手动调整。");
+      });
     const off = mini.onState((s) => {
       if (s && typeof s === "object") setSnapshot(s as MiniChatSnapshot);
     });

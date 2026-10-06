@@ -34,6 +34,7 @@ export function BackupSection() {
     assignments,
     calendarMarks,
     groupProjects,
+    studyBlocks,
     preferences,
     reminders,
     focusSessions,
@@ -55,6 +56,8 @@ export function BackupSection() {
     assignments,
     calendarMarks,
     groupProjects,
+    // 时间表学习计划必须进备份（此前遗漏：恢复时缺失回落 []，等于清空用户计划）
+    studyBlocks,
     preferences,
     reminders,
     focusSessions,

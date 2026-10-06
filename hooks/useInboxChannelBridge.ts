@@ -39,8 +39,12 @@ export function useInboxChannelBridge(): void {
         const input = inboxRawPayloadToInput(candidate as InboxRawPayloadLike);
         useInboxStore.getState().addItem(input);
         if (deliveryId) void bridge.ack(deliveryId).catch(() => {});
-      } catch {
-        // addItem threw, do not ack so it will be resent on reload
+      } catch (err) {
+        // addItem threw, do not ack so it will be resent on reload.
+        // 可观测性：静默会让连续失败时用户收不到站外消息且无感知；此处至少落 console，
+        // 长期失败的显性告警需要同步状态 UI（未建，先留痕）。
+        // eslint-disable-next-line no-console
+        console.error("[classflow:inbox] ingest failed, will retry on reload", deliveryId, err);
       }
     });
     // Signal ready after subscribe, so Main resends pending

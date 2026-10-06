@@ -951,7 +951,10 @@ function SkillEditorDialog({
               if (skill?.instructions) setWorkflow(skill.instructions);
               setExistingManifest(skill?.kiroManifest ?? null);
             })
-            .catch(() => {});
+            // 读取失败必须可见：静默会让用户基于空模板覆盖保存，丢掉原 Skill 内容
+            .catch(() => {
+              setError("读取 Skill 内容失败，工作流显示为空，请关闭重试（保存前请确认内容完整）");
+            });
         }
       } else {
         setName("");

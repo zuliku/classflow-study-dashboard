@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   parseBackupJSON,
   validateBackup,
@@ -137,5 +139,12 @@ describe("checkMaterialAvailability", () => {
   it("collectMaterialRefs 仅收集带 storageKey 的资料", () => {
     const refs = collectMaterialRefs(mkCourse(["file_1"]));
     expect(refs).toEqual([{ storageKey: "file_1", title: "file-file_1.pdf" }]);
+  });
+});
+
+describe("BackupSection 导出完整性回归", () => {
+  it("backupData 包含 studyBlocks（缺失会导致恢复时回落 []，清空时间表计划）", () => {
+    const src = readFileSync(join(process.cwd(), "components/settings/BackupSection.tsx"), "utf8");
+    expect(src).toContain("studyBlocks,");
   });
 });
