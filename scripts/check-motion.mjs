@@ -8,6 +8,10 @@
  * - FAIL（exit 1）：duration-[<数字>ms] 裸时长（必须引用 motion token 变量）
  * - WARN（exit 0）：裸 cubic-bezier（新代码优先引用 ease token；globals.css :root 与
  *   lib/motion.ts EASE 定义处除外）
+ * - WARN（exit 0）：裸 Tailwind 具名时长 duration-150/200/300/500/700/1000
+ *   （默认 150ms ≠ fast:140/base:180，且曲线非 --ease-standard；一律用 duration-[var(--motion-*)]）
+ * - WARN（exit 0）：CSS animation 简写里的字面量时长（新代码走 var(--motion-*) token；
+ *   recharts animationDuration/animationEasing 走库关键字，不在此列）
  * - WARN（exit 0）：transition-[left/top/right/bottom]（布局位移，优先 transform；
  *   拖拽跟手 Timetable/Timeline 与滑块旋钮暂白名单，见 WARN_LAYOUT_ALLOW）
  * - WARN（exit 0）：transition-[width/height/min/max-height]（布局尺寸，JS 直写高度处禁用；
@@ -35,6 +39,10 @@ const FAIL_PATTERNS = [
 
 const WARN_PATTERNS = [
   { name: "裸 cubic-bezier（优先 --ease-* token）", regex: /cubic-bezier\(/g },
+  // Tailwind 具名档裸时长：默认 ease/150ms 偏离 token（fast:140/base:180 + --ease-standard）
+  { name: "duration-具名档（须引用 motion token）", regex: /duration-(150|200|300|500|700|1000)\b/g },
+  // CSS animation 简写字面量时长：新代码引用 var(--motion-*)；token 定义源头（globals.css）在白名单
+  { name: "animation 字面量时长（须引用 motion token）", regex: /animation:[^;{}]*?\b\d[\d.]*(ms|s)\b/g },
   // 布局位移过渡：优先 transform 合成层；拖拽跟手/滑块旋钮暂白名单（见 WARN_LAYOUT_ALLOW）
   { name: "transition-[left/top/right/bottom]（优先 transform）", regex: /transition-\[[^\]]*\b(left|top|right|bottom)\b[^\]]*\]/g },
   // 布局尺寸过渡：JS 直写高度处禁用；结构折叠/进度/分段暂白名单

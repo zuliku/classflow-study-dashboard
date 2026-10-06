@@ -987,7 +987,7 @@ export function MiniCalendar() {
                 className={cn(
                   "absolute bottom-full right-0 mb-1 w-44 bg-background border border-line-strong rounded-xl shadow-card p-2.5 space-y-2 z-40 origin-bottom-right transition-[opacity,transform]",
                   timeEditPresence.visible
-                    ? "opacity-100 scale-100 duration-[var(--motion-fast)]"
+                    ? "opacity-100 scale-100 translate-y-0 ease-[var(--ease-standard)] duration-[var(--motion-fast)]"
                     : "opacity-0 scale-[0.98] translate-y-[3px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
                 )}
               >

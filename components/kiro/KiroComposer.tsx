@@ -756,9 +756,10 @@ export const KiroComposer = React.memo(function KiroComposer({
                   <span
                     ref={warningInertRef}
                     className={cn(
+                      // 进退对称：进入显式复位位移 + standard（此前只有 opacity，位移靠默认值回零，看着轻跳）
                       "inline-flex items-center gap-1.5 text-[11px] font-semibold text-warning px-1.5 whitespace-nowrap transition-[opacity,transform]",
                       warningPresence.visible
-                        ? "opacity-100 duration-[var(--motion-fast)]"
+                        ? "opacity-100 translate-y-0 ease-[var(--ease-standard)] duration-[var(--motion-fast)]"
                         : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
                     )}
                   >
@@ -776,7 +777,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                     className={cn(
                       "inline-flex items-center gap-1.5 text-[11px] font-semibold text-sandrift px-1.5 whitespace-nowrap transition-[opacity,transform]",
                       preparingPresence.visible
-                        ? "opacity-100 duration-[var(--motion-fast)]"
+                        ? "opacity-100 translate-y-0 ease-[var(--ease-standard)] duration-[var(--motion-fast)]"
                         : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
                     )}
                   >
@@ -794,7 +795,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                     className={cn(
                       "flex items-center gap-1.5 pt-1.5 transition-[opacity,transform]",
                       intentPresence.visible
-                        ? "opacity-100 duration-[var(--motion-fast)]"
+                        ? "opacity-100 translate-y-0 ease-[var(--ease-standard)] duration-[var(--motion-fast)]"
                         : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
                     )}
                   >

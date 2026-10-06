@@ -351,9 +351,10 @@ export function KiroNavigator() {
               "flex flex-col items-center py-3 gap-1.5",
               expanded && "absolute inset-y-0 left-0 w-[52px] pointer-events-none",
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
+              // 结构切换无意图延迟（stagger 只给列表项；折叠图标延迟 140ms 会慢半拍）
               expanded || !collapsedPresence.visible
                 ? "opacity-0 -translate-x-[3px] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
-                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)] delay-[var(--kiro-stagger-3,140ms)]"
+                : "opacity-100 translate-x-0 duration-[var(--kiro-motion-structure,150ms)]"
             )}
           >
             <button
