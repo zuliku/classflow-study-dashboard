@@ -74,7 +74,8 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
 
 /**
  * Assignment Detail Panel（Task/DDL Detail Panel UX Refresh）：
- * - presentation="floating"：有界浮层（非 full-height edge）
+ * - presentation="floating"：有界浮层（非 full-height edge），真模态（背景不可操作，
+ *   backdrop 点击关闭；切换任务走关闭 → 打开）
  * - 信息架构：Header → Hero（Deadline/Status/Priority/Health/Schedule/Reminder 摘要）→
  *   Primary Actions → Execution → Reminder/说明/资料/Kiro Disclosure
  * - 已打开时切换任务：outer shell 保持 mounted，仅内容两阶段替换（60ms out + 100ms in）

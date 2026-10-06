@@ -84,6 +84,23 @@ export function CalendarMarkDetailDrawer() {
     mark.type === "ddl" &&
     !!(mark.sourceId && assignments.some((a) => a.id === mark.sourceId));
 
+  // Hooks 必须无条件执行（mark 为空首帧直接 return null；若 useExitPresenceList 留在
+  // return 之后，选中实体后 hooks 数量变化 → "Rendered more hooks" 崩溃被 OverlayBoundary 吞掉，
+  // 面板打不开。空 mark 时喂空列表 + 稳定 resetKey，语义与有 mark 时一致）
+  const scheduled = mark
+    ? reminders
+        .filter(
+          (r) => r.targetType === "calendarMark" && r.targetId === mark.id && r.status === "scheduled"
+        )
+        .sort((a, b) => (parseLocalDDL(a.triggerAt)?.getTime() ?? 0) - (parseLocalDDL(b.triggerAt)?.getTime() ?? 0))
+    : [];
+  // 行删除原位 collapse（AssignmentReminderSection 同语法；mark 切换走 resetKey 即时）
+  const retainedScheduled = useExitPresenceList({
+    items: scheduled,
+    getId: (r) => r.id,
+    resetKey: mark?.id ?? "__none__",
+  });
+
   if (!mark || isLinkedDdl) return null;
   const isExamActivity = mark.type === "exam" || mark.type === "activity";
 
@@ -123,17 +140,6 @@ export function CalendarMarkDetailDrawer() {
     mark.id,
     mark.autoReminderDisabled === true
   );
-  const scheduled = reminders
-    .filter(
-      (r) => r.targetType === "calendarMark" && r.targetId === mark.id && r.status === "scheduled"
-    )
-    .sort((a, b) => (parseLocalDDL(a.triggerAt)?.getTime() ?? 0) - (parseLocalDDL(b.triggerAt)?.getTime() ?? 0));
-  // 行删除原位 collapse（AssignmentReminderSection 同语法；mark 切换走 resetKey 即时）
-  const retainedScheduled = useExitPresenceList({
-    items: scheduled,
-    getId: (r) => r.id,
-    resetKey: mark.id,
-  });
 
   const handleAddPreset = (offsetMinutes: number) => {
     if (!anchor) return;

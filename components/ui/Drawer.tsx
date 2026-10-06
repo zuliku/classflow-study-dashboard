@@ -13,11 +13,10 @@ import { cn } from "@/lib/utils";
  * - presentation="edge"（默认）：现有 full-height edge drawer，行为/class 完全不变
  * - presentation="floating"（opt-in）：bounded floating detail panel
  *   （viewport inset、rounded、full border + shadow；Task/DDL Detail Panel UX Refresh）
- * - 焦点陷阱与 aria-modal 一致（S2-1）：edge 默认 trap（blocking modal），
- *   floating 默认不 trap（背景可交互，trap 会破坏“直接点击其他任务”工作流）；
- *   可用 trapFocus 显式覆盖。
- * - floating 的 scrim 透明、无 dim、无 blur（诚实 modeless：可交互的背景看起来也可交互；
- *   dim + blur 是 modal 视觉语言，会与透传点击错位；全屏 blur 还是逐帧重模糊的卡顿源）。
+ * - 真模态（blocking modal）：两种 presentation 打开时背景均不可操作——
+ *   背板拦截指针（floating 下 backdrop 点击关闭）、焦点陷阱、aria-modal="true"。
+ *   切换实体走“关闭 → 打开”（连续 Esc / backdrop 关闭后点选），不再支持开着面板
+ *   直接点击背景任务就地切换——dim + blur 的模态视觉与透传点击错位，已下线。
  * - 无 scroll lock
  */
 export type DrawerPresentation = "edge" | "floating";
@@ -34,8 +33,8 @@ export interface DrawerProps extends React.HTMLAttributes<HTMLDivElement> {
   /** edge = 现状 full-height；floating = bounded floating panel（默认 edge） */
   presentation?: DrawerPresentation;
   /**
-   * 焦点陷阱（默认跟随 presentation，S2-1）：edge → true（blocking modal），
-   * floating → false（背景可交互）。显式传值可覆盖。
+   * 焦点陷阱（默认开启，S2-1：Modal 语义要求 Tab 不逃逸到背后页面）。
+   * 显式传 false 可 opt-out（需同时自行保证背后不可达）。
    */
   trapFocus?: boolean;
   /**
@@ -46,14 +45,12 @@ export interface DrawerProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * aria-modal 与 presentation 一致：
- * - edge（blocking modal）→ "true"（保持现状）
- * - floating（non-blocking contextual panel，背景可交互）→ 不声明 aria-modal（不冒充 modal）
+ * aria-modal：两种 presentation 均为 blocking modal → "true"。
  */
 export function resolveDrawerAriaModal(
-  presentation: DrawerPresentation
-): "true" | undefined {
-  return presentation === "edge" ? "true" : undefined;
+  _presentation: DrawerPresentation
+): "true" {
+  return "true";
 }
 
 /** 面板 enter/exit 视觉：
@@ -68,13 +65,11 @@ export function resolveDrawerPresentation(
 ): { overlayClassName: string; panelClassName: string } {
   if (presentation === "floating") {
   return {
-    // 诚实 modeless：overlay 透明、无 dim、无 blur——背景可交互就必须看起来可交互
-    // （此前 bg-black/20 + backdrop-blur-sm 是 modal 视觉语言，点击却透传，感知错位；
-    // blur 全屏逐帧重模糊还是已知卡顿源，见 motionContract 卡顿点护栏）。
-    // 非阻塞浮层：backdrop 透传指针（面板打开时可直接点击其他任务 → 内容就地切换；
-    // 关闭规则不变：closeOnBackdrop 对 floating 无效，关闭走 Esc / 关闭按钮）
+    // 真模态：柔和 dim 遮罩 + 拦截指针（背景不可操作；backdrop 点击关闭，
+    // 关闭规则见 closeOnBackdrop 解析——floating 默认 backdrop 关闭）。
+    // blur 由 OverlayLayer scrimBlurClass 按 visible 挂载（进退场不逐帧重模糊）
     overlayClassName:
-      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-transparent flex justify-end overflow-hidden p-3 sm:p-4 pointer-events-none",
+      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/20 flex justify-end overflow-hidden p-3 sm:p-4",
       panelClassName: cn(
         // 有界浮层：宽度 min(470px, 100vw-32px)；高度 max calc(100dvh-32px)；圆角 + 完整边框 + shadow
         "w-full sm:w-[470px] h-full max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)]",
@@ -108,11 +103,14 @@ export function Drawer({
   stackZ = 40,
   // panel 档 exit（160ms）：与两种 presentation 的 CSS 退出过渡（--motion-exit-panel）一致
   exitMs = MOTION_EXIT_MS.panel,
-  closeOnBackdrop = false,
+  // backdrop 关闭默认跟随 presentation：floating 默认 backdrop 点击关闭
+  //（轻量 dismiss，与 Settings/ArrangeSheet 同语言；抽屉内编辑均为即时落库，无草稿丢失风险）；
+  // edge 保持现状 false。显式传值可覆盖。
+  closeOnBackdrop,
   onEscapeKeyDown,
   overlayClassName,
   presentation = "edge",
-  trapFocus = presentation === "edge",
+  trapFocus = true,
   focusRestoreKey,
   className,
   children,
@@ -122,6 +120,8 @@ export function Drawer({
   const trapTab = useFocusTrap(panelRef, open && trapFocus);
   // S2-1：trap 与 consumer onKeyDown 组合（与 Dialog 同模式）
   const { onKeyDown: consumerOnKeyDown, ...rest } = props;
+  // 未显式指定时：floating 默认 backdrop 点击关闭（真模态轻 dismiss），edge 保持 false
+  const resolvedCloseOnBackdrop = closeOnBackdrop ?? presentation === "floating";
   return (
     <OverlayLayer
       open={open}
@@ -129,13 +129,12 @@ export function Drawer({
       overlayId={overlayId}
       stackZ={stackZ}
       exitMs={exitMs}
-      closeOnBackdrop={closeOnBackdrop}
+      closeOnBackdrop={resolvedCloseOnBackdrop}
       onEscapeKeyDown={onEscapeKeyDown}
       focusRestoreKey={focusRestoreKey}
       className={cn(resolveDrawerPresentation(presentation, false).overlayClassName, overlayClassName)}
-      // 背板模糊只给 blocking 的 edge（modal 承诺）；floating 是诚实 modeless，不挂 blur
-      //（全屏 backdrop-blur-sm 在透明度动画期间逐帧重模糊，是已知卡顿源）
-      scrimBlurClass={presentation === "edge" ? "backdrop-blur-sm" : undefined}
+      // 背板模糊只在完全可见时挂载（进退场不逐帧重模糊），与 Dialog 同模式
+      scrimBlurClass="backdrop-blur-sm"
     >
       {({ visible }) => (
         <div

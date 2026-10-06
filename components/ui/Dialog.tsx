@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
  * - 不自动生成 close button / title context；close button 属于 consumer
  * - 焦点陷阱默认开启（S2-1：Modal 语义要求 Tab 不逃逸到背后页面）；
  *   嵌套 Dialog 由 useFocusTrap 嵌套守卫隔离（子 portal 冒泡事件父陷阱忽略）；
- *   确需非阻塞行为用 Drawer floating，不要关 trap；
+ *   确需非阻塞行为时显式传 false（并自行保证背后不可达链路一致）；
  * - 无 scroll lock（body 锁定仅 KiroImagePreviewDialog 自持，见 S2-1 备注）
  *
  * Motion Contract：enter = --motion-overlay（220ms，与 Drawer panel enter 同档）；
@@ -33,7 +33,7 @@ export interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
    * 焦点陷阱（默认开启，S2-1）：开启后 Tab / Shift+Tab 在面板内循环，不逃逸到背后页面。
    * 嵌套 Dialog 各自处理包裹处的 Tab（子陷阱 stopPropagation + 父陷阱嵌套守卫忽略子树外事件）。
-   * 仅当面板确需非阻塞行为时显式传 false（优先改用 Drawer floating）。
+   * 仅当面板确需非阻塞行为时显式传 false（同时背板不得拦截指针，保持视觉与交互一致）。
    */
   trapFocus?: boolean;
 }

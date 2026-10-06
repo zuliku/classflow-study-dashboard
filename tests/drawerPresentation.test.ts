@@ -7,7 +7,8 @@ import { resolveDrawerAriaModal, resolveDrawerPresentation } from "@/components/
  *    （enter = --motion-overlay，exit = --motion-exit-panel —— 与 usePresence 的
  *    MOTION_EXIT_MS.panel 同源对应，消除 CSS 160ms / JS unmount 200ms 的历史漂移）
  * 2. floating 是有界浮层（viewport inset + 470px + rounded + full border）
- * 3. aria-modal 与 presentation 一致：edge=true（现状）；floating 不冒充 modal
+ * 3. 真模态：两种 presentation 均声明 aria-modal="true"；floating 背板柔和 dim + 拦截指针
+ *   （backdrop 点击关闭），背景不可操作
  */
 describe("Drawer presentation class contract", () => {
   it("edge（默认）：overlay + panel class；enter/exit 走 motion token", () => {
@@ -34,11 +35,10 @@ describe("Drawer presentation class contract", () => {
     // overlay 提供 16px(桌面)/12px(移动) inset
     expect(enter.overlayClassName).toContain("p-3");
     expect(enter.overlayClassName).toContain("sm:p-4");
-    // 诚实 modeless：overlay 透明（无 dim——背景可交互就必须看起来可交互；
-    // dim + blur 是 modal 视觉语言，会与透传点击错位）
-    expect(enter.overlayClassName).not.toContain("bg-black/");
-    // 非阻塞浮层：backdrop 透传指针（面板打开时可点击其他任务 → 内容就地切换）
-    expect(enter.overlayClassName).toContain("pointer-events-none");
+    // 真模态：柔和 dim 遮罩（浅于 edge 的 bg-black/30）
+    expect(enter.overlayClassName).toContain("bg-black/20");
+    // 背板拦截指针（背景不可操作；backdrop 点击关闭，关闭走 OverlayLayer 同一规则）
+    expect(enter.overlayClassName).not.toContain("pointer-events-none");
     expect(enter.panelClassName).toContain("pointer-events-auto");
     // 面板：有界几何
     expect(enter.panelClassName).toContain("sm:w-[470px]");
@@ -80,8 +80,8 @@ describe("Drawer presentation class contract", () => {
     expect(enter.panelClassName).toContain("ease-[var(--ease-emphasized)]");
   });
 
-  it("aria-modal 与 presentation 一致：edge=true（保持现状）；floating 不声明（不冒充 modal）", () => {
+  it("aria-modal：两种 presentation 均为真模态，声明 true", () => {
     expect(resolveDrawerAriaModal("edge")).toBe("true");
-    expect(resolveDrawerAriaModal("floating")).toBeUndefined();
+    expect(resolveDrawerAriaModal("floating")).toBe("true");
   });
 });

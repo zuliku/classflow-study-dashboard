@@ -2,8 +2,8 @@
 
 /**
  * Task/DDL Detail Panel（Task/DDL Detail Panel UX Refresh）focused E2E。
- * A. Timeline → Assignment card → floating panel（有界、非贴边）打开，首屏核心可见
- * B. 已打开时点击另一任务 → outer shell 保持同一 DOM 节点，仅内容替换（不 close/reopen）
+ * A. Timeline → Assignment card → floating panel（有界、真模态）打开，首屏核心可见
+ * B. 打开时背景不可操作（背板拦截指针；切换实体走关闭 → 打开）
  * C. Escape → exit presence → 关闭 → focus 回到原 trigger
  * D. linked DDL（sourceId=assignment）→ 只打开 Assignment 详情，不出现第二套 DDL 详情
  * E. independent DDL mark → 轻量 DDL 详情（无 Assignment 专属字段）
@@ -84,8 +84,8 @@ base("A：Timeline 点击 Assignment → floating panel 有界打开，首屏核
   await expect(dialog).toBeVisible({ timeout: 8000 });
   const panel = page.getByTestId("assignment-detail-panel");
   await expect(panel).toBeVisible();
-  // floating 是 non-blocking contextual panel：不声明 aria-modal（不冒充 modal）
-  await expect(dialog).not.toHaveAttribute("aria-modal", "true");
+  // floating 是真模态：声明 aria-modal="true"，背景不可操作
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
   // 等 enter 动画（230ms transform/opacity）settle 后再测量几何
   await expect(async () => {
     const transform = await panel.evaluate((el) => getComputedStyle(el).transform);
@@ -116,7 +116,7 @@ base("A：Timeline 点击 Assignment → floating panel 有界打开，首屏核
   await expect(dialog.getByRole("button", { name: /关联资料/ })).toHaveAttribute("aria-expanded", "false");
 });
 
-base("B：已打开时点击另一任务 → outer shell 同一 DOM 节点，内容就地替换", async ({ page }) => {
+base("B：打开时背景不可操作——另一任务按钮的点击落点被背板拦截，面板保持 A", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   await openTimeline(page);
@@ -124,25 +124,32 @@ base("B：已打开时点击另一任务 → outer shell 同一 DOM 节点，内
   await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
   const panel = page.getByTestId("assignment-detail-panel");
   await expect(panel).toBeVisible({ timeout: 8000 });
-  const shellHandle = await panel.evaluateHandle((node) => node);
-  const sameShell = await shellHandle.evaluate(
-    (node) => node === document.querySelector('[data-testid="assignment-detail-panel"]')
-  );
-  expect(sameShell).toBe(true);
 
-  // 移开鼠标避免 hover preview 遮挡，再点击第二任务
-  await page.mouse.move(20, 20);
-  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
-
-  // 面板从未卸载（同一节点）→ 内容替换为第二任务
-  const stillSame = await shellHandle.evaluate(
-    (node) => node === document.querySelector('[data-testid="assignment-detail-panel"]')
-  );
-  expect(stillSame).toBe(true);
-  await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 8000 });
-  await expect(panel.getByRole("heading", { name: "置信区间作业" })).toHaveCount(0);
-  // 开关状态无闪断：任意时刻 DOM 中始终恰有 1 个 shell
+  // 背景任务按钮中心落点命中背板而非按钮本身（pointer-events 被 overlay 拦截）
+  const bBtn = page.getByRole("button", { name: /假设检验作业.*截止/ });
+  const intercepted = await bBtn.evaluate((btn) => {
+    const r = btn.getBoundingClientRect();
+    const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return el !== btn && !btn.contains(el);
+  });
+  expect(intercepted).toBe(true);
+  // 面板内容保持为 A（背景点击无法切换实体）
+  await expect(panel.getByRole("heading", { name: "置信区间作业" })).toBeVisible();
   await expect(page.getByTestId("assignment-detail-panel")).toHaveCount(1);
+});
+
+base("B3：backdrop 点击关闭抽屉（真模态轻 dismiss）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openTimeline(page);
+
+  await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
+  const panel = page.getByTestId("assignment-detail-panel");
+  await expect(panel).toBeVisible({ timeout: 8000 });
+
+  // 主区域空白处点击（背板）→ 关闭
+  await page.mouse.click(200, 400);
+  await expect(panel).toHaveCount(0, { timeout: 8000 });
 });
 
 base("C：Escape → exit presence → 关闭 → focus 回到原 trigger", async ({ page }) => {
@@ -216,10 +223,13 @@ base("F：reduced motion 下面板正常开合（不依赖动画完成）", asyn
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0, { timeout: 8000 });
 
-  // reduced motion 下 A→B：立即 entity swap（不做 60ms fade-out，也不残留 stale id）
-  await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
+  // reduced motion 下关闭后重新打开 B：第一帧即 B（不残留 stale A）
+  // 注：Esc 关闭后面板触发元素获焦并带出 hover preview（会遮挡 B 的点击落点），
+  // 重开走键盘 focus + Enter（与 E2 同模式，不依赖点击落点）
+  const bBtn = page.getByRole("button", { name: /假设检验作业.*截止/ });
+  await bBtn.focus();
+  await page.keyboard.press("Enter");
   await expect(panel).toBeVisible({ timeout: 8000 });
-  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
   await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 2000 });
   await expect(panel.getByRole("heading", { name: "置信区间作业" })).toHaveCount(0, { timeout: 200 });
 });
@@ -276,14 +286,17 @@ base("A2：close A → open B：fresh reopen 第一帧即 B，绝不 flash A", a
 
   // 重新打开 B：进入阶段第一帧不得出现 A（fresh reopen 不做 swap-out；
   // 若实现回退为「先渲染旧 displayedId 再 60ms swap」，此处会捕获 A）
-  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
+  // 注：Esc 后焦点预览会遮挡点击落点，重开走键盘 focus + Enter
+  const bBtn = page.getByRole("button", { name: /假设检验作业.*截止/ });
+  await bBtn.focus();
+  await page.keyboard.press("Enter");
   await expect(panel.getByRole("heading", { name: "置信区间作业" })).toHaveCount(0, { timeout: 50 });
   await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 2000 });
   // Header 与 Body 同实体：B 的标题与 hero 同时可见，A 的标题从未出现
   await expect(panel.getByRole("heading", { name: "假设检验作业" })).toHaveCount(1);
 });
 
-base("B2：切换任务后 transient state reset（Reminder 默认 collapsed；More/资料 picker 复位）", async ({ page }) => {
+base("B2：关闭后重新打开，transient state 复位（Reminder 默认 collapsed；More/资料 picker 复位）", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   await openTimeline(page);
@@ -298,10 +311,14 @@ base("B2：切换任务后 transient state reset（Reminder 默认 collapsed；M
   await panel.getByRole("button", { name: "更多操作" }).click();
   await expect(panel.getByRole("menuitem", { name: "Ask Kiro" })).toBeVisible();
 
-  // switch B：transient 全部复位（More 关闭；Reminder collapsed）
-  await page.mouse.move(20, 20);
-  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
-  await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 2000 });
+  // 关闭后重新打开：transient 全部复位（More 关闭；Reminder collapsed）
+  // 注：Esc 先关闭顶层 More 菜单，再 Esc 才关闭抽屉（overlay 栈语义）
+  await page.keyboard.press("Escape");
+  await expect(panel.getByRole("menuitem", { name: "Ask Kiro" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0, { timeout: 8000 });
+  await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
+  await expect(panel).toBeVisible({ timeout: 8000 });
   await expect(page.getByTestId("reminder-disclosure-trigger")).toHaveAttribute("aria-expanded", "false");
   await expect(panel.getByRole("menuitem", { name: "Ask Kiro" })).toHaveCount(0);
 });
@@ -323,7 +340,7 @@ base("C2：click Full Detail 立即关闭 hover preview（不等 mouseleave）",
   await expect(page.getByTestId("floating-timeline-detail")).toHaveCount(0, { timeout: 1000 });
 });
 
-base("D2：A→B 切换后关闭，focus 回到 B 的 trigger（最近切换实体）", async ({ page }) => {
+base("D2：关闭后面板卸载，focus 回到打开它的 trigger", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   await openTimeline(page);
@@ -331,9 +348,6 @@ base("D2：A→B 切换后关闭，focus 回到 B 的 trigger（最近切换实�
   await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
   const panel = page.getByTestId("assignment-detail-panel");
   await expect(panel).toBeVisible({ timeout: 8000 });
-  // 面板打开时点击 B → 实体切换（shell 不关闭）
-  await page.getByRole("button", { name: /假设检验作业.*截止/ }).click();
-  await expect(panel.getByRole("heading", { name: "假设检验作业" })).toBeVisible({ timeout: 2000 });
 
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0, { timeout: 8000 });
@@ -341,7 +355,7 @@ base("D2：A→B 切换后关闭，focus 回到 B 的 trigger（最近切换实�
     const el = document.activeElement as HTMLElement | null;
     return el?.getAttribute("aria-label") ?? "";
   });
-  expect(focused).toContain("假设检验作业");
+  expect(focused).toContain("置信区间作业");
 });
 
 base("E2：keyboard Enter 激活 deadline → Full Detail 打开（preview 不残留）", async ({ page }) => {
@@ -360,24 +374,17 @@ base("E2：keyboard Enter 激活 deadline → Full Detail 打开（preview 不�
   ).toBeVisible();
 });
 
-base("F2：独立 DDL A→B：outer shell 同一节点，内容就地替换", async ({ page }) => {
+base("F2：backdrop 点击关闭 DDL 抽屉（真模态轻 dismiss）", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   await openTimeline(page);
 
   await page.getByRole("button", { name: /交项目报告.*截止/ }).click();
-  const panel = page.getByTestId("ddl-detail-panel");
+  const panel = page.getByTestId("calendar-mark-detail-panel");
   await expect(panel).toBeVisible({ timeout: 8000 });
-  const shellHandle = await panel.evaluateHandle((node) => node);
 
-  await page.mouse.move(20, 20);
-  await page.getByRole("button", { name: /交结课报告.*截止/ }).click();
-  const stillSame = await shellHandle.evaluate(
-    (node) => node === document.querySelector('[data-testid="ddl-detail-panel"]')
-  );
-  expect(stillSame).toBe(true);
-  await expect(panel.getByRole("heading", { name: "交结课报告" })).toBeVisible({ timeout: 2000 });
-  await expect(panel.getByRole("heading", { name: "交项目报告" })).toHaveCount(0);
+  await page.mouse.click(200, 400);
+  await expect(panel).toHaveCount(0, { timeout: 8000 });
 });
 
 base("G2：close DDL A → open DDL B：第一帧无 A", async ({ page }) => {
@@ -386,7 +393,7 @@ base("G2：close DDL A → open DDL B：第一帧无 A", async ({ page }) => {
   await openTimeline(page);
 
   await page.getByRole("button", { name: /交项目报告.*截止/ }).click();
-  const panel = page.getByTestId("ddl-detail-panel");
+  const panel = page.getByTestId("calendar-mark-detail-panel");
   await expect(panel).toBeVisible({ timeout: 8000 });
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0, { timeout: 8000 });

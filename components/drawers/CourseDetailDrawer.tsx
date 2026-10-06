@@ -42,7 +42,7 @@ const DAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 /**
  * Course Detail —— Floating Course Hub（orchestration）：
- * - presentation="floating"（non-blocking contextual panel；背景可交互、不声明 aria-modal）
+ * - presentation="floating"（有界浮层；真模态：背景不可操作，backdrop 点击关闭）
  * - 水平靠右 + 垂直居中（overlay items-center）；宽度约 500px
  * - 高度 content-fit：!h-auto + base max-h（desktop 32px / mobile 24px inset），超限 Body 内部滚动
  * - Header：Identity（breadcrumb + 标题）+ [···] [关闭]；编辑在 Body Actions，删除进 More（confirm 语义不变）
