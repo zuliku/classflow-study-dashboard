@@ -11,6 +11,9 @@ import {
 import { KiroAgentRunHeader } from "@/components/kiro/run/KiroAgentRunHeader";
 import { KiroWorklogTimeline } from "@/components/kiro/KiroWorklog";
 import { KiroInlineApproval } from "@/components/kiro/run/KiroInlineApproval";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 
 /** 审批绑定（由 Conversation 层按 taskId 精确匹配后注入；未匹配 → orphan fallback Dialog） */
 export interface KiroAgentRunApprovalBinding {
@@ -92,6 +95,12 @@ export function KiroAgentRun({
     setExpanded((value) => !value);
   };
 
+  // 审批决策后 110ms 折叠退出（此前整段瞬时卸载，Timeline/Final Answer 上收跳变）
+  const approvalPresence = usePresence(!!approval, MOTION_EXIT_MS.fast);
+  const lastApprovalRef = React.useRef(approval);
+  if (approval) lastApprovalRef.current = approval;
+  const shownApproval = approval ?? (approvalPresence.mounted ? lastApprovalRef.current : null);
+
   return (
     <div data-testid="kiro-agent-run" className="space-y-1 min-w-0 w-full">
       <KiroAgentRunHeader
@@ -111,13 +120,15 @@ export function KiroAgentRun({
       />
 
       {/* Inline Approval：Timeline 后、Final Answer 前；折叠 Timeline 也始终可见 */}
-      {approval && (
-        <KiroInlineApproval
-          request={approval.request}
-          queueLength={approval.queueLength}
-          onDecision={approval.onDecision}
-          onBulkDecision={approval.onBulkDecision}
-        />
+      {shownApproval && (
+        <ExitCollapse exiting={!approvalPresence.visible}>
+          <KiroInlineApproval
+            request={shownApproval.request}
+            queueLength={shownApproval.queueLength}
+            onDecision={shownApproval.onDecision}
+            onBulkDecision={shownApproval.onBulkDecision}
+          />
+        </ExitCollapse>
       )}
     </div>
   );

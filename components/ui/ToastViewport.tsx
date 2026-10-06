@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2, AlertTriangle, Info, XCircle, X } from "lucide-react";
 import { useToastStore, ToastType } from "@/store/useToastStore";
-import { MOTION_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
 import { cn } from "@/lib/utils";
 
@@ -16,18 +16,19 @@ const TYPE_META: Record<ToastType, { icon: React.ElementType; accentClass: strin
 };
 
 /**
- * Motion Contract：toast 视觉退出走 ux-inline（--motion-fast），
- * EXIT_MS = MOTION_MS.fast 与之同源——动画结束即移除，不空等也不截断。
+ * Motion Contract：toast 视觉退出走 ux-inline（--motion-exit-fast），
+ * EXIT_MS = MOTION_EXIT_MS.fast 与之同源——动画结束即移除，不空等也不截断。
  * Motion V3：退出加速（--ease-exit），进入保持 --ease-standard。
+ * （此前误用 MOTION_MS.fast 140ms，与 Reminder 110ms 退场脱节 30ms。）
  */
-const EXIT_MS = MOTION_MS.fast;
+const EXIT_MS = MOTION_EXIT_MS.fast;
 
 export function ToastViewport() {
   const toasts = useToastStore((s) => s.toasts);
   const removeToast = useToastStore((s) => s.removeToast);
   const reducedMotion = useEffectiveReducedMotion();
   const [exiting, setExiting] = useState<Set<string>>(new Set());
-  // action 单发守卫：按钮在 140ms 退出动画期间仍可点击，双击会把「撤销」执行两次
+  // action 单发守卫：按钮在退出动画期间仍可点击，双击会把「撤销」执行两次
   //（restoreSchedule 曾因此插入重复 id 实体）。点击一次后立即禁用。
   const actionTakenRef = useRef<Set<string>>(new Set());
   const toastsRef = useRef(toasts);
@@ -89,7 +90,7 @@ export function ToastViewport() {
               // BUG-071：入场用一次性 animation（挂载即播），出场仍走 ux-inline 过渡
               "ux-toast-enter ux-inline",
               isExiting
-                ? "opacity-0 translate-y-1 !ease-[var(--ease-exit)]"
+                ? "opacity-0 translate-y-1 !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
                 : "opacity-100 translate-y-0"
             )}
             role="status"

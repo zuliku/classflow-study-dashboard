@@ -181,12 +181,25 @@ export function AssignmentTable({
   );
   const filteredIdsKey = filteredIds.join(",");
 
+  // ---- Compact 分页（纯展示状态，不写入 store；提前声明供过渡键使用） ----
+  // workspace 模式保持完整列表（键盘导航/多选语义不截断）
+  const [compactPage, setCompactPage] = useState(1);
+  const compactPaged = useMemo(() => {
+    if (isWorkspace) return null;
+    return paginate(filteredAssignments, compactPage, COMPACT_PAGE_SIZE);
+  }, [isWorkspace, filteredAssignments, compactPage]);
+  // 渲染用 clamp 后的安全页号（数据变化导致总页数减少时自动回退，绝不出现 第 2 / 1 页）
+  const pagedAssignments = compactPaged?.items ?? filteredAssignments;
+  const compactTotalPages = compactPaged?.totalPages ?? 1;
+  const compactSafePage = compactPaged?.currentPage ?? 1;
+
   // 列表内容舞台 presentation key：View / Course / Risk 切换时轻过渡（不含 search——
   // 搜索仍即时同步列表，不反复重放整表动画）。workspaceResetKey 保持原语义不变。
   const contentTransitionKey = isWorkspace
     ? `${controller?.view ?? ""}|${controller?.courseFilter ?? ""}|${controller?.riskOnly ?? ""}`
-    // BUG-G3：timeSlice 是显式分段切换（与搜索不同），纳入过渡键 → 切段播放 settle
-    : `compact|${courseFilter}|${assignmentTimeSlice}`;
+    // BUG-G3：timeSlice 是显式分段切换（与搜索不同），纳入过渡键 → 切段播放 settle；
+    // compact 翻页同样纳入（此前点上一页/下一页整表硬换）
+    : `compact|${courseFilter}|${assignmentTimeSlice}|p${compactSafePage}`;
 
   // IM4A：Exit-only 列表保留——仅真实数据 mutation（完成/删除导致离开当前视图）触发 Row 退出；
   // View/筛选/搜索/风险过滤 变化（resetKey）直接同步新列表，不播放大面积退出
@@ -214,18 +227,6 @@ export function AssignmentTable({
     setHighlightedAssignmentId(sanitizeHighlight(highlightedAssignmentId, filteredIds));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredIdsKey]);
-
-  // ---- Compact 分页（纯展示状态，不写入 store） ----
-  // workspace 模式保持完整列表（键盘导航/多选语义不截断）
-  const [compactPage, setCompactPage] = useState(1);
-  const compactPaged = useMemo(() => {
-    if (isWorkspace) return null;
-    return paginate(filteredAssignments, compactPage, COMPACT_PAGE_SIZE);
-  }, [isWorkspace, filteredAssignments, compactPage]);
-  // 渲染用 clamp 后的安全页号（数据变化导致总页数减少时自动回退，绝不出现 第 2 / 1 页）
-  const pagedAssignments = compactPaged?.items ?? filteredAssignments;
-  const compactTotalPages = compactPaged?.totalPages ?? 1;
-  const compactSafePage = compactPaged?.currentPage ?? 1;
 
   // 桌面（Peek 仅 >=1024px）
   const [desktop, setDesktop] = useState(false);

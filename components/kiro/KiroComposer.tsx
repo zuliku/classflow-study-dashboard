@@ -948,18 +948,22 @@ export const KiroComposer = React.memo(function KiroComposer({
             </div>
           )}
 
-          {/* P0：发送禁用首因 inline 行（与 visionWarning 同款位置；此前灰按钮零解释） */}
-          {sendDisabledReason && (
-            <p className="px-3 pt-2 text-[11px] font-semibold text-warning" role="status">
-              {sendDisabledReason}
-            </p>
-          )}
+          {/* P0：发送禁用首因 inline 行（退出走折叠，阈值反复横跳不再顶起 toolbar） */}
+          <ExitCollapse exiting={!sendDisabledReason}>
+            {sendDisabledReason && (
+              <p className="px-3 pt-2 text-[11px] font-semibold text-warning" role="status">
+                {sendDisabledReason}
+              </p>
+            )}
+          </ExitCollapse>
           {/* P0：上下文预检（粗估；精确值以服务端快照为准，不拦截发送） */}
-          {!sendDisabledReason && contextPrecheck && (
-            <p className="px-3 pt-2 text-[11px] font-semibold text-sandrift" role="status">
-              {contextPrecheck}
-            </p>
-          )}
+          <ExitCollapse exiting={!!sendDisabledReason || !contextPrecheck}>
+            {!sendDisabledReason && contextPrecheck && (
+              <p className="px-3 pt-2 text-[11px] font-semibold text-sandrift" role="status">
+                {contextPrecheck}
+              </p>
+            )}
+          </ExitCollapse>
 
           {/* Prompt + Toolbar：统一内部 gutter，prompt 区保持最干净 */}
           <div className={cn(compact ? "px-2.5 pt-2 pb-2" : "px-3 pt-2.5 pb-2.5")}>

@@ -451,7 +451,9 @@ export function ReminderCenter() {
                   {upcoming.length}
                 </span>
               </div>
-              {upcoming.length === 0 ? (
+              {/* 空↔列表双挂载交叉折叠（此前旧分支瞬卸，新分支硬现，高度差大时跳变） */}
+              <ExitCollapse exiting={upcoming.length !== 0}>
+                {upcoming.length === 0 && (
                 <div className="flex flex-col items-center text-center gap-1.5 px-4 py-7 ux-fade">
                   <CalendarClock className="w-7 h-7 text-sandrift" />
                   <p className="text-xs font-bold text-charcoal">暂时没有即将提醒</p>
@@ -465,7 +467,10 @@ export function ReminderCenter() {
                     新建提醒
                   </Button>
                 </div>
-              ) : (
+                )}
+              </ExitCollapse>
+              <ExitCollapse exiting={upcoming.length === 0}>
+                {upcoming.length !== 0 && (
                 <div className="divide-y divide-line-soft">
                   {upcoming.map((r) =>
                     renderRow(r, {
@@ -475,7 +480,8 @@ export function ReminderCenter() {
                     })
                   )}
                 </div>
-              )}
+                )}
+              </ExitCollapse>
             </section>
 
             {/* History Group（视觉权重低于 Upcoming） */}
@@ -486,12 +492,16 @@ export function ReminderCenter() {
                   {history.length}
                 </span>
               </div>
-              {history.length === 0 ? (
+              <ExitCollapse exiting={history.length !== 0}>
+                {history.length === 0 && (
                 <div className="px-4 py-3.5 text-center ux-fade">
                   <p className="text-[10px] text-sandrift">还没有提醒记录</p>
                   <p className="text-[9px] text-satin-grey mt-0.5">触发过的提醒会保留在这里</p>
                 </div>
-              ) : (
+                )}
+              </ExitCollapse>
+              <ExitCollapse exiting={history.length === 0}>
+                {history.length !== 0 && (
                 <div className="divide-y divide-line-soft">
                   {history.map((r) =>
                     renderRow(r, {
@@ -501,7 +511,8 @@ export function ReminderCenter() {
                     })
                   )}
                 </div>
-              )}
+                )}
+              </ExitCollapse>
             </section>
           </div>
         </div>

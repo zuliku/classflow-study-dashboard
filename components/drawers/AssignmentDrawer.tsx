@@ -697,7 +697,7 @@ export function AssignmentDrawer() {
           <DisclosureRegion open={followUpSession != null}>
             <div
               data-testid="focus-follow-up"
-              className="animate-enter flex items-center gap-2 rounded-xl border border-line bg-[#F7F5F5]/60 px-3 py-2"
+              className="ux-fade flex items-center gap-2 rounded-xl border border-line bg-[#F7F5F5]/60 px-3 py-2"
             >
               <span className="min-w-0 truncate text-xs font-semibold text-charcoal">
                 本次专注完成{recentDuration ? ` · ${recentDuration}` : ""}

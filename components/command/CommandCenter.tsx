@@ -407,7 +407,8 @@ export function CommandCenter() {
         "fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 md:pt-20 p-3 sm:p-4",
         visible && "backdrop-blur-sm",
         "ux-overlay",
-        visible ? "opacity-100" : "opacity-0",
+        // 退出与 Dialog/Drawer 同式（此前 180ms standard 走满被 150ms 卸载截断两帧）
+        visible ? "opacity-100" : "opacity-0 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]",
         !isSearchModalOpen && "pointer-events-none"
       )}
       style={exitDurationStyle}
@@ -423,7 +424,9 @@ export function CommandCenter() {
         className={cn(
           "w-full max-w-[680px] bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col",
           "ux-modal-panel",
-          visible ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-[0.985] translate-y-1"
+          visible
+            ? "opacity-100 scale-100 translate-y-0"
+            : "opacity-0 scale-[0.985] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
         )}
         style={exitDurationStyle}
       >

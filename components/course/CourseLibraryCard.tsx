@@ -22,7 +22,8 @@ const MATERIAL_PREVIEW_LIMIT = 2;
 /** preview row 高度（局部 line-height stability；不用于撑高整个 Card） */
 const PREVIEW_ROW_HEIGHT = "h-7";
 /** Desktop preview 区域稳定 slot（2 × h-7；仅 xl，mobile/tablet content-fit） */
-const PREVIEW_SLOT_XL = "xl:min-h-14";
+// 预览槽全断点固定最小高（此前仅 xl 生效，移动/平板空↔有高度跳变）
+const PREVIEW_SLOT_XL = "min-h-14";
 
 const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 

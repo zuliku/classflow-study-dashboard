@@ -14,6 +14,8 @@ import {
 } from "@/lib/ai/computer/artifacts/access";
 import { removeArtifactRecord } from "@/lib/ai/computer/artifacts/service";
 import { INSPECTOR_OUTPUTS_LIMIT } from "@/lib/ai/ui/kiroInspector";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { formatHistoryTime } from "@/lib/ai/history/sanitize";
 import {
   KiroInspectorEmptyState,
@@ -139,6 +141,13 @@ export function KiroInspectorOutputs() {
     };
   }, [showRecent, activeWorkspaceId, workspaces, meta.conversationSourcesVersion, artifactUiVersion]);
 
+  // 删除行原位折叠退出（此前删后即时刷新整单，行直接消失；会话切换走 resetKey 即时同步）
+  const retainedEntries = useExitPresenceList({
+    items: entries,
+    getId: (e) => e.artifact.id,
+    resetKey: conversationId ?? "",
+  });
+
   const removeStale = useCallback(async (entry: KiroRecentArtifactEntry) => {
     await removeArtifactRecord(entry.artifact.id);
     useKiroArtifactUiStore.getState().bumpArtifactUiVersion();
@@ -242,7 +251,13 @@ export function KiroInspectorOutputs() {
         </>
       ) : (
         <>
-          <div className="space-y-0.5">{entries.map((entry) => renderRow(entry))}</div>
+          <div className="space-y-0.5">
+            {retainedEntries.map(({ item: entry, exiting }) => (
+              <ExitCollapse key={entry.artifact.id} exiting={exiting}>
+                {renderRow(entry)}
+              </ExitCollapse>
+            ))}
+          </div>
           {/* P1：常驻“最近文件”双段（此前切对话即清零，用户以为文件没生成；此处含其他对话产物，去重本段已有） */}
           <button
             type="button"

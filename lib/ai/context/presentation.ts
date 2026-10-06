@@ -26,25 +26,19 @@ export interface KiroContextDisplaySplit {
 }
 
 /**
- * 展示数量：Desktop = ambient 2 + manual 2；compact（Sidecar）= ambient 1 + manual 1。
- * 顺序：Ambient（week 时间锚点置顶）→ Manual → overflow（+N）。不做像素测量，按 compact prop 决定。
+ * 展示数量：只展示手动（manual / entry）上下文；自动（ambient）永不进胶囊。
+ * （产品决策：自动上下文只进模型，不占输入区视觉；开关在设置 → 自动上下文。）
+ * Desktop manual 2；compact（Sidecar）manual 1；多余进 +N。不做像素测量，按 compact prop 决定。
  */
 export function splitKiroContextsForDisplay(
   contexts: KiroContextRef[],
   compact: boolean
 ): KiroContextDisplaySplit {
-  const ambient = contexts.filter((c) => getKiroContextVisualRole(c) === "ambient");
   const manual = contexts.filter((c) => getKiroContextVisualRole(c) === "manual");
-  const maxAmbient = compact ? 1 : 2;
   const maxManual = compact ? 1 : 2;
-  // P1：week 置顶（时间锚点永远可见；此前按构建顺序取首个，有选中实体时 week 被挤进 +N 胶囊消失）
-  const weekFirst = [
-    ...ambient.filter((c) => c.kind === "week"),
-    ...ambient.filter((c) => c.kind !== "week"),
-  ];
-  const visibleAmbient = weekFirst.slice(0, maxAmbient);
+  const visibleAmbient: KiroContextRef[] = [];
   const visibleManual = manual.slice(0, maxManual);
-  const overflow = [...weekFirst.slice(maxAmbient), ...manual.slice(maxManual)];
+  const overflow = [...manual.slice(maxManual)];
   return { visibleAmbient, visibleManual, overflow };
 }
 

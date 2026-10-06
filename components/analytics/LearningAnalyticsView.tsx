@@ -179,14 +179,15 @@ export function LearningAnalyticsView() {
           {loading ? (
             <>
               <AnalyticsSummaryStripSkeleton />
-              {/* Loading Skeleton 与 Loaded 使用同一 Paired Grid（避免横向 layout shift） */}
+              {/* Loading Skeleton 与 Loaded 使用同一 Paired Grid（避免横向 layout shift）；
+                  四块统一 ux-skeleton 扫光（此前三块裸 pulse 节奏分裂） */}
               <div className={ANALYTICS_PAIRED_GRID}>
                 <ChartSkeleton />
-                <div className="h-40 w-full rounded-xl bg-alabaster animate-pulse" />
+                <div className="h-40 w-full rounded-xl bg-alabaster ux-skeleton" />
               </div>
               <div className={ANALYTICS_PAIRED_GRID}>
-                <div className="h-52 w-full rounded-xl bg-alabaster animate-pulse" />
-                <div className="h-40 w-full rounded-xl bg-alabaster animate-pulse" />
+                <div className="h-52 w-full rounded-xl bg-alabaster ux-skeleton" />
+                <div className="h-40 w-full rounded-xl bg-alabaster ux-skeleton" />
               </div>
             </>
           ) : error ? (

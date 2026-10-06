@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { usePresence } from "@/lib/usePresence";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useInertOnHidden } from "@/lib/useInertOnHidden";
 
@@ -264,6 +265,12 @@ export function KiroConversation({
   // P0：preflight（preparingSend）同样给反馈——此前点发送后数秒对话区零变化，用户以为没点中而重发。
   const lastMsg = messages[messages.length - 1];
   const showPending = (turnInFlight || !!preparingSend) && lastMsg?.role !== "assistant";
+  // 错误条退出走折叠（重试成功/切会话/新建时直接卸载会顶起滚动高度）；
+  // 退出期 error 已清零，用 ref 快照保持内容直到卸载
+  const errorPresence = usePresence(!!error, MOTION_EXIT_MS.fast);
+  const lastErrorRef = useRef<AIError | null>(null);
+  if (error) lastErrorRef.current = error;
+  const shownError = error ?? lastErrorRef.current;
 
   return (
     // Outer Viewport Wrapper：负责浮层定位；Scroll Container 独立承担滚动（Task 6B-A）
@@ -321,7 +328,8 @@ export function KiroConversation({
             {/* 首 token 前：Kiro Logo + 正在处理（Assistant 任一可见 part 出现后自动消失） */}
             {showPending && <KiroPendingIndicator />}
 
-            {error && (
+            {errorPresence.mounted && shownError && (
+              <ExitCollapse exiting={!errorPresence.visible}>
               <div
                 data-testid="kiro-error"
                 className="kiro-structure-settle rounded-2xl bg-danger-bg border border-danger-border p-3.5 space-y-2"
@@ -329,11 +337,11 @@ export function KiroConversation({
                 <p className="text-xs font-bold text-danger">这次没能生成回复</p>
                 <p className="text-[11px] text-satin-grey leading-relaxed">
                   {/* P0：友好文案优先（此前服务端透传的 provider 英文原串优先上屏，与中文语境断裂） */}
-                  {AI_ERROR_MESSAGES[error.code] || error.message}
+                  {AI_ERROR_MESSAGES[shownError.code] || shownError.message}
                 </p>
                 <div className="flex items-center gap-2 pt-0.5">
                   {/* P0：Key 错/模型下线时原样重试必败 → 隐藏重试，主按钮去设置 */}
-                  {error.code !== "INVALID_API_KEY" && error.code !== "MODEL_NOT_FOUND" && (
+                  {shownError.code !== "INVALID_API_KEY" && shownError.code !== "MODEL_NOT_FOUND" && (
                     <button
                       onClick={onRetry}
                       className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
@@ -343,7 +351,7 @@ export function KiroConversation({
                     </button>
                   )}
                   {/* 超预算/超时：原样重试必然再败或需新起，给一键新建对话出口（provider 未传时不渲染） */}
-                  {(error.code === "CONTEXT_TOO_LARGE" || error.code === "TIMEOUT") && onNewChat && (
+                  {(shownError.code === "CONTEXT_TOO_LARGE" || shownError.code === "TIMEOUT") && onNewChat && (
                     <button
                       onClick={onNewChat}
                       className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-[11px] font-semibold text-satin-grey bg-surface border border-line hover:text-charcoal hover:border-line-strong transition-colors"
@@ -360,6 +368,7 @@ export function KiroConversation({
                   </button>
                 </div>
               </div>
+              </ExitCollapse>
             )}
           </div>
         </div>
@@ -653,14 +662,19 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
             </div>
           ) : null}
         </DisclosureRegion>
-        {/* Visual Intake V1.3：历史只读 Proposal 快照（display-only；绝不交叉到 live Card） */}
-        {view.historyVisualActionProposals && view.historyVisualActionProposals.length > 0 && (
-          <div className="space-y-2.5 pt-1 ux-fade">
-            {view.historyVisualActionProposals.map((p) => (
-              <VisualActionProposalHistoryCard key={p.id} proposal={p} />
-            ))}
-          </div>
-        )}
+        {/* Visual Intake V1.3：历史只读 Proposal 快照（display-only；绝不交叉到 live Card；
+            与 live 卡片同 Disclosure 语义，此前裸 ux-fade 与 live 动效语言不一致） */}
+        <DisclosureRegion
+          open={!!view.historyVisualActionProposals && view.historyVisualActionProposals.length > 0}
+        >
+          {view.historyVisualActionProposals && view.historyVisualActionProposals.length > 0 ? (
+            <div className="space-y-2.5 pt-1 ux-fade">
+              {view.historyVisualActionProposals.map((p) => (
+                <VisualActionProposalHistoryCard key={p.id} proposal={p} />
+              ))}
+            </div>
+          ) : null}
+        </DisclosureRegion>
       </KiroMessage>
       <SkillDistillDialog open={skillDistillOpen} onOpenChange={setSkillDistillOpen} trace={skillTrace} />
     </div>

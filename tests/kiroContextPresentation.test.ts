@@ -27,38 +27,20 @@ describe("getKiroContextVisualRole", () => {
   });
 });
 
-describe("splitKiroContextsForDisplay", () => {
-  it("Test 1：1 auto + 1 manual（Desktop）→ 各展示 1，无 overflow", () => {
-    const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(
-      [autoWeek(), manual1()],
-      false
-    );
-    expect(visibleAmbient.map((c) => c.key)).toEqual(["auto-week-current"]);
-    expect(visibleManual.map((c) => c.key)).toEqual(["m1"]);
-    expect(overflow).toHaveLength(0);
+describe("splitKiroContextsForDisplay（产品决策：自动永不进胶囊，只进模型）", () => {
+  it("auto 再多也不展示（Desktop/compact 一致），manual 按上限展示", () => {
+    const desktop = splitKiroContextsForDisplay([autoWeek(), autoCourse(), manual1()], false);
+    expect(desktop.visibleAmbient).toEqual([]);
+    expect(desktop.visibleManual.map((c) => c.key)).toEqual(["m1"]);
+    expect(desktop.overflow).toHaveLength(0);
+
+    const compact = splitKiroContextsForDisplay([autoWeek(), manual1(), manual2()], true);
+    expect(compact.visibleAmbient).toEqual([]);
+    expect(compact.visibleManual.map((c) => c.key)).toEqual(["m1"]);
+    expect(compact.overflow.map((c) => c.key)).toEqual(["m2"]);
   });
 
-  it("Test 2：1 auto + 4 manual（Desktop）→ ambient 1 + manual 2 + overflow 2", () => {
-    const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(
-      [autoWeek(), manual1(), manual2(), manual3(), entry1()],
-      false
-    );
-    expect(visibleAmbient).toHaveLength(1);
-    expect(visibleManual.map((c) => c.key)).toEqual(["m1", "m2"]);
-    expect(overflow).toHaveLength(2);
-  });
-
-  it("Test 3：1 auto + 3 manual（compact）→ ambient 1 + manual 1 + overflow 2", () => {
-    const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(
-      [autoWeek(), manual1(), manual2(), manual3()],
-      true
-    );
-    expect(visibleAmbient).toHaveLength(1);
-    expect(visibleManual.map((c) => c.key)).toEqual(["m1"]);
-    expect(overflow).toHaveLength(2);
-  });
-
-  it("Test 4：只有 manual → 正确展示 manual（无 ambient 也正常）", () => {
+  it("只有 manual → 按上限展示（Desktop 2，余进 +N）", () => {
     const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(
       [manual1(), manual2(), manual3()],
       false
@@ -66,32 +48,6 @@ describe("splitKiroContextsForDisplay", () => {
     expect(visibleAmbient).toHaveLength(0);
     expect(visibleManual).toHaveLength(2);
     expect(overflow).toHaveLength(1);
-  });
-
-  it("顺序：Ambient 在前、Manual 在后，overflow 保留原角色顺序", () => {
-    const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(
-      [manual1(), autoWeek(), autoCourse(), manual2()],
-      false
-    );
-    // Desktop ambient 上限 2：week 置顶 + course 同显
-    expect(visibleAmbient.map((c) => c.key)).toEqual(["auto-week-current", "auto-course-c1"]);
-    expect(visibleManual.map((c) => c.key)).toEqual(["m1", "m2"]);
-    expect(overflow).toHaveLength(0);
-  });
-
-  it("week 置顶：构建顺序课程在前时，本周仍可见（此前被挤进 +N 胶囊消失）", () => {
-    const { visibleAmbient, overflow } = splitKiroContextsForDisplay(
-      [autoCourse(), autoWeek()],
-      false
-    );
-    expect(visibleAmbient.map((c) => c.key)).toEqual(["auto-week-current", "auto-course-c1"]);
-    expect(overflow).toHaveLength(0);
-  });
-
-  it("compact 仍 ambient 1：week 置顶，课程进 overflow", () => {
-    const { visibleAmbient, overflow } = splitKiroContextsForDisplay([autoCourse(), autoWeek()], true);
-    expect(visibleAmbient.map((c) => c.key)).toEqual(["auto-week-current"]);
-    expect(overflow.map((c) => c.key)).toEqual(["auto-course-c1"]);
   });
 
   it("空列表 → 全空", () => {

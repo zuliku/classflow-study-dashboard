@@ -171,7 +171,8 @@ export function UpcomingDDL() {
         ) : (
           <div
             key={`${safePage}-${pageSize}-${density}-${cardHeight}`}
-            className="grid ux-agenda-enter"
+            // 行数变化高度过渡（此前条数增减整区瞬变）
+            className="grid ux-agenda-enter transition-[grid-template-rows] duration-[var(--motion-base)] ease-[var(--ease-standard)]"
             style={{ gridTemplateRows: `repeat(${pagedItems.length}, ${cardHeight}px)`, gap: `${metrics.gap}px` }}
           >
             {pagedItems.map((task) => {

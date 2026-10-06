@@ -114,7 +114,7 @@ describe("硬切深筛源码契约", () => {
 
   it("AssignmentDrawer：follow-up 进入 + focus 三态淡入 + picker Disclosure", () => {
     const src = read("components/drawers/AssignmentDrawer.tsx");
-    expect(src).toMatch(/data-testid="focus-follow-up"[\s\S]*?animate-enter/);
+    expect(src).toMatch(/data-testid="focus-follow-up"[\s\S]*?ux-fade/);
     expect(src).toMatch(/key=\{focusView\.active \? focusView\.relation/);
     expect(src).toMatch(/<DisclosureRegion open=\{materialPickerOpen\}>/);
   });
@@ -130,7 +130,7 @@ describe("硬切深筛源码契约", () => {
     const src = read("components/assignment/AssignmentWorkspaceViewBar.tsx");
     expect(src).toContain("ux-fade flex items-center gap-1 bg-alabaster");
     expect(src).toContain("ux-fade flex items-stretch gap-1.5");
-    expect(src).toContain("animate-enter flex items-center gap-1 px-2.5 py-1 rounded-xl border");
+    expect(src).toContain("ux-fade flex items-center gap-1 px-2.5 py-1 rounded-xl border");
   });
 
   it("ReminderSection picker：DisclosureRegion + pickerMode keyed 淡入", () => {

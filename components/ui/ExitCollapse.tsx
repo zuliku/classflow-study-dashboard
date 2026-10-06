@@ -47,7 +47,8 @@ export function ExitCollapse({
       data-state={exiting ? "exiting" : "present"}
       data-axis={axis}
       className={cn(
-        "grid ease-[var(--ease-standard)]",
+        // V3 立约：退出统一加速离场（此前退出仍用 standard 进入曲线）
+        "grid ease-[var(--ease-exit)]",
         horizontal
           ? "transition-[grid-template-columns,opacity] duration-[var(--motion-exit-panel)]"
           : "transition-[grid-template-rows,opacity] duration-[var(--motion-exit-panel)]",

@@ -106,11 +106,12 @@ export function KiroContextBar({
     };
   }, [overflowOpen]);
 
-  // locked 只决定现有 Context 是否可以修改，不决定 ContextBar 是否必须存在
-  if (contexts.length === 0 && !leading) return null;
-
   const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(contexts, !!compact);
   const allForPopover = [...visibleAmbient, ...visibleManual, ...overflow];
+
+  // locked 只决定现有 Context 是否可以修改，不决定 ContextBar 是否必须存在；
+  // 无可展示项（全自动上下文被产品决策隐藏）时整条不占位，避免空 pb-1.5 顶起输入区
+  if (allForPopover.length === 0 && !leading) return null;
 
   const removeButton = (c: KiroContextRef, revealOnHover: boolean) => (
     <button
@@ -134,33 +135,11 @@ export function KiroContextBar({
       // 不能用 overflow-hidden：会裁剪 leading（Workspace）与 +N 的 absolute popover
       className={cn("flex flex-wrap items-center gap-1.5 pb-1.5", compact && "px-0.5")}
     >
-      {/* Leading：Workspace / Sandbox 指示（先于 ambient/manual context 渲染） */}
+      {/* Leading：Workspace / Sandbox 指示（先于 manual context 渲染） */}
       {leading}
-      {/* Ambient Capsule：系统自动环境（弱图标 + 极浅底，稳定存在）；移除走原位 collapse */}
-      {visibleAmbient.map((c) => {
-        const Icon = AMBIENT_KIND_ICONS[c.kind];
-        return (
-          <ExitCollapse key={c.key} axis="horizontal" exiting={leavingKeys.has(c.key)} className="shrink-0">
-            <span
-              className={cn(
-                "group inline-flex items-center gap-1.5 pl-2 pr-1 h-7 max-w-[220px] rounded-full border border-line-soft bg-pastel-mint/55 text-[11px] font-semibold text-satin-grey hover:bg-pastel-mint/75 transition-colors shrink-0",
-                enteringContextKeys.has(c.key) && "animate-enter"
-              )}
-              title={describeKiroContextRef(c)}
-            >
-              <Icon className="w-3.5 h-3.5 text-sandrift shrink-0" />
-              <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
-              {/* P1：自动携带小标（此前自动/手动视觉几乎无差，用户不敢删也不敢留） */}
-              <span className="shrink-0 text-[9px] font-bold text-sandrift/80 rounded-full bg-white/60 px-1">
-                自动
-              </span>
-              {removeButton(c, true)}
-            </span>
-          </ExitCollapse>
-        );
-      })}
 
-      {/* Manual Token：用户显式 @ / Ask Kiro 实体入口（无图标，× 清晰）；移除走原位 collapse */}
+      {/* Manual Token：用户显式 @ / Ask Kiro 实体入口（无图标，× 清晰）；移除走原位 collapse。
+          自动上下文按产品决策不进胶囊（只进模型；开关在设置），此处无 ambient 渲染 */}
       {visibleManual.map((c) => (
         <ExitCollapse key={c.key} axis="horizontal" exiting={leavingKeys.has(c.key)} className="shrink-0">
             <span

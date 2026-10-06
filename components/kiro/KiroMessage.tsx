@@ -249,7 +249,8 @@ export function KiroMessage({
             )}
             {/* Hotfix：正文底部不再显示独立 Sources Tray（来源移入 More → 来源） */}
             {/* Message Actions：整个 Turn 结束后常驻（不依赖 hover），低权重 inline toolbar；settle 时淡入 */}
-            {(actionsReady ?? true) && !streaming && (
+            <ExitCollapse exiting={!((actionsReady ?? true) && !streaming)}>
+              {(actionsReady ?? true) && !streaming && (
               <div className="flex items-center gap-1 text-[11px] font-semibold text-sandrift animate-enter">
                 <button
                   onClick={copyMarkdownSource}
@@ -324,7 +325,8 @@ export function KiroMessage({
                     </KiroMenuPanel>
                 </div>
               </div>
-            )}
+              )}
+            </ExitCollapse>
           </div>
         ) : null}
       {/* P4 Agent Run Result：Final Answer 之后的低权重结果区（只终态；运行中绝不重复 Task 步骤） */}
@@ -346,8 +348,9 @@ export function KiroMessage({
           onCancel={onCancelPlan}
         />
       ))}
-      {/* 空终答安全网：已结算业务工具 + 零正文 → 纯文本追答（零工具重跑） */}
-      {showRegenerateAnswer && onRegenerateAnswer && (
+      {/* 空终答安全网：已结算业务工具 + 零正文 → 纯文本追答（零工具重跑）；退出走折叠 */}
+      <ExitCollapse exiting={!(showRegenerateAnswer && onRegenerateAnswer)}>
+        {showRegenerateAnswer && onRegenerateAnswer && (
         <div className="flex items-center gap-2 pt-1 animate-enter">
           <span className="text-[10px] text-sandrift">模型未返回正文</span>
           <button
@@ -359,7 +362,8 @@ export function KiroMessage({
             重新生成回答
           </button>
         </div>
-      )}
+        )}
+      </ExitCollapse>
       {children}
     </KiroAssistantShell>
   );

@@ -668,7 +668,8 @@ export function MiniCalendar() {
         data-selected-date={selectedDateKey}
         key={monthKey}
         className={cn(
-          "relative grid grid-cols-7 gap-1 text-xs h-full",
+          // 5 周↔6 周行数变化高度过渡（此前下方 Agenda 被顶跳）
+          "relative grid grid-cols-7 gap-1 text-xs h-full transition-[grid-template-rows] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
           monthDir !== 0 && "ux-month-enter"
         )}
         style={{

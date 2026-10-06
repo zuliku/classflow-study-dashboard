@@ -342,9 +342,10 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     // useEnterOnAdd ↔ animate-enter（--motion-base）同一档位
     const enterOnAdd = read("lib/useEnterOnAdd.ts");
     expect(enterOnAdd).toContain("MOTION_MS.base");
-    // ToastViewport：EXIT_MS 与 ux-inline（--motion-fast）同源
+    // ToastViewport：EXIT_MS 与退出视觉（--motion-exit-fast）同源，与 Reminder 同档
     const toast = read("components/ui/ToastViewport.tsx");
-    expect(toast).toContain("EXIT_MS = MOTION_MS.fast");
+    expect(toast).toContain("EXIT_MS = MOTION_EXIT_MS.fast");
+    expect(toast).toContain("!duration-[var(--motion-exit-fast)]");
     // Select：共享 usePresence，不再自维护 close timer / rAF
     const select = read("components/ui/Select.tsx");
     expect(select).toContain("usePresence(open, MOTION_EXIT_MS.fast)");

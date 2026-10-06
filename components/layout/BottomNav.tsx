@@ -84,8 +84,9 @@ export function BottomNav() {
               ) : (
                 <span
                   className={cn(
-                    "flex items-center justify-center w-11 h-7 rounded-full transition-colors duration-[var(--motion-fast)]",
-                    isActive && "bg-pastel-mint"
+                    // 选中胶囊进入带 scale（此前只过渡颜色，原地出现/消失）
+                    "flex items-center justify-center w-11 h-7 rounded-full transition-[background-color,transform] duration-[var(--motion-fast)]",
+                    isActive ? "bg-pastel-mint scale-100" : "scale-95"
                   )}
                 >
                   <Icon className="w-5 h-5" />
@@ -107,8 +108,8 @@ export function BottomNav() {
         >
           <span
             className={cn(
-              "flex items-center justify-center w-11 h-7 rounded-full transition-colors duration-[var(--motion-fast)]",
-              isMoreActive && "bg-pastel-mint"
+              "flex items-center justify-center w-11 h-7 rounded-full transition-[background-color,transform] duration-[var(--motion-fast)]",
+              isMoreActive ? "bg-pastel-mint scale-100" : "scale-95"
             )}
           >
             <MoreHorizontal className="w-5 h-5" />

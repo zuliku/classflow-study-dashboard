@@ -143,8 +143,8 @@ export function KiroRecentArtifactsPopover() {
             </span>
           </div>
 
-          {/* V4.1：内容高度跟随真实文件数量——移除固定 min-height；仅超限滚动 */}
-          <div className="max-h-[min(420px,60dvh)] overflow-y-auto overflow-x-clip">
+          {/* 内容区常驻 min-h（loading/空态同高 104px；空→有文件不再顶跳面板） */}
+          <div className="min-h-[104px] max-h-[min(420px,60dvh)] overflow-y-auto overflow-x-clip">
             {loading && entries.length === 0 && (
               <div className="h-[104px] flex flex-col items-center justify-center gap-2 text-sandrift">
                 <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden="true" />
@@ -163,7 +163,7 @@ export function KiroRecentArtifactsPopover() {
                 <div
                   key={entry.artifact.id}
                   data-testid="kiro-recent-artifact-row"
-                  className="px-3 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-alabaster/50 transition-colors"
+                  className="px-3 py-2.5 border-b border-line-soft last:border-b-0 hover:bg-alabaster/50 transition-colors animate-enter"
                 >
                   <div className="flex items-center gap-2">
                     <p className="text-xs font-bold text-charcoal truncate min-w-0 flex-1">

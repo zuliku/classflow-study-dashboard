@@ -222,10 +222,11 @@ function GlanceChip({
         <Icon className={cn("w-3.5 h-3.5", iconColor)} />
         <span className="tabular-nums leading-none">{count}</span>
       </button>
-      {/* Detail Popover：hover / focus-within 显示；right-0 对齐避免越出 Card */}
+      {/* Detail Popover：hover / focus-within 显示；right-0 对齐避免越出 Card。
+          hover 意图延迟 150ms（此前挪用退出档 --motion-exit-fast 语义；此处是进入延迟非退出时长） */}
       <div
         role="tooltip"
-        className="absolute right-0 top-full mt-1.5 w-[240px] bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2.5 z-30 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-[opacity,visibility] duration-[var(--motion-fast)] delay-[var(--motion-exit-fast)] group-hover:delay-0 group-focus-within:delay-0"
+        className="absolute right-0 top-full mt-1.5 w-[240px] bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2.5 z-30 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-[opacity,visibility] duration-[var(--motion-fast)] delay-150 group-hover:delay-0 group-focus-within:delay-0"
       >
         {children}
       </div>

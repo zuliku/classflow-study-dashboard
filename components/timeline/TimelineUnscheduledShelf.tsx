@@ -71,11 +71,12 @@ export function TimelineUnscheduledShelf({
         </button>
       </div>
 
-      {/* 默认单行横向滚动；展开后允许换行（模式切换 key + 淡入，不做 FLIP 布局动画） */}
+      {/* 默认单行横向滚动；展开后允许换行（模式切换 key + 淡入；
+          高度翻倍处加 min-h 兜底 + 高度过渡，chip 重排不再硬顶下方内容） */}
       <div
         key={expanded ? "wrap" : "row"}
         className={cn(
-          "ux-fade flex gap-1.5",
+          "ux-fade flex gap-1.5 min-h-7 transition-[height] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
           expanded ? "flex-wrap" : "flex-nowrap items-center overflow-x-auto kiro-attachment-tray"
         )}
       >

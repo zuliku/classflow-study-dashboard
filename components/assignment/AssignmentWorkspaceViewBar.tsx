@@ -143,13 +143,13 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
         />
       </div>
 
-      {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；挂载一次淡入；不新增第六个 Tab） */}
+      {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；与文件内 ux-fade 同进入语义） */}
       {view === "focus" && atRiskCount > 0 && (
         <button
           onClick={() => setRiskOnly(!riskOnly)}
           data-testid="focus-risk-filter"
           aria-pressed={riskOnly}
-          className={`animate-enter flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-semibold transition-colors ${
+          className={`ux-fade flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-semibold transition-colors ${
             riskOnly
               ? "bg-danger-bg border-danger-border text-danger font-bold"
               : "bg-background border-line text-satin-grey hover:text-charcoal"

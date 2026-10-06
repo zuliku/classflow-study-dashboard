@@ -159,9 +159,9 @@ export const KiroThreadRow = React.memo(function KiroThreadRow({
                 deleteRow();
               }}
               aria-label={confirmingDelete ? `确认删除对话 ${record.title}（不可恢复）` : `删除对话 ${record.title}`}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left font-semibold text-danger hover:bg-danger-bg transition-colors"
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left font-semibold text-danger hover:bg-danger-bg transition-colors whitespace-nowrap"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
               {confirmingDelete ? "确认删除？" : "删除"}
             </button>
         </KiroMenuPanel>

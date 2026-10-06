@@ -391,10 +391,15 @@ describe("Inline Approval", () => {
     expect(q('[data-testid="kiro-inline-approval"]')!.textContent).not.toContain("批量允许");
   });
 
-  it("Approval resolve（request 消失）→ Inline UI 消失", async () => {
+  it("Approval resolve（request 消失）→ Inline UI 折叠退出后卸载", async () => {
     await render(messageNode({ approval: { request: approval(), queueLength: 1, onDecision: vi.fn() } }));
     expect(q('[data-testid="kiro-inline-approval"]')).toBeTruthy();
     await render(messageNode({ approval: null }));
+    // 退出期仍挂载（折叠中），随后才卸载（此前瞬时卸载顶起下方内容）
+    expect(q('[data-testid="kiro-inline-approval"]')).toBeTruthy();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
     expect(q('[data-testid="kiro-inline-approval"]')).toBeNull();
   });
 

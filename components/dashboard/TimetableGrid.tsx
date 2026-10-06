@@ -930,8 +930,10 @@ export function TimetableGrid({
                     );
                   })}
 
-                  {/* Drag / Resize Ghost + 目标时间提示 */}
+                  {/* Drag / Resize Ghost + 目标时间提示；
+                      Reduced Motion：不渲染跟随 ghost（原位半透明即可），只留时间文案 */}
                   {interaction.type !== "idle" &&
+                    !reducedMotion &&
                     interaction.candidate.dayOfWeek === wd.dayOfWeek && (
                       <>
                         {(() => {

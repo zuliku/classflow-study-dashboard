@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Save } from "lucide-react";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { cn } from "@/lib/utils";
 
 interface SettingsSaveBarProps {
@@ -24,7 +25,9 @@ export function SettingsSaveBar({ dirty, onSave, onDiscard, saving = false }: Se
       >
         {dirty ? "有未保存的更改" : "已保存"}
       </span>
-      {dirty && (
+      {/* 脏按钮组进退场走横向折叠（此前输入即 dirty 瞬间弹出，右侧宽度突变） */}
+      <ExitCollapse exiting={!dirty} axis="horizontal" className="shrink-0">
+        {dirty && (
         <div className="flex items-center gap-2">
           <button
             onClick={onDiscard}
@@ -42,7 +45,8 @@ export function SettingsSaveBar({ dirty, onSave, onDiscard, saving = false }: Se
             保存
           </button>
         </div>
-      )}
+        )}
+      </ExitCollapse>
     </div>
   );
 }

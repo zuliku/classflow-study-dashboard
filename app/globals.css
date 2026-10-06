@@ -343,6 +343,7 @@ html[data-motion-effective="reduced"] .kiro-now-course {
 @media (prefers-reduced-motion: reduce) {
   .kiro-ring,
   .kiro-featured-flow,
+  .kiro-reasoning-flow,
   [data-kiro-flow] .kiro-ring {
     animation: none !important;
   }
@@ -1718,6 +1719,16 @@ html[data-motion-effective="reduced"] .kiro-scroll-control-exit,
 html[data-motion-effective="reduced"] .kiro-send-activate {
   transition: none !important;
   animation: none !important;
+}
+/* P1：一次性提示动画在应用内减弱动效下同样静态收敛（与 @media 兜底对齐；citation 保留静态 outline 定位反馈） */
+html[data-motion-effective="reduced"] .kiro-mode-swap,
+html[data-motion-effective="reduced"] .kiro-mode-flash {
+  animation: none !important;
+}
+html[data-motion-effective="reduced"] .kiro-citation-flash {
+  animation: none !important;
+  outline: 2px solid rgba(49, 48, 50, 0.55);
+  outline-offset: 1px;
 }
 
 /* Motion V1：Sidecar geometry 交互期间内部装饰性 motion 近瞬时（hover/streaming/scroll 正常）。

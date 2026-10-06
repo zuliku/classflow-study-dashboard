@@ -10,6 +10,7 @@ import {
   DEFAULT_SIDECAR_MINIMIZED_POSITION,
 } from "@/lib/ai/ui/sidecarMinimizedPosition";
 import { KiroMark } from "@/components/kiro/KiroHeader";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { cn } from "@/lib/utils";
 
 const DRAG_THRESHOLD = 5;
@@ -248,8 +249,9 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
           ? "cursor-grabbing transition-none"
           : "cursor-grab transition-[opacity,transform,box-shadow] hover:shadow-[0_6px_18px_-2px_rgba(49,48,50,0.10)]",
         visible
-          ? "opacity-100 scale-100 translate-y-0 duration-[var(--motion-panel)] ease-[var(--ease-standard)]"
-          : "opacity-0 scale-[0.96] translate-y-1 pointer-events-none duration-[var(--motion-exit-panel)] ease-[var(--ease-exit)]"
+          // sidecar scope 档（不在 shell 内时回退全局档；此前直接用全局 panel 档）
+          ? "opacity-100 scale-100 translate-y-0 duration-[var(--kiro-motion-spatial,var(--motion-panel))] ease-[var(--ease-standard)]"
+          : "opacity-0 scale-[0.96] translate-y-1 pointer-events-none duration-[var(--kiro-motion-popover-exit,var(--motion-exit-panel))] ease-[var(--ease-exit)]"
       )}
       style={
         {
@@ -297,11 +299,14 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
           </span>
           <span className="min-w-0 flex flex-col leading-none">
             <span className="text-[12px] font-bold text-charcoal truncate">Kiro</span>
-            {kiroBusy && (
+            {/* busy 行退出走折叠（此前整行高度瞬增，胶囊被撑高一跳） */}
+            <ExitCollapse exiting={!kiroBusy}>
+              {kiroBusy && (
               <span className="text-[10px] font-semibold text-sandrift truncate" data-testid="kiro-capsule-busy">
                 正在处理
               </span>
-            )}
+              )}
+            </ExitCollapse>
           </span>
         </button>
 

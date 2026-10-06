@@ -11,6 +11,7 @@ import { useKiroComputerSessionActions } from "@/components/kiro/computer/sessio
 import { useKiroComputerSessionSkillDraft } from "@/components/kiro/computer/session/useKiroComputerSessionSkillDraft";
 import { useDesktopSessionStore } from "@/store/useDesktopSessionStore";
 import { useToastStore } from "@/store/useToastStore";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import {
   describeDesktopSessionState,
   formatDesktopSessionProgress,
@@ -111,8 +112,9 @@ export function KiroComputerSessionSurface({
             currentStep={progress.currentStep}
           />
 
-          {/* failed：Main 已 sanitized 的短句 + 恢复出口（此前红色即终点，只能重打字） */}
-          {state === "failed" && failureReason && (
+          {/* failed：Main 已 sanitized 的短句 + 恢复出口（此前红色即终点，只能重打字）；退出走折叠 */}
+          <ExitCollapse exiting={!(state === "failed" && failureReason)}>
+            {(state === "failed" && failureReason && (
             <div data-testid="computer-session-failure" className="pl-3.5 animate-enter space-y-1">
               <p className="text-[10px] text-danger">{failureReason}</p>
               <div className="flex items-center gap-1.5">
@@ -131,16 +133,19 @@ export function KiroComputerSessionSurface({
                 <span className="text-[10px] text-sandrift">换种说法再试一次，或去 Composer 调整后重发</span>
               </div>
             </div>
-          )}
+            ))}
+          </ExitCollapse>
 
-          {showReflection && (
+          <ExitCollapse exiting={!showReflection}>
+            {showReflection && (
             <p
               data-testid="computer-session-reflection"
               className="pl-3.5 text-[10px] font-semibold text-warning animate-enter"
             >
               正在调整策略
             </p>
-          )}
+            )}
+          </ExitCollapse>
 
           {/* 后台静默执行中：界面不可见，仅执行记录可查（terminal 后不再展示）；
               状态灯语义，随执行通断频繁切换，不加进退场（避免反复重播） */}

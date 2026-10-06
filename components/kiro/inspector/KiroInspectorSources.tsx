@@ -15,6 +15,7 @@ import {
   KiroInspectorRow,
   KiroInspectorSection,
 } from "@/components/kiro/inspector/KiroInspectorSection";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 
 function sourceIcon(source: KiroSourceMeta) {
   switch (source.source) {
@@ -61,7 +62,13 @@ function locateSourceCitation(sourceId: string): boolean {
         : sourceId.replace(/["\\]/g, "\\$&");
     const el = scope.querySelector(`[data-citation-source="${esc}"]`);
     if (!el) return false;
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    // 减弱动效（应用内开关 / 系统偏好）时瞬时定位，与回到底部同语义
+    const reduced =
+      document.documentElement.dataset.motionEffective === "reduced" ||
+      (typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    el.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
     el.classList.remove("kiro-citation-flash");
     // 强制重启动画（同一来源连续点击两次也闪）
     void (el as HTMLElement).offsetWidth;
@@ -89,6 +96,56 @@ export function KiroInspectorSources() {
 
   const visible = showAll ? sources : sources.slice(0, INSPECTOR_SOURCES_PREVIEW_LIMIT);
 
+  const renderSourceRow = (source: (typeof sources)[number]) => {
+    const url = isSafeWebUrl(source.url) ? source.url : null;
+    const rowKey = `${source.source}:${source.sourceId}:${source.name}`;
+    return (
+      <li key={rowKey} className="animate-enter">
+        <KiroInspectorRow
+          testId="kiro-inspector-source-row"
+          icon={sourceIcon(source)}
+          actions={
+            <>
+              {/* P1：在对话中定位首次引用（此前来源看得到但定位不到，依据不可溯源） */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!locateSourceCitation(source.sourceId)) {
+                    pushToast({ message: "对话中暂无该来源的引用", type: "info" });
+                  }
+                }}
+                aria-label={`在对话中定位来源 ${source.name}`}
+                title="在对话中定位引用位置"
+                className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
+              >
+                <Crosshair className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+              {url ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`打开来源：${source.name}`}
+                  className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                </a>
+              ) : null}
+            </>
+          }
+        >
+          <span className="block text-xs font-semibold text-charcoal truncate" title={source.name}>
+            {source.name}
+          </span>
+          <span className="block text-[10px] text-sandrift truncate">
+            {sourceMetaLine(source)}
+            {source.publishedAt ? ` · ${source.publishedAt}` : ""}
+          </span>
+        </KiroInspectorRow>
+      </li>
+    );
+  };
+
   return (
     <KiroInspectorSection title="来源" count={sources.length} testId="kiro-inspector-sources">
       {sources.length === 0 ? (
@@ -99,64 +156,24 @@ export function KiroInspectorSources() {
       ) : (
         <>
           <ul className="space-y-0.5">
-            {visible.map((source) => {
-              const url = isSafeWebUrl(source.url) ? source.url : null;
-              const rowKey = `${source.source}:${source.sourceId}:${source.name}`;
-              return (
-                <li key={rowKey} className="animate-enter">
-                  <KiroInspectorRow
-                    testId="kiro-inspector-source-row"
-                    icon={sourceIcon(source)}
-                    actions={
-                      <>
-                        {/* P1：在对话中定位首次引用（此前来源看得到但定位不到，依据不可溯源） */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!locateSourceCitation(source.sourceId)) {
-                              pushToast({ message: "对话中暂无该来源的引用", type: "info" });
-                            }
-                          }}
-                          aria-label={`在对话中定位来源 ${source.name}`}
-                          title="在对话中定位引用位置"
-                          className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
-                        >
-                          <Crosshair className="w-3.5 h-3.5" aria-hidden="true" />
-                        </button>
-                        {url ? (
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label={`打开来源：${source.name}`}
-                            className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-                          </a>
-                        ) : null}
-                      </>
-                    }
-                  >
-                    <span className="block text-xs font-semibold text-charcoal truncate" title={source.name}>
-                      {source.name}
-                    </span>
-                    <span className="block text-[10px] text-sandrift truncate">
-                      {sourceMetaLine(source)}
-                      {source.publishedAt ? ` · ${source.publishedAt}` : ""}
-                    </span>
-                  </KiroInspectorRow>
-                </li>
-              );
+            {visible.slice(0, INSPECTOR_SOURCES_PREVIEW_LIMIT).map((source) => {
+              return renderSourceRow(source);
             })}
           </ul>
-          {!showAll && sources.length > INSPECTOR_SOURCES_PREVIEW_LIMIT ? (
+          {/* 超限行进退场走折叠（此前收起瞬删全部） */}
+          <DisclosureRegion open={showAll}>
+            <ul className="space-y-0.5">
+              {visible.slice(INSPECTOR_SOURCES_PREVIEW_LIMIT).map((source) => renderSourceRow(source))}
+            </ul>
+          </DisclosureRegion>
+          {sources.length > INSPECTOR_SOURCES_PREVIEW_LIMIT ? (
             <button
               type="button"
-              onClick={() => setShowAll(true)}
-              aria-expanded={false}
+              onClick={() => setShowAll((v) => !v)}
+              aria-expanded={showAll}
               className="mt-0.5 w-full text-left px-2 py-1.5 rounded-lg text-[11px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
             >
-              查看全部（{sources.length}）
+              {showAll ? "收起" : `查看全部（${sources.length}）`}
             </button>
           ) : null}
         </>
