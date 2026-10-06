@@ -34,8 +34,9 @@ describe("Drawer presentation class contract", () => {
     // overlay 提供 16px(桌面)/12px(移动) inset
     expect(enter.overlayClassName).toContain("p-3");
     expect(enter.overlayClassName).toContain("sm:p-4");
-    // 背景不更深于 edge（柔和遮罩）
-    expect(enter.overlayClassName).toContain("bg-black/20");
+    // 诚实 modeless：overlay 透明（无 dim——背景可交互就必须看起来可交互；
+    // dim + blur 是 modal 视觉语言，会与透传点击错位）
+    expect(enter.overlayClassName).not.toContain("bg-black/");
     // 非阻塞浮层：backdrop 透传指针（面板打开时可点击其他任务 → 内容就地切换）
     expect(enter.overlayClassName).toContain("pointer-events-none");
     expect(enter.panelClassName).toContain("pointer-events-auto");

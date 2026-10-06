@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
  * - 焦点陷阱与 aria-modal 一致（S2-1）：edge 默认 trap（blocking modal），
  *   floating 默认不 trap（背景可交互，trap 会破坏“直接点击其他任务”工作流）；
  *   可用 trapFocus 显式覆盖。
+ * - floating 的 scrim 透明、无 dim、无 blur（诚实 modeless：可交互的背景看起来也可交互；
+ *   dim + blur 是 modal 视觉语言，会与透传点击错位；全屏 blur 还是逐帧重模糊的卡顿源）。
  * - 无 scroll lock
  */
 export type DrawerPresentation = "edge" | "floating";
@@ -66,11 +68,13 @@ export function resolveDrawerPresentation(
 ): { overlayClassName: string; panelClassName: string } {
   if (presentation === "floating") {
   return {
+    // 诚实 modeless：overlay 透明、无 dim、无 blur——背景可交互就必须看起来可交互
+    // （此前 bg-black/20 + backdrop-blur-sm 是 modal 视觉语言，点击却透传，感知错位；
+    // blur 全屏逐帧重模糊还是已知卡顿源，见 motionContract 卡顿点护栏）。
     // 非阻塞浮层：backdrop 透传指针（面板打开时可直接点击其他任务 → 内容就地切换；
     // 关闭规则不变：closeOnBackdrop 对 floating 无效，关闭走 Esc / 关闭按钮）
-    // blur 由 OverlayLayer scrimBlurClass 按 visible 挂载（进退场不逐帧重模糊）
     overlayClassName:
-      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/20 flex justify-end overflow-hidden p-3 sm:p-4 pointer-events-none",
+      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-transparent flex justify-end overflow-hidden p-3 sm:p-4 pointer-events-none",
       panelClassName: cn(
         // 有界浮层：宽度 min(470px, 100vw-32px)；高度 max calc(100dvh-32px)；圆角 + 完整边框 + shadow
         "w-full sm:w-[470px] h-full max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)]",
@@ -129,7 +133,9 @@ export function Drawer({
       onEscapeKeyDown={onEscapeKeyDown}
       focusRestoreKey={focusRestoreKey}
       className={cn(resolveDrawerPresentation(presentation, false).overlayClassName, overlayClassName)}
-      scrimBlurClass="backdrop-blur-sm"
+      // 背板模糊只给 blocking 的 edge（modal 承诺）；floating 是诚实 modeless，不挂 blur
+      //（全屏 backdrop-blur-sm 在透明度动画期间逐帧重模糊，是已知卡顿源）
+      scrimBlurClass={presentation === "edge" ? "backdrop-blur-sm" : undefined}
     >
       {({ visible }) => (
         <div
