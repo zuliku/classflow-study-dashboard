@@ -10,6 +10,8 @@ interface InboxState {
   addItem: (input: Omit<ExternalInboxItem, "id" | "dedupeKey" | "status" | "origin"> & { id?: string }) => string;
   updateStatus: (id: string, status: InboxStatus) => void;
   removeItem: (id: string) => void;
+  /** 删除撤销：按原 id 完整回填（addItem 会走去重/新 id，不适合撤销） */
+  restoreItem: (item: ExternalInboxItem) => void;
   archiveItem: (id: string) => void;
   getUnreadCount: () => number;
   getByStatus: (status: InboxStatus | "all") => ExternalInboxItem[];
@@ -54,6 +56,8 @@ export const useInboxStore = create<InboxState>()(
       },
       updateStatus: (id, status) => set((s) => ({ items: s.items.map((it) => (it.id === id ? { ...it, status } : it)) })),
       removeItem: (id) => set((s) => ({ items: s.items.filter((it) => it.id !== id) })),
+      restoreItem: (item) =>
+        set((s) => (s.items.some((it) => it.id === item.id) ? s : { items: [item, ...s.items] })),
       archiveItem: (id) => set((s) => ({ items: s.items.map((it) => (it.id === id ? { ...it, status: "archived" as const } : it)) })),
       getUnreadCount: () => get().items.filter((it) => it.status === "unread").length,
       getByStatus: (status) => {
@@ -126,6 +130,8 @@ export function createTestInboxStore() {
     },
     updateStatus: (id, status) => set((s) => ({ items: s.items.map((it) => (it.id === id ? { ...it, status } : it)) })),
     removeItem: (id) => set((s) => ({ items: s.items.filter((it) => it.id !== id) })),
+    restoreItem: (item) =>
+      set((s) => (s.items.some((it) => it.id === item.id) ? s : { items: [item, ...s.items] })),
     archiveItem: (id) => set((s) => ({ items: s.items.map((it) => (it.id === id ? { ...it, status: "archived" as const } : it)) })),
     getUnreadCount: () => get().items.filter((it) => it.status === "unread").length,
     getByStatus: (status) => {

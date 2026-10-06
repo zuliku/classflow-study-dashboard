@@ -3,6 +3,8 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Inbox, Archive, Eye, Trash2, Check, Clock, Reply, X } from "lucide-react";
 import { useInboxStore } from "@/store/useInboxStore";
+import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import type { ExternalInboxItem, InboxStatus } from "@/lib/inbox/types";
 import { wrapExternalContent } from "@/lib/inbox/types";
 import { getInboxSourcePresentation } from "@/lib/inbox/sourcePresentation";
@@ -18,7 +20,6 @@ import { Button } from "@/components/ui/Button";
 export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const items = useInboxStore((s) => s.items);
   const updateStatus = useInboxStore((s) => s.updateStatus);
-  const removeItem = useInboxStore((s) => s.removeItem);
   const [filter, setFilter] = useState<InboxStatus | "all">("unread");
   const [selected, setSelected] = useState<ExternalInboxItem | null>(null);
   const [replyItem, setReplyItem] = useState<ExternalInboxItem | null>(null);
@@ -166,8 +167,28 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                 </button>
                 <button
                   type="button"
-                  onClick={() => removeItem(item.id)}
+                  onClick={() => {
+                    const snapshot = useInboxStore.getState().items.find((it) => it.id === item.id);
+                    if (!snapshot) return;
+                    useConfirmStore.getState().confirm({
+                      title: "删除这条消息？",
+                      description: "将从收件箱中移除，可通过提示中的「撤销」恢复。",
+                      confirmLabel: "删除消息",
+                      danger: true,
+                      onConfirm: () => {
+                        useInboxStore.getState().removeItem(item.id);
+                        useToastStore.getState().pushToast({
+                          message: "消息已删除",
+                          actionLabel: "撤销",
+                          onAction: () => {
+                            useInboxStore.getState().restoreItem(snapshot);
+                          },
+                        });
+                      },
+                    });
+                  }}
                   data-testid={`inbox-delete-${item.id}`}
+                  aria-label={`删除消息 ${item.subject || item.senderDisplay || item.id}`}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-danger"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

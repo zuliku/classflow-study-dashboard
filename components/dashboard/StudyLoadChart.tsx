@@ -44,6 +44,7 @@ export function StudyLoadChart() {
   const schedules = useAppStore((s) => s.schedules);
   const scheduleOccurrenceOverrides = useAppStore((s) => s.scheduleOccurrenceOverrides);
   const semester = useAppStore((s) => s.semester);
+  const setImportScheduleModalOpen = useAppStore((s) => s.setImportScheduleModalOpen);
 
   const today = new Date();
   const weekLoad = computeWeekCourseLoad(schedules, semester, undefined, scheduleOccurrenceOverrides);
@@ -94,8 +95,16 @@ export function StudyLoadChart() {
       {/* Chart — adaptive height, anchored near bottom with breathing */}
       <div className="flex-1 flex flex-col justify-end mt-4 min-h-[330px] max-h-[400px] mb-5">
         {isEmpty ? (
-          <div className="h-full flex items-center justify-center text-xs text-sandrift border border-dashed border-line-soft rounded-xl bg-surface-soft/50">
-            本周暂无课程安排
+          <div className="h-full flex flex-col items-center justify-center gap-1.5 text-xs text-sandrift border border-dashed border-line-soft rounded-xl bg-surface-soft/50 px-4 text-center">
+            <p className="font-semibold text-satin-grey">本周暂无课程安排</p>
+            <p className="text-[11px]">导入课表后自动统计每周负荷</p>
+            <button
+              type="button"
+              onClick={() => setImportScheduleModalOpen(true)}
+              className="mt-1 h-7 px-3 rounded-lg border border-line text-[11px] font-bold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
+            >
+              导入课表
+            </button>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">

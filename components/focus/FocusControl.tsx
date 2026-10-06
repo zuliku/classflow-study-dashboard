@@ -162,6 +162,9 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
       <button
         onClick={() => setOpen((v) => !v)}
         data-testid="focus-control"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label={active ? `专注 ${active.status === "running" ? "进行中" : "已暂停"}` : "开始专注"}
         className={cn(
           "flex items-center gap-1 text-[11px] h-8 rounded-lg font-bold transition-colors",
           compact ? "w-8 justify-center px-0" : "px-2",
@@ -188,6 +191,8 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
       {mounted && (
         <div
           data-testid="focus-popover"
+          role="dialog"
+          aria-label="专注设置"
           className={cn(
             "absolute right-0 top-full mt-1.5 w-[260px] bg-surface border border-line-strong rounded-2xl shadow-card p-3 space-y-3 text-xs z-40 ux-inline",
             visible
@@ -208,12 +213,13 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
             <div key="idle" className="ux-fade space-y-3">
               <div className="space-y-1.5 pr-8">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">专注时间</p>
-                <div className="flex items-center gap-1">
-                  {FOCUS_PRESETS.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPlanned(String(p))}
-                      className={cn(
+                  <div className="flex items-center gap-1">
+                    {FOCUS_PRESETS.map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setPlanned(String(p))}
+                        aria-pressed={planned === String(p)}
+                        className={cn(
                         "px-2 py-1 rounded-lg text-[11px] font-bold transition-colors",
                         planned === String(p)
                           ? "bg-charcoal text-white"

@@ -5,9 +5,9 @@ test("no auto-inject on first run - empty workspace remains empty", async ({ pag
   await page.goto("/");
   // First run should show empty workspace, not demo data
   await expect(page.getByTestId("getting-started")).toBeVisible({ timeout: 10000 });
-  await expect(page.getByText("欢迎使用 ClassFlow")).toBeVisible();
+  await expect(page.getByText("搭建你的学习工作区")).toBeVisible();
   // No auto toast
-  await expect(page.getByText("演示数据已载入")).toHaveCount(0);
+  await expect(page.getByText("示例数据已载入")).toHaveCount(0);
   const diag = await page.evaluate(() => {
     const raw = localStorage.getItem("classflow-storage-v2") || "{}";
     const s = JSON.parse(raw).state ?? JSON.parse(raw) ?? {};
@@ -29,16 +29,18 @@ test("manual demo load via settings with confirm", async ({ page }) => {
   // Open settings -> data
   await page.getByRole("button", { name: /设置/ }).click();
   await page.getByText("数据与隐私").click();
-  await page.getByTestId("dev-demo-reload").getByRole("button", { name: /载入演示数据/ }).click();
+  // 体验示例已收拢进数据诊断：展开后可用
+  await page.getByTestId("data-diagnostics-toggle").click();
+  await page.getByTestId("dev-demo-reload").getByRole("button", { name: /载入示例数据/ }).click();
   // Confirm dialog should appear (not native confirm)
-  await expect(page.getByText("载入演示数据？")).toBeVisible();
+  await expect(page.getByText("载入示例数据？")).toBeVisible();
   await page.getByRole("button", { name: "取消" }).click();
   // Cancel should not change data
   await expect(page.getByTestId("getting-started")).toBeVisible();
   // Re-open and confirm
-  await page.getByTestId("dev-demo-reload").getByRole("button", { name: /载入演示数据/ }).click();
+  await page.getByTestId("dev-demo-reload").getByRole("button", { name: /载入示例数据/ }).click();
   await page.getByTestId("confirm-dialog-confirm").click();
-  await expect(page.getByText("演示数据已载入")).toBeVisible();
+  await expect(page.getByText("示例数据已载入")).toBeVisible();
   await page.getByRole("button", { name: /关闭/ }).click(); // close settings
   // Now overview should have data
   await expect(page.getByTestId("getting-started")).toHaveCount(0);

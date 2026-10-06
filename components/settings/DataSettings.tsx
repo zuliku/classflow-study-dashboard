@@ -48,24 +48,48 @@ export function DataSettings() {
   // 数据诊断：日常不需要常开，默认收起
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
-  // 演示数据手动载入（设置 → 数据 唯一入口；用于体验与测试）
-  // 选项保留（by design）：载入后按文案兑现——个人资料原样保留（restoreAppData 会覆盖，
-  // 此处快照回填，备份恢复路径不受影响）
+  // 体验示例数据：收拢进「数据诊断」内（设置 → 数据 → 当前设备数据 → 数据诊断展开后可见）。
+  // 日常隐藏降低 demo 感；载入前快照当前业务数据，Toast 提供一次撤销恢复。
+  // 个人资料原样保留（restoreAppData 会整库覆盖，此处快照回填，备份恢复路径不受影响）
   const reloadDemoData = () => {
     useConfirmStore.getState().confirm({
-      title: "载入演示数据？",
-      description: "用一学期的演示数据替换当前业务数据（覆盖课程、课表、任务、学期等），用于快速体验功能。个人资料与偏好不受影响。",
-      confirmLabel: "载入演示数据",
+      title: "载入示例数据？",
+      description: "用一套示例课表和任务替换当前业务数据，用于熟悉功能。原数据可通过提示中的「撤销」一次恢复。个人资料与偏好不受影响。",
+      confirmLabel: "载入示例数据",
       onConfirm: () => {
         import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
           const store = useAppStore.getState();
           const savedProfile = store.userProfile;
+          // 快照当前业务数据，供 Toast 撤销一次恢复（profile 以当前真实为准）
+          const snapshot = {
+            userProfile: savedProfile,
+            semester: store.semester,
+            courses: store.courses,
+            schedules: store.schedules,
+            assignments: store.assignments,
+            calendarMarks: store.calendarMarks,
+            groupProjects: store.groupProjects,
+            studyBlocks: store.studyBlocks,
+            preferences: store.preferences,
+            reminders: store.reminders,
+            focusSessions: store.focusSessions,
+            scheduleOccurrenceOverrides: store.scheduleOccurrenceOverrides,
+            bellSchedules: store.bellSchedules,
+            activeBellScheduleId: store.activeBellScheduleId,
+          };
           store.restoreAppData(buildFullDemoData());
           // 兑现“个人资料不受影响”：restoreAppData 整库覆盖，演示载入把真名回填
           useAppStore.getState().updateUserProfile(savedProfile);
           // 演示学期开学于数周前：按新学期校准当前教学周
           store.resetToCurrentWeek();
-          useToastStore.getState().pushToast({ message: "演示数据已载入", type: "success" });
+          useToastStore.getState().pushToast({
+            message: "示例数据已载入",
+            type: "success",
+            actionLabel: "撤销",
+            onAction: () => {
+              useAppStore.getState().restoreAppData(snapshot);
+            },
+          });
         });
       },
     });
@@ -103,11 +127,12 @@ export function DataSettings() {
           <LearningHistorySettings />
         </SettingsGroup>
 
-        {/* 当前设备数据：概览常驻；诊断默认收起 */}
+        {/* 当前设备数据：概览常驻；诊断默认收起；体验示例收拢进诊断内 */}
         <SettingsGroup title="当前设备数据" contentClassName="px-4 py-3 space-y-2">
           <DataOverview counts={counts} />
           <button
             type="button"
+            data-testid="data-diagnostics-toggle"
             onClick={() => setDiagnosticsOpen((v) => !v)}
             aria-expanded={diagnosticsOpen}
             className="w-full flex items-center justify-between py-2 text-left"
@@ -122,8 +147,19 @@ export function DataSettings() {
             />
           </button>
           <DisclosureRegion open={diagnosticsOpen}>
-            <div className="pb-1">
+            <div className="pb-1 space-y-3">
               <DataHealth />
+              {/* 体验示例：诊断内的次级入口（用于熟悉功能与测试），日常收起降低 demo 感 */}
+              <div data-testid="dev-demo-reload" className="rounded-xl border border-line-soft bg-surface-soft/60 px-3 py-1">
+                <SettingsActionRow
+                  title="体验示例数据"
+                  description="载入一套示例课表和任务来熟悉功能，会替换当前课程和任务，可撤销。个人资料不受影响。"
+                  icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
+                  actionLabel="载入示例数据"
+                  onAction={reloadDemoData}
+                  actionMinWidth="min-w-[140px]"
+                />
+              </div>
             </div>
           </DisclosureRegion>
         </SettingsGroup>
@@ -150,20 +186,6 @@ export function DataSettings() {
         {/* 危险操作 */}
         <SettingsGroup title="危险操作">
           <DangerZone />
-        </SettingsGroup>
-
-        {/* 演示数据：设置 → 数据 唯一人工入口（用于体验与测试） */}
-        <SettingsGroup title="演示数据">
-          <div data-testid="dev-demo-reload">
-            <SettingsActionRow
-              title="载入完整演示数据"
-              description="载入一套示例课表和任务来体验功能。会替换当前课程和任务，不动你的个人资料和偏好。"
-              icon={<RefreshCcw className="w-3.5 h-3.5 text-[#A48F82]" />}
-              actionLabel="载入演示数据"
-              onAction={reloadDemoData}
-              actionMinWidth="min-w-[140px]"
-            />
-          </div>
         </SettingsGroup>
       </div>
     </SettingsSection>

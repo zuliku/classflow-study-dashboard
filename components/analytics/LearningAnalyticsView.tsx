@@ -67,7 +67,7 @@ export function LearningAnalyticsView() {
   // Workflow UX V13：Outlook task → 全局 Assignment Drawer（selective action 订阅，不切 Workspace）
   const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
   const courses = useAppStore((s) => s.courses);
-  const { data, loading, error } = useLearningAnalytics(preset);
+  const { data, loading, error, refresh } = useLearningAnalytics(preset);
   const [outlookHorizon, setOutlookHorizon] = useState<StudyOutlookHorizon>(7);
   const outlook = useStudyOutlook(outlookHorizon);
   // 趋势图动画：仅首次 meaningful load 播放；后续 Range 切换直接更新（外层 ux-settle 表达 continuity）
@@ -191,8 +191,15 @@ export function LearningAnalyticsView() {
               </div>
             </>
           ) : error ? (
-            <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 text-xs font-semibold text-danger">
-              学习洞察加载失败，请稍后重试。
+            <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-danger">学习洞察加载失败，请稍后重试。</p>
+              <button
+                type="button"
+                onClick={() => refresh()}
+                className="h-7 px-3 rounded-lg bg-surface border border-line text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors"
+              >
+                重试
+              </button>
             </div>
           ) : data ? (
             <>
@@ -277,8 +284,15 @@ export function LearningAnalyticsView() {
 
           {/* 下一步：学习前瞻 + 估时参考（独立于历史 Snapshot；确定性；不逐卡查询） */}
           {outlook.error ? (
-            <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 text-xs font-semibold text-danger">
-              学习前瞻加载失败，请稍后重试。
+            <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-danger">学习前瞻加载失败，请稍后重试。</p>
+              <button
+                type="button"
+                onClick={() => outlook.refresh()}
+                className="h-7 px-3 rounded-lg bg-surface border border-line text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors"
+              >
+                重试
+              </button>
             </div>
           ) : outlook.loading && !outlook.data ? (
             <ChartSkeleton />

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Bell, Plus, Trash2, X, PencilLine, Check, Clock, CalendarClock } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
+import { useToastStore } from "@/store/useToastStore";
 import { useUIChromeStore } from "@/store/useUIChromeStore";
 import { Reminder } from "@/types";
 import { combineLocalDateTime, parseLocalDDL } from "@/lib/ddl";
@@ -200,7 +201,17 @@ export function ReminderCenter() {
 
   const handleDelete = (id: string) => {
     // P2 §13：用户删除（auto → 该 target opt-out 由 ByUser 语义处理）
+    // 产品化：快照后删除，Toast 提供一次撤销（对齐任务删除体验）
+    const snapshot = useAppStore.getState().reminders.find((r) => r.id === id);
+    if (!snapshot) return;
     useAppStore.getState().deleteReminderByUser(id);
+    useToastStore.getState().pushToast({
+      message: "提醒已删除",
+      actionLabel: "撤销",
+      onAction: () => {
+        useAppStore.getState().restoreReminder(snapshot);
+      },
+    });
   };
 
   const handleOpenItem = (r: Reminder) => {
@@ -223,12 +234,15 @@ export function ReminderCenter() {
         <div
           role="button"
           tabIndex={0}
+          aria-label={`提醒 ${r.title}`}
           onClick={() => handleOpenItem(r)}
           onKeyDown={(e) => {
-            if (e.key !== "Enter") return;
+            if (e.key !== "Enter" && e.key !== " ") return;
             // 焦点在行内按钮（编辑/删除）上时只执行按钮动作：按钮 click 已 stopPropagation，
             // 但 keydown 会继续冒泡到行，不判 target 会同时触发打开详情
             if ((e.target as HTMLElement | null)?.closest?.("button")) return;
+            // Space 会滚动页面：仅行级 Space 激活时阻止默认
+            if (e.key === " ") e.preventDefault();
             handleOpenItem(r);
           }}
           className={cn(

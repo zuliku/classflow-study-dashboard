@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { format, formatDistanceToNow, differenceInCalendarDays, differenceInHours, startOfDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
+import { openAssignmentEditor } from "@/lib/uiEvents";
 import { paginate } from "@/lib/pagination";
 import { DDL_DENSITY_METRICS, resolveAdaptiveDdlLayout, DdlDensity } from "@/lib/ui/adaptiveDdlLayout";
 import { cn, cardKeyHandler } from "@/lib/utils";
@@ -164,9 +165,26 @@ export function UpcomingDDL() {
 
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col py-1.5" style={{ ["--ddl-card-height" as string]: `${cardHeight}px` } as React.CSSProperties}>
         {pagedItems.length === 0 ? (
-          <div className="ux-fade flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-1 min-h-24">
+          <div className="ux-fade flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-2 min-h-24 px-4 text-center">
             <CheckCircle2 className="w-6 h-6 text-success" />
-            <p>暂无临近 DDL</p>
+            <p className="font-semibold text-satin-grey">暂无临近 DDL</p>
+            <p className="text-[11px]">新建任务后会在这里按时间归位</p>
+            <div className="flex items-center gap-2 pt-0.5">
+              <button
+                type="button"
+                onClick={() => openAssignmentEditor({})}
+                className="h-7 px-3 rounded-lg bg-charcoal text-white text-[11px] font-bold hover:bg-black transition-colors"
+              >
+                新建任务
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("assignments")}
+                className="h-7 px-3 rounded-lg border border-line text-[11px] font-bold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
+              >
+                查看全部
+              </button>
+            </div>
           </div>
         ) : (
           <div

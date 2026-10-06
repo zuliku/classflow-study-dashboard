@@ -59,18 +59,48 @@ export function ToastViewport() {
   };
 
   // 自动消失：带操作按钮的提示等待更久，便于用户撤销。
-  // 每条 Toast 只调度一次定时器（用 ref 去重），
-  // 避免其他 Toast 到期触发 effect cleanup 时把本 Toast 的定时器重置。
+  // 每条 Toast 只调度一次定时器（用 ref 去重），hover/focus 暂停、离开恢复，
+  // 避免键盘聚焦中被移除（a11y）与“撤销”来不及点。
   const scheduledRef = useRef<Set<string>>(new Set());
+  const timersRef = useRef<Map<string, number>>(new Map());
+  const remainingRef = useRef<Map<string, number>>(new Map());
+  const startedAtRef = useRef<Map<string, number>>(new Map());
+
+  const scheduleDismiss = (id: string, delay: number) => {
+    startedAtRef.current.set(id, Date.now());
+    remainingRef.current.set(id, delay);
+    const timer: number = window.setTimeout(() => dismiss(id), delay);
+    timersRef.current.set(id, timer);
+  };
+
   useEffect(() => {
     toasts.forEach((t) => {
       if (scheduledRef.current.has(t.id)) return;
       scheduledRef.current.add(t.id);
       const duration = t.duration ?? (t.actionLabel ? 6000 : 4000);
-      window.setTimeout(() => dismiss(t.id), duration);
+      scheduleDismiss(t.id, duration);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toasts]);
+
+  const pauseDismiss = (id: string) => {
+    const timer = timersRef.current.get(id);
+    if (!timer) return;
+    window.clearTimeout(timer);
+    timersRef.current.delete(id);
+    const startedAt = startedAtRef.current.get(id) ?? Date.now();
+    const remaining = remainingRef.current.get(id) ?? 0;
+    const elapsed = Date.now() - startedAt;
+    remainingRef.current.set(id, Math.max(0, remaining - elapsed));
+  };
+
+  const resumeDismiss = (id: string) => {
+    if (exiting.has(id)) return;
+    if (timersRef.current.has(id)) return;
+    const remaining = remainingRef.current.get(id);
+    if (remaining == null || remaining <= 0) return;
+    scheduleDismiss(id, remaining);
+  };
 
   if (toasts.length === 0) return null;
 
@@ -85,6 +115,10 @@ export function ToastViewport() {
         return (
           <div
             key={toast.id}
+            onMouseEnter={() => pauseDismiss(toast.id)}
+            onMouseLeave={() => resumeDismiss(toast.id)}
+            onFocus={() => pauseDismiss(toast.id)}
+            onBlur={() => resumeDismiss(toast.id)}
             className={cn(
               "pointer-events-auto w-full sm:w-auto sm:max-w-sm bg-surface border border-line rounded-xl shadow-card p-3 flex items-start gap-2.5",
               // BUG-071：入场用一次性 animation（挂载即播），出场仍走 ux-inline 过渡

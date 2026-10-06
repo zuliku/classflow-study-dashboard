@@ -14,7 +14,7 @@ async function openFresh(page: Page) {
 test("首次打开：Getting Started 显示，无任何假数据", async ({ page }) => {
   await openFresh(page);
 
-  await expect(page.getByText("欢迎使用 ClassFlow")).toBeVisible();
+  await expect(page.getByText("搭建你的学习工作区")).toBeVisible();
   await expect(page.getByTestId("getting-started").getByRole("button", { name: "添加第一门课程" })).toBeVisible();
   await expect(page.getByTestId("getting-started").getByRole("button", { name: "导入课表" })).toBeVisible();
 

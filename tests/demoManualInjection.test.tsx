@@ -51,7 +51,7 @@ describe("Demo Manual Injection Hardening", () => {
       "utf8"
     );
     expect(src).toContain('data-testid="getting-started"');
-    expect(src).toContain("欢迎使用 ClassFlow");
+    expect(src).toContain("搭建你的学习工作区");
     // Verify Home renders getting-started when store is empty (empty check)
     expect(src).toContain('courses.length === 0 &&');
   });
@@ -72,13 +72,17 @@ describe("Demo Manual Injection Hardening", () => {
     useToastStore.setState({ toasts: [] } as never);
     const confirmSpy = vi.spyOn(useConfirmStore.getState(), "confirm");
     render(<DataSettings />);
-    const btn = screen.getByTestId("dev-demo-reload").querySelector("button");
+    // 体验示例已收拢进数据诊断：默认收起不可见，展开后可用（降低生产 demo 感）
+    expect(screen.queryByTestId("dev-demo-reload")).toBeNull();
+    fireEvent.click(screen.getByTestId("data-diagnostics-toggle"));
+    const container = await screen.findByTestId("dev-demo-reload");
+    const btn = container.querySelector("button");
     expect(btn).toBeTruthy();
     fireEvent.click(btn!);
     expect(confirmSpy).toHaveBeenCalled();
     const req = useConfirmStore.getState().request;
     expect(req).toBeTruthy();
-    expect(req?.title).toContain("载入演示数据");
+    expect(req?.title).toContain("载入示例数据");
     useConfirmStore.getState().close();
     expect(useAppStore.getState().courses.length).toBe(0);
     fireEvent.click(btn!);
@@ -86,7 +90,9 @@ describe("Demo Manual Injection Hardening", () => {
     await req2.onConfirm();
     await waitFor(() => expect(useAppStore.getState().courses.length).toBeGreaterThan(0), { timeout: 4000 });
     expect(useAppStore.getState().courses.length).toBe(10);
-    expect(useToastStore.getState().toasts.some(t => t.message.includes("演示数据已载入"))).toBe(true);
+    expect(useToastStore.getState().toasts.some(t => t.message.includes("示例数据已载入"))).toBe(true);
+    // 载入提供一次撤销恢复（快照回填）
+    expect(useToastStore.getState().toasts.some(t => t.actionLabel === "撤销")).toBe(true);
     confirmSpy.mockRestore();
     // @ts-ignore
     process.env.NODE_ENV = originalEnv;
@@ -101,7 +107,9 @@ describe("Demo Manual Injection Hardening", () => {
     // 真实用户资料
     useAppStore.getState().updateUserProfile({ name: "真实姓名" } as never);
     render(<DataSettings />);
-    const btn = screen.getByTestId("dev-demo-reload").querySelector("button");
+    fireEvent.click(screen.getByTestId("data-diagnostics-toggle"));
+    const container = await screen.findByTestId("dev-demo-reload");
+    const btn = container.querySelector("button");
     fireEvent.click(btn!);
     const req = useConfirmStore.getState().request!;
     await req.onConfirm();
