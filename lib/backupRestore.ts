@@ -118,6 +118,25 @@ export interface CommitResult {
 }
 
 /**
+ * 写入失败的附件 storageKey 从课程资料元数据中摘除（与头像 stripUnbackableAvatarRef 同模式）：
+ * 否则恢复后资料指向不存在的 Blob（悬指），健康检查报缺失且用户无法从 UI 修复引用。
+ * savedFailures 照常返回，调用方以 warning 告知用户。
+ */
+export function stripFailedMaterialRefs(
+  courses: ClassFlowBackupData["courses"],
+  failedKeys: ReadonlySet<string> | readonly string[]
+): ClassFlowBackupData["courses"] {
+  const failed: ReadonlySet<string> = failedKeys instanceof Set ? failedKeys : new Set(failedKeys);
+  if (failed.size === 0) return courses;
+  return courses.map((c) => ({
+    ...c,
+    materials: c.materials.map((m) =>
+      m.storageKey && failed.has(m.storageKey) ? { ...m, storageKey: undefined } : m
+    ),
+  }));
+}
+
+/**
  * 用户确认后执行：先写附件 Blob + 头像，再原子恢复业务数据，最后刷新资料健康。
  * 头像一致性：ZIP 携带头像 → 覆盖写入；未携带但 metadata 声明 → 清理陈旧本地头像并摘除
  * 悬挂引用（绝不保留不可用的 avatarStorageKey，也绝不复用恢复前的旧头像）。
@@ -166,6 +185,14 @@ export async function commitBackupRestore(
     restoreData = {
       ...prepared.data,
       userProfile: stripUnbackableAvatarRef(prepared.data.userProfile),
+    };
+  }
+
+  // 附件 Blob 写入失败的 storageKey 从资料元数据摘除（悬指修复；失败清单照常返回告警）
+  if (savedFailures.length > 0) {
+    restoreData = {
+      ...restoreData,
+      courses: stripFailedMaterialRefs(restoreData.courses, savedFailures),
     };
   }
 

@@ -23,6 +23,9 @@ function downloadBlob(href: string, filename: string) {
   anchor.remove();
 }
 
+/** 备份下载 URL 延迟释放（同步 revoke 在 Firefox 下可能中断下载；与 artifacts 下载同式） */
+const BACKUP_URL_REVOKE_DELAY_MS = 5000;
+
 /** 备份（Settings V3 Task 6）：两行统一 action row；完整 ZIP 为 primary，仅数据 JSON 为 secondary */
 export function BackupSection() {
   const state = useAppStore();
@@ -74,7 +77,7 @@ export function BackupSection() {
       const { zipBlob, result } = await buildFullBackupZip(backupData());
       const url = URL.createObjectURL(zipBlob);
       downloadBlob(url, `classflow_full_backup_${localDateStr()}.zip`);
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), BACKUP_URL_REVOKE_DELAY_MS);
       setFeedback({ message: `备份已导出 · ${result.packedMaterials} 个附件${result.avatar === "packed" ? " · 头像已包含" : ""}` });
       const warnings: string[] = [];
       if (result.missingMaterials.length > 0) {

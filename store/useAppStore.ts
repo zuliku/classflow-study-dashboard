@@ -428,8 +428,71 @@ function isValidSemester(v: unknown): v is Semester {
     typeof v === "object" &&
     typeof (v as Semester).name === "string" &&
     typeof (v as Semester).startDate === "string" &&
-    typeof (v as Semester).totalWeeks === "number"
+    // totalWeeks 非正整数（0/NaN/负数/小数）会让 currentSemesterWeek 钳位异常 → 回落默认学期
+    typeof (v as Semester).totalWeeks === "number" &&
+    Number.isInteger((v as Semester).totalWeeks) &&
+    (v as Semester).totalWeeks >= 1
   );
+}
+
+/** hydrate 用户资料归一（纯 cast 会让 name:null 之类透过，渲染层被迫处处判空） */
+function normalizeHydratedUserProfile(raw: unknown): UserProfile {
+  if (!raw || typeof raw !== "object") return EMPTY_USER_PROFILE;
+  const p = raw as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    name: str(p.name),
+    avatarUrl: str(p.avatarUrl),
+    avatarStorageKey: typeof p.avatarStorageKey === "string" ? p.avatarStorageKey : undefined,
+    college: str(p.college),
+    grade: str(p.grade),
+    studentId: str(p.studentId),
+    completedCredits: num(p.completedCredits),
+    totalCredits: num(p.totalCredits),
+  };
+}
+
+/** hydrate 学习计划归一（非法 date/time 整条丢弃——缺一半时间的块渲染必错位） */
+function normalizeHydratedStudyBlock(raw: unknown): StudyBlock | null {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as Record<string, unknown>;
+  if (typeof b.id !== "string") return null;
+  if (typeof b.title !== "string") return null;
+  if (typeof b.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(b.date)) return null;
+  if (typeof b.startTime !== "string" || !/^\d{2}:\d{2}$/.test(b.startTime)) return null;
+  if (typeof b.endTime !== "string" || !/^\d{2}:\d{2}$/.test(b.endTime)) return null;
+  const source = b.source === "manual" || b.source === "kiro" ? b.source : undefined;
+  return {
+    id: b.id,
+    title: b.title,
+    date: b.date,
+    startTime: b.startTime,
+    endTime: b.endTime,
+    assignmentId: typeof b.assignmentId === "string" ? b.assignmentId : undefined,
+    courseId: typeof b.courseId === "string" ? b.courseId : undefined,
+    ...(source ? { source } : {}),
+    planningState: b.planningState === "released" ? "released" : undefined,
+    courseOverlapApprovals: Array.isArray(b.courseOverlapApprovals) ? b.courseOverlapApprovals : undefined,
+  } as StudyBlock;
+}
+
+/** hydrate 作息方案归一（periods 元素逐个校验——坏节次整表丢弃，不带病入库） */
+function normalizeHydratedBellSchedule(raw: unknown): BellScheduleTemplate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as Record<string, unknown>;
+  if (typeof b.id !== "string" || typeof b.name !== "string" || !Array.isArray(b.periods)) return null;
+  const periods = (b.periods as unknown[]).filter(
+    (p): p is { period: number; startTime: string; endTime: string } =>
+      !!p &&
+      typeof p === "object" &&
+      typeof (p as { period?: unknown }).period === "number" &&
+      Number.isInteger((p as { period?: unknown }).period) &&
+      typeof (p as { startTime?: unknown }).startTime === "string" &&
+      typeof (p as { endTime?: unknown }).endTime === "string"
+  );
+  if (periods.length === 0) return null;
+  return { id: b.id, name: b.name, periods };
 }
 
 /**
@@ -545,11 +608,14 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
   const groupProjects = Array.isArray(legacy.groupProjects)
     ? (legacy.groupProjects as GroupProject[]).map(normalizeGroupProject)
     : [];
+  // 作息表先归一化：active 必须指向归一化后仍存在的表（原表坏节次被丢弃后不再悬指）
+  const bellSchedules = Array.isArray(legacy.bellSchedules)
+    ? (legacy.bellSchedules as unknown[])
+        .map(normalizeHydratedBellSchedule)
+        .filter((b): b is BellScheduleTemplate => b !== null)
+    : [];
   const result: PersistedAppState = {
-    userProfile:
-      legacy.userProfile && typeof legacy.userProfile === "object"
-        ? (legacy.userProfile as UserProfile)
-        : EMPTY_USER_PROFILE,
+    userProfile: normalizeHydratedUserProfile(legacy.userProfile),
     semester: isValidSemester(legacy.semester) ? legacy.semester : createDefaultSemester(),
     courses: Array.isArray(legacy.courses)
       ? (legacy.courses as unknown[]).map(normalizeHydratedCourse).filter((c): c is Course => c !== null)
@@ -576,8 +642,12 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
       : "overview",
     // v3：preferences 稳定偏好，缺失/部分/非法均逐字段回落默认值
     preferences: sanitizePreferences(legacy.preferences),
-    // v4：Timeline V1 学习计划（旧数据缺失 → []）
-    studyBlocks: Array.isArray(legacy.studyBlocks) ? (legacy.studyBlocks as StudyBlock[]) : [],
+    // v4：Timeline V1 学习计划（旧数据缺失 → []；非法条目丢弃）
+    studyBlocks: Array.isArray(legacy.studyBlocks)
+      ? (legacy.studyBlocks as unknown[])
+          .map(normalizeHydratedStudyBlock)
+          .filter((b): b is StudyBlock => b !== null)
+      : [],
     // v5：Reminder（旧数据缺失 → []；非法条目丢弃）
     reminders: Array.isArray(legacy.reminders)
       ? (legacy.reminders as Reminder[]).map(normalizeReminder).filter((r): r is Reminder => r !== null)
@@ -592,17 +662,11 @@ function sanitizePersistedState(persisted: unknown): PersistedAppState {
           .map(normalizeHydratedOverride)
           .filter((o): o is ScheduleOccurrenceOverride => o !== null)
       : [],
-    // v8：Bell Schedule（旧数据缺失 → []；非法条目丢弃；active 回落第一个或 null）
-    bellSchedules: Array.isArray(legacy.bellSchedules)
-      ? (legacy.bellSchedules as BellScheduleTemplate[]).filter(
-          (b): b is BellScheduleTemplate =>
-            b !== null && typeof b === "object" && typeof b.id === "string" && typeof b.name === "string" && Array.isArray(b.periods)
-        )
-      : [],
+    // v8：Bell Schedule（旧数据缺失 → []；非法表/坏节次丢弃；active 悬指回落 null）
+    bellSchedules,
     activeBellScheduleId:
       typeof legacy.activeBellScheduleId === "string" &&
-      Array.isArray(legacy.bellSchedules) &&
-      (legacy.bellSchedules as BellScheduleTemplate[]).some((b) => b && b.id === legacy.activeBellScheduleId)
+      bellSchedules.some((b) => b.id === legacy.activeBellScheduleId)
         ? legacy.activeBellScheduleId
         : null,
   };
@@ -1243,8 +1307,24 @@ export const useAppStore = create<AppState>()(
         // 允许 completed Focus backfill（restore 后 Runtime 会跑）
         resetLearningHistoryForDomainReset();
         set((state) => {
+          // 恢复与 hydrate 同一归一口径：脏备份（手改 JSON / 旧版本缺字段）不得直写入库
           const assignments = data.assignments.map(normalizeAssignment);
-          const calendarMarks = linkLegacyDDLMarks(data.assignments, data.calendarMarks);
+          const courses = Array.isArray(data.courses)
+            ? (data.courses as unknown[])
+                .map(normalizeHydratedCourse)
+                .filter((c): c is Course => c !== null)
+            : [];
+          const schedules = Array.isArray(data.schedules)
+            ? (data.schedules as unknown[])
+                .map(normalizeHydratedSchedule)
+                .filter((s): s is CourseSchedule => s !== null)
+            : [];
+          const calendarMarks = linkLegacyDDLMarks(
+            assignments,
+            (Array.isArray(data.calendarMarks) ? (data.calendarMarks as unknown[]) : [])
+              .map(normalizeHydratedMark)
+              .filter((m): m is CalendarMark => m !== null)
+          );
           const preferences = data.preferences
             ? sanitizePreferences(data.preferences)
             : state.preferences;
@@ -1264,16 +1344,19 @@ export const useAppStore = create<AppState>()(
           // Workflow UX V15：backup import 同样执行 legacy terminal reconciliation（幂等）
           const reconciledRestore = reconcileTerminalAssignmentStudyBlocks({
             assignments,
-            studyBlocks: Array.isArray(data.studyBlocks) ? data.studyBlocks : [],
+            studyBlocks: Array.isArray(data.studyBlocks)
+              ? (data.studyBlocks as unknown[])
+                  .map(normalizeHydratedStudyBlock)
+                  .filter((b): b is StudyBlock => b !== null)
+              : [],
             reminders,
             now: Date.now(),
           });
           // 作息方案：备份缺失 → 保留当前（旧备份不清空用户作息表）
           const bellSchedules = Array.isArray(data.bellSchedules)
-            ? (data.bellSchedules as BellScheduleTemplate[]).filter(
-                (b): b is BellScheduleTemplate =>
-                  b !== null && typeof b === "object" && typeof b.id === "string" && typeof b.name === "string" && Array.isArray(b.periods)
-              )
+            ? (data.bellSchedules as unknown[])
+                .map(normalizeHydratedBellSchedule)
+                .filter((b): b is BellScheduleTemplate => b !== null)
             : state.bellSchedules;
           const activeBellScheduleId =
             typeof data.activeBellScheduleId === "string" &&
@@ -1282,11 +1365,17 @@ export const useAppStore = create<AppState>()(
               : Array.isArray(data.bellSchedules)
                 ? (bellSchedules[0]?.id ?? null)
                 : state.activeBellScheduleId;
+          // 学期非法（totalWeeks 非正整数等）→ 保留当前学期；周钳位用有效周数，防 NaN 污染
+          const restoredSemester = isValidSemester(data.semester) ? data.semester : state.semester;
+          const restoredTotalWeeks = restoredSemester.totalWeeks;
           return {
-            userProfile: data.userProfile,
-            semester: data.semester,
-            courses: data.courses,
-            schedules: data.schedules,
+            userProfile:
+              data.userProfile && typeof data.userProfile === "object"
+                ? normalizeHydratedUserProfile(data.userProfile)
+                : state.userProfile,
+            semester: restoredSemester,
+            courses,
+            schedules,
             assignments,
             calendarMarks,
             groupProjects: data.groupProjects.map(normalizeGroupProject),
@@ -1296,15 +1385,17 @@ export const useAppStore = create<AppState>()(
             focusSessions: Array.isArray(data.focusSessions)
               ? data.focusSessions.map(normalizeFocusSession).filter((f): f is FocusSession => f !== null)
               : [],
-            // Task 7：旧备份缺失 → []（不破坏旧数据恢复）
+            // Task 7：旧备份缺失 → []（不破坏旧数据恢复）；非法条目丢弃
             scheduleOccurrenceOverrides: Array.isArray(data.scheduleOccurrenceOverrides)
-              ? data.scheduleOccurrenceOverrides
+              ? (data.scheduleOccurrenceOverrides as unknown[])
+                  .map(normalizeHydratedOverride)
+                  .filter((o): o is ScheduleOccurrenceOverride => o !== null)
               : [],
             bellSchedules,
             activeBellScheduleId,
             currentSemesterWeek: Math.min(
               Math.max(state.currentSemesterWeek, 1),
-              data.semester.totalWeeks
+              restoredTotalWeeks
             ),
           };
         });

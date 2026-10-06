@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import {
   prepareBackupRestore,
   commitBackupRestore,
+  stripFailedMaterialRefs,
 } from "@/lib/backupRestore";
 import { useAppStore } from "@/store/useAppStore";
 import { ClassFlowBackupData, AppPreferences } from "@/types";
@@ -310,5 +311,30 @@ describe("commitBackupRestore（确认后恢复）", () => {
       restoreAppData: (d) => useAppStore.getState().restoreAppData(d),
     });
     expect(useAppStore.getState().focusSessions).toEqual([]);
+  });
+});
+
+describe("stripFailedMaterialRefs（写入失败不悬指）", () => {
+  const course = (materials: { id: string; title: string; storageKey?: string }[]) => ({
+    id: "c1",
+    name: "课程",
+    code: "",
+    teacher: "",
+    classroom: "",
+    credit: 0,
+    bgHex: "",
+    borderHex: "",
+    textHex: "",
+    description: "",
+    materials: materials.map((m) => ({ type: "pdf", uploadDate: "", ...m }) as never),
+  });
+  it("失败 key 摘除 storageKey，其余保留；空失败集原样返回", () => {
+    const courses = [course([{ id: "m1", title: "a", storageKey: "f1" }, { id: "m2", title: "b", storageKey: "f2" }, { id: "m3", title: "c" }])] as never;
+    const stripped = stripFailedMaterialRefs(courses, ["f1"]);
+    const mats = (stripped[0] as unknown as { materials: { id: string; storageKey?: string }[] }).materials;
+    expect(mats.find((m) => m.id === "m1")?.storageKey).toBeUndefined();
+    expect(mats.find((m) => m.id === "m2")?.storageKey).toBe("f2");
+    expect(mats.find((m) => m.id === "m3")?.storageKey).toBeUndefined();
+    expect(stripFailedMaterialRefs(courses, [])).toBe(courses);
   });
 });
