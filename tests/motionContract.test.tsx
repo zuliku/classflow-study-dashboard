@@ -462,9 +462,12 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
     expect(collapse).toContain("duration-[var(--motion-exit-panel)]");
   });
 
-  it("P2/P3：textarea 高度过渡 + 发送 press 均走 token/常量", () => {
+  it("P2/P3：textarea 高度直写无过渡 + 发送 press 均走 token/常量", () => {
     const composer = read("components/kiro/KiroComposer.tsx");
-    expect(composer).toContain("transition-[height]");
+    // autoGrow 每键直写 height：禁止 height 过渡（否则排队插值滞后/回弹），等高由 min-h 保证
+    expect(composer).not.toContain("transition-[height]");
+    expect(composer).toContain('min-h-[44px]');
+    expect(composer).toContain('min-h-[64px]');
     expect(composer).toContain("duration-[var(--kiro-motion-control,var(--motion-fast))]");
     expect(composer).toContain("MOTION_MS.snap");
     expect(read("app/globals.css")).toContain(

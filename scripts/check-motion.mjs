@@ -8,6 +8,11 @@
  * - FAIL（exit 1）：duration-[<数字>ms] 裸时长（必须引用 motion token 变量）
  * - WARN（exit 0）：裸 cubic-bezier（新代码优先引用 ease token；globals.css :root 与
  *   lib/motion.ts EASE 定义处除外）
+ * - WARN（exit 0）：transition-[left/top/right/bottom]（布局位移，优先 transform；
+ *   拖拽跟手 Timetable/Timeline 与滑块旋钮暂白名单，见 WARN_LAYOUT_ALLOW）
+ * - WARN（exit 0）：transition-[width/height/min/max-height]（布局尺寸，JS 直写高度处禁用；
+ *   ExitCollapse 网格折叠 / 进度条 / SegmentedControl transform+width 暂白名单）
+ * - WARN（exit 0）：.style.(left/top/width/height)= 直接写布局属性（优先 transform）
  *
  * 对标 scripts/check-secrets.mjs 的目录 walk 口径；可在 CI 显式调用。
  * 用法：node scripts/check-motion.mjs
@@ -30,6 +35,12 @@ const FAIL_PATTERNS = [
 
 const WARN_PATTERNS = [
   { name: "裸 cubic-bezier（优先 --ease-* token）", regex: /cubic-bezier\(/g },
+  // 布局位移过渡：优先 transform 合成层；拖拽跟手/滑块旋钮暂白名单（见 WARN_LAYOUT_ALLOW）
+  { name: "transition-[left/top/right/bottom]（优先 transform）", regex: /transition-\[[^\]]*\b(left|top|right|bottom)\b[^\]]*\]/g },
+  // 布局尺寸过渡：JS 直写高度处禁用；结构折叠/进度/分段暂白名单
+  { name: "transition-[width/height]（JS 直写高度处禁用）", regex: /transition-\[[^\]]*\b(width|height|min-height|max-height)\b[^\]]*\]/g },
+  // JS 直接写布局属性：优先 transform（autoGrow 高度直写除外，其处禁止配 height 过渡）
+  { name: "style.layout 直写（优先 transform）", regex: /\.style\.(left|top|width|height)\s*=/g },
 ];
 
 // WARN 豁免：token 定义源头本身就是字面量
@@ -38,6 +49,23 @@ const WARN_ALLOW_FILES = new Set([
   "lib/motion.ts",
   "scripts/check-motion.mjs",
 ]);
+
+// 布局过渡 WARN 豁免（有意为之，勿扩散）：
+// - ExitCollapse：grid 结构折叠（exit-only 160ms + 内层 inert，IM4B 规范）
+// - SegmentedControl/KiroModeCapsule：transform+width（width 只在切换瞬间 layout 一次，非逐帧）
+// 其余（ReasoningControl 滑块 / Timetable-Timeline 拖拽跟手 / Terminal max-height / TimelineKeyLane）
+// 保持 WARN 可见，留给后续批次收敛，不在此静默。
+const WARN_TRANSITION_ALLOW = [
+  "components/ui/ExitCollapse.tsx",
+  "components/ui/SegmentedControl.tsx",
+  "components/kiro/KiroModeCapsule.tsx",
+];
+// JS 直写布局属性 WARN 豁免：autoGrow 直写 height 无过渡是有意正确模式
+//（bug 是直写+过渡并存；直写本身保留），仅此两处豁免。
+const WARN_STYLE_ALLOW = [
+  "components/kiro/KiroComposer.tsx",
+  "components/kiro/KiroMessage.tsx",
+];
 
 const failures = [];
 const warnings = [];
@@ -62,6 +90,12 @@ function walk(dir) {
       }
       if (!WARN_ALLOW_FILES.has(rel.replace(/\\/g, "/"))) {
         for (const p of WARN_PATTERNS) {
+          // 布局类 WARN 分两类白名单：过渡 vs 直写；白名单文件跳过对应项，仍检查 cubic-bezier
+          const relPosix = rel.replace(/\\/g, "/");
+          const isTransitionWarn = p.name.startsWith("transition-[");
+          const isStyleWarn = p.name.startsWith("style.layout");
+          if (isTransitionWarn && WARN_TRANSITION_ALLOW.includes(relPosix)) continue;
+          if (isStyleWarn && WARN_STYLE_ALLOW.includes(relPosix)) continue;
           const m = content.match(p.regex);
           if (m) warnings.push(`${p.name}: ${rel} x${m.length}`);
         }

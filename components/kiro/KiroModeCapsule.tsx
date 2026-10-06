@@ -28,19 +28,28 @@ export function KiroModeCapsule({
 }) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const [pill, setPill] = React.useState<{ left: number; width: number } | null>(null);
-  // 滑动指示条：测量激活段位置，transform 位移（只动合成层，不触发布局，胶囊/聊天框/logo 零位移）
+  // 滑动指示条：测量激活段位置，transform 位移（只动合成层，left 固定为 0 不触发布局）
   React.useLayoutEffect(() => {
     const container = containerRef.current;
-    const activeBtn = container?.querySelector('[aria-pressed="true"]');
-    if (!container || !(activeBtn instanceof HTMLElement)) return;
-    const c = container.getBoundingClientRect();
-    const b = activeBtn.getBoundingClientRect();
-    if (b.width === 0) return;
-    setPill((prev) => {
+    if (!container) return;
+    const measure = () => {
+      const activeBtn = container.querySelector('[aria-pressed="true"]');
+      if (!(activeBtn instanceof HTMLElement)) return;
+      const c = container.getBoundingClientRect();
+      const b = activeBtn.getBoundingClientRect();
+      if (b.width === 0) return;
       const next = { left: b.left - c.left, width: b.width };
-      if (prev && prev.left === next.left && prev.width === next.width) return prev;
-      return next;
-    });
+      setPill((prev) => (prev && prev.left === next.left && prev.width === next.width ? prev : next));
+    };
+    measure();
+    // 窗口缩放/字体加载/Sidecar 拖宽后重算，避免指示条错位
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    ro?.observe(container);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, [active]);
   return (
     <div
@@ -54,8 +63,8 @@ export function KiroModeCapsule({
         <span
           aria-hidden="true"
           // 小浮层位移用 control 档（不用 spatial spring：胶囊是轻量切换，非空间位移）
-          className="absolute top-0.5 bottom-0.5 rounded-full bg-charcoal shadow-subtle transition-[left,width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
-          style={{ left: pill.left, width: pill.width }}
+          className="absolute left-0 top-0.5 bottom-0.5 rounded-full bg-charcoal shadow-subtle transition-[transform,width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
+          style={{ width: pill.width, transform: `translateX(${pill.left}px)` }}
         />
       )}
       {SEGMENTS.map((s) => {

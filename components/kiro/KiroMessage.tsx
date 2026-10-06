@@ -513,7 +513,7 @@ export function KiroUserMessage({
                 }
               }}
               aria-label="编辑消息"
-              className="w-full px-3 py-2.5 bg-white border border-line-strong rounded-2xl text-xs font-medium text-charcoal focus:outline-none focus:border-charcoal resize-none whitespace-pre-wrap leading-relaxed transition-[height] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
+              className="w-full px-3 py-2.5 bg-white border border-line-strong rounded-2xl text-xs font-medium text-charcoal focus:outline-none focus:border-charcoal resize-none whitespace-pre-wrap leading-relaxed"
             />
             <div className="flex items-center justify-end gap-1.5">
               <button

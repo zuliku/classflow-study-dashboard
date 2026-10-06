@@ -1007,8 +1007,8 @@ export const KiroComposer = React.memo(function KiroComposer({
                 aria-label="Ask Kiro"
                 className={cn(
                   "relative w-full resize-none bg-transparent text-sm text-charcoal placeholder-sandrift focus:outline-none leading-relaxed",
-                  // P2：autoGrow 高度 px 跳变走 control 档过渡（输入增高不再硬跳；reduced-motion 全局兜底）
-                  "transition-[height] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]",
+                  // autoGrow 每键直写 height（JS 同步定高）：不加 height 过渡，
+                  // 否则快速输入排队插值导致增高滞后/回弹；等高由 min-h 保证
                   // P1 实测结论：最低高度常驻两模式（此前仅 Computer ON 有 64px，
                   // 模式切换 0↔64 瞬跳 41px 且 min-height 过渡不可靠；等高后切换零位移，
                   // 品牌区居中不再被带着上下移动）

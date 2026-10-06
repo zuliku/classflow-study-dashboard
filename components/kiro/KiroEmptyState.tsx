@@ -42,7 +42,7 @@ export function KiroEmptyState({
     swapTimerRef.current = window.setTimeout(() => {
       swapTimerRef.current = null;
       setModeSwapping(false);
-    }, 300);
+    }, 260);
   }, [computerEnabled]);
   React.useEffect(
     () => () => {
