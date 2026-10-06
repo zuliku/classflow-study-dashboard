@@ -294,7 +294,7 @@ describe("硬切深筛源码契约", () => {
     const command = read("components/command/CommandCenter.tsx");
     expect(command).toContain("visible && \"backdrop-blur-sm\"");
     const glance = read("components/dashboard/TimetableQuickGlance.tsx");
-    expect(glance).toContain("transition-[opacity,visibility]");
+    expect(glance).toContain("transition-[opacity,transform,visibility]");
     const agent = read("components/settings/KiroAgentSettings.tsx");
     expect(agent).toContain("DisclosureRegion open={desktopActionAvailable && desktopActionEnabled}");
     const toast = read("components/ui/ToastViewport.tsx");

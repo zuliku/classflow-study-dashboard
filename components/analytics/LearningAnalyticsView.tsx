@@ -30,6 +30,7 @@ import {
   presentPlanMetric,
 } from "@/lib/analytics/presentation";
 import { cn } from "@/lib/utils";
+import { ChevronDown } from "lucide-react";
 import { handleOpenOutlookAssignment } from "@/lib/analytics/outlookAssignmentAction";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { AnalyticsWorkspaceViewBar } from "@/components/analytics/AnalyticsWorkspaceViewBar";
@@ -60,6 +61,10 @@ export function LearningAnalyticsView() {
   const [preset, setPreset] = useState<AnalyticsRangePreset>("week");
   /** 周回顾展开状态：只属于 component UI state，不持久化 */
   const [reviewExpanded, setReviewExpanded] = useState(false);
+  // 渐进披露：下方三个明细分区默认展开、允许收起（E2E 层级契约要求默认齐全可见）
+  const [distOpen, setDistOpen] = useState(true);
+  const [execOpen, setExecOpen] = useState(true);
+  const [nextOpen, setNextOpen] = useState(true);
   const reviewRef = useRef<HTMLDivElement | null>(null);
   const reducedMotion = useEffectiveReducedMotion();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -248,33 +253,65 @@ export function LearningAnalyticsView() {
 
                   {/* 投入与节奏（Distribution；Course/Rhythm 各自 content-fit，不强制等高） */}
                   <section>
-                    <h2 className="text-[13px] font-bold text-charcoal mb-3">投入与节奏</h2>
+                    <button
+                      type="button"
+                      onClick={() => setDistOpen((v) => !v)}
+                      aria-expanded={distOpen}
+                      className="w-full flex items-center justify-between mb-3 text-left group"
+                    >
+                      <h2 className="text-[13px] font-bold text-charcoal">投入与节奏</h2>
+                      <ChevronDown
+                        className={cn(
+                          "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
+                          !distOpen && "-rotate-90"
+                        )}
+                        aria-hidden="true"
+                      />
+                    </button>
                     {data.coverage.focusReliability === "partial" && (
                       <p className="text-[10px] text-satin-grey mb-3 -mt-1">
                         专注记录在该区间不完整，以下为已记录部分
                       </p>
                     )}
-                    <div className={ANALYTICS_PAIRED_GRID}>
-                      <CourseInvestmentCard
-                        investment={presentCourseInvestment(data.courseInvestment, courseNameById)}
-                        onOpenCourse={(courseId) => {
-                          if (courseNameById[courseId]) setSelectedCourseId(courseId);
-                        }}
-                      />
-                      <FocusRhythmCard rhythm={data.focusRhythm} />
-                    </div>
+                    <DisclosureRegion open={distOpen}>
+                      <div className={ANALYTICS_PAIRED_GRID}>
+                        <CourseInvestmentCard
+                          investment={presentCourseInvestment(data.courseInvestment, courseNameById)}
+                          onOpenCourse={(courseId) => {
+                            if (courseNameById[courseId]) setSelectedCourseId(courseId);
+                          }}
+                        />
+                        <FocusRhythmCard rhythm={data.focusRhythm} />
+                      </div>
+                    </DisclosureRegion>
                   </section>
 
                   {/* 执行情况（reliability-aware：partial 只显示已记录，不显示伪精确按时率） */}
                   <section>
-                    <h2 className="text-[13px] font-bold text-charcoal mb-3">执行情况</h2>
-                    <ExecutionQualityCard
-                      view={presentExecutionQuality(
-                        data.execution,
-                        data.coverage.assignmentReliability,
-                        data.coverage.focusReliability
-                      )}
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setExecOpen((v) => !v)}
+                      aria-expanded={execOpen}
+                      className="w-full flex items-center justify-between mb-3 text-left group"
+                    >
+                      <h2 className="text-[13px] font-bold text-charcoal">执行情况</h2>
+                      <ChevronDown
+                        className={cn(
+                          "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
+                          !execOpen && "-rotate-90"
+                        )}
+                        aria-hidden="true"
+                      />
+                    </button>
+                    <DisclosureRegion open={execOpen}>
+                      <ExecutionQualityCard
+                        view={presentExecutionQuality(
+                          data.execution,
+                          data.coverage.assignmentReliability,
+                          data.coverage.focusReliability
+                        )}
+                      />
+                    </DisclosureRegion>
                   </section>
                 </>
               )}
@@ -298,16 +335,32 @@ export function LearningAnalyticsView() {
             <ChartSkeleton />
           ) : outlook.data ? (
             <section>
-              <h2 className="text-[13px] font-bold text-charcoal mb-3">下一步</h2>
-              <div className={ANALYTICS_PAIRED_GRID}>
-                <StudyOutlookCard
-                  outlook={outlook.data}
-                  horizonDays={outlookHorizon}
-                  onHorizonChange={setOutlookHorizon}
-                  onOpenAssignment={handleOpenOutlookAssignment}
+              <button
+                type="button"
+                onClick={() => setNextOpen((v) => !v)}
+                aria-expanded={nextOpen}
+                className="w-full flex items-center justify-between mb-3 text-left group"
+              >
+                <h2 className="text-[13px] font-bold text-charcoal">下一步</h2>
+                <ChevronDown
+                  className={cn(
+                    "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
+                    !nextOpen && "-rotate-90"
+                  )}
+                  aria-hidden="true"
                 />
-                <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
-              </div>
+              </button>
+              <DisclosureRegion open={nextOpen}>
+                <div className={ANALYTICS_PAIRED_GRID}>
+                  <StudyOutlookCard
+                    outlook={outlook.data}
+                    horizonDays={outlookHorizon}
+                    onHorizonChange={setOutlookHorizon}
+                    onOpenAssignment={handleOpenOutlookAssignment}
+                  />
+                  <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
+                </div>
+              </DisclosureRegion>
             </section>
           ) : null}
         </div>

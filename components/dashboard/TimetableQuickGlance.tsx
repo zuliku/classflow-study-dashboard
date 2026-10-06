@@ -223,10 +223,13 @@ function GlanceChip({
         <span className="tabular-nums leading-none">{count}</span>
       </button>
       {/* Detail Popover：hover / focus-within 显示；right-0 对齐避免越出 Card。
-          hover 意图延迟 150ms（此前挪用退出档 --motion-exit-fast 语义；此处是进入延迟非退出时长） */}
+          进入 = hover 意图延迟 100ms + 上浮 4px + 淡入（--motion-fast/--ease-standard）；
+          退出 = 无延迟加速离场（--motion-exit-fast/--ease-exit），与 Toast 同一契约。
+          （此前 delay-150 写在基线、group-hover:delay-0 只在悬停时生效——鼠标一离开
+          delay 跌回 150ms，退出先冻住再淡出；且纯 opacity 无位移，看起来发僵。） */}
       <div
         role="tooltip"
-        className="absolute right-0 top-full mt-1.5 w-[240px] bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2.5 z-30 opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-[opacity,visibility] duration-[var(--motion-fast)] delay-150 group-hover:delay-0 group-focus-within:delay-0"
+        className="absolute right-0 top-full mt-1.5 w-[240px] bg-surface border border-line-strong rounded-xl shadow-card px-3 py-2.5 z-30 origin-top-right opacity-0 invisible translate-y-1 scale-[0.98] group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:scale-100 transition-[opacity,transform,visibility] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)] delay-0 group-hover:duration-[var(--motion-fast)] group-hover:ease-[var(--ease-standard)] group-hover:delay-100 group-focus-within:duration-[var(--motion-fast)] group-focus-within:ease-[var(--ease-standard)] group-focus-within:delay-100"
       >
         {children}
       </div>

@@ -657,7 +657,7 @@ export function AssignmentTable({
                 "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
                 isHighlighted
                   ? "opacity-100"
-                  : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
               )}
               title="Kiro 拆解为步骤"
               aria-label={`Kiro 拆解 ${task.title}`}
@@ -669,7 +669,7 @@ export function AssignmentTable({
             onClick={(e) => handleEditClick(e, task.id)}
             className={cn(
               "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
-              isWorkspace && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+              isWorkspace && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
             )}
             title="编辑任务"
           >
@@ -683,7 +683,7 @@ export function AssignmentTable({
             }}
             className={cn(
               "p-1.5 rounded-lg text-danger hover:bg-danger-bg transition-colors",
-              isWorkspace && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+              isWorkspace && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
             )}
             title="删除任务"
           >
@@ -841,10 +841,30 @@ export function AssignmentTable({
           ) : (
             <div
               data-testid="assignment-empty"
-              className="h-full flex flex-col items-center justify-center gap-2.5 text-center"
+              className="h-full flex flex-col items-center justify-center gap-1.5 text-center"
             >
               <CheckCircle2 className="w-9 h-9 text-success" />
-              <p className="text-xs text-sandrift">该筛选条件下暂无任务</p>
+              <p className="text-xs font-semibold text-satin-grey">该筛选条件下暂无任务</p>
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCourseFilter("all");
+                    setAssignmentTimeSlice("all");
+                    setCompactPage(1);
+                  }}
+                  className="px-3 h-7 rounded-lg text-[11px] font-bold text-satin-grey bg-alabaster border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+                >
+                  清除筛选
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddAssignmentClick}
+                  className="px-3 h-7 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+                >
+                  新建任务
+                </button>
+              </div>
             </div>
           )
         ) : (
