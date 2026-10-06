@@ -547,7 +547,7 @@ export function AssignmentTable({
             <div className="flex items-center space-x-2">
               <h4
                 title={task.title}
-                className={`text-xs font-bold truncate ${
+                className={`text-xs font-bold truncate min-w-0 flex-1 ${
                   isCompleted
                     ? "line-through text-sandrift"
                     : "text-charcoal group-hover:text-black"
@@ -588,7 +588,7 @@ export function AssignmentTable({
             </div>
 
             <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">
-              <span title={course?.name || "通用"} className="truncate font-semibold">{course?.name || "通用"}</span>
+              <span title={course?.name || "通用"} className="truncate min-w-0 font-semibold">{course?.name || "通用"}</span>
               <span>·</span>
               <span className={hasDdl ? "whitespace-nowrap" : "text-satin-grey/70 whitespace-nowrap"}>截止: {formattedDate}</span>
               {task.estimatedMinutes && isWorkspace && (

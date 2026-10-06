@@ -257,16 +257,15 @@ describe("Kiro Composer — Access", () => {
     expect(auto.className).toContain("text-[#C2410C]");
   });
 
-  it("菜单：模式选择回调 / 工作范围 + warning / 权限摘要 / 管理入口", async () => {
+  it("菜单精简：仅访问等级 + 管理入口（工作范围/权限明细进设置）", async () => {
     await renderComposer({ computerEnabled: false, grantWarning: "需要重新授权" });
     await click('[data-testid="kiro-composer-access"]');
     const menu = q('[data-testid="kiro-composer-access-menu"]')!;
     expect(menu.querySelectorAll('[role="menuitemradio"]').length).toBe(4);
-    expect(q('[data-testid="kiro-composer-access-workspace"]')!.textContent).toContain("ClassFlow Desktop");
-    expect(q('[data-testid="kiro-composer-access-workspace"]')!.textContent).toContain("需要重新授权");
-    expect(container!.querySelectorAll('[data-testid="kiro-composer-permission-row"]').length).toBe(4);
-    expect(text()).toContain("已允许");
-    expect(text()).toContain("未允许");
+    // 工作范围 / 权限摘要已移出弹窗（进设置 → Agent 与权限查看）
+    expect(q('[data-testid="kiro-composer-access-workspace"]')).toBeNull();
+    expect(q('[data-testid="kiro-composer-access-permissions"]')).toBeNull();
+    expect(container!.querySelectorAll('[data-testid="kiro-composer-permission-row"]').length).toBe(0);
 
     await clickText("受控访问");
     expect(handlers.onToggleComputer).toHaveBeenCalledWith(true);

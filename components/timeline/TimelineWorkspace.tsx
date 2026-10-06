@@ -778,7 +778,7 @@ export function TimelineWorkspace() {
                   {focusRunning ? "专注中" : "已暂停"}
                 </span>
               )}
-              <span className="truncate text-[10px] font-semibold text-satin-grey">
+              <span className="truncate min-w-0 flex-1 text-[10px] font-semibold text-satin-grey">
                 {b.title}
               </span>
               {validApprovalCount > 0 && (

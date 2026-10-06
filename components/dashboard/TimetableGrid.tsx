@@ -836,7 +836,7 @@ export function TimetableGrid({
                         <div className="space-y-0.5 min-w-0">
                           {/* 1. Course Title */}
                           <div className="flex items-start justify-between">
-                            <h4 title={course.name} className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal truncate">
+                            <h4 title={course.name} className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal truncate min-w-0 flex-1">
                               {course.name}
                             </h4>
                             {hasConflict && (
@@ -863,7 +863,7 @@ export function TimetableGrid({
                           {/* 2. Teacher Info */}
                           <div className="flex items-center text-[10px] sm:text-[11px] opacity-85 space-x-1 font-medium leading-none">
                             <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                            <span title={course.teacher} className="truncate">{course.teacher}</span>
+                            <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
                           </div>
                         </div>
 
@@ -880,7 +880,7 @@ export function TimetableGrid({
                             </span>
                           )}
                           <MapPin className="w-2.5 h-2.5 mr-1 shrink-0 opacity-75" />
-                          <span title={sched.location} className="truncate">{sched.location}</span>
+                          <span title={sched.location} className="truncate min-w-0">{sched.location}</span>
                         </div>
 
                         {/* Resize Handle：仅工作区显示（moved/extra 一次性 occurrence 不显示），hover/focus/拖拽中才明显 */}

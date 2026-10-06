@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React from "react";
-import { Check, Settings2, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Check, Settings2, ShieldCheck } from "lucide-react";
 import { PopoverPanel } from "@/components/ui/Popover";
 import { KiroAgentMode } from "@/lib/ai/computer/types";
 import {
@@ -16,43 +16,20 @@ import {
 } from "@/components/kiro/composer/KiroComposerAccess";
 import { cn } from "@/lib/utils";
 
-export interface KiroComposerPermissionSummary {
-  terminal: boolean;
-  desktopObserve: boolean;
-  desktopAction: boolean;
-  clipboard: boolean;
-}
-
-function PermissionRow({ label, allowed }: { label: string; allowed: boolean }) {
-  return (
-    <div
-      className="flex items-center justify-between gap-1.5 px-2 h-7 rounded-md bg-alabaster/60"
-      data-testid="kiro-composer-permission-row"
-    >
-      <span className="text-[10px] font-medium text-satin-grey truncate">{label}</span>
-      <span className={cn("text-[10px] font-semibold shrink-0", allowed ? "text-charcoal" : "text-sandrift/80")}>
-        {allowed ? "已允许" : "未允许"}
-      </span>
-    </div>
-  );
-}
-
 /**
- * Kiro Composer — Access（访问）：Computer 开关 + Agent Mode + 工作范围 + 权限摘要。
+ * Kiro Composer — Access（访问）：只做访问等级选择 + 设置入口。
  *
- * - 一级只显示一个 chip（🛡 仅对话 / 仅规划 / 受控访问 / 自动执行）
+ * - 弹窗仅两段：顶部访问等级（仅对话 / 仅规划 / 受控访问 / 自动执行）+ 底部管理 Agent 权限…
+ * - 工作范围 / 细粒度权限明细不在此展开，进设置 → Agent 与权限查看修改
+ *   （一级 chip 的 title + 未授权 warning 圆点保留状态提示）
  * - 仅对话 ↔ Computer ON/OFF：Turn 运行中禁用（属于当前 Turn scope）
  * - plan / guided / workspace-auto：只受 next-turn preference 锁（Intent 冻结后仍可改）
- * - 细粒度权限只显示「已允许 / 未允许」（permission preference），不声称 runtime availability
- * - 权限修改入口：管理 Agent 权限… → 设置
  */
 export function KiroComposerAccessControl({
   computerEnabled,
   agentMode,
-  workspaceName,
   workspaceConfigured,
   grantWarning,
-  permissions,
   scopeLocked,
   preferencesLocked,
   compact,
@@ -63,10 +40,8 @@ export function KiroComposerAccessControl({
 }: {
   computerEnabled: boolean;
   agentMode: KiroAgentMode;
-  workspaceName: string | null;
   workspaceConfigured: boolean;
   grantWarning?: string | null;
-  permissions: KiroComposerPermissionSummary;
   /** 当前 Turn scope 锁（仅对话 ↔ Computer 开关） */
   scopeLocked: boolean;
   /** 下一 Turn preference 锁（Agent Mode 选择） */
@@ -109,7 +84,7 @@ export function KiroComposerAccessControl({
         aria-label="访问"
         aria-expanded={open}
         aria-haspopup="menu"
-        title={`${copy.label}${workspaceConfigured && workspaceName ? ` · ${workspaceName}` : ""}`}
+        title={copy.label}
         data-testid="kiro-composer-access"
         data-access-mode={state}
         className={cn(
@@ -187,33 +162,6 @@ export function KiroComposerAccessControl({
               </button>
             );
           })}
-
-          <div className="my-1 h-px bg-line-soft" aria-hidden="true" />
-
-          <div className="px-3 py-1" data-testid="kiro-composer-access-workspace">
-            <p className="text-[10px] font-bold tracking-[0.02em] text-sandrift">工作范围</p>
-            <p className="mt-0.5 text-[11px] font-semibold text-charcoal truncate">
-              {workspaceName ?? "未配置 Workspace"}
-            </p>
-            {warning && (
-              <p className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold text-warning">
-                <ShieldAlert className="w-3 h-3 shrink-0" />
-                {grantWarning}
-              </p>
-            )}
-          </div>
-
-          <div className="my-1 h-px bg-line-soft" aria-hidden="true" />
-
-          <div className="px-3 pt-0.5" data-testid="kiro-composer-access-permissions">
-            <p className="pb-1 text-[10px] font-bold tracking-[0.02em] text-sandrift">权限</p>
-            <div className="grid grid-cols-2 gap-1">
-              <PermissionRow label="终端" allowed={permissions.terminal} />
-              <PermissionRow label="查看桌面" allowed={permissions.desktopObserve} />
-              <PermissionRow label="操作电脑" allowed={permissions.desktopAction} />
-              <PermissionRow label="剪贴板" allowed={permissions.clipboard} />
-            </div>
-          </div>
 
           <div className="my-1 h-px bg-line-soft" aria-hidden="true" />
 

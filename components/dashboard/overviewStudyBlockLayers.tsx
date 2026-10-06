@@ -88,7 +88,7 @@ export function buildOverviewStudyBlockLayers(input: {
               className="absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none"
               style={{ top: `${topPct}%`, height: `${Math.max(heightPct, 2)}%`, minHeight: 4 }}
             >
-              <span className="truncate text-[10px] font-semibold text-satin-grey">{b.title}</span>
+              <span className="truncate min-w-0 flex-1 text-[10px] font-semibold text-satin-grey">{b.title}</span>
               <span className="shrink-0 text-[9px] text-sandrift">{b.startTime}</span>
             </div>
           );

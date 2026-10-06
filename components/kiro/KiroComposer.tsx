@@ -8,7 +8,6 @@ import { KiroAttachmentChip } from "@/components/kiro/KiroAttachmentChip";
 import { KiroComposerAddMenu } from "@/components/kiro/composer/KiroComposerAddMenu";
 import {
   KiroComposerAccessControl,
-  type KiroComposerPermissionSummary,
 } from "@/components/kiro/composer/KiroComposerAccessControl";
 import { KiroComposerModelControl } from "@/components/kiro/composer/KiroComposerModelControl";
 import { KiroComposerReasoningControl } from "@/components/kiro/composer/KiroComposerReasoningControl";
@@ -97,7 +96,6 @@ export const KiroComposer = React.memo(function KiroComposer({
   workspace,
   workspaceIsSandbox,
   grantWarning,
-  permissionSummary,
   onOpenAgentSettings,
   contextUsage,
   contextOverflow,
@@ -152,8 +150,6 @@ export const KiroComposer = React.memo(function KiroComposer({
   workspace?: KiroWorkspaceMeta | null;
   workspaceIsSandbox?: boolean;
   grantWarning?: string | null;
-  /** P3：Access Menu 的权限摘要（只含 boolean preference，不含 runtime 事实） */
-  permissionSummary?: KiroComposerPermissionSummary;
   /** P3：管理 Agent 权限…（设置 → Agent 与权限） */
   onOpenAgentSettings?: () => void;
   /** 上下文占用快照（Codex-style ring；只展示，不参与任何预算决策） */
@@ -654,17 +650,6 @@ export const KiroComposer = React.memo(function KiroComposer({
     if (nextAgentMode) onSetAgentMode?.(nextAgentMode);
   };
 
-  const resolvedPermissions: KiroComposerPermissionSummary = React.useMemo(
-    () =>
-      permissionSummary ?? {
-        terminal: false,
-        desktopObserve: false,
-        desktopAction: false,
-        clipboard: false,
-      },
-    [permissionSummary]
-  );
-
   return (
     <div
       ref={dropRef}
@@ -1072,10 +1057,8 @@ export const KiroComposer = React.memo(function KiroComposer({
                   <KiroComposerAccessControl
                     computerEnabled={!!computerEnabled}
                     agentMode={agentMode ?? "guided"}
-                    workspaceName={workspace?.name ?? null}
                     workspaceConfigured={!!workspace}
                     grantWarning={grantWarning ?? null}
-                    permissions={resolvedPermissions}
                     scopeLocked={currentTurnScopeLocked}
                     preferencesLocked={nextTurnPreferencesLocked}
                     compact={compact}

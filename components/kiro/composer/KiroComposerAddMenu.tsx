@@ -129,6 +129,7 @@ export function KiroComposerAddMenu({
           <div className="px-1 pb-1">
             <KiroContextListView
               compact
+              showSearch
               onPick={(ref) => {
                 onAddContext(ref);
                 onClose();
