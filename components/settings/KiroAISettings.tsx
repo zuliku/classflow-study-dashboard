@@ -306,6 +306,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     value={model}
                     onChange={setModel}
                     ariaLabel="模型"
+                    searchable
                     options={models.map((m) => ({ value: m.id, label: m.name }))}
                   />
                   {modelUnavailable && (

@@ -22,12 +22,15 @@ export function SettingsSelect<T extends string>({
   options,
   ariaLabel,
   disabled,
+  searchable,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: SelectOption<T>[];
   ariaLabel?: string;
   disabled?: boolean;
+  /** 长列表（模型等）透传 Codex-style 搜索 */
+  searchable?: boolean;
 }) {
   return (
     <UISelect
@@ -36,6 +39,7 @@ export function SettingsSelect<T extends string>({
       options={options}
       ariaLabel={ariaLabel}
       disabled={disabled}
+      searchable={searchable}
       triggerClassName="min-w-[150px] w-full"
       menuClassName="min-w-[150px]"
     />

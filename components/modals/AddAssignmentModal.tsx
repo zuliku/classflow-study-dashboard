@@ -369,6 +369,7 @@ export function AddAssignmentModal() {
                     value={courseId}
                     onChange={handleCourseChange}
                     ariaLabel="关联课程"
+                    searchable
                     options={courses.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` }))}
                   />
                 </Field>

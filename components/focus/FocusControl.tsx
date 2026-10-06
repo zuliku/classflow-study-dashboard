@@ -246,7 +246,7 @@ export function FocusControl({ compact = false }: { compact?: boolean }) {
 
               <div className="space-y-1">
                 <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">关联对象</p>
-                <UISelect value={target} onChange={setTarget} ariaLabel="关联对象" options={targetOptions} />
+                <UISelect value={target} onChange={setTarget} ariaLabel="关联对象" searchable options={targetOptions} />
               </div>
 
               <div className="space-y-1">

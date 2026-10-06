@@ -433,6 +433,54 @@ describe("UISelect lifecycle（共享 usePresence）", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(getListbox()).toBeNull();
   });
+
+  it("searchable：无搜索框时行为不变；有搜索框时过滤 + Enter 选过滤首项 + 空结果提示", () => {
+    // 默认（非 searchable）：无搜索输入
+    render(<SelectHarness />);
+    fireEvent.click(getCombobox());
+    expect(screen.queryByPlaceholderText("搜索选项...")).toBeNull();
+    cleanup();
+
+    const onChange = vi.fn();
+    const many = Array.from({ length: 8 }, (_, i) => ({ value: `c${i}`, label: `课程${i}` }));
+    render(
+      <UISelect
+        value="c0"
+        onChange={onChange}
+        options={many}
+        ariaLabel="课程筛选"
+        searchable
+      />
+    );
+    fireEvent.click(screen.getByRole("combobox", { name: "课程筛选" }));
+    const input = screen.getByPlaceholderText("搜索选项...") as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "课程1" } });
+    // "课程1" 命中 1 条（课程1），其余过滤掉
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith("c1");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("searchable：无匹配时显示空态；空格在搜索框内是输入字符", () => {
+    const onChange = vi.fn();
+    const many = Array.from({ length: 8 }, (_, i) => ({ value: `c${i}`, label: `课程${i}` }));
+    render(
+      <UISelect value="c0" onChange={onChange} options={many} ariaLabel="课程筛选" searchable />
+    );
+    fireEvent.click(screen.getByRole("combobox", { name: "课程筛选" }));
+    const input = screen.getByPlaceholderText("搜索选项...") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "不存在的课" } });
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(screen.getByText("无匹配选项")).not.toBeNull();
+    // 空格不触发选择（仍在输入），菜单保持打开
+    fireEvent.change(input, { target: { value: "课程 1" } });
+    fireEvent.keyDown(input, { key: " " });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("listbox")).not.toBeNull();
+    expect(input.value).toBe("课程 1");
+  });
 });
 
 describe("ToastViewport lifecycle", () => {

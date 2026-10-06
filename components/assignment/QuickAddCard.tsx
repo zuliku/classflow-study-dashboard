@@ -184,6 +184,7 @@ export function QuickAddCard({
           value={courseId}
           onChange={(v) => setCourseId(v)}
           ariaLabel="关联课程"
+          searchable
           options={courses.map((c) => ({ value: c.id, label: c.name }))}
           triggerClassName="h-8 bg-white border-line-strong text-[11px] font-semibold max-w-[180px]"
         />

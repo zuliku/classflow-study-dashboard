@@ -134,6 +134,7 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
           value={courseFilter}
           onChange={setCourseFilter}
           ariaLabel="课程筛选"
+          searchable
           options={[
             { value: "all", label: `全部课程 (${assignments.length})` },
             ...courses.map((c) => ({ value: c.id, label: c.name })),

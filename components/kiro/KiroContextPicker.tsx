@@ -53,7 +53,7 @@ export function KiroContextPicker({
 
   if (!mounted) return null;
 
-  const list = <KiroContextListView onPick={onPick} compact={compact} />;
+  const list = <KiroContextListView onPick={onPick} compact={compact} showSearch />;
 
   return (
     <>

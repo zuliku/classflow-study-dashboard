@@ -32,7 +32,7 @@ export function KiroSourcesMenuView({
         来源
       </button>
       <div className="my-1 h-px bg-line-soft" />
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col gap-1 max-h-[min(320px,50vh)] overflow-y-auto overflow-x-clip">
         {sources.map((source) => {
           const url = isSafeWebUrl(source.url) ? source.url : null;
           return (

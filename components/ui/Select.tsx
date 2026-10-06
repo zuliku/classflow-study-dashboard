@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,13 @@ interface UISelectProps<T extends string | number> {
   /** 菜单项高度（默认 h-9） */
   itemClassName?: string;
   testid?: string;
+  /**
+   * Codex-style 小搜索：打开时顶部出现过滤输入（长列表如课程/模型/关联对象）。
+   * 默认关闭——短列表行为零变化；过滤后键盘导航/Enter 选择均走过滤结果。
+   */
+  searchable?: boolean;
+  /** 搜索框占位（默认“搜索选项...”） */
+  searchPlaceholder?: string;
 }
 
 export function UISelect<T extends string | number>({
@@ -52,6 +59,8 @@ export function UISelect<T extends string | number>({
   itemClassName,
   placeholder,
   testid,
+  searchable,
+  searchPlaceholder,
 }: UISelectProps<T>) {
   const baseId = useId().replace(/[^a-zA-Z0-9]/g, "");
   const listboxId = `select-listbox-${baseId}`;
@@ -74,7 +83,15 @@ export function UISelect<T extends string | number>({
   const [viewportMaxWidth, setViewportMaxWidth] = useState<number>(320);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const selectedIndex = Math.max(0, options.findIndex((o) => o.value === value));
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  // Codex-style 过滤：非 searchable 时 filtered 与 options 同一引用，全部逻辑零分支
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!searchable || !q) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, query, searchable]);
+  const selectedIndex = Math.max(0, filtered.findIndex((o) => o.value === value));
 
   // 打开：presence 负责 mount hidden → 双 rAF 后 visible（进入过渡）；此处只做定位测量 + semantic open
   const openMenu = useCallback(() => {
@@ -99,6 +116,7 @@ export function UISelect<T extends string | number>({
     setMenuLeft(rect.left);
     setViewportMaxWidth(Math.min(320, window.innerWidth - 16));
     setSuppressRender(false);
+    setQuery("");
     setOpen(true);
     setActiveIndex(options.findIndex((o) => o.value === value));
   }, [disabled, options, value]);
@@ -156,13 +174,21 @@ export function UISelect<T extends string | number>({
   }, [open, closeMenu]);
 
   // 打开时聚焦到当前选中项（preventScroll）+ 保证 active option 在可视区域。
+  // searchable 时聚焦搜索框（输入即过滤；↑↓/Enter 仍走菜单键盘语义）。
   // mounted 门控：portal 在 mounted 翻转后的 commit 才存在（presence 先 mount hidden 再 visible）。
   useEffect(() => {
     if (!open || !mounted) return;
+    if (searchable) {
+      searchRef.current?.focus({ preventScroll: true });
+      // 焦点留在输入框，仅把 active 行滚入可视区（Codex combobox 语义）
+      menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+      return;
+    }
     const el = menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
     el?.focus({ preventScroll: true });
     el?.scrollIntoView({ block: "nearest" });
-  }, [open, mounted, activeIndex]);
+  }, [open, mounted, activeIndex, searchable]);
 
   // 挂载后测量实际宽度：右侧溢出 → 右对齐修正；至少保留 8px viewport inset
   useEffect(() => {
@@ -177,8 +203,13 @@ export function UISelect<T extends string | number>({
     if (left !== menuLeft) setMenuLeft(left);
   }, [open, visible, menuLeft]);
 
+  // 过滤收缩时 active 越界 → 回到首项（空结果时保持 0，不触发选择）
+  useEffect(() => {
+    if (activeIndex >= filtered.length) setActiveIndex(0);
+  }, [filtered.length, activeIndex]);
+
   const selectOption = (index: number) => {
-    const opt = options[index];
+    const opt = filtered[index];
     if (!opt) return;
     onChange(opt.value);
     // 选择完成：立即卸载（不经退出窗口，避免拦截紧随其后的 Escape / 上层交互）——保留既有语义
@@ -196,6 +227,8 @@ export function UISelect<T extends string | number>({
   };
 
   const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    // 搜索框内空格是输入字符，不是选择（Enter 仍确认选择）
+    const inSearch = (e.target as HTMLElement | null)?.tagName === "INPUT";
     if (e.key === "Escape") {
       // Portal 内由 React handler 同步消费，避免原生 window overlay listener 关闭父 Dialog。
       e.preventDefault();
@@ -204,17 +237,17 @@ export function UISelect<T extends string | number>({
       triggerRef.current?.focus();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => (i + 1) % options.length);
+      setActiveIndex((i) => (filtered.length === 0 ? 0 : (i + 1) % filtered.length));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((i) => (i - 1 + options.length) % options.length);
+      setActiveIndex((i) => (filtered.length === 0 ? 0 : (i - 1 + filtered.length) % filtered.length));
     } else if (e.key === "Home") {
       e.preventDefault();
       setActiveIndex(0);
     } else if (e.key === "End") {
       e.preventDefault();
-      setActiveIndex(options.length - 1);
-    } else if (e.key === "Enter" || e.key === " ") {
+      setActiveIndex(Math.max(0, filtered.length - 1));
+    } else if (e.key === "Enter" || (e.key === " " && !inSearch)) {
       e.preventDefault();
       selectOption(activeIndex);
     } else if (e.key === "Tab") {
@@ -284,7 +317,38 @@ export function UISelect<T extends string | number>({
             )}
             onKeyDown={onMenuKeyDown}
           >
-            {options.map((opt, i) => {
+            {searchable && (
+              <div className="sticky top-0 z-10 px-1.5 pt-1.5 pb-1 bg-surface">
+                <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line-soft bg-background focus-within:border-line-strong transition-colors">
+                  <Search className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
+                  <input
+                    ref={searchRef}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={searchPlaceholder ?? "搜索选项..."}
+                    aria-label={ariaLabel ? `搜索${ariaLabel}` : "搜索选项"}
+                    className="flex-1 min-w-0 bg-transparent text-xs text-charcoal placeholder:text-sandrift/70 focus:outline-none"
+                  />
+                  {query && (
+                    <button
+                      type="button"
+                      onClick={() => setQuery("")}
+                      aria-label="清空搜索"
+                      tabIndex={-1}
+                      className="p-0.5 rounded text-sandrift hover:text-charcoal transition-colors shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {filtered.length === 0 && (
+              <div role="status" className="px-3 py-2.5 text-xs text-sandrift">
+                无匹配选项
+              </div>
+            )}
+            {filtered.map((opt, i) => {
               const isSelected = opt.value === value;
               const isActive = i === activeIndex;
               return (

@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FileClock, Eye, Download, MessagesSquare, Trash2, Loader2 } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FileClock, Eye, Download, MessagesSquare, Search, Trash2, Loader2, X } from "lucide-react";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useKiroArtifactActions } from "@/hooks/useKiroArtifactActions";
 import { useToastStore } from "@/store/useToastStore";
@@ -39,6 +39,7 @@ export function KiroRecentArtifactsPopover() {
   const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<KiroRecentArtifactEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement | null>(null);
   // 富面板保持 role="dialog"（非 menu，不迁移 DropdownMenuPanel），对称进退走 usePresence
   const panelPresence = usePresence(open, MOTION_EXIT_MS.fast);
@@ -73,6 +74,11 @@ export function KiroRecentArtifactsPopover() {
     return () => window.clearInterval(timer);
   }, [open, refresh]);
 
+  // 关闭时清空搜索（下次打开从全量开始）
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open]);
+
   // 外部点击关闭
   useEffect(() => {
     if (!open) return;
@@ -84,6 +90,13 @@ export function KiroRecentArtifactsPopover() {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
+
+  // Codex-style 小搜索：按文件名过滤（空查询不过滤）
+  const visibleEntries = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter((e) => e.artifact.displayName.toLowerCase().includes(q));
+  }, [entries, query]);
 
   // Inspector P2：Ask Kiro 逻辑与 Inspector Outputs 共用（canonical artifactToContextRef，无第二份实现）
   const askKiro = async (entry: KiroRecentArtifactEntry) => {
@@ -144,6 +157,28 @@ export function KiroRecentArtifactsPopover() {
           </div>
 
           {/* 内容区常驻 min-h（loading/空态同高 104px；空→有文件不再顶跳面板） */}
+          <div className="px-2.5 pt-2">
+            <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line-soft bg-background focus-within:border-line-strong transition-colors">
+              <Search className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索文件..."
+                aria-label="搜索最近文件"
+                className="flex-1 min-w-0 bg-transparent text-xs text-charcoal placeholder:text-sandrift/70 focus:outline-none"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="清空搜索"
+                  className="p-0.5 rounded text-sandrift hover:text-charcoal transition-colors shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
           <div className="min-h-[104px] max-h-[min(420px,60dvh)] overflow-y-auto overflow-x-clip">
             {loading && entries.length === 0 && (
               <div className="h-[104px] flex flex-col items-center justify-center gap-2 text-sandrift">
@@ -157,7 +192,12 @@ export function KiroRecentArtifactsPopover() {
                 <p className="text-[11px] font-semibold text-charcoal">暂无最近文件</p>
               </div>
             )}
-            {entries.map((entry) => {
+            {!loading && entries.length > 0 && visibleEntries.length === 0 && (
+              <div className="h-[104px] flex flex-col items-center justify-center gap-1.5 px-4">
+                <p className="text-[11px] font-semibold text-charcoal">无匹配文件</p>
+              </div>
+            )}
+            {visibleEntries.map((entry) => {
               const available = entry.availability === "available";
               return (
                 <div
