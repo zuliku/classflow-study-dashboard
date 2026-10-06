@@ -42,7 +42,6 @@ export function MiniChatApp() {
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   // 常驻窗动效：拖拽/附件/提示对称进退，时长全部走 Contract 常量。
   const dragPresence = usePresence(dragOver, MOTION_EXIT_MS.fast);
-  const trayPresence = usePresence(files.length > 0, MOTION_EXIT_MS.panel);
   const noticePresence = usePresence(notice !== null, MOTION_EXIT_MS.panel);
   // busy 由快照驱动（early return 之前只能读 snapshot，不能读派生 busy）。
   const busyPresence = usePresence(snapshot?.busy ?? false, MOTION_EXIT_MS.fast);
@@ -79,6 +78,12 @@ export function MiniChatApp() {
       leavingTimersRef.current.push(timer);
     },
     [leavingFileKeys, reducedMotion]
+  );
+  // 删最后一个文件时整架与 chip 并行收（Composer shelf 同语义）：open 判定排除 leaving，
+  // 落库与卸载同 tick 且已零高度，避免“chip 先收、落库后盒子再折”的两段割裂
+  const trayPresence = usePresence(
+    files.some((f, i) => !leavingFileKeys.has(fileKey(f, i))),
+    MOTION_EXIT_MS.panel
   );
 
   // 初始快照 + 订阅推送（无 bridge 即 fallback，不抛错）

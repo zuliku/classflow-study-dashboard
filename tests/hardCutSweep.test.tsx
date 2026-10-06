@@ -100,10 +100,13 @@ describe("硬切深筛源码契约", () => {
     expect(src).toMatch(/key=\{`shortfall-\$\{horizonDays\}`\}[\s\S]*?ux-fade/);
   });
 
-  it("UnscheduledShelf：presence 淡出 + 展开 key 淡入", () => {
+  it("UnscheduledShelf：presence 淡出 + 展开走实测高度 FLIP（无 key 重挂）", () => {
     const src = read("components/timeline/TimelineUnscheduledShelf.tsx");
     expect(src).toContain("usePresence(assignments.length > 0, MOTION_EXIT_MS.panel)");
-    expect(src).toMatch(/key=\{expanded \? "wrap" : "row"\}[\s\S]*?ux-fade/);
+    // auto 高度不可插值 + key 重挂会杀死过渡：实测 offsetHeight 后 WAAPI 补间
+    expect(src).toContain("toggleExpanded");
+    expect(src).toContain(".animate(");
+    expect(src).not.toMatch(/key=\{expanded/);
   });
 
   it("MiniCalendar Agenda：DisclosureRegion 折叠（非整块卸载）", () => {

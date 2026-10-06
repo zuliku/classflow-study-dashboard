@@ -109,9 +109,32 @@ export function KiroContextBar({
   const { visibleAmbient, visibleManual, overflow } = splitKiroContextsForDisplay(contexts, !!compact);
   const allForPopover = [...visibleAmbient, ...visibleManual, ...overflow];
 
-  // locked 只决定现有 Context 是否可以修改，不决定 ContextBar 是否必须存在；
-  // 无可展示项（全自动上下文被产品决策隐藏）时整条不占位，避免空 pb-1.5 顶起输入区
-  if (allForPopover.length === 0 && !leading) return null;
+  // 整条 presence（仅退出补折叠）：删最后一项时与 chip 并行收（同 composer shelf 语义），
+  // 而非瞬间卸载顶起输入区。进入不播放（首帧即有内容时直接渲染，chip 各自 animate-enter）。
+  // reduced-motion 下瞬间落位（无动画即正确）。
+  const hasVisible = allForPopover.some((c) => !leavingKeys.has(c.key)) || !!leading;
+  const [renderBar, setRenderBar] = useState(hasVisible);
+  const [barExiting, setBarExiting] = useState(false);
+  useEffect(() => {
+    if (reducedMotion) {
+      setRenderBar(hasVisible);
+      setBarExiting(false);
+      return;
+    }
+    if (hasVisible) {
+      setRenderBar(true);
+      setBarExiting(false);
+      return;
+    }
+    setBarExiting(true);
+    const t = window.setTimeout(() => {
+      setRenderBar(false);
+      setBarExiting(false);
+    }, MOTION_EXIT_MS.panel);
+    return () => window.clearTimeout(t);
+  }, [hasVisible, reducedMotion]);
+  // 首帧无内容（且无 leading）直接不占位；退出播完后卸载
+  if (!renderBar) return null;
 
   const removeButton = (c: KiroContextRef, revealOnHover: boolean) => (
     <button
@@ -130,6 +153,18 @@ export function KiroContextBar({
   );
 
   return (
+    // 整条折叠不能直接用 ExitCollapse：其内层常驻 overflow-hidden，会裁掉 +N 的
+    // absolute popover（非 portal）。此处只在 exiting 期间裁剪，平时保持可见。
+    <div
+      className={cn(
+        "grid ease-[var(--ease-exit)]",
+        "transition-[grid-template-rows,opacity] duration-[var(--motion-exit-panel)]",
+        barExiting
+          ? "grid-rows-[0fr] opacity-0 pointer-events-none"
+          : "grid-rows-[1fr] opacity-100"
+      )}
+    >
+    <div className={cn("min-h-0", barExiting ? "overflow-hidden" : "overflow-visible")}>
     <div
       data-testid="kiro-context-bar"
       // 不能用 overflow-hidden：会裁剪 leading（Workspace）与 +N 的 absolute popover
@@ -202,6 +237,8 @@ export function KiroContextBar({
           )}
         </div>
       )}
+    </div>
+    </div>
     </div>
   );
 }

@@ -243,7 +243,12 @@ export const KiroComposer = React.memo(function KiroComposer({
   // 附件架： chips 全走光且退出播完才卸载（避免截断 chip collapse）；
   // 高度走 ExitCollapse 纵向折叠（toolbar 平滑上收，否则最后 60px 硬跳）。
   // presence 时长与折叠 CSS 同源（panel 160ms），避免卸载截断动画尾。
-  const shelfPresence = usePresence(attachments.length > 0, MOTION_EXIT_MS.panel);
+  // 删最后一张卡时盒子与 chip 并行收：open 判定排除 leaving（此前等 store 落库后盒子才折，
+  // 两段 sequential 看着割裂）；落库与卸载同 tick 且盒子已零高度，无第二段。
+  const shelfPresence = usePresence(
+    attachments.some((a) => !leavingAttachmentIds.has(a.id)),
+    MOTION_EXIT_MS.panel
+  );
   const [commitPulse, setCommitPulse] = useState(false);
   const commitTimerRef = useRef(0);
   useEffect(

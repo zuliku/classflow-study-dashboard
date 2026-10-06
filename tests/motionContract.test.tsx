@@ -436,7 +436,8 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
       "usePresence(mentionOpen, MOTION_EXIT_MS.fast)",
       "usePresence(dragOver, MOTION_EXIT_MS.fast)",
       // 附件架 presence 与 ExitCollapse 纵向折叠同源（panel），卸载不截断；其余提示条走 fast
-      "attachments.length > 0, MOTION_EXIT_MS.panel",
+      // 删最后一张卡时盒子与 chip 并行收：open 判定排除 leaving（落库与卸载同 tick）
+      "attachments.some((a) => !leavingAttachmentIds.has(a.id))",
     ]) {
       expect(composer).toContain(snippet);
     }
