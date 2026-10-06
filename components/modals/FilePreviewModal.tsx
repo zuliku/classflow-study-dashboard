@@ -20,6 +20,7 @@ export function FilePreviewModal() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   // Workflow UX V7：Resource → Task Promotion——
   // 通过 Store Source of Truth 反查 Material 所属课程（不修改 previewMaterial contract、
@@ -89,7 +90,7 @@ export function FilePreviewModal() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [material, isOpen]);
+  }, [material, isOpen, reloadNonce]);
 
   const handleClose = () => {
     setIsOpen(false);
@@ -176,7 +177,10 @@ export function FilePreviewModal() {
               <span>正在读取文件…</span>
             </div>
           ) : loadFailed ? (
-            <div className="bg-surface p-8 rounded-2xl max-w-md text-center space-y-3 shadow-2xl border border-line">
+            <div
+              role="status"
+              className="bg-surface p-8 rounded-2xl max-w-md text-center space-y-3 shadow-2xl border border-line"
+            >
               <div className="w-14 h-14 rounded-2xl bg-danger-bg border border-danger-border flex items-center justify-center mx-auto text-danger">
                 <FileText className="w-7 h-7" />
               </div>
@@ -185,9 +189,16 @@ export function FilePreviewModal() {
                   文件读取失败
                 </h4>
                 <p className="text-xs text-sandrift">
-                  文件找不到了，重新上传即可预览。
+                  文件找不到了，重新上传即可预览；偶发读取失败可先重试。
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setReloadNonce((n) => n + 1)}
+                className="inline-flex items-center px-5 py-2.5 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-card"
+              >
+                重新加载
+              </button>
             </div>
           ) : displayUrl && isPdf ? (
             <iframe

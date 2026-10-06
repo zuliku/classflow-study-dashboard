@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToastStore } from "@/store/useToastStore";
 import { useAppStore } from "@/store/useAppStore";
 import {
@@ -37,6 +37,13 @@ export function useKiroAttachments() {
   // 上限计算经 ref 读最新列表（addFiles 回调身份稳定，不 stale）
   const attachmentsRef = useRef<KiroAttachment[]>([]);
   attachmentsRef.current = attachments;
+  // 在途解析取消：误选大文件后 remove/clear 可立即中断后台解析
+  const controllersRef = useRef(new Map<string, AbortController>());
+  const isAbortError = (err: unknown) =>
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError");
+  const isAlive = (id: string, signal?: AbortSignal) =>
+    !signal?.aborted && attachmentsRef.current.some((a) => a.id === id);
 
   const toView = useCallback((a: KiroAttachment): KiroAttachmentView => {
     if (a.source === "local") {
@@ -121,6 +128,9 @@ export function useKiroAttachments() {
 
       for (const { id, base, routed } of pending) {
         if (!routed.ok) continue;
+        const controller = new AbortController();
+        controllersRef.current.set(id, controller);
+        const signal = controller.signal;
         const patch = (partial: Partial<KiroLocalAttachment>) =>
           setAttachments((prev) =>
             prev.map((a) => (a.id === id ? { ...(a as KiroLocalAttachment), ...partial } : a))
@@ -128,36 +138,51 @@ export function useKiroAttachments() {
         // 图片：只生成缩略图（vision 由模型处理）；文档：本地提取文本
         if (routed.kind === "image") {
           try {
-            const thumb = await createImageThumbnail(base.file);
+            const thumb = await createImageThumbnail(base.file, 96, signal);
+            if (!isAlive(id, signal)) continue;
             // 只更新已存在 entry；被移除 / 会话已切换 → no-op（绝不复活 ghost source）
             updateLiveImageSourceThumbnail(id, thumb || undefined);
             patch({ status: "ready", thumbnail: thumb || undefined });
-          } catch {
+          } catch (err) {
+            if (isAbortError(err) || !isAlive(id, signal)) continue;
             // thumbnail 失败 → 从 runtime registry 移除（不留无图来源）
             unregisterLiveImageSource(id);
             patch({ status: "error", error: "无法生成预览。" });
+          } finally {
+            controllersRef.current.delete(id);
           }
           continue;
         }
-        const result = await extractAttachment(base.file, {
-          kind: routed.kind,
-          cacheKey: extractCacheKey({
-            name: base.file.name,
-            size: base.file.size,
-            lastModified: base.file.lastModified,
-            contentHash: await hashBlobFingerprint(base.file),
-          }),
-        });
-        if (result.ok) {
-          // 扫描型 PDF（Task 12）：不再是 error —— ready + Vision metadata（发送时渲染页面图）
-          const possiblyScanned = result.extracted.possiblyScanned === true;
-          patch(
-            possiblyScanned
-              ? { status: "ready", extracted: result.extracted }
-              : { status: "ready", extracted: result.extracted }
-          );
-        } else {
-          patch({ status: "error", error: result.message });
+        try {
+          const contentHash = await hashBlobFingerprint(base.file);
+          if (!isAlive(id, signal)) continue;
+          const result = await extractAttachment(base.file, {
+            kind: routed.kind,
+            signal,
+            cacheKey: extractCacheKey({
+              name: base.file.name,
+              size: base.file.size,
+              lastModified: base.file.lastModified,
+              contentHash,
+            }),
+          });
+          if (!isAlive(id, signal)) continue;
+          if (result.ok) {
+            // 扫描型 PDF（Task 12）：不再是 error —— ready + Vision metadata（发送时渲染页面图）
+            const possiblyScanned = result.extracted.possiblyScanned === true;
+            patch(
+              possiblyScanned
+                ? { status: "ready", extracted: result.extracted }
+                : { status: "ready", extracted: result.extracted }
+            );
+          } else {
+            patch({ status: "error", error: result.message });
+          }
+        } catch (err) {
+          if (isAbortError(err) || !isAlive(id, signal)) continue;
+          patch({ status: "error", error: "无法读取该文件，请确认格式与内容。" });
+        } finally {
+          controllersRef.current.delete(id);
         }
       }
     },
@@ -193,24 +218,34 @@ export function useKiroAttachments() {
 
   /** 课程资料 PDF inspection（添加与重试共用：读 Blob → 提取 → 标记扫描件/页数） */
   const inspectMaterialPdf = useCallback(async (id: string, courseId: string, materialId: string) => {
+    controllersRef.current.get(id)?.abort();
+    const controller = new AbortController();
+    controllersRef.current.set(id, controller);
+    const signal = controller.signal;
     const storageKey = useAppStore
       .getState()
       .courses.find((c) => c.id === courseId)
       ?.materials.find((m) => m.id === materialId)?.storageKey;
-    if (!storageKey) return; // 外部链接资料：不尝试下载，保持 ready
+    if (!storageKey) {
+      controllersRef.current.delete(id);
+      return; // 外部链接资料：不尝试下载，保持 ready
+    }
     const patch = (partial: Partial<KiroMaterialAttachment>) =>
       setAttachments((prev) => prev.map((a) => (a.id === id ? { ...(a as KiroMaterialAttachment), ...partial } : a)));
     patch({ status: "processing" });
     try {
       const blob = await getFileBlob(storageKey);
+      if (!isAlive(id, signal)) return;
       if (!blob) {
         patch({ status: "error", error: "本地文件已丢失，请重新上传。" });
         return;
       }
       const result = await extractAttachment(blob as Blob & { name?: string }, {
         kind: "pdf",
+        signal,
         cacheKey: extractCacheKey({ storageKey }),
       });
+      if (!isAlive(id, signal)) return;
       if (!result.ok) {
         patch({ status: "error", error: result.message });
         return;
@@ -223,62 +258,107 @@ export function useKiroAttachments() {
       } else {
         patch({ status: "ready" });
       }
-    } catch {
+    } catch (err) {
+      if (isAbortError(err) || !isAlive(id, signal)) return;
       patch({ status: "error", error: "资料读取失败。" });
+    } finally {
+      controllersRef.current.delete(id);
     }
   }, []);
 
   const remove = useCallback((id: string) => {
+    controllersRef.current.get(id)?.abort();
+    controllersRef.current.delete(id);
     unregisterLiveImageSource(id);
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   }, []);
+
+  // 卸载时中断全部在途解析，避免后台白耗 + 迟到 patch
+  const abortAll = useCallback(() => {
+    for (const c of controllersRef.current.values()) {
+      try {
+        c.abort();
+      } catch {
+        /* 忽略 */
+      }
+    }
+    controllersRef.current.clear();
+  }, []);
+
+  useEffect(() => () => abortAll(), [abortAll]);
 
   const retry = useCallback(
     async (id: string) => {
       const att = attachmentsRef.current.find((a) => a.id === id);
       if (!att || att.status !== "error") return;
+      controllersRef.current.get(id)?.abort();
+      const controller = new AbortController();
+      controllersRef.current.set(id, controller);
+      const signal = controller.signal;
       // 图片：重生成缩略图（与 addFiles 同一路径；registry 已有 entry 则更新）
       if (att.source === "local" && att.kind === "image") {
         setAttachments((prev) =>
           prev.map((a) => (a.id === id ? { ...(a as KiroLocalAttachment), status: "processing", error: undefined } : a))
         );
         try {
-          const thumb = await createImageThumbnail(att.file);
+          const thumb = await createImageThumbnail(att.file, 96, signal);
+          if (!isAlive(id, signal)) return;
           updateLiveImageSourceThumbnail(id, thumb || undefined);
           setAttachments((prev) =>
             prev.map((a) =>
               a.id === id ? { ...(a as KiroLocalAttachment), status: "ready", thumbnail: thumb || undefined } : a
             )
           );
-        } catch {
+        } catch (err) {
+          if (isAbortError(err) || !isAlive(id, signal)) return;
           unregisterLiveImageSource(id);
           setAttachments((prev) =>
             prev.map((a) =>
               a.id === id ? { ...(a as KiroLocalAttachment), status: "error", error: "无法生成预览。" } : a
             )
           );
+        } finally {
+          controllersRef.current.delete(id);
         }
         return;
       }
       // 课程资料 PDF：重跑 inspection（文件恢复后可自愈）
       if (att.source === "material" && att.kind === "pdf") {
+        controllersRef.current.delete(id);
         await inspectMaterialPdf(id, att.courseId, att.materialId);
         return;
       }
-      if (att.source !== "local") return;
+      if (att.source !== "local") {
+        controllersRef.current.delete(id);
+        return;
+      }
       setAttachments((prev) =>
         prev.map((a) => (a.id === id ? { ...(a as KiroLocalAttachment), status: "processing", error: undefined } : a))
       );
-      const result = await extractAttachment(att.file, { kind: att.kind });
-      setAttachments((prev) =>
-        prev.map((a) =>
-          a.id === id
-            ? result.ok
-              ? { ...(a as KiroLocalAttachment), status: "ready", extracted: result.extracted }
-              : { ...(a as KiroLocalAttachment), status: "error", error: result.message }
-            : a
-        )
-      );
+      try {
+        const result = await extractAttachment(att.file, { kind: att.kind, signal });
+        if (!isAlive(id, signal)) return;
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === id
+              ? result.ok
+                ? { ...(a as KiroLocalAttachment), status: "ready", extracted: result.extracted }
+                : { ...(a as KiroLocalAttachment), status: "error", error: result.message }
+              : a
+          )
+        );
+      } catch (err) {
+        if (isAbortError(err) || !isAlive(id, signal)) return;
+        setAttachments((prev) =>
+          prev.map((a) =>
+            a.id === id
+              ? { ...(a as KiroLocalAttachment), status: "error", error: "无法读取该文件，请确认格式与内容。" }
+              : a
+          )
+        );
+      } finally {
+        controllersRef.current.delete(id);
+      }
     },
     [inspectMaterialPdf]
   );
@@ -314,6 +394,14 @@ export function useKiroAttachments() {
 
   /** 发送后清空（附件已绑定到该 User Turn） */
   const clear = useCallback(() => {
+    for (const c of controllersRef.current.values()) {
+      try {
+        c.abort();
+      } catch {
+        /* 忽略 */
+      }
+    }
+    controllersRef.current.clear();
     setAttachments([]);
   }, []);
 

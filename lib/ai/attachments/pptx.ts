@@ -77,14 +77,16 @@ async function extractSlideTexts(file: Blob): Promise<string[]> {
   return slides;
 }
 
-export async function extractPptxRawText(file: Blob): Promise<string> {
+export async function extractPptxRawText(file: Blob, opts?: { signal?: AbortSignal }): Promise<string> {
+  opts?.signal?.throwIfAborted();
   const slides = await extractSlideTexts(file);
   const blocks = slides.map((text, i) => `【幻灯片 ${i + 1}】\n${text}`);
   return normalizeLineEndings(blocks.join("\n\n")).trim();
 }
 
 /** bounded extraction：页结构与 PDF 对齐（pages[] + pageCount），空演示抛错走统一失败文案 */
-export async function extractPptx(file: Blob): Promise<ExtractedDocument> {
+export async function extractPptx(file: Blob, opts?: { signal?: AbortSignal }): Promise<ExtractedDocument> {
+  opts?.signal?.throwIfAborted();
   const slides = await extractSlideTexts(file);
   const pages = slides.map((text, i) => ({ page: i + 1, text }));
   const nonEmpty = pages.filter((p) => p.text.length > 0);

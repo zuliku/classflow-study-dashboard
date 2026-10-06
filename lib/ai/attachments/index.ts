@@ -14,12 +14,13 @@ import { EXTRACTOR_VERSION } from "@/lib/ai/attachments/limits";
  */
 export async function extractAttachment(
   file: Blob & { name?: string; lastModified?: number },
-  options: { cacheKey?: string; kind: KiroAttachmentKind }
+  options: { cacheKey?: string; kind: KiroAttachmentKind; signal?: AbortSignal }
 ): Promise<
   | { ok: true; extracted: ExtractedDocument }
   | { ok: false; reason: "unsupported" | "too_large" | "too_small" | "legacy"; message: string }
 > {
   const routed = routeAttachment({ name: file.name ?? "", type: file.type ?? "", size: file.size });
+  options.signal?.throwIfAborted();
   if (!routed.ok) {
     if (routed.reason === "too_large")
       return {
@@ -65,14 +66,14 @@ export async function extractAttachment(
   try {
     const extracted =
       options.kind === "pdf"
-        ? await extractPdf(file)
+        ? await extractPdf(file, { signal: options.signal })
         : options.kind === "docx"
-        ? await extractDocx(file)
-        : options.kind === "spreadsheet"
-        ? await extractXlsx(file)
-        : options.kind === "slides"
-        ? await extractPptx(file)
-        : await extractTextFile(file);
+          ? await extractDocx(file, { signal: options.signal })
+          : options.kind === "spreadsheet"
+            ? await extractXlsx(file, { signal: options.signal })
+            : options.kind === "slides"
+              ? await extractPptx(file, { signal: options.signal })
+              : await extractTextFile(file, { signal: options.signal });
     await setExtractCache(cacheKey, {
       text: extracted.text,
       pages: extracted.pages,
@@ -85,6 +86,9 @@ export async function extractAttachment(
     });
     return { ok: true, extracted };
   } catch (err) {
+    // 调用方取消（remove/clear/重试覆盖）：直接抛 AbortError，hook 层 no-op 不写 error 态
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    if (options.signal?.aborted) throw err;
     // PDF 分类报错（可操作提示）；其它格式保持笼统文案（不透传 raw error）。
     // 诊断保留在 console（dev 复现用），绝不进入 Tool Output / Audit。
     if (err instanceof PdfExtractError) {

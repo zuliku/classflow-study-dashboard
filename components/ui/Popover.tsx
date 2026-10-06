@@ -3,6 +3,7 @@
 import React, { useEffect, useId, useRef } from "react";
 import { usePresence } from "@/lib/usePresence";
 import { useInertOnHidden } from "@/lib/useInertOnHidden";
+import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,8 @@ export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function Popover({ open, onOpenChange, className, children, ...props }: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null);
+  // 关闭后焦点回到触发元素（Esc/点外关闭时焦点可能落在面板内）
+  useRestoreFocus(open);
   // Esc topmost 语义：打开时进 overlay 栈（视觉层级 z-40），有 Dialog/Drawer 等更高层时
   // 后台 Popover 不再跟着一起关；嵌套 Popover 只关最上层。
   const overlayId = useId();

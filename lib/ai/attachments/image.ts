@@ -3,11 +3,26 @@
  */
 
 /** 生成图片缩略图 data URL（克制尺寸，避免内存浪费） */
-export async function createImageThumbnail(file: File, maxSize = 96): Promise<string> {
+export async function createImageThumbnail(
+  file: File,
+  maxSize = 96,
+  signal?: AbortSignal
+): Promise<string> {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
+    const done = () => signal?.removeEventListener("abort", onAbort);
+    const onAbort = () => {
+      URL.revokeObjectURL(url);
+      img.onload = null;
+      img.onerror = null;
+      img.src = "";
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     img.onload = () => {
+      done();
       try {
         const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
         const canvas = document.createElement("canvas");
@@ -28,6 +43,7 @@ export async function createImageThumbnail(file: File, maxSize = 96): Promise<st
       }
     };
     img.onerror = () => {
+      done();
       URL.revokeObjectURL(url);
       reject(new Error("无法生成预览"));
     };

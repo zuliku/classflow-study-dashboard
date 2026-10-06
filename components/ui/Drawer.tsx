@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { MOTION_EXIT_MS } from "@/lib/motion";
@@ -42,6 +42,11 @@ export interface DrawerProps extends React.HTMLAttributes<HTMLDivElement> {
    * 无该 prop 的 consumer 行为完全不变。
    */
   focusRestoreKey?: string | number | null;
+  /**
+   * opt-in 初始焦点：open 后 rAF 聚焦到该元素（如详情标题关闭钮/搜索框）。
+   * 不传则保持现状。
+   */
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 /**
@@ -112,12 +117,23 @@ export function Drawer({
   presentation = "edge",
   trapFocus = true,
   focusRestoreKey,
+  initialFocusRef,
   className,
   children,
   ...props
 }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trapTab = useFocusTrap(panelRef, open && trapFocus);
+  useEffect(() => {
+    if (!open || !initialFocusRef?.current) return;
+    const target = initialFocusRef.current;
+    const raf = requestAnimationFrame(() => {
+      if (document.contains(target) && typeof target.focus === "function") {
+        target.focus();
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open, initialFocusRef]);
   // S2-1：trap 与 consumer onKeyDown 组合（与 Dialog 同模式）
   const { onKeyDown: consumerOnKeyDown, ...rest } = props;
   // 未显式指定时：floating 默认 backdrop 点击关闭（真模态轻 dismiss），edge 保持 false

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useFocusTrap } from "@/lib/useFocusTrap";
@@ -31,11 +31,16 @@ export interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Full-screen overlay 视觉（背景/布局） */
   overlayClassName?: string;
   /**
-   * 焦点陷阱（默认开启，S2-1）：开启后 Tab / Shift+Tab 在面板内循环，不逃逸到背后页面。
+   * 焦点陷阱（默认开启，S2-1：Modal 语义要求 Tab 不逃逸到背后页面）。
    * 嵌套 Dialog 各自处理包裹处的 Tab（子陷阱 stopPropagation + 父陷阱嵌套守卫忽略子树外事件）。
    * 仅当面板确需非阻塞行为时显式传 false（同时背板不得拦截指针，保持视觉与交互一致）。
    */
   trapFocus?: boolean;
+  /**
+   * opt-in 初始焦点：open 后 rAF 聚焦到该元素（如搜索框/输入框）。
+   * 不传则保持现状（不抢焦点，兼容各消费方自持 autoFocus）。
+   */
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 export function Dialog({
@@ -48,12 +53,23 @@ export function Dialog({
   onEscapeKeyDown,
   overlayClassName,
   trapFocus = true,
+  initialFocusRef,
   className,
   children,
   ...props
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trapTab = useFocusTrap(panelRef, open && trapFocus);
+  useEffect(() => {
+    if (!open || !initialFocusRef?.current) return;
+    const target = initialFocusRef.current;
+    const raf = requestAnimationFrame(() => {
+      if (document.contains(target) && typeof target.focus === "function") {
+        target.focus();
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open, initialFocusRef]);
   // S2-1：trap 与 consumer onKeyDown 组合（此前 {...props} 后置会整体覆盖 trap）
   const { onKeyDown: consumerOnKeyDown, ...rest } = props;
   return (

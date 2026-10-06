@@ -38,8 +38,8 @@ export async function extractXlsxRawText(file: Blob, opts?: { signal?: AbortSign
 }
 
 /** bounded extraction（沿用既有语义；search 请用 extractXlsxRawText） */
-export async function extractXlsx(file: Blob): Promise<ExtractedDocument> {
-  const normalized = await extractXlsxRawText(file);
+export async function extractXlsx(file: Blob, opts?: { signal?: AbortSignal }): Promise<ExtractedDocument> {
+  const normalized = await extractXlsxRawText(file, opts);
   if (!normalized) {
     throw new Error("empty-workbook");
   }

@@ -18,8 +18,12 @@ export function useRestoreFocus(open: boolean, restoreKey?: string | number | nu
       const el = document.activeElement as HTMLElement | null;
       if (el && el !== document.body) openerRef.current = el;
     } else if (openerRef.current && typeof openerRef.current.focus === "function") {
-      openerRef.current.focus();
+      // 触发元素可能已卸载（如删除对话行后关闭弹窗）：detached 节点 focus 会丢到 body
+      const opener = openerRef.current;
       openerRef.current = null;
+      if (document.contains(opener)) {
+        opener.focus();
+      }
     }
   }, [open, restoreKey]);
 }

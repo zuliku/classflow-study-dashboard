@@ -20,11 +20,11 @@ export function DangerZone() {
   const handleResetPreferences = () => {
     confirmRequest({
       title: "恢复默认设置？",
-      description: "恢复所有 ClassFlow 偏好设置，不影响课程、任务和个人资料。",
+      description: "仅恢复主工作区偏好（通用、任务、专注、学期显示等），不影响课程、任务和个人资料；Kiro、AI 服务、提醒、Agent 与侧边栏状态需在各自设置页单独恢复。",
       confirmLabel: "恢复默认设置",
       onConfirm: () => {
         resetPreferences();
-        pushToast({ message: "已恢复默认设置" });
+        pushToast({ message: "已恢复主工作区默认设置" });
       },
     });
   };
@@ -33,7 +33,7 @@ export function DangerZone() {
     confirmRequest({
       title: "清空学习数据？",
       description:
-        "删除所有课程、排课、任务、小组项目和课程资料。个人资料、当前学期和应用偏好将保留。",
+        "删除课程、排课、任务、小组项目、课程资料、作息表、提醒与专注记录。个人资料、当前学期和主工作区偏好将保留；Kiro 对话、AI 设置与账号凭据不受影响。",
       confirmLabel: "清空学习数据",
       danger: true,
       onConfirm: () => {
@@ -49,7 +49,7 @@ export function DangerZone() {
       confirmRequest({
         title: "清除所有本地数据？",
         description:
-          "删除 ClassFlow 在当前设备上的所有本地数据，包括个人资料、课程、任务、设置和课程附件。此操作无法撤销。",
+          "删除主工作区本地数据（个人资料、课程、任务、设置和课程附件）并回到首次使用状态。此操作无法撤销；Kiro/AI/提醒/Agent 偏好、侧边栏状态与账号凭据不在此列，需单独清理。",
         confirmLabel: "继续",
         danger: true,
         onConfirm: () => {
@@ -76,7 +76,7 @@ export function DangerZone() {
       key: "preferences",
       icon: <RotateCcw className="w-3.5 h-3.5" />,
       title: "恢复默认设置",
-      description: "恢复所有偏好设置，不影响课程、任务和个人资料。",
+      description: "仅恢复主工作区偏好，不影响课程、任务和个人资料。",
       action: handleResetPreferences,
       label: "恢复默认设置",
       danger: false,
@@ -85,7 +85,7 @@ export function DangerZone() {
       key: "learning",
       icon: <Trash2 className="w-3.5 h-3.5" />,
       title: "清空学习数据",
-      description: "删除所有课程、排课、任务、小组项目和课程资料。个人资料、学期和偏好将保留。",
+      description: "删除课程、任务、作息表等学习数据。个人资料、学期和偏好将保留。",
       action: handleClearLearningData,
       label: "清空学习数据",
       danger: true,
@@ -94,7 +94,7 @@ export function DangerZone() {
       key: "entire",
       icon: <XCircle className="w-3.5 h-3.5" />,
       title: "清除所有本地数据",
-      description: "删除当前设备上的所有本地数据，包括个人资料、课程、任务、设置和课程附件。",
+      description: "清除主工作区本地数据并回到首次使用状态（不含外围偏好与凭据）。",
       action: handleResetEntireApp,
       label: confirmPhase === 1 ? "再次点击确认清除" : "清除所有本地数据",
       danger: true,

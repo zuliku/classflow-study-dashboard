@@ -17,8 +17,8 @@ export async function extractDocxRawText(file: Blob, opts?: { signal?: AbortSign
 }
 
 /** bounded extraction（沿用既有语义；search 请用 extractDocxRawText） */
-export async function extractDocx(file: Blob): Promise<ExtractedDocument> {
-  const normalized = await extractDocxRawText(file);
+export async function extractDocx(file: Blob, opts?: { signal?: AbortSignal }): Promise<ExtractedDocument> {
+  const normalized = await extractDocxRawText(file, opts);
   const { text, truncated } = truncateText(normalized);
   return { text, truncated };
 }

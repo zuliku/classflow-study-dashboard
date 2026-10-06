@@ -22,7 +22,11 @@ export function normalizeLineEndings(text: string): string {
 }
 
 /** TXT / MD：直接读文本（UTF-8），归一化换行 + 截断 */
-export async function extractTextFile(file: Blob): Promise<ExtractedDocument> {
+export async function extractTextFile(
+  file: Blob,
+  opts?: { signal?: AbortSignal }
+): Promise<ExtractedDocument> {
+  opts?.signal?.throwIfAborted();
   const raw = await file.text();
   const normalized = normalizeLineEndings(raw).trim();
   const { text, truncated } = truncateText(normalized);
