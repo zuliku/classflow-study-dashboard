@@ -7,6 +7,7 @@ import { buildWeeklyReview, weeklyReviewCopy } from "@/lib/analytics/weeklyRevie
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
+import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
 
 const DEEP_REVIEW_PROMPT =
   "帮我复盘下这周：总结投入和完成情况，再指出 2-3 个最值得调整的地方。只用我的真实学习数据，别打分。";
@@ -41,12 +42,15 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
   return (
     <div className="bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden" data-testid="weekly-review-card">
       <div className="px-4 pt-4 pb-3 border-b border-line-soft">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-charcoal">本周回顾</h3>
-          <span className="text-[10px] font-semibold text-sandrift">
-            {formatMD(review.range.from)} – {formatMD(review.range.to)}
-          </span>
-        </div>
+        <AnalyticsCardHeader
+          eyebrow="每周复盘"
+          title="本周回顾"
+          action={
+            <span className="text-[10px] font-semibold text-sandrift shrink-0">
+              {formatMD(review.range.from)} – {formatMD(review.range.to)}
+            </span>
+          }
+        />
         {coverageNote && (
           <div className="flex items-start gap-1.5 mt-2 px-2.5 py-1.5 bg-alabaster/60 border border-line rounded-lg text-[10px] text-sandrift">
             <Info className="w-3 h-3 shrink-0 mt-0.5" />

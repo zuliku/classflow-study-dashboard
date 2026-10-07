@@ -40,10 +40,10 @@ import { AnalyticsWorkspaceViewBar } from "@/components/analytics/AnalyticsWorks
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 
 function ChartSkeleton() {
-  // 趋势卡终态 ≈ header(33) + pt-3(12) + 图(h-56/224, md:h-64/256) + 卡片 p-4(32) ≈ 300/333；
-  // 骨架同高避免加载完推挤下文（此前 h-64 短 50px+）
+  // 趋势卡终态 ≈ 头(36) + pt-3(12) + 图(h-60/240, md:h-72/288) + 卡片 p-4(32) ≈ 320/368；
+  // 骨架同高避免加载完推挤下文
   // Motion V3 P1：ux-skeleton 扫光（保留 pulse 占位，reduced-motion 下静态）
-  return <div className="ux-skeleton h-[300px] md:h-[320px] w-full rounded-xl bg-alabaster animate-pulse" />;
+  return <div className="ux-skeleton h-[320px] md:h-[368px] w-full rounded-xl bg-alabaster animate-pulse" />;
 }
 
 /** B2/B9：双并列信息 Card 的统一列几何（Desktop 50/50；Tablet/Mobile 单列）。

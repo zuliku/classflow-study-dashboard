@@ -63,7 +63,7 @@ export function LearningTrendChart({
         )}
         <span className="ml-auto text-[10px] text-satin-grey">单位：分钟</span>
       </div>
-      <div className="h-56 w-full md:h-64">
+      <div className="h-60 w-full md:h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F0EBE1" vertical={false} />
