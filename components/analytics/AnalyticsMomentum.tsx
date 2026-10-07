@@ -92,6 +92,22 @@ export function AnalyticsMomentum({
   const [open, setOpen] = useState(true);
   const { data, loading, error } = useStudyMomentum();
   const columns = useHeatColumns(data?.days ?? []);
+  // 每列月份刻度（与前列同月则省略，保持 GitHub 式稀疏标注）
+  const monthLabels = useMemo(
+    () =>
+      columns.map((col) => {
+        const first = col.find(({ day }) => day !== null)?.day;
+        return first ? Number(first.date.slice(5, 7)) : null;
+      }),
+    [columns]
+  );
+  const shownMonths = useMemo(() => {
+    const out: (string | null)[] = [];
+    monthLabels.forEach((m, i) => {
+      out.push(m === null || (i > 0 && monthLabels[i - 1] === m) ? null : `${m}月`);
+    });
+    return out;
+  }, [monthLabels]);
 
   if (error || (!loading && !data)) return null;
 
@@ -119,22 +135,25 @@ export function AnalyticsMomentum({
         >
           <AnalyticsCardHeader eyebrow="坚持与热度" title="12 周投入热力" />
           {loading || !data ? (
-            <div className="ux-skeleton h-[172px] mt-3 w-full rounded-xl bg-alabaster animate-pulse" aria-label="动量加载中" />
+            <div className="ux-skeleton h-[220px] mt-3 w-full rounded-xl bg-alabaster animate-pulse" aria-label="动量加载中" />
           ) : (
-            <div className="pt-3 flex flex-col gap-4 lg:flex-row lg:items-center">
-              {/* 热力 */}
-              <div className="flex-1 min-w-0">
+            <div className="pt-3 flex flex-col gap-4 xl:flex-row xl:items-stretch">
+              {/* 热力：月份刻度 + 放大格点，窄屏横向滚（不挤压） */}
+              <div className="shrink-0">
                 <div
                   data-testid="momentum-heatmap"
                   role="img"
                   aria-label={`近 ${MOMENTUM_WEEKS} 周学习热力，连续学习 ${data.streakDays} 天`}
-                  className="flex gap-[3px] overflow-x-auto pb-1"
+                  className="flex gap-1 overflow-x-auto pb-1"
                 >
                   {columns.map((col, ci) => (
-                    <div key={ci} className="flex flex-col gap-[3px] shrink-0">
+                    <div key={ci} className="flex flex-col gap-1 shrink-0">
+                      <span className="h-4 text-[10px] font-semibold text-sandrift whitespace-nowrap overflow-visible" aria-hidden="true">
+                        {shownMonths[ci] ?? ""}
+                      </span>
                       {col.map(({ day }, ri) =>
                         day === null ? (
-                          <span key={ri} className="w-3 h-3" aria-hidden="true" />
+                          <span key={ri} className="w-4 h-4" aria-hidden="true" />
                         ) : (
                           <span
                             key={day.date}
@@ -142,7 +161,7 @@ export function AnalyticsMomentum({
                             data-level={day.level}
                             data-unknown={day.unknown || undefined}
                             className={cn(
-                              "w-3 h-3 rounded-[3px]",
+                              "w-4 h-4 rounded-[4px]",
                               day.unknown && "border border-dashed border-line-strong"
                             )}
                             style={{
@@ -172,9 +191,9 @@ export function AnalyticsMomentum({
                   </span>
                 </div>
               </div>
-              {/* 右轨：连续 + 双环 */}
-              <div className="flex items-center gap-5 shrink-0 lg:w-52 lg:justify-around lg:border-l lg:border-line-soft lg:pl-4">
-                <div className="flex flex-col items-center gap-1">
+              {/* 三统计等宽 tile：连续 / 计划达成 / 按时完成 */}
+              <div className="flex-1 min-w-0 grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-2 py-3 flex flex-col items-center justify-center gap-1 text-center">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-danger/10 text-warning">
                     <Flame className="h-4 w-4" aria-hidden="true" />
                   </span>
@@ -182,22 +201,26 @@ export function AnalyticsMomentum({
                     <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
                   </p>
                   <p className="text-[10px] text-sandrift">连续学习</p>
-                  <p className="text-[10px] font-semibold text-satin-grey">
+                  <p className="text-[10px] font-semibold text-satin-grey leading-tight">
                     {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
                   </p>
                 </div>
-                <Ring
-                  fraction={planRatio === null ? null : planRatio / 100}
-                  label="计划达成"
-                  display={planRatio === null ? "—" : `${Math.round(planRatio)}%`}
-                  toneClass="text-sandrift"
-                />
-                <Ring
-                  fraction={onTimeRate === null ? null : onTimeRate / 100}
-                  label="按时完成"
-                  display={onTimeRate === null ? "—" : `${Math.round(onTimeRate)}%`}
-                  toneClass="text-success"
-                />
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-2 py-3 flex flex-col items-center justify-center gap-1">
+                  <Ring
+                    fraction={planRatio === null ? null : planRatio / 100}
+                    label="计划达成"
+                    display={planRatio === null ? "—" : `${Math.round(planRatio)}%`}
+                    toneClass="text-sandrift"
+                  />
+                </div>
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-2 py-3 flex flex-col items-center justify-center gap-1">
+                  <Ring
+                    fraction={onTimeRate === null ? null : onTimeRate / 100}
+                    label="按时完成"
+                    display={onTimeRate === null ? "—" : `${Math.round(onTimeRate)}%`}
+                    toneClass="text-success"
+                  />
+                </div>
               </div>
             </div>
           )}
