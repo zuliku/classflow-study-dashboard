@@ -110,36 +110,47 @@ export function KiroNavigator() {
     setView(next);
   }, []);
 
-  // ---- Lazy load：collapsed 不读 DB；首次 expanded 并行读取 History + Projects；版本变化刷新 ----
+  // ---- Lazy load：collapsed 不读 DB；首次 expanded 按需读取；版本变化只刷新对应列表 ----
+  // （此前门控算对了 needProjects/needThreads，但 loader 永远 Promise.all 双读：
+  // projectsVersion  bump 会连带重读 conversations，白费一次 DB + 线程列表闪动）
   const loadedProjectsVersionRef = useRef(-1);
   const loadedHistoryVersionRef = useRef(-1);
-  const loadNavigatorData = useCallback(async () => {
-    const projectsVersion = meta.projectsVersion;
-    const historyVersion = meta.historyVersion;
-    try {
-      const [projectList, threadList] = await Promise.all([
-        listKiroProjects(),
-        listConversations(),
-      ]);
-      loadedProjectsVersionRef.current = projectsVersion;
-      loadedHistoryVersionRef.current = historyVersion;
-      setProjects(projectList);
-      setThreads(threadList);
-    } catch {
-      pushToast({
-        message: "导航数据加载失败，请重试",
-        type: "error",
-        actionLabel: "重试",
-        onAction: () => void loadNavigatorData(),
-      });
-    }
-  }, [meta.projectsVersion, meta.historyVersion, pushToast]);
+  const loadNavigatorData = useCallback(
+    async (which?: { projects?: boolean; threads?: boolean }) => {
+      const wantProjects = which?.projects ?? true;
+      const wantThreads = which?.threads ?? true;
+      const projectsVersion = meta.projectsVersion;
+      const historyVersion = meta.historyVersion;
+      try {
+        const [projectList, threadList] = await Promise.all([
+          wantProjects ? listKiroProjects() : Promise.resolve(null),
+          wantThreads ? listConversations() : Promise.resolve(null),
+        ]);
+        if (wantProjects) {
+          loadedProjectsVersionRef.current = projectsVersion;
+          if (projectList) setProjects(projectList);
+        }
+        if (wantThreads) {
+          loadedHistoryVersionRef.current = historyVersion;
+          if (threadList) setThreads(threadList);
+        }
+      } catch {
+        pushToast({
+          message: "导航数据加载失败，请重试",
+          type: "error",
+          actionLabel: "重试",
+          onAction: () => void loadNavigatorData(which),
+        });
+      }
+    },
+    [meta.projectsVersion, meta.historyVersion, pushToast]
+  );
   useEffect(() => {
     if (!expanded) return;
     const needProjects = loadedProjectsVersionRef.current !== meta.projectsVersion;
     const needThreads = loadedHistoryVersionRef.current !== meta.historyVersion;
     if (!needProjects && !needThreads) return;
-    void loadNavigatorData();
+    void loadNavigatorData({ projects: needProjects, threads: needThreads });
   }, [expanded, meta.projectsVersion, meta.historyVersion, loadNavigatorData]);
 
   const collapse = useCallback(() => {
