@@ -135,6 +135,56 @@ export function LearningAnalyticsView() {
     setActiveTab(tab);
   };
 
+  /** 下一步（学习前瞻 + 估时参考）：独立于历史 Snapshot，空历史用户同样可见
+   *（基于任务数据而非历史事件）。data/empty 两分支共用同一渲染，避免重复。 */
+  const renderOutlookSection = () => (
+    <>
+      {outlook.error ? (
+        <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-semibold text-danger">学习前瞻加载失败，请稍后重试。</p>
+          <button
+            type="button"
+            onClick={() => outlook.refresh()}
+            className="h-7 px-3 rounded-lg bg-surface border border-line text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors"
+          >
+            重试
+          </button>
+        </div>
+      ) : outlook.loading && !outlook.data ? (
+        <ChartSkeleton />
+      ) : outlook.data ? (
+        <section>
+          <button
+            type="button"
+            onClick={() => setNextOpen((v) => !v)}
+            aria-expanded={nextOpen}
+            className="w-full flex items-center justify-between mb-3 text-left group"
+          >
+            <h2 className="text-[13px] font-bold text-charcoal">下一步</h2>
+            <ChevronDown
+              className={cn(
+                "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
+                !nextOpen && "-rotate-90"
+              )}
+              aria-hidden="true"
+            />
+          </button>
+          <DisclosureRegion open={nextOpen}>
+            <div className={ANALYTICS_PAIRED_GRID}>
+              <StudyOutlookCard
+                outlook={outlook.data}
+                horizonDays={outlookHorizon}
+                onHorizonChange={setOutlookHorizon}
+                onOpenAssignment={handleOpenOutlookAssignment}
+              />
+              <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
+            </div>
+          </DisclosureRegion>
+        </section>
+      ) : null}
+    </>
+  );
+
   /** 周回顾：toggle 语义（V3.1）——已展开且仍在 week 时收起；否则切 week + 展开 + scroll */
   const toggleWeeklyReview = () => {
     if (preset === "week" && reviewExpanded) {
@@ -265,6 +315,7 @@ export function LearningAnalyticsView() {
               {data.isEmpty ? (
                 <>
                   <EmptyState onNewTask={() => navigate("assignments")} onPlan={() => navigate("timetable")} />
+                  {renderOutlookSection()}
                   <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
                       <WeeklyReviewCard snapshot={data} />
@@ -316,6 +367,9 @@ export function LearningAnalyticsView() {
                     </div>
                     <LearningSignalsCard signals={data.signals} onNavigate={navigate} />
                   </div>
+
+                  {/* 下一步：看完过去看未来（与空历史分支共用同一渲染） */}
+                  {renderOutlookSection()}
 
                   {/* 投入与节奏（Distribution；Course/Rhythm 各自 content-fit，不强制等高） */}
                   <section style={staggerStyle(4)} className="ux-settle">
@@ -384,51 +438,6 @@ export function LearningAnalyticsView() {
             </>
           ) : null}
           </div>
-
-          {/* 下一步：学习前瞻 + 估时参考（独立于历史 Snapshot；确定性；不逐卡查询） */}
-          {outlook.error ? (
-            <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-semibold text-danger">学习前瞻加载失败，请稍后重试。</p>
-              <button
-                type="button"
-                onClick={() => outlook.refresh()}
-                className="h-7 px-3 rounded-lg bg-surface border border-line text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors"
-              >
-                重试
-              </button>
-            </div>
-          ) : outlook.loading && !outlook.data ? (
-            <ChartSkeleton />
-          ) : outlook.data ? (
-            <section>
-              <button
-                type="button"
-                onClick={() => setNextOpen((v) => !v)}
-                aria-expanded={nextOpen}
-                className="w-full flex items-center justify-between mb-3 text-left group"
-              >
-                <h2 className="text-[13px] font-bold text-charcoal">下一步</h2>
-                <ChevronDown
-                  className={cn(
-                    "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
-                    !nextOpen && "-rotate-90"
-                  )}
-                  aria-hidden="true"
-                />
-              </button>
-              <DisclosureRegion open={nextOpen}>
-                <div className={ANALYTICS_PAIRED_GRID}>
-                  <StudyOutlookCard
-                    outlook={outlook.data}
-                    horizonDays={outlookHorizon}
-                    onHorizonChange={setOutlookHorizon}
-                    onOpenAssignment={handleOpenOutlookAssignment}
-                  />
-                  <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
-                </div>
-              </DisclosureRegion>
-            </section>
-          ) : null}
         </div>
       </div>
     </div>
