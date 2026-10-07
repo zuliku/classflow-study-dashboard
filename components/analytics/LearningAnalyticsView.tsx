@@ -50,13 +50,39 @@ function ChartSkeleton() {
  *  Loading Skeleton 与 Loaded 共用同一常量（避免横向 layout shift）。 */
 export const ANALYTICS_PAIRED_GRID = "grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch";
 
-function EmptyState() {
+function EmptyState({ onNewTask, onPlan }: { onNewTask: () => void; onPlan: () => void }) {
+  // 数据感知的进度行：store 里已有课程/任务时告诉用户差什么（均为真实计数，不编造）
+  const courseCount = useAppStore((s) => s.courses.length);
+  const assignmentCount = useAppStore((s) => s.assignments.length);
+  const progressLine =
+    assignmentCount > 0
+      ? `你已有 ${assignmentCount} 个任务，完成 1 个就会生成首份趋势`
+      : courseCount > 0
+        ? `已建 ${courseCount} 门课程，新建任务并完成 1 个即可生成`
+        : "先添加课程与任务";
   return (
     <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex flex-col items-center justify-center text-center gap-1.5">
       <p className="text-xs font-bold text-charcoal">学习洞察会随着使用逐渐形成</p>
       <p className="text-[11px] text-sandrift leading-relaxed">
         完成 1 个任务或记 1 次专注，这里就会生成趋势图。
       </p>
+      <p className="text-[11px] font-semibold text-charcoal/80 leading-relaxed">{progressLine}</p>
+      <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+        <button
+          type="button"
+          onClick={onNewTask}
+          className="h-8 px-4 rounded-lg bg-charcoal text-white text-xs font-bold hover:bg-black transition-colors"
+        >
+          新建任务
+        </button>
+        <button
+          type="button"
+          onClick={onPlan}
+          className="h-8 px-4 rounded-lg border border-line text-xs font-bold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
+        >
+          安排学习计划
+        </button>
+      </div>
     </div>
   );
 }
@@ -91,6 +117,18 @@ export function LearningAnalyticsView() {
   // 历史分析 stage：preset / data state 变化时轻 settle（skeleton→data、empty→data、error→data 均有连续性）
   const analyticsStageState = loading ? "loading" : error ? "error" : data ? (data.isEmpty ? "empty" : "data") : "idle";
   const analyticsStageKey = `${preset}|${analyticsStageState}`;
+  // 首个数据 stage 挂载一次性阶梯（0/40/80/120/160ms）：preset 切换重挂载不再阶梯
+  //（频繁切换跟手优先）；reduced-motion 下无延迟（全局时长守卫只压 duration，不压 delay）。
+  // render 期懒初始化（sanctioned lazy-init；并发丢弃时最多跳过阶梯，无副作用）。
+  const staggerKeyRef = useRef<string | null>(null);
+  const dataStage = !!data && !loading && !error && !data.isEmpty;
+  let staggerFirstData = false;
+  if (dataStage && staggerKeyRef.current === null) {
+    staggerKeyRef.current = analyticsStageKey;
+    staggerFirstData = true;
+  }
+  const staggerStyle = (i: number): React.CSSProperties | undefined =>
+    staggerFirstData && !reducedMotion ? { animationDelay: `${i * 40}ms` } : undefined;
 
   const navigate = (tab: "assignments" | "timetable" | "courses") => {
     setActiveTab(tab);
@@ -225,7 +263,7 @@ export function LearningAnalyticsView() {
               />
               {data.isEmpty ? (
                 <>
-                  <EmptyState />
+                  <EmptyState onNewTask={() => navigate("assignments")} onPlan={() => navigate("timetable")} />
                   <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
                       <WeeklyReviewCard snapshot={data} />
@@ -235,16 +273,20 @@ export function LearningAnalyticsView() {
               ) : (
                 <>
                   {/* 结论横幅：一句话判断 + 一步行动（新增表达层，不碰既有标题/数据口径） */}
-                  <AnalyticsVerdict
-                    verdict={buildAnalyticsVerdict({
-                      signals: data.signals,
-                      overview: data.overview,
-                      comparisonAvailable: data.coverage.comparisonAvailable,
-                    })}
-                    onAction={navigate}
-                  />
+                  <div style={staggerStyle(0)} className="ux-settle">
+                    <AnalyticsVerdict
+                      verdict={buildAnalyticsVerdict({
+                        signals: data.signals,
+                        overview: data.overview,
+                        comparisonAvailable: data.coverage.comparisonAvailable,
+                      })}
+                      onAction={navigate}
+                    />
+                  </div>
                   {/* Summary Strip（一个共同 surface，替代四张独立卡） */}
-                  <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
+                  <div style={staggerStyle(1)} className="ux-settle">
+                    <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
+                  </div>
 
                   <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
@@ -255,7 +297,8 @@ export function LearningAnalyticsView() {
                   {/* 学习趋势（唯一主视觉）+ 值得注意 —— 统一 Paired Grid（50/50；层级由标题/图表/顺序表达） */}
                   <div className={ANALYTICS_PAIRED_GRID}>
                     <div
-                      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle"
+                      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle ux-settle"
+                      style={staggerStyle(2)}
                       data-testid="learning-trend-card"
                     >
                       <AnalyticsCardHeader eyebrow="走势总览" title="学习趋势" />
@@ -267,7 +310,7 @@ export function LearningAnalyticsView() {
                   </div>
 
                   {/* 投入与节奏（Distribution；Course/Rhythm 各自 content-fit，不强制等高） */}
-                  <section>
+                  <section style={staggerStyle(3)} className="ux-settle">
                     <button
                       type="button"
                       onClick={() => setDistOpen((v) => !v)}
@@ -302,7 +345,7 @@ export function LearningAnalyticsView() {
                   </section>
 
                   {/* 执行情况（reliability-aware：partial 只显示已记录，不显示伪精确按时率） */}
-                  <section>
+                  <section style={staggerStyle(4)} className="ux-settle">
                     <button
                       type="button"
                       onClick={() => setExecOpen((v) => !v)}
