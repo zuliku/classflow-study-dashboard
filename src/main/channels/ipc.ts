@@ -190,6 +190,17 @@ export function registerChannelIpc(opts?: { validateSender?: (channel: string, e
     }
   });
 
+  ipcMain.handle("bridge:channels:cancelGmailOAuth", async (event) => {
+    if (!guard("bridge:channels:cancelGmailOAuth", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
+    try {
+      const mgr = getChannelManager();
+      const result = await (mgr as unknown as { cancelGmailOAuth: () => Promise<unknown> }).cancelGmailOAuth();
+      return result;
+    } catch (e) {
+      toIpcError(e);
+    }
+  });
+
   ipcMain.handle("bridge:channels:syncNow", async (event, input: unknown) => {
     if (!guard("bridge:channels:syncNow", event)) throw new Error(JSON.stringify({ code: "PERMISSION_DENIED" }));
     try {

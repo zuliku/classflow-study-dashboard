@@ -22,6 +22,8 @@ export class GmailChannelAdapter implements ChannelAdapter {
   private lastError?: { code: string; message: string };
   private messageCount = 0;
   private scheduler: EmailSyncScheduler | null = null;
+  /** stop 后残余循环的退出标记（connect 时清零；区别于 scheduler 未创建阶段） */
+  private stopRequested = false;
   private syncStateStore: EmailSyncStateStore;
   private tokenProvider: GmailTokenProvider;
   private seenIds = new Set<string>();
@@ -56,6 +58,7 @@ export class GmailChannelAdapter implements ChannelAdapter {
   async start(): Promise<void> {
     if (this.state === "connecting" || this.state === "connected") return;
     this.setState("connecting");
+    this.stopRequested = false;
     try {
       // Verify token can be refreshed (auth check)
       await this.tokenProvider.getAccessToken();
@@ -79,7 +82,11 @@ export class GmailChannelAdapter implements ChannelAdapter {
   }
 
   async stop(): Promise<void> {
+    // 与 qqmail 对齐：先等进行中 tick 落定（≤5s），再置空 —— 否则残余 tick 在 disconnected 后
+    // 继续 ingest 写 inboxSink（ghost），快速禁用→启用还会双实例重叠
+    this.stopRequested = true;
     this.scheduler?.stop();
+    await this.scheduler?.whenSettled();
     this.scheduler = null;
     this.setState("disconnected");
     this.tokenProvider.clearCache();
@@ -87,18 +94,23 @@ export class GmailChannelAdapter implements ChannelAdapter {
 
   async syncNow(): Promise<{ added: number; durationMs: number }> {
     const start = Date.now();
+    const before = this.messageCount;
     if (this.scheduler) {
-      await this.scheduler.syncNow();
+      const ran = await this.scheduler.syncNow();
+      if (!ran) throw new ChannelError("SYNC_BUSY" as never, "sync already running");
     } else {
       await this.doIncrementalSync();
     }
-    return { added: 0, durationMs: Date.now() - start };
+    // 与 qqmail 同口径：真实增量（此前恒返回 0，UI 永远“新增 0 封”误导）
+    return { added: this.messageCount - before, durationMs: Date.now() - start };
   }
 
   private async doInitialSync(): Promise<void> {
     const items = await GmailApi.listInboxMessages(this.tokenProvider, 50);
     let hadIngestFailure = false;
     for (const item of items) {
+      // stop 后残余循环及时退出，避免 disconnected 后继续 ingest 写 ghost
+      if (this.stopRequested) break;
       let ingestedExternalId: string | undefined;
       try {
         const detail = await GmailApi.getMessageDetail(this.tokenProvider, item.id);
@@ -154,6 +166,7 @@ export class GmailChannelAdapter implements ChannelAdapter {
       const { historyId, messages } = await GmailApi.getHistory(this.tokenProvider, state.historyId);
       let hadIngestFailure = false;
       for (const m of messages) {
+        if (this.stopRequested) break;
         let ingestedExternalId: string | undefined;
         try {
           if (this.seenIds.has(m.id)) continue;

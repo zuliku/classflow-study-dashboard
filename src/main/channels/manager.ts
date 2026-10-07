@@ -247,6 +247,12 @@ export class ChannelManager {
     return { channel: cfg };
   }
 
+  /** 取消在途 Gmail OAuth（无在途返回 false；取消本身不抛错） */
+  async cancelGmailOAuth(): Promise<{ cancelled: boolean }> {
+    const { cancelGmailOAuth } = await import("./email/gmail/oauth");
+    return { cancelled: cancelGmailOAuth() };
+  }
+
   async addQQMailChannel(input: {
     displayName: string;
     emailAddress: string;

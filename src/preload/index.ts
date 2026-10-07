@@ -111,6 +111,7 @@ const INVOKE_TIMEOUTS_MS: Record<string, number> = {
   "bridge:channels:cancelReply": 30_000,
   "bridge:channels:canReply": 30_000,
   "bridge:channels:startGmailOAuth": 200_000,
+  "bridge:channels:cancelGmailOAuth": 30_000,
   // inbox（本地队列，秒级）
   "bridge:inbox:rendererReady": 30_000,
   "bridge:inbox:ack": 30_000,
@@ -337,6 +338,7 @@ const channelsBridge = {
   cancelReply: (input: unknown) => invokeBridge("bridge:channels:cancelReply", input),
   canReply: (input: unknown) => invokeBridge("bridge:channels:canReply", input),
   startGmailOAuth: () => invokeBridge("bridge:channels:startGmailOAuth", {}),
+  cancelGmailOAuth: () => invokeBridge("bridge:channels:cancelGmailOAuth", {}),
   syncNow: (input: unknown) => invokeBridge("bridge:channels:syncNow", input),
 };
 

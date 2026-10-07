@@ -20,6 +20,25 @@ export interface GmailOAuthResult {
   emailAddress: string;
 }
 
+/**
+ * 在途 OAuth 取消（用户关闭授权弹窗/点取消授权）：
+ * 关 loopback server + 以 CANCELLED 结算，调用方按取消处理（不 toast 错误，不锁死 UI）。
+ * 同一时刻只支持一笔在途授权（UI busyMap 已互斥），后来者覆盖前者。
+ */
+let activeOAuthCancel: (() => void) | null = null;
+
+export function cancelGmailOAuth(): boolean {
+  const cancel = activeOAuthCancel;
+  activeOAuthCancel = null;
+  if (!cancel) return false;
+  try {
+    cancel();
+  } catch {
+    /* 取消本身永不抛错 */
+  }
+  return true;
+}
+
 function getClientId(): string | null {
   // ClassFlow built-in Desktop OAuth Client, dev override via env
   return process.env.CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || null;
@@ -42,13 +61,23 @@ export async function startGmailOAuth(): Promise<GmailOAuthResult> {
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
+      activeOAuthCancel = null;
       try { server?.close(); } catch {}
       reject(new Error(JSON.stringify({ code: "GMAIL_OAUTH_TIMEOUT", message: "OAuth timeout" })));
     }, 180_000);
 
     const cleanup = () => {
       clearTimeout(timeout);
+      activeOAuthCancel = null;
       try { server?.close(); } catch {}
+    };
+
+    // 注册取消：在途时用户点“取消授权”/关弹窗即结算 CANCELLED 并关 server
+    activeOAuthCancel = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(JSON.stringify({ code: "GMAIL_OAUTH_CANCELLED", message: "OAuth cancelled" })));
     };
 
     server = createServer(async (req: IncomingMessage, res: ServerResponse) => {

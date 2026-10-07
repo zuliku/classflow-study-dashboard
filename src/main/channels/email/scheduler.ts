@@ -68,14 +68,19 @@ export class EmailSyncScheduler {
     }, this.intervalMs);
   }
 
-  async syncNow(): Promise<void> {
-    if (this.running) return;
+  /**
+   * 手动同步：周期 tick 进行中则跳过（返回 false），调用方据此提示“正在同步”而非谎报成功。
+   * 此前静默 return void，UI 照常显示“已同步，新增 0 封”。
+   */
+  async syncNow(): Promise<boolean> {
+    if (this.running) return false;
     this.running = true;
     try {
       await this.syncFn();
     } finally {
       this.running = false;
     }
+    return true;
   }
 
   isRunning(): boolean {

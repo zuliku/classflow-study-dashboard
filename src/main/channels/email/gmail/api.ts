@@ -7,6 +7,17 @@ import { GmailTokenProvider } from "./tokenProvider";
 
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
 
+/** 有界网络调用（与 oauth 同 15s 口径）：弱网下 tick 不悬挂数分钟，stop()/whenSettled() 才等得到 */
+async function gmailFetch(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface GmailMessageListItem {
   id: string;
   threadId?: string;
@@ -27,7 +38,7 @@ export async function listInboxMessages(tokenProvider: GmailTokenProvider, maxRe
     q: "in:inbox newer_than:7d",
     maxResults: String(maxResults),
   });
-  const res = await fetch(`${GMAIL_BASE}/messages?${params}`, {
+  const res = await gmailFetch(`${GMAIL_BASE}/messages?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Gmail list failed ${res.status}`);
@@ -37,7 +48,7 @@ export async function listInboxMessages(tokenProvider: GmailTokenProvider, maxRe
 
 export async function getMessageDetail(tokenProvider: GmailTokenProvider, messageId: string): Promise<GmailMessageDetail> {
   const token = await tokenProvider.getAccessToken();
-  const res = await fetch(`${GMAIL_BASE}/messages/${messageId}?format=full`, {
+  const res = await gmailFetch(`${GMAIL_BASE}/messages/${messageId}?format=full`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Gmail get failed ${res.status}`);
@@ -51,7 +62,7 @@ export async function getHistory(tokenProvider: GmailTokenProvider, startHistory
     startHistoryId,
     historyTypes: "messageAdded",
   });
-  const res = await fetch(`${GMAIL_BASE}/history?${params}`, {
+  const res = await gmailFetch(`${GMAIL_BASE}/history?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -71,7 +82,7 @@ export async function getHistory(tokenProvider: GmailTokenProvider, startHistory
 
 export async function getProfileHistoryId(tokenProvider: GmailTokenProvider): Promise<string> {
   const token = await tokenProvider.getAccessToken();
-  const res = await fetch(`${GMAIL_BASE}/profile`, {
+  const res = await gmailFetch(`${GMAIL_BASE}/profile`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json() as { historyId?: string };

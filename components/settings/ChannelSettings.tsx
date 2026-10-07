@@ -40,6 +40,7 @@ function getChannelsBridge(): {
   test: (input: unknown) => Promise<{ ok: boolean; error?: string }>;
   remove: (input: unknown) => Promise<unknown>;
   startGmailOAuth: () => Promise<{ channel: unknown }>;
+  cancelGmailOAuth: () => Promise<{ cancelled: boolean }>;
   syncNow: (input: unknown) => Promise<{ added: number; durationMs: number }>;
 } | null {
   if (typeof window === "undefined") return null;
@@ -92,6 +93,11 @@ export function ChannelSettings() {
   // Latest-wins generation token：connect/disconnect/test 各自触发 refresh()，
   // 无守卫时慢的旧 list() 响应会覆盖新状态（卡片显示与真实连接态相反，直到下次刷新）
   const refreshGenerationRef = useRef(0);
+  // 操作世代：同卡并发操作（连接+测试+同步）后完成的旧操作不 toast/不 refresh（main 副作用已发生，只防 UI 乱序）
+  const opGenerationRef = useRef(0);
+  // 行级互斥：同卡任一操作进行中，其他操作直接返回（防 connect 改 adapter 同时 test 读旧 credential）
+  const isBusyAny = (id: string) =>
+    Object.entries(busyMap).some(([k, v]) => v && k.startsWith(`${id}:`));
   const refresh = useCallback(async () => {
     const bridge = getChannelsBridge();
     if (!bridge) {
@@ -115,30 +121,46 @@ export function ChannelSettings() {
 
   const handleConnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
+    if (isBusyAny(id)) return;
+    const gen = ++opGenerationRef.current;
     setBusy(id, "connect", true);
-    try { await b.connect({ id }); await refresh(); pushToast({ message: `「${channelNameOf(id)}」已连接`, type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "连接失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "connect", false); }
+    try { await b.connect({ id }); if (gen !== opGenerationRef.current) return; await refresh(); pushToast({ message: `「${channelNameOf(id)}」已连接`, type: "success" }); } catch (e) { if (gen !== opGenerationRef.current) return; pushToast({ message: resolveChannelUserMessage(e, "连接失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "connect", false); }
   };
   const handleDisconnect = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
+    if (isBusyAny(id)) return;
+    const gen = ++opGenerationRef.current;
     setBusy(id, "disconnect", true);
-    try { await b.disconnect({ id }); await refresh(); pushToast({ message: `「${channelNameOf(id)}」已断开`, type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "断开失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "disconnect", false); }
+    try { await b.disconnect({ id }); if (gen !== opGenerationRef.current) return; await refresh(); pushToast({ message: `「${channelNameOf(id)}」已断开`, type: "success" }); } catch (e) { if (gen !== opGenerationRef.current) return; pushToast({ message: resolveChannelUserMessage(e, "断开失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "disconnect", false); }
   };
   const handleTest = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
+    if (isBusyAny(id)) return;
+    const gen = ++opGenerationRef.current;
     setBusy(id, "test", true);
     try {
       const res = await b.test({ id }) as { ok: boolean; error?: string };
+      if (gen !== opGenerationRef.current) return;
       pushToast({ message: res.ok ? "连接正常" : resolveChannelUserMessage(res.error, "测试失败，请稍后重试"), type: res.ok ? "success" : "error" });
-    } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "测试失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "test", false); }
+    } catch (e) { if (gen !== opGenerationRef.current) return; pushToast({ message: resolveChannelUserMessage(e, "测试失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "test", false); }
   };
   const handleSyncNow = async (id: string) => {
     const b = getChannelsBridge(); if (!b) return;
+    if (isBusyAny(id)) return;
+    const gen = ++opGenerationRef.current;
     setBusy(id, "sync", true);
     try {
       const res = await b.syncNow({ id }) as { added: number; durationMs: number };
+      if (gen !== opGenerationRef.current) return;
       pushToast({ message: `已同步，新增 ${res.added} 封邮件`, type: "success" });
       await refresh();
-    } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "同步失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "sync", false); }
+    } catch (e) {
+      if (gen !== opGenerationRef.current) return;
+      // 周期 tick 进行中：如实提示而非谎报“已同步 0 封”
+      const code = (e as { code?: string })?.code ?? "";
+      if (code === "SYNC_BUSY") pushToast({ message: "正在同步中，稍候自动完成，无需重复点击", type: "info" });
+      else pushToast({ message: resolveChannelUserMessage(e, "同步失败，请稍后重试"), type: "error" });
+    } finally { setBusy(id, "sync", false); }
   };
   const handleRemove = async (id: string, displayName: string) => {
     const cfg = channels.find(c => c.config.id === id)?.config;
@@ -157,8 +179,10 @@ export function ChannelSettings() {
   };
   const handleToggleEnabled = async (id: string, enabled: boolean) => {
     const b = getChannelsBridge(); if (!b) return;
+    if (isBusyAny(id)) return;
+    const gen = ++opGenerationRef.current;
     setBusy(id, "toggle", true);
-    try { await b.setEnabled({ id, enabled }); await refresh(); pushToast({ message: enabled ? "已启用" : "已停用", type: "success" }); } catch (e) { pushToast({ message: resolveChannelUserMessage(e, "操作失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "toggle", false); }
+    try { await b.setEnabled({ id, enabled }); if (gen !== opGenerationRef.current) return; await refresh(); pushToast({ message: enabled ? "已启用" : "已停用", type: "success" }); } catch (e) { if (gen !== opGenerationRef.current) return; pushToast({ message: resolveChannelUserMessage(e, "操作失败，请稍后重试"), type: "error" }); } finally { setBusy(id, "toggle", false); }
   };
 
   return (
@@ -226,19 +250,19 @@ export function ChannelSettings() {
                 {config.channel === "qq-bot" ? (
                   <Button variant="secondary" size="sm" onClick={() => setEditTarget({ config, health })} data-testid={`channel-edit-${config.id}`}> <Settings2 className="w-3 h-3" />配置</Button>
                 ) : null}
-                <Button variant="secondary" size="sm" loading={isBusy(config.id, "test")} loadingLabel="正在测试" onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`}><TestTube2 className="w-3 h-3" />{config.channel === "qq-bot" ? "测试连接" : "测试"}</Button>
+                <Button variant="secondary" size="sm" loading={isBusy(config.id, "test")} loadingLabel="正在测试" disabled={isBusyAny(config.id)} onClick={() => handleTest(config.id)} data-testid={`channel-test-${config.id}`}><TestTube2 className="w-3 h-3" />{config.channel === "qq-bot" ? "测试连接" : "测试"}</Button>
                 {(config.channel === "gmail" || config.channel === "qq-mail") && (
-                  <Button variant="secondary" size="sm" loading={isBusy(config.id, "sync")} loadingLabel="正在同步" onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`}><RefreshCw className="w-3 h-3" />立即同步</Button>
+                  <Button variant="secondary" size="sm" loading={isBusy(config.id, "sync")} loadingLabel="正在同步" disabled={isBusyAny(config.id)} onClick={() => handleSyncNow(config.id)} data-testid={`channel-sync-${config.id}`}><RefreshCw className="w-3 h-3" />立即同步</Button>
                 )}
                 {health.state === "connected" ? (
-                  <Button variant="secondary" size="sm" loading={isBusy(config.id, "disconnect")} loadingLabel="断开中" onClick={() => handleDisconnect(config.id)} data-testid={`channel-disconnect-${config.id}`}><Power className="w-3 h-3" />断开</Button>
+                  <Button variant="secondary" size="sm" loading={isBusy(config.id, "disconnect")} loadingLabel="断开中" disabled={isBusyAny(config.id)} onClick={() => handleDisconnect(config.id)} data-testid={`channel-disconnect-${config.id}`}><Power className="w-3 h-3" />断开</Button>
                 ) : (
-                  <Button variant="primary" size="sm" loading={isBusy(config.id, "connect")} loadingLabel="正在连接" onClick={() => handleConnect(config.id)} data-testid={`channel-connect-${config.id}`}><Plug2 className="w-3 h-3" />连接</Button>
+                  <Button variant="primary" size="sm" loading={isBusy(config.id, "connect")} loadingLabel="正在连接" disabled={isBusyAny(config.id)} onClick={() => handleConnect(config.id)} data-testid={`channel-connect-${config.id}`}><Plug2 className="w-3 h-3" />连接</Button>
                 )}
-                <Button variant="secondary" size="sm" loading={isBusy(config.id, "remove")} onClick={() => handleRemove(config.id, config.displayName)} data-testid={`channel-remove-${config.id}`} className="text-danger hover:bg-danger-bg"><Trash2 className="w-3 h-3" /></Button>
+                <Button variant="secondary" size="sm" loading={isBusy(config.id, "remove")} disabled={isBusyAny(config.id)} onClick={() => handleRemove(config.id, config.displayName)} data-testid={`channel-remove-${config.id}`} className="text-danger hover:bg-danger-bg"><Trash2 className="w-3 h-3" /></Button>
                 <div className="ml-auto flex items-center gap-2">
                   <span className="text-xs text-sandrift">启用</span>
-                  <Switch checked={config.enabled} onChange={(v) => handleToggleEnabled(config.id, v)} label="启用" disabled={isBusy(config.id, "toggle")} />
+                  <Switch checked={config.enabled} onChange={(v) => handleToggleEnabled(config.id, v)} label="启用" disabled={isBusyAny(config.id)} />
                 </div>
               </div>
             </div>
@@ -417,6 +441,13 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 切页签/unmount 即放弃在途授权（此前切走后回包仍 onAdded 关弹窗 + 写已卸载 state）
+  useEffect(() => {
+    return () => {
+      try { void getChannelsBridge()?.cancelGmailOAuth(); } catch {}
+    };
+  }, []);
+
   const handleConnect = async () => {
     setError(null);
     const bridge = getChannelsBridge();
@@ -431,8 +462,16 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
       if (code === "GMAIL_OAUTH_CONFIG_MISSING") setError(process.env.NODE_ENV === "development" ? "Gmail OAuth 未配置（开发环境需设置 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID）" : "Gmail 授权服务暂不可用，请稍后重试。");
       else if (code === "GMAIL_OAUTH_DENIED") setError("已拒绝授权");
       else if (code === "GMAIL_OAUTH_TIMEOUT") setError("授权超时，请重试");
+      else if (code === "GMAIL_OAUTH_CANCELLED") setError(null);
       else setError(resolveChannelUserMessage(e));
     } finally { setSaving(false); onBusyChange?.(false); }
+  };
+
+  const handleCancelOAuth = async () => {
+    const bridge = getChannelsBridge();
+    if (bridge) {
+      try { await bridge.cancelGmailOAuth(); } catch {}
+    }
   };
 
   return (
@@ -452,6 +491,11 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
       <button type="button" onClick={handleConnect} disabled={saving} data-testid="gmail-connect-oauth" className="w-full h-10 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">
         <Mail className="w-4 h-4" />{saving ? "正在打开授权页面…" : "连接 Gmail"}
       </button>
+      {saving && (
+        <button type="button" onClick={handleCancelOAuth} data-testid="gmail-cancel-oauth" className="w-full h-9 bg-white border border-line text-charcoal text-xs font-bold rounded-xl hover:bg-alabaster transition-colors">
+          取消授权
+        </button>
+      )}
       {process.env.NODE_ENV === "development" && (
         <p className="text-[11px] text-sandrift text-center">开发环境可通过 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID 覆盖内置授权配置。</p>
       )}

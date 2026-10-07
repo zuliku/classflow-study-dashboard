@@ -165,7 +165,8 @@ export class QQMailChannelAdapter implements ChannelAdapter {
     const start = Date.now();
     const before = this.messageCount;
     if (this.scheduler) {
-      await this.scheduler.syncNow();
+      const ran = await this.scheduler.syncNow();
+      if (!ran) throw new ChannelError("SYNC_BUSY" as never, "sync already running");
     } else if (this.state !== "disconnected") {
       await this.doPoll();
     }
