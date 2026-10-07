@@ -238,7 +238,7 @@ demoTest("C：配对行等高（grid stretch；signals 与 Trend 同高顶对齐
   await seedLearningHistory(page);
   await openAnalytics(page);
 
-  const trendCard = page.getByText("学习趋势", { exact: true }).locator("..");
+  const trendCard = page.getByTestId("learning-trend-card");
   const signals = page.getByTestId("learning-signals-card");
   await expect(signals).toBeVisible();
   const trendBox = (await trendCard.boundingBox())!;

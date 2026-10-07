@@ -3,6 +3,7 @@
 import React from "react";
 import { CourseInvestmentView } from "@/lib/analytics/presentation";
 import { formatAnalyticsDuration } from "@/lib/analytics/presentation";
+import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
 import { cn } from "@/lib/utils";
 
 const BAR_COLORS = ["#627566", "#CDB9AB", "#A48F82", "#9B5B57", "#A87952"];
@@ -34,7 +35,7 @@ export function CourseInvestmentCard({
   const maxMinutes = Math.max(...investment.map((i) => i.minutes), 1);
   return (
     <div className="bg-surface border border-line rounded-2xl p-4 ux-fade" data-testid="course-investment-card">
-      <h3 className="text-sm font-bold text-charcoal">课程投入</h3>
+      <AnalyticsCardHeader eyebrow="时间去向" title="课程投入" />
       <div className="space-y-2.5 pt-3">
         {investment.map((item, index) => {
           const neutral = item.isOther || item.courseName === "未关联课程";

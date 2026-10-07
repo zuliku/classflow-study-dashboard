@@ -4,6 +4,7 @@ import React from "react";
 import { Scale } from "lucide-react";
 import { EstimateCalibration } from "@/lib/analytics/estimateCalibration";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
+import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 
@@ -26,10 +27,11 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
   if (calibration.status !== "ready" || calibration.medianRatio === null) {
     return (
     <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 ux-fade" data-testid="estimate-calibration-card">
-        <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-          <Scale className="w-4 h-4 text-[#A48F82]" />
-          估时参考
-        </h3>
+        <AnalyticsCardHeader
+          eyebrow="估时校准"
+          title="估时参考"
+          icon={<Scale className="w-4 h-4 text-[#A48F82]" aria-hidden="true" />}
+        />
         <p className="py-3 text-[11px] text-sandrift leading-relaxed">
           继续积累任务估时与关联专注记录后，这里会提供个人估时参考。
         </p>
@@ -43,10 +45,11 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
 
   return (
     <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 ux-fade" data-testid="estimate-calibration-card">
-      <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-        <Scale className="w-4 h-4 text-[#A48F82]" />
-        估时参考
-      </h3>
+        <AnalyticsCardHeader
+          eyebrow="估时校准"
+          title="估时参考"
+          icon={<Scale className="w-4 h-4 text-[#A48F82]" aria-hidden="true" />}
+        />
       <div className="pt-2 space-y-1">
         <p className="text-[11px] text-satin-grey leading-relaxed">
           过去 {calibration.sampleCount} 个有完整记录的任务中，已记录专注时长中位数约为预计耗时的{" "}

@@ -7,6 +7,7 @@ import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
 import { cn } from "@/lib/utils";
 
 const HEALTH_COPY: Record<OutlookHealth, { label: string; cls: string }> = {
@@ -71,27 +72,28 @@ export function StudyOutlookCard({
   return (
     <div className="w-full min-w-0 bg-surface border border-line rounded-2xl shadow-subtle" data-testid="study-outlook-card">
       <div className="px-4 pt-4 pb-3 border-b border-line-soft">
-        <div className="flex items-center justify-between">
-          <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal">
-            <CalendarClock className="w-4 h-4 text-[#A48F82]" />
-            学习前瞻
-          </h3>
-          <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong">
-            {/* Workflow UX Motion M3：horizon 切换收敛为 SegmentedControl（compact xs）——
-                single moving plate（--motion-base / emphasized），替代静态 bg-white 瞬切 */}
-            <SegmentedControl<StudyOutlookHorizon>
-              value={horizonDays}
-              onChange={onHorizonChange}
-              ariaLabel="学习前瞻范围"
-              size="xs"
-              className="border-0 p-0.5"
-              options={([7, 14] as StudyOutlookHorizon[]).map((h) => ({
-                value: h,
-                label: `未来 ${h} 天`,
-              }))}
-            />
-          </div>
-        </div>
+        <AnalyticsCardHeader
+          eyebrow="未来安排"
+          title="学习前瞻"
+          icon={<CalendarClock className="w-4 h-4 text-[#A48F82]" aria-hidden="true" />}
+          action={
+            <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong">
+              {/* Workflow UX Motion M3：horizon 切换收敛为 SegmentedControl（compact xs）——
+                  single moving plate（--motion-base / emphasized），替代静态 bg-white 瞬切 */}
+              <SegmentedControl<StudyOutlookHorizon>
+                value={horizonDays}
+                onChange={onHorizonChange}
+                ariaLabel="学习前瞻范围"
+                size="xs"
+                className="border-0 p-0.5"
+                options={([7, 14] as StudyOutlookHorizon[]).map((h) => ({
+                  value: h,
+                  label: `未来 ${h} 天`,
+                }))}
+              />
+            </div>
+          }
+        />
         <p className="text-[11px] text-sandrift mt-1.5">
           {summary.counts.totalDue > 0
             ? `${summary.counts.totalDue} 个截止任务${attentionCount > 0 ? ` · ${attentionCount} 个需注意` : ""}`

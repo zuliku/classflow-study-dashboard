@@ -10,6 +10,7 @@ import {
   AnalyticsSummaryStripSkeleton,
 } from "@/components/analytics/AnalyticsSummaryStrip";
 import { AnalyticsVerdict } from "@/components/analytics/AnalyticsVerdict";
+import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
 import { buildAnalyticsVerdict } from "@/lib/analytics/verdict";
 import { LearningTrendChart } from "@/components/analytics/LearningTrendChart";
 import { LearningSignalsCard } from "@/components/analytics/LearningSignalsCard";
@@ -253,10 +254,11 @@ export function LearningAnalyticsView() {
 
                   {/* 学习趋势（唯一主视觉）+ 值得注意 —— 统一 Paired Grid（50/50；层级由标题/图表/顺序表达） */}
                   <div className={ANALYTICS_PAIRED_GRID}>
-                    <div className="bg-surface border border-line rounded-2xl p-4 shadow-subtle">
-                      <h3 className="text-sm font-bold text-charcoal pb-2 border-b border-[#F0EBE1]">
-                        学习趋势
-                      </h3>
+                    <div
+                      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle"
+                      data-testid="learning-trend-card"
+                    >
+                      <AnalyticsCardHeader eyebrow="走势总览" title="学习趋势" />
                       <div className="pt-3">
                         <LearningTrendChart points={data.trend} period={data.period} animate={trendAnimated} />
                       </div>

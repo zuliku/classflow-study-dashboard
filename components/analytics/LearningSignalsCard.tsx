@@ -6,6 +6,7 @@ import { LearningSignal, LearningSignalTone } from "@/lib/analytics/types";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
+import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
 import { cn } from "@/lib/utils";
 
 const TONE_STYLE: Record<LearningSignalTone, { icon: typeof TrendingUp; cls: string }> = {
@@ -51,7 +52,7 @@ export function LearningSignalsCard({
       className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 flex flex-col ux-fade"
       data-testid="learning-signals-card"
     >
-      <h3 className="text-sm font-bold text-charcoal">值得注意</h3>
+      <AnalyticsCardHeader eyebrow="行动信号" title="值得注意" />
       <div className="divide-y divide-line-soft pt-2">
         {signals.map((signal) => {
           const Icon = TONE_STYLE[signal.tone].icon;

@@ -3,6 +3,7 @@
 import React from "react";
 import { ClipboardCheck } from "lucide-react";
 import { ExecutionQualityView } from "@/lib/analytics/presentation";
+import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
 
 /**
  * 执行情况（V3.1）：3 个 primary 列（完成任务 / 重新打开 / 按时完成）+ secondary footer
@@ -12,10 +13,11 @@ import { ExecutionQualityView } from "@/lib/analytics/presentation";
 export function ExecutionQualityCard({ view }: { view: ExecutionQualityView }) {
   return (
     <div className="bg-surface border border-line rounded-2xl p-4" data-testid="execution-quality-card">
-      <h3 className="flex items-center gap-1.5 text-sm font-bold text-charcoal">
-        <ClipboardCheck className="w-4 h-4 text-[#A48F82]" />
-        执行情况
-      </h3>
+      <AnalyticsCardHeader
+        eyebrow="完成质量"
+        title="执行情况"
+        icon={<ClipboardCheck className="w-4 h-4 text-[#A48F82]" aria-hidden="true" />}
+      />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
         {[view.completed, view.reopened, view.onTime].map((m) => (
           <div key={m.label} data-testid={`execution-${m.label}`}>
