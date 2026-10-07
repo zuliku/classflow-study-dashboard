@@ -6,6 +6,7 @@ import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/Kir
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { KiroMenuPanel, KiroMenuItem, KiroMenuDivider, useKiroPopover } from "@/components/kiro/KiroMenu";
+import { PopoverPanel } from "@/components/ui/Popover";
 import { KiroShareSheet } from "@/components/kiro/KiroShareSheet";
 import { KiroMemoryManager } from "@/components/kiro/KiroMemoryManager";
 import {
@@ -85,9 +86,10 @@ export function KiroSessionActions({
         >
           <Share2 className="w-4 h-4" />
         </button>
-          <KiroMenuPanel open={share.open} placement="bottom-end" className="w-[290px] p-3">
+          {/* 分享是表单型面板而非菜单：role=dialog（menu 内只放 menuitem，roving 在此无项可走） */}
+          <PopoverPanel open={share.open} placement="bottom-end" role="dialog" aria-label="分享对话" className="w-[290px] p-3">
             <KiroShareSheet onClose={share.close} />
-          </KiroMenuPanel>
+          </PopoverPanel>
       </div>
 
       {/* More（会话级） */}

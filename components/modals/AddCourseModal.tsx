@@ -45,6 +45,8 @@ export function AddCourseModal() {
   const [description, setDescription] = useState("");
   const [colorIndex, setColorIndex] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
+  // 打开后初始焦点落课程名（Dialog initialFocusRef 在可见后 rAF 聚焦，比 autoFocus 稳）
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
 
   // Multi-slot schedule state (支持一门课多个上课时间)
   const [scheduleSlots, setScheduleSlots] = useState<SlotInput[]>([
@@ -169,6 +171,7 @@ export function AddCourseModal() {
       overlayId="add-course-modal"
       stackZ={50}
       aria-label="添加课程"
+      initialFocusRef={nameInputRef}
       className="max-w-lg max-h-[90dvh] flex flex-col"
     >
         {/* Header */}
@@ -194,12 +197,12 @@ export function AddCourseModal() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="课程名称" required htmlFor="course-name">
                   <Input
+                    ref={nameInputRef}
                     id="course-name"
                     type="text"
                     placeholder="如：行为经济学"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    autoFocus
                     required
                   />
                 </Field>

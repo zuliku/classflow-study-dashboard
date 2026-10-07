@@ -14,8 +14,8 @@
  *   recharts animationDuration/animationEasing 走库关键字，不在此列）
  * - WARN（exit 0）：transition-[left/top/right/bottom]（布局位移，优先 transform；
  *   拖拽跟手 Timetable/Timeline 与滑块旋钮暂白名单，见 WARN_LAYOUT_ALLOW）
- * - WARN（exit 0）：transition-[width/height/min/max-height]（布局尺寸，JS 直写高度处禁用；
- *   ExitCollapse 网格折叠 / 进度条 / SegmentedControl transform+width 暂白名单）
+ * - WARN（exit 0）：transition-[width/height/min/max-height]（布局尺寸；进度条 data-tier
+ *   有意过渡保持 WARN 可见不进白名单，JS 直写高度处禁用）
  * - WARN（exit 0）：.style.(left/top/width/height)= 直接写布局属性（优先 transform）
  *
  * 对标 scripts/check-secrets.mjs 的目录 walk 口径；可在 CI 显式调用。

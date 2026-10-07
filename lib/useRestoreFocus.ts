@@ -10,18 +10,35 @@ import { useEffect, useRef } from "react";
  * - 不提供 restoreKey 的 consumer：行为与旧版完全一致（只在 open 变化时记录）。
  * 安全条件：activeElement 是有效 HTMLElement 且不是 body。
  */
+function isFocusableTarget(el: HTMLElement | null): el is HTMLElement {
+  if (!el || el === document.body) return false;
+  if ((el as HTMLButtonElement).disabled) return false;
+  if (el.closest("[inert],[hidden],[aria-hidden='true']")) return false;
+  try {
+    const style = getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+  } catch {
+    return false;
+  }
+  return typeof el.focus === "function";
+}
+
 export function useRestoreFocus(open: boolean, restoreKey?: string | number | null): void {
   const openerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (open) {
       const el = document.activeElement as HTMLElement | null;
-      if (el && el !== document.body) openerRef.current = el;
-    } else if (openerRef.current && typeof openerRef.current.focus === "function") {
-      // 触发元素可能已卸载（如删除对话行后关闭弹窗）：detached 节点 focus 会丢到 body
+      // 只记录真正可聚焦的触发元素；陷阱内元素（restoreKey 翻转时）不覆盖 opener
+      if (isFocusableTarget(el) && openerRef.current !== el) {
+        const inTrap = el.closest('[role="dialog"],[data-focus-trap]');
+        if (restoreKey === undefined || !inTrap) openerRef.current = el;
+      }
+    } else if (openerRef.current) {
+      // 触发元素可能已卸载/禁用/隐藏（detached 节点 focus 会丢到 body）：复查后再还焦
       const opener = openerRef.current;
       openerRef.current = null;
-      if (document.contains(opener)) {
+      if (document.contains(opener) && isFocusableTarget(opener)) {
         opener.focus();
       }
     }

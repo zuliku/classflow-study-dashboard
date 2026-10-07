@@ -14,7 +14,9 @@ export type DropdownMenuPanelProps = PopoverPanelProps;
 function focusMenuItem(container: HTMLElement | null, dir: 1 | -1 | "first" | "last"): void {
   if (!container) return;
   const items = Array.from(
-    container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])')
+    container.querySelectorAll<HTMLButtonElement>(
+      '[role="menuitem"]:not([disabled]),[role="menuitemradio"]:not([disabled])'
+    )
   ).filter((el) => el.offsetParent !== null || el.getClientRects().length > 0);
   if (items.length === 0) return;
   const active = document.activeElement as HTMLElement | null;

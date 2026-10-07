@@ -383,7 +383,7 @@ describe("Kiro Composer — Reasoning / Model", () => {
     expect(css).toContain("html[data-motion-effective=\"reduced\"] .kiro-reasoning-flow");
   });
 
-  it("Reasoning 拖动：按指针位置换算档位（pointerdown → pointermove），拖动期间关闭过渡", async () => {
+  it("Reasoning 拖动：按指针位置换算档位（pointerdown → pointermove），档位间保留平滑过渡", async () => {
     await renderComposer({ reasoningEffort: "low" });
     await click('[data-testid="kiro-composer-reasoning"]');
     const track = q('[data-testid="kiro-composer-reasoning-track"]')!;

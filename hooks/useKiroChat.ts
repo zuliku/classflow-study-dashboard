@@ -1221,8 +1221,14 @@ export function useKiroChat({
     }),
     // Streaming UX V2 Phase 4：24ms 客户端节流（SDK 内建；不引入手写 queue / rAF / debounce）
     experimental_throttle: KIRO_CLIENT_STREAM_THROTTLE_MS,
-    onError: () => {
-      // error 状态由 useChat 内部维护；归一化在下方派生
+    onError: (err) => {
+      // error 状态由 useChat 内部维护，归一化在下方派生；此处只补客户端可追踪日志（UI 行为不变）
+      try {
+        const code = normalizeAIError(err).code;
+        console.warn("[kiro-chat] transport error", code, (err as Error)?.message?.slice(0, 200));
+      } catch {
+        /* 日志失败不影响主链路 */
+      }
     },
     onToolCall: async ({ toolCall }) => {
       const { toolName, toolCallId, input } = toolCall as {
@@ -3101,6 +3107,8 @@ export function useKiroChat({
       const conversationIdAtSend = conversationIdRef.current;
       setTurnIntentFrozen(false);
       const intent = captureIntentRef.current();
+      // P0：项目归属同冻结（preflight 期切 Project 旧指令注入新轮 → 与 conversation 同级丢弃）
+      const projectIdAtSend = intent.projectId;
       setTurnIntentFrozen(true);
       turnPerf("intentFrozen");
 
@@ -3457,9 +3465,11 @@ export function useKiroChat({
       }
       // V4.6 preparation generation：preflight 期间 conversation 已切换到另一个会话 → 丢弃结果，不 commit。
       // 第一条消息的 transient conversation id 在 send 内创建（null → 新 id）属正常，不丢弃。
+      // P0：同级 project 归属校验（preflight 期切 Project 旧指令注入 → 静默丢弃重发）
       if (
-        conversationIdAtSend != null &&
-        conversationIdRef.current !== conversationIdAtSend
+        (conversationIdAtSend != null &&
+          conversationIdRef.current !== conversationIdAtSend) ||
+        projectIdRef.current !== projectIdAtSend
       ) {
         turnPerf("preparationDiscarded");
         setTurnIntentFrozen(false);

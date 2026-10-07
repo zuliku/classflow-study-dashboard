@@ -318,15 +318,16 @@ export function KiroNavigator() {
       <KiroMenuDivider />
       <div className="px-2.5 py-2 space-y-1.5" role="group" aria-label="Kiro 输出字号">
         <p className="text-[10px] font-semibold text-sandrift">输出字号</p>
-        <div className="flex items-center gap-0.5 bg-[#F7F5F5] p-0.5 rounded-lg w-fit">
+        <div className="flex items-center gap-0.5 bg-[#F7F5F5] p-0.5 rounded-lg w-fit" role="group" aria-label="字号选项">
           {(Object.keys(KIRO_OUTPUT_TEXT_SIZE_LABELS) as KiroOutputTextSize[]).map((size) => {
             const active = outputTextSize === size;
             return (
               <button
                 key={size}
                 type="button"
+                role="menuitemradio"
+                aria-checked={active}
                 onClick={() => setOutputTextSize(size)}
-                aria-pressed={active}
                 aria-label={`${KIRO_OUTPUT_TEXT_SIZE_LABELS[size]}字号`}
                 className={cn(
                   "px-2.5 h-6 rounded-md text-[11px] font-semibold transition-colors",

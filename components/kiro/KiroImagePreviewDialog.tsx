@@ -49,6 +49,8 @@ export function KiroImagePreviewDialog({
   const [url, setUrl] = useState<string | null>(null);
   // P0：图片加载失败态（此前 createObjectURL 失败直接 return null 消失，img 坏图只剩空白 viewport，用户以为卡死）
   const [loadError, setLoadError] = useState(false);
+  // 失败原地重试：不关闭画廊（index 保留），重建 object URL + 重载 img
+  const [retryKey, setRetryKey] = useState(0);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -79,7 +81,7 @@ export function KiroImagePreviewDialog({
     return () => {
       if (created) URL.revokeObjectURL(created);
     };
-  }, [currentSource]);
+  }, [currentSource, retryKey]);
 
   // ---- Focus management + body scroll lock ----
   // prev focus / scroll lock 在 source 挂载时捕获；恢复在 cleanup（unmount / source 变化）
@@ -206,18 +208,31 @@ export function KiroImagePreviewDialog({
           {loadError || urlFailed ? (
             <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
               <p className="text-xs font-bold text-charcoal">原图加载失败</p>
-              <p className="text-[11px] text-sandrift">文件可能已损坏或过大，关闭后重试</p>
-              <button
-                type="button"
-                onClick={onClose}
-                className="mt-1 px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
-              >
-                关闭
-              </button>
+              <p className="text-[11px] text-sandrift">文件可能已损坏或过大，可原地重试（画廊位置保留）</p>
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoadError(false);
+                    setRetryKey((k) => k + 1);
+                  }}
+                  className="px-3 h-8 rounded-lg text-[11px] font-bold text-white bg-charcoal hover:bg-black transition-colors"
+                >
+                  重试
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint transition-colors"
+                >
+                  关闭
+                </button>
+              </div>
             </div>
           ) : (
             <img
               data-testid="kiro-image-preview-image"
+              key={retryKey}
               src={url}
               alt={currentSource.name ?? "截图预览"}
               onError={() => setLoadError(true)}

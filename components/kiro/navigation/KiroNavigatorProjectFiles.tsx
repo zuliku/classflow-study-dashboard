@@ -55,9 +55,18 @@ export function KiroNavigatorProjectFiles({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // 上传取消：多文件串行写入中可中断；切项目/unmount 自动取消剩余（闭包 projectId 已过期）
+  const uploadAbortRef = useRef(false);
+  useEffect(() => {
+    return () => {
+      uploadAbortRef.current = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    // 项目切换时中断上一项目的剩余上传（剩余文件不再写入旧 projectId）
+    uploadAbortRef.current = true;
     listProjectFiles(projectId)
       .then((list) => {
         if (!cancelled) setFiles(list);
@@ -90,9 +99,16 @@ export function KiroNavigatorProjectFiles({
       }
       setUploading(true);
       setUploadProgress({ done: 0, total: accepted.length });
+      uploadAbortRef.current = false;
       try {
         let added = 0;
+        let cancelled = false;
         for (const file of accepted) {
+          // 取消/切项目/unmount（list effect 置 abort）→ 停止写入剩余文件，已加的不回滚
+          if (uploadAbortRef.current) {
+            cancelled = true;
+            break;
+          }
           const routed = routeAttachment(file);
           if (!routed.ok) continue;
           await createProjectFile({
@@ -107,7 +123,11 @@ export function KiroNavigatorProjectFiles({
           setUploadProgress({ done: added, total: accepted.length });
         }
         actions.refreshProjects();
-        if (added > 0) pushToast({ message: `已添加 ${added} 个资料` });
+        if (cancelled) {
+          pushToast({ message: `已取消上传，已添加 ${added} 个资料` });
+        } else if (added > 0) {
+          pushToast({ message: `已添加 ${added} 个资料` });
+        }
       } catch (err) {
         const message = (err as { message?: string })?.message;
         if (message === "PROJECT_FILE_LIMIT_REACHED") {
@@ -153,6 +173,16 @@ export function KiroNavigatorProjectFiles({
                 aria-hidden="true"
               />
               上传中 {uploadProgress.done}/{uploadProgress.total}
+              <button
+                type="button"
+                onClick={() => {
+                  uploadAbortRef.current = true;
+                }}
+                aria-label="取消上传"
+                className="px-1.5 h-5 rounded-md text-[10px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint transition-colors"
+              >
+                取消
+              </button>
             </span>
           ) : (
             <button

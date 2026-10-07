@@ -53,6 +53,8 @@ export function AddAssignmentModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const submittingRef = useRef(false);
+  // 打开后初始焦点落任务名（同 AddCourseModal，经 Dialog 聚焦比 autoFocus 稳）
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
 
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState(courses[0]?.id || "");
@@ -302,6 +304,7 @@ export function AddAssignmentModal() {
       overlayId="add-assignment-modal"
       stackZ={50}
       aria-label="添加任务"
+      initialFocusRef={titleInputRef}
       className="max-w-lg max-h-[90dvh] flex flex-col"
     >
         {/* Header */}
@@ -353,12 +356,12 @@ export function AddAssignmentModal() {
               )}
               <Field label="任务名称" required htmlFor="assignment-title">
                 <Input
+                  ref={titleInputRef}
                   id="assignment-title"
                   type="text"
                   placeholder="如：计量经济学实证报告"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  autoFocus
                   required
                 />
               </Field>
