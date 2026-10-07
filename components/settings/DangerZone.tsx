@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
 import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
+import { resetOuterScopesForEntireApp } from "@/lib/reset/resetOuterScopes";
 
 /** 危险操作：三个明确语义层级（偏好 / 学习数据 / 全部本地数据）；确认逻辑保持原有 safety */
 export function DangerZone() {
@@ -49,7 +50,7 @@ export function DangerZone() {
       confirmRequest({
         title: "清除所有本地数据？",
         description:
-          "删除主工作区本地数据（个人资料、课程、任务、设置和课程附件）并回到首次使用状态。此操作无法撤销；Kiro/AI/提醒/Agent 偏好、侧边栏状态与账号凭据不在此列，需单独清理。",
+          "删除主工作区数据、全部偏好设置、收件箱与本会话凭据并回到首次使用状态。此操作无法撤销；账号凭据（vault）与 Kiro 对话历史不在此列，需单独清理。",
         confirmLabel: "继续",
         danger: true,
         onConfirm: () => {
@@ -66,6 +67,8 @@ export function DangerZone() {
       onConfirm: () => {
         setConfirmPhase(0);
         resetEntireApp();
+        // 主库之外：偏好/收件箱/会话凭据/待办快照回到首次使用（vault/对话 IDB 不动，见函数注释）
+        resetOuterScopesForEntireApp();
         pushToast({ message: "已清除所有本地数据" });
       },
     });
@@ -94,7 +97,7 @@ export function DangerZone() {
       key: "entire",
       icon: <XCircle className="w-3.5 h-3.5" />,
       title: "清除所有本地数据",
-      description: "清除主工作区本地数据并回到首次使用状态（不含外围偏好与凭据）。",
+      description: "清除主工作区、偏好与收件箱并回到首次使用（凭据与对话历史除外）。",
       action: handleResetEntireApp,
       label: confirmPhase === 1 ? "再次点击确认清除" : "清除所有本地数据",
       danger: true,

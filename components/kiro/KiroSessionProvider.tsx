@@ -52,6 +52,7 @@ import {
   KIRO_PROJECT_INSTRUCTIONS_MAX,
 } from "@/lib/ai/projects/types";
 import { buildConversationSeed } from "@/lib/ai/history/conversationSeed";
+import { cancelAllActiveTerminalExecutions } from "@/lib/ai/computer/terminal/executor";
 import {
   CONVERSATION_TRANSITION_IDLE,
   conversationTransitionReducer,
@@ -610,6 +611,8 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
       if (s.pending !== transition) return; // 被拒绝（已有 pending）
       if (s.phase === "stopping") {
         chatRef.current.stop();
+        // P0：切换会话同样中断旧终端（此前只停流式，旧长命令后台跑、迟到输出落新会话）
+        void cancelAllActiveTerminalExecutions();
       } else if (s.phase === "switching") {
         void finishConversationTransition(transition);
       }
@@ -999,6 +1002,9 @@ export function KiroSessionProvider({ children }: { children: React.ReactNode })
 
   const clearHistory = useCallback(() => {
     // 全量清空 + 当前会话 tombstone：防止清空后迟到的持久化把当前线程复活
+    // P0：先停流式+终端，缩小“清空→新会话”窗口内迟到输出/保存复活竞态
+    chatRef.current.stop();
+    void cancelAllActiveTerminalExecutions();
     void clearConversationHistory();
     const current = conversationIdRef.current;
     if (current) deletedConversationIdsRef.current.add(current);

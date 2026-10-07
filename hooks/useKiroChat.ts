@@ -1199,6 +1199,10 @@ export function useKiroChat({
   const stoppedTurnMessageIdRef = useRef<string | null>(null);
   /** P0：preflight 世代（Stop 递增作废在途准备链；sendMessage 前校验，过期直接丢弃） */
   const preflightGenerationRef = useRef(0);
+  /** P0：发送同步互斥（同 tick 双击穿透 state 异步 → 同步 ref 守卫；finally 必释放） */
+  const sendActiveRef = useRef(false);
+  /** Turn 进行中镜像（send 入口同步读，闭包 turnInFlight 会过期；渲染期逐帧同步） */
+  const turnInFlightMirrorRef = useRef(false);
 
   const consumeUndo = useCallback((toolCallId: string) => {
     const entry = undoRegistryRef.current.get(toolCallId);
@@ -1923,6 +1927,8 @@ export function useKiroChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.status, chat.messages]);
   const turnInFlight = turnExecution !== "settled";
+  // P0：渲染期同步镜像，供 send 入口同步读（闭包 turnInFlight 会过期）
+  turnInFlightMirrorRef.current = turnInFlight;
 
   /**
    * Kiro Rail Runtime Status V1：Computer 是否真实执行中（低频派生 boolean）。
@@ -3066,6 +3072,11 @@ export function useKiroChat({
     async (text: string, turnAttachments: KiroAttachment[], opts?: { textOnlyAnswer?: boolean }): Promise<boolean> => {
       const v = text.trim();
       if (!v || !enabled) return false;
+      // P0：同 tick 双发互斥（canSend 是渲染态，同 tick 双击可穿透；ref 同步拦截）
+      // + Turn 进行中拒发（preflight 释放守卫后 streaming 窗口仍拒，镜像读最新值）
+      if (sendActiveRef.current || turnInFlightMirrorRef.current) return false;
+      sendActiveRef.current = true;
+      try {
       // P0：新 Turn 清 Stop 标记（此前只在 edit/new/load 清，正常发送不清 → 首轮工具结果被静默丢弃卡 awaiting-tool-result）
       stoppedTurnMessageIdRef.current = null;
       userStopSuppressTimeoutRef.current = false;
@@ -3177,8 +3188,15 @@ export function useKiroChat({
             for (const a of userImages) {
               try {
                 const prepared = await preprocessVisionImage(a.file);
+                // P0：Stop/重发已作废本链 → 静默丢弃（不 toast、不污染新 Turn 引用）
+                if (preflightGen !== preflightGenerationRef.current) {
+                  return { pageFiles, preparedImageFiles };
+                }
                 preparedImageFiles.push(prepared.file);
               } catch {
+                if (preflightGen !== preflightGenerationRef.current) {
+                  return { pageFiles, preparedImageFiles };
+                }
                 pushToast({ message: "图片处理失败，请重新添加或换一张图片后重试。", type: "error" });
                 visionFailed = true; // Prompt 与附件保留
                 return { pageFiles, preparedImageFiles };
@@ -3253,6 +3271,10 @@ export function useKiroChat({
               const rendered = await renderPdfPages(blob, pages, sourceId, {
                 maxBytes: remainingVisionBytes,
               });
+              // P0：作废链晚到渲染完成 → 静默丢弃，不 push 引用污染新 Turn
+              if (preflightGen !== preflightGenerationRef.current) {
+                return { pageFiles, preparedImageFiles };
+              }
               for (const r of rendered) {
                 pageFiles.push(r.file);
                 remainingVisionBytes -= r.size;
@@ -3330,6 +3352,10 @@ export function useKiroChat({
                   const rendered = await renderPdfPages(blob, sel.pages, sourceId, {
                     maxBytes: remainingVisionBytes,
                   });
+                  // P0：作废链晚到 → 静默丢弃
+                  if (preflightGen !== preflightGenerationRef.current) {
+                    return { pageFiles, preparedImageFiles };
+                  }
                   for (const r of rendered) {
                     pageFiles.push(r.file);
                     remainingVisionBytes -= r.size;
@@ -3489,6 +3515,11 @@ export function useKiroChat({
               }
         );
       // Task 7：每次 live user send 都 push 一项（即使 []），否则 text-only 与 attachment turn 位置错配
+      // P0：作废链不 push（否则错位到新 Turn；发送前 3544 世代校验是最后门，这里提前拦省一次 trim）
+      if (preflightGen !== preflightGenerationRef.current) {
+        setTurnIntentFrozen(false);
+        return false;
+      }
       snapshotQueueRef.current.push(snapshot);
 
       // D. composition invariant：最终视觉二进制总字节必须 <= Turn 预算
@@ -3526,6 +3557,9 @@ export function useKiroChat({
       );
       turnPerf("chatSendMessage");
       return true;
+      } finally {
+        sendActiveRef.current = false;
+      }
     },
     [chatSendMessage, enabled, pushToast]
   );

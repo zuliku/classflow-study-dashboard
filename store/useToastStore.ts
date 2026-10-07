@@ -34,15 +34,18 @@ export const useToastStore = create<ToastState>((set) => ({
         if (!Number.isNaN(ts) && now - ts < 2000) return state;
       }
       const next = [...state.toasts, { ...toast, type: toast.type ?? "success", id }];
-      // 队列上限 3：挤掉最旧时补调 onDismiss，避免 Blob 清理泄漏
+      // 队列上限 3：优先挤最旧的非紧急（success/info），error/warning 关键信息不被随后 success 顶掉；
+      // 全是紧急时才动最旧紧急；挤掉时补调 onDismiss，避免 Blob 清理泄漏
       if (next.length > 3) {
-        const [evicted, ...rest] = next.slice(-4);
+        const victimIdx = next.findIndex((t) => t.id !== id && t.type !== "error" && t.type !== "warning");
+        const idx = victimIdx >= 0 ? victimIdx : 0;
+        const [evicted] = next.splice(idx, 1);
         try {
           evicted?.onDismiss?.();
         } catch {
           /* 忽略清理回调异常 */
         }
-        return { toasts: rest.slice(-3) };
+        return { toasts: next.slice(-3) };
       }
       return { toasts: next };
     });

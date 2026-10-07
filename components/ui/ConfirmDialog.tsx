@@ -3,6 +3,7 @@
 import React from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { useConfirmStore } from "@/store/useConfirmStore";
+import { useToastStore } from "@/store/useToastStore";
 import { Dialog } from "@/components/ui/Dialog";
 import { cn } from "@/lib/utils";
 
@@ -11,19 +12,31 @@ const OVERLAY_ID = "confirm-dialog";
 /** 统一危险操作确认对话框（删除课程、重置数据、Kiro 高风险工具等） */
 export function ConfirmDialog() {
   const { request, close } = useConfirmStore();
+  const [confirmBusy, setConfirmBusy] = React.useState(false);
 
   /** Esc / X / 取消按钮统一走 onCancel（确认按钮不触发） */
   const handleCancel = () => {
+    if (confirmBusy) return;
     const fn = request?.onCancel;
     close();
     fn?.();
   };
 
   const handleConfirm = () => {
-    if (!request) return;
+    if (!request || confirmBusy) return;
     const fn = request.onConfirm;
+    setConfirmBusy(true);
+    // 先出队展示下一个（若有），再执行本项；异步失败给反馈，不静默吞错
     close();
-    fn();
+    void Promise.resolve()
+      .then(() => fn())
+      .catch((err) => {
+        console.warn("confirm action failed", err);
+        useToastStore.getState().pushToast({ message: "操作失败，请重试。", type: "error" });
+      })
+      .finally(() => {
+        setConfirmBusy(false);
+      });
   };
 
   return (
@@ -65,13 +78,17 @@ export function ConfirmDialog() {
           <div className="flex justify-end space-x-2 pt-2 border-t border-[#F0EBE1]">
             <button
               onClick={handleCancel}
-              className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba transition-colors duration-[var(--motion-fast)]"
+              disabled={confirmBusy}
+              // 危险操作默认焦点落取消（Enter 不直达删除；非危险保持确认便捷）
+              autoFocus={request.danger}
+              className="px-4 py-2 text-xs font-medium text-satin-grey bg-alabaster border border-line rounded-xl hover:bg-alba transition-colors duration-[var(--motion-fast)] disabled:opacity-60"
             >
               取消
             </button>
             <button
               onClick={handleConfirm}
-              autoFocus
+              disabled={confirmBusy}
+              autoFocus={!request.danger}
               data-testid="confirm-dialog-confirm"
               className={cn(
                 "ux-press px-4 py-2 text-xs font-bold rounded-xl transition-colors duration-[var(--motion-fast)]",

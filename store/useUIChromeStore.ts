@@ -29,6 +29,8 @@ export function migrateLegacySidebarCollapsed(): boolean {
 interface UIChromeState {
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  /** 恢复首次使用（展开；仅全局清除调用） */
+  reset: () => void;
 }
 
 export const useUIChromeStore = create<UIChromeState>()(
@@ -36,6 +38,7 @@ export const useUIChromeStore = create<UIChromeState>()(
     (set) => ({
       sidebarCollapsed: migrateLegacySidebarCollapsed(),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      reset: () => set({ sidebarCollapsed: false }),
     }),
     {
       name: UI_CHROME_KEY,

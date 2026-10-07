@@ -69,6 +69,8 @@ export interface KiroComputerState {
   removeWorkspace: (id: string) => void;
   upsertPermissionRule: (rule: ComputerPermissionRule) => void;
   removePermissionRule: (id: string) => void;
+  /** 整库恢复首次使用（开关全关 + 工作区/规则清空；仅全局清除调用） */
+  resetToDefaults: () => void;
   /**
    * 默认 Kiro Sandbox 只能有一个：已存在则激活 + 启用并返回其 id；
    * 不存在则创建 canonical Sandbox（adapterRef = sandbox-default）并激活启用。
@@ -178,6 +180,8 @@ export const useKiroComputerStore = create<KiroComputerState>()(
         set((state) => ({
           permissionRules: state.permissionRules.filter((r) => r.id !== id),
         })),
+
+      resetToDefaults: () => set({ ...DEFAULT_STATE, workspaces: [], permissionRules: [] }),
     }),
     {
       name: "classflow-kiro-computer-v1",

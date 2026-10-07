@@ -35,12 +35,15 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
   // P0 防重：同 tick 双击穿透 state 异步 → 同步 ref 守卫；UNCERTAIN 后锁定同 approval 二次 confirm
   const inFlightRef = React.useRef(false);
   const [confirmLocked, setConfirmLocked] = useState(false);
+  // 世代守卫：超时/关闭后晚到回包不许清新轮 saving/inFlight（否则新轮守卫被误清可双发）
+  const requestGenRef = React.useRef(0);
 
   // Fresh-open session reset（Motion V2.1）：组件常驻后，false→true 沿清空上一会话的
   // 草稿 / 错误 / 审批流状态（保持既有「每次打开为新回复」语义）；不在 close 时 reset。
   const prevOpenRef = React.useRef(open);
   React.useEffect(() => {
     if (open && !prevOpenRef.current) {
+      requestGenRef.current += 1;
       setText("");
       setTone("natural");
       setDraftGenerated(false);
@@ -89,20 +92,25 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       setError("桌面环境不可用");
       return;
     }
+    const gen = ++requestGenRef.current;
     inFlightRef.current = true;
     setSaving(true);
     setError(null);
     try {
       const res = await bridge.prepareReply({ replyContextId: item.replyContextId, text: text.trim() });
+      if (requestGenRef.current !== gen) return;
       setApproval(res);
       setConfirmLocked(false);
       setConfirmOpen(true);
     } catch (e) {
+      if (requestGenRef.current !== gen) return;
       const msg = (e as { message?: string })?.message ?? String(e);
       setError(msg);
     } finally {
-      setSaving(false);
-      inFlightRef.current = false;
+      if (requestGenRef.current === gen) {
+        setSaving(false);
+        inFlightRef.current = false;
+      }
     }
   };
 
@@ -113,11 +121,13 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       setError("桌面环境不可用");
       return;
     }
+    const gen = ++requestGenRef.current;
     inFlightRef.current = true;
     setSaving(true);
     setError(null);
     try {
       const res = await bridge.confirmReply({ approvalId: approval.approvalId });
+      if (requestGenRef.current !== gen) return;
       if (res.ok) {
         pushToast({ message: "已回复到 QQ", type: "success" });
         onOpenChange(false);
@@ -126,6 +136,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
         setConfirmOpen(false);
       }
     } catch (e) {
+      if (requestGenRef.current !== gen) return;
       const raw = (e as { code?: string; message?: string })?.message ?? String(e);
       const code = (e as { code?: string })?.code ?? "";
       if (code === "QQ_REPLY_REJECTED") {
@@ -134,14 +145,20 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
         // 结果不确定即锁定同 approval 二次发送，只允许关闭去检查（防重复外发）
         setConfirmLocked(true);
         setError("发送结果不确定，请先去 QQ 检查是否已发送，确认未发送后再重新发起（不要重复点击发送）。");
+      } else if (code === "TIMEOUT") {
+        // 渲染侧超时只结束等待，Main 侧发送可能继续：按不确定锁定，防重复外发
+        setConfirmLocked(true);
+        setError("发送超时，结果不确定，请先去 QQ 检查是否已发送，确认未发送后再重新发起（不要重复点击发送）。");
       } else if (code === "QQ_RATE_LIMITED") {
         setError("发送过于频繁，请稍后重试");
       } else {
         setError(raw);
       }
     } finally {
-      setSaving(false);
-      inFlightRef.current = false;
+      if (requestGenRef.current === gen) {
+        setSaving(false);
+        inFlightRef.current = false;
+      }
     }
   };
 

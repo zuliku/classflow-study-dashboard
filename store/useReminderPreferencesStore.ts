@@ -41,6 +41,8 @@ interface ReminderPreferencesState extends ReminderPreferences {
   resetReminderPreference: (key: ReminderPreferenceKey) => void;
   /** DND 三字段一次恢复 canonical defaults */
   resetDoNotDisturb: () => void;
+  /** 整库恢复 canonical defaults（仅全局清除调用） */
+  resetToDefaults: () => void;
 }
 
 /**
@@ -112,6 +114,7 @@ export const useReminderPreferencesStore = create<ReminderPreferencesState>()(
           doNotDisturbStart: DEFAULT_REMINDER_PREFERENCES.doNotDisturbStart,
           doNotDisturbEnd: DEFAULT_REMINDER_PREFERENCES.doNotDisturbEnd,
         }),
+      resetToDefaults: () => set({ ...DEFAULT_REMINDER_PREFERENCES }),
     }),
     {
       name: "classflow-reminder-preferences-v1",

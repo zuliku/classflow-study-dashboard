@@ -110,6 +110,8 @@ interface KiroPreferencesState extends KiroSettingsPreferences {
   setShowAllModels: (enabled: boolean) => void;
   /** V5A9：只允许 reset Settings-facing Kiro preferences。 */
   resetKiroSettingsPreference: (key: KiroSettingsPreferenceKey) => void;
+  /** 整库恢复首次使用（含 Sidecar 几何与隐私提示；仅全局清除调用，行级 reset 不走这里） */
+  resetToDefaults: () => void;
   setSidecarSize: (size: SidecarSize) => void;
   setSidecarPosition: (position: SidecarPosition) => void;
   setSidecarMinimizedPosition: (position: SidecarMinimizedPosition) => void;
@@ -136,6 +138,14 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       setWebPdfVisionModel: (model) => set({ webPdfVisionModel: normalizeWebPdfVisionModel(model) }),
       setShowAllModels: (enabled) => set({ showAllModels: enabled }),
       resetKiroSettingsPreference: (key) => set(resetKiroSettingsPreferencePatch(key)),
+      resetToDefaults: () =>
+        set({
+          ...DEFAULT_KIRO_SETTINGS_PREFERENCES,
+          sidecarSize: SIDECAR_DEFAULT_SIZE,
+          sidecarPosition: SIDECAR_DEFAULT_POSITION,
+          sidecarMinimizedPosition: DEFAULT_SIDECAR_MINIMIZED_POSITION,
+          visualAttachmentPrivacyNoticeSeen: false,
+        }),
       // 结构归一后保存；viewport clamp 由 Shell 在浏览器内执行
       setSidecarSize: (size) => set({ sidecarSize: normalizeSidecarSize(size) }),
       setSidecarPosition: (position) =>

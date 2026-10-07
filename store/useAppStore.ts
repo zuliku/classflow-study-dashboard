@@ -1279,6 +1279,8 @@ export const useAppStore = create<AppState>()(
           bellSchedules: [],
           activeBellScheduleId: null,
           semester: createDefaultSemester(),
+          activeTab: "overview",
+          lastWorkspaceTab: "overview",
           currentSemesterWeek: 1,
           assignmentTimeSlice: "all",
           preferences: DEFAULT_PREFERENCES,
@@ -3156,6 +3158,16 @@ export const useAppStore = create<AppState>()(
             "[useAppStore] persist rehydration failed；启动 Blob 对账将跳过 GC（fail-closed）。",
             error
           );
+          // P0：损坏启动给横幅（此前仅 console）：用户看到空库时知道是损坏保护而非数据丢失，
+          // 新建写入前先备份，避免空快照覆盖最后一份好数据
+          try {
+            useToastStore.getState().pushToast({
+              message: "本地数据读取失败，已进入保护模式（附件不会被清理）。请先备份，再新建或恢复数据。",
+              type: "error",
+            });
+          } catch {
+            /* toast 未就绪不阻塞水合 */
+          }
         }
         // P1 水合收敛：week/视图 seed/自动提醒 reconcile 等水合后一次性初始化
         //（此前模块尾 import 时抢跑，覆盖水合值并重复生成 auto Reminder；
