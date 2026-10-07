@@ -269,6 +269,28 @@ export function AssignmentContextMenu({
     <div
       ref={menuRef}
       data-testid="assignment-context-menu"
+      role="menu"
+      aria-label="任务操作"
+      onKeyDown={(e) => {
+        // 输入框内方向键保持原生行为（日期输入）
+        if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+        if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
+        e.preventDefault();
+        const root = menuRef.current;
+        if (!root) return;
+        const items = Array.from(root.querySelectorAll<HTMLButtonElement>("button:not([disabled])")).filter(
+          (el) => el.getClientRects().length > 0
+        );
+        if (items.length === 0) return;
+        const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+        const next =
+          e.key === "Home"
+            ? items[0]
+            : e.key === "End"
+              ? items[items.length - 1]
+              : items[(idx + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+        next?.focus();
+      }}
       {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
         "fixed z-50 w-52 bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 text-xs ux-inline overflow-x-clip",

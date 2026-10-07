@@ -7,6 +7,8 @@ export interface Toast {
   type: ToastType;
   message: string;
   actionLabel?: string;
+  /** 动作按钮读屏名（缺省用“动作+消息”合成；撤销类请传带对象名，如“撤销删除 3 项任务”） */
+  actionAriaLabel?: string;
   onAction?: () => void;
   duration?: number;
   /** 提示自动消失（未撤销）时回调，用于延迟清理（如 IndexedDB Blob） */

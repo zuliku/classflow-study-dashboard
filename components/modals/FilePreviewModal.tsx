@@ -178,7 +178,7 @@ export function FilePreviewModal() {
             </div>
           ) : loadFailed ? (
             <div
-              role="status"
+              role="alert"
               className="bg-surface p-8 rounded-2xl max-w-md text-center space-y-3 shadow-2xl border border-line"
             >
               <div className="w-14 h-14 rounded-2xl bg-danger-bg border border-danger-border flex items-center justify-center mx-auto text-danger">
@@ -203,12 +203,14 @@ export function FilePreviewModal() {
           ) : displayUrl && isPdf ? (
             <iframe
               src={displayUrl}
+              onError={() => setLoadFailed(true)}
               className="w-full h-full rounded-xl bg-white border-none"
               title={material.title}
             />
           ) : displayUrl && isImage ? (
             <img
               src={displayUrl}
+              onError={() => setLoadFailed(true)}
               alt={material.title}
               className="max-w-full max-h-full object-contain rounded-xl shadow-card"
             />

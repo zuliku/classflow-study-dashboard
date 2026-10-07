@@ -127,7 +127,7 @@ export function ToastViewport() {
                 ? "opacity-0 translate-y-1 !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
                 : "opacity-100 translate-y-0"
             )}
-            role="status"
+            role={toast.type === "error" || toast.type === "warning" ? "alert" : "status"}
           >
             <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", accentClass)} />
             <p className="flex-1 text-xs text-charcoal font-medium leading-relaxed min-w-0">
@@ -136,6 +136,7 @@ export function ToastViewport() {
             {toast.actionLabel && (
               <button
                 disabled={actionTakenRef.current.has(toast.id)}
+                aria-label={toast.actionAriaLabel ?? `${toast.actionLabel}：${toast.message}`}
                 onClick={() => {
                   if (actionTakenRef.current.has(toast.id)) return;
                   actionTakenRef.current.add(toast.id);

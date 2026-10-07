@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   ChevronLeft,
   Copy,
@@ -14,6 +14,7 @@ import {
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS, KIRO_MOTION_MS } from "@/lib/motion";
 import { useInertOnHidden } from "@/lib/useInertOnHidden";
+import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -99,8 +100,8 @@ export function KiroNavigator() {
   const expandedPresence = usePresence(expanded, KIRO_MOTION_MS.popoverExit);
   // 折叠层退出时内部按钮不可聚焦（absolute 残留层，pointer-events-none 拦不住 Tab）
   const collapsedInertRef = useInertOnHidden<HTMLDivElement>(!collapsedPresence.visible);
-  // 展开层收起时同样不可聚焦，避免 Tab 掉进不可见面板
-  const expandedInertRef = useInertOnHidden<HTMLDivElement>(!expanded);
+  // 展开层收起时同样不可聚焦：按 presence.visible 驱动（退出 100-120ms 窗内仍 inert）
+  const expandedInertRef = useInertOnHidden<HTMLDivElement>(!expandedPresence.visible);
 
   const goToView = useCallback((next: NavigatorView) => {
     const prev = viewRef.current;
@@ -175,10 +176,14 @@ export function KiroNavigator() {
   );
 
   // Esc：Detail → Home → collapse；点击外部 collapse；Cmd/Ctrl+Shift+H toggle
+  // 进 overlay 栈：上层 Dialog/Confirm 打开时 Esc 只关上层，不连带收 Navigator（此前双关）
+  const navigatorOverlayId = useId();
   useEffect(() => {
     if (!expanded && !moreOpen) return;
+    pushOverlay(navigatorOverlayId, 40);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (!isTopmostOverlay(navigatorOverlayId)) return;
         if (viewRef.current.type !== "home") {
           goToView({ type: "home" });
         } else {
@@ -191,15 +196,17 @@ export function KiroNavigator() {
       }
     };
     const onPointerDown = (e: PointerEvent) => {
+      if (!isTopmostOverlay(navigatorOverlayId)) return;
       if (railRef.current && !railRef.current.contains(e.target as Node)) collapse();
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onPointerDown);
     return () => {
+      popOverlay(navigatorOverlayId);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [expanded, moreOpen, collapse, goToView]);
+  }, [expanded, moreOpen, collapse, goToView, navigatorOverlayId]);
 
   // 会话切换完成后：收起 Navigator（与旧 Rail 行为一致）
   const collapseAfterTransitionRef = useRef(false);

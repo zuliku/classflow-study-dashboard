@@ -54,7 +54,12 @@ export function KiroSendControl({
           : idleLabel;
 
   return (
-    <button
+    <>
+      {/* 状态翻转读屏播报（生成中/已停止/可发送；此前 SR 听不到态变化以为没点上） */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {state === "stop" ? "正在生成，可停止" : state === "preparing" ? "正在准备" : ""}
+      </span>
+      <button
       type="button"
       onClick={() => {
         if (state === "stop") onStop();
@@ -116,5 +121,6 @@ export function KiroSendControl({
         <Square className="w-3.5 h-3.5 fill-current" />
       </span>
     </button>
+    </>
   );
 }
