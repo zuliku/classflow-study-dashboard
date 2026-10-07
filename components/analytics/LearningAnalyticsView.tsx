@@ -339,12 +339,9 @@ export function LearningAnalyticsView() {
                   <div style={staggerStyle(1)} className="ux-settle">
                     <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
                   </div>
-                  {/* 学习动量（12 周热力 + 连续天数 + 双环；独立查询，与 range preset 无关） */}
+                  {/* 学习动量（12 周热力 + 12 周专属统计；独立查询，与 range preset 无关） */}
                   <div style={staggerStyle(2)} className="ux-settle">
-                    <AnalyticsMomentum
-                      planRatio={data.overview.actualToPlanRatio}
-                      onTimeRate={data.overview.onTimeRate}
-                    />
+                    <AnalyticsMomentum />
                   </div>
 
                   <DisclosureRegion open={reviewExpanded}>

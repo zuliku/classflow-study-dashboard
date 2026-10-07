@@ -11,56 +11,13 @@ import { cn } from "@/lib/utils";
 /** 热力等级 → 底色（charcoal 系阶梯；未知日同底 + 虚线框 + 降透明区分） */
 const LEVEL_FILL = ["#F0EBE1", "#D9CFC2", "#CDB9AB", "#A48F82", "#313032"];
 
-function Ring({
-  fraction,
-  label,
-  display,
-  toneClass,
-  trackClass = "text-alabaster",
-  size = 60,
-  bare = false,
-}: {
-  /** 0..1，null = 无数据（空环） */
-  fraction: number | null;
-  label: string;
-  display: string;
-  toneClass: string;
-  trackClass?: string;
-  size?: number;
-  /** 紧凑横 tile 内使用：只画环，文字由外部排版 */
-  bare?: boolean;
-}) {
-  const r = size * 0.4;
-  const c = size / 2;
-  const circ = 2 * Math.PI * r;
-  const f = fraction === null ? 0 : Math.min(1, Math.max(0, fraction));
-  const strokeWidth = Math.max(5, size * 0.115);
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${label}${display}`}>
-        <circle cx={c} cy={c} r={r} fill="none" strokeWidth={strokeWidth} className={trackClass} stroke="currentColor" />
-        <circle
-          cx={c}
-          cy={c}
-          r={r}
-          fill="none"
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          className={toneClass}
-          stroke="currentColor"
-          strokeDasharray={circ}
-          strokeDashoffset={circ * (1 - f)}
-          transform={`rotate(-90 ${c} ${c})`}
-        />
-      </svg>
-      {!bare && (
-        <>
-          <p className="text-[11px] font-bold text-charcoal tabular-nums">{display}</p>
-          <p className="text-[10px] text-sandrift -mt-0.5">{label}</p>
-        </>
-      )}
-    </div>
-  );
+function formatHours(minutes: number): string {
+  const h = minutes / 60;
+  return h >= 10 ? `${Math.round(h)} 小时` : `${Math.round(h * 10) / 10} 小时`;
+}
+
+function formatMonthDay(dateStr: string): string {
+  return `${Number(dateStr.slice(5, 7))}月${Number(dateStr.slice(8, 10))}日`;
 }
 
 /** 84 天按周成列（GitHub 式：列 = 周，周一在上；首周前补空格对齐） */
@@ -88,18 +45,12 @@ function cellTitle(day: MomentumDay): string {
 
 /**
  * 学习动量（对标 GitHub contributions + Duolingo streak）：
- * 12 周热力 + 连续学习天数 + 计划/按时双环。数据独立查询（与 range preset 无关），
+ * 12 周热力 + 12 周专属四统计（连续 / 总专注 / 活跃天数 / 单日最佳）。
+ * 统计口径均为 12 周独立查询结果（与本周 Strip 不重复：Strip 是本周，环已删除，
+ * 计划达成/按时完成只看 Strip）。数据独立查询（与 range preset 无关），
  * 纯新增表达层，不碰既有标题/testid/口径。
  */
-export function AnalyticsMomentum({
-  planRatio,
-  onTimeRate,
-}: {
-  /** 计划达成比（百分比，如 125；null = 不可算） */
-  planRatio: number | null;
-  /** 按时率（百分比 0..100；null = 不可算） */
-  onTimeRate: number | null;
-}) {
+export function AnalyticsMomentum() {
   const [open, setOpen] = useState(true);
   const { data, loading, error } = useStudyMomentum();
   const columns = useHeatColumns(data?.days ?? []);
@@ -185,10 +136,7 @@ export function AnalyticsMomentum({
                     </div>
                   ))}
                 </div>
-                <div className="mt-2 flex items-center justify-between text-[10px] text-sandrift">
-                  <span>
-                    近 {MOMENTUM_WEEKS} 周共专注 {Math.round(data.totalMinutes / 60)} 小时
-                  </span>
+                <div className="mt-2 flex items-center justify-end text-[10px] text-sandrift">
                   <span className="flex items-center gap-1" aria-hidden="true">
                     少
                     {[0, 1, 2, 3, 4].map((l) => (
@@ -202,8 +150,8 @@ export function AnalyticsMomentum({
                   </span>
                 </div>
               </div>
-              {/* 三统计压缩横 tile：连续 / 计划达成 / 按时完成 */}
-              <div className="grid grid-cols-3 gap-3">
+              {/* 12 周专属四统计：连续 / 总专注 / 活跃天数 / 单日最佳（与本周 Strip 不重复） */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex items-center gap-2.5 min-w-0">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-warning">
                     <Flame className="h-4 w-4" aria-hidden="true" />
@@ -217,36 +165,24 @@ export function AnalyticsMomentum({
                     </span>
                   </span>
                 </div>
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex items-center gap-2.5 min-w-0">
-                  <Ring
-                    fraction={planRatio === null ? null : planRatio / 100}
-                    label="计划达成"
-                    display={planRatio === null ? "—" : `${Math.round(planRatio)}%`}
-                    toneClass="text-sandrift"
-                    size={44}
-                    bare
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
-                      {planRatio === null ? "—" : `${Math.round(planRatio)}%`}
-                    </span>
-                    <span className="mt-1 block text-[10px] text-sandrift">计划达成</span>
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex flex-col justify-center min-w-0">
+                  <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                    {formatHours(data.totalMinutes)}
                   </span>
+                  <span className="mt-1 block text-[10px] text-sandrift">近 {MOMENTUM_WEEKS} 周总专注</span>
                 </div>
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex items-center gap-2.5 min-w-0">
-                  <Ring
-                    fraction={onTimeRate === null ? null : onTimeRate / 100}
-                    label="按时完成"
-                    display={onTimeRate === null ? "—" : `${Math.round(onTimeRate)}%`}
-                    toneClass="text-success"
-                    size={44}
-                    bare
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
-                      {onTimeRate === null ? "—" : `${Math.round(onTimeRate)}%`}
-                    </span>
-                    <span className="mt-1 block text-[10px] text-sandrift">按时完成</span>
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex flex-col justify-center min-w-0">
+                  <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                    {data.activeDays} 天
+                  </span>
+                  <span className="mt-1 block text-[10px] text-sandrift">活跃天数</span>
+                </div>
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex flex-col justify-center min-w-0">
+                  <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                    {data.bestDay ? formatHours(data.bestDay.minutes) : "—"}
+                  </span>
+                  <span className="mt-1 block text-[10px] text-sandrift">
+                    单日最佳{data.bestDay ? ` · ${formatMonthDay(data.bestDay.date)}` : ""}
                   </span>
                 </div>
               </div>

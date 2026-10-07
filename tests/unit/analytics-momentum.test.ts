@@ -100,4 +100,28 @@ describe("buildStudyMomentum", () => {
     expect(dates[0]).toBe("2026-10-03");
     expect(dates[6]).toBe("2026-10-09");
   });
+
+  it("汇总：活跃天数 + 单日最高（日期+分钟）", () => {
+    const m = buildStudyMomentum({
+      events: [
+        focus("2026-10-07", 10),
+        focus("2026-10-08", 90),
+        focus("2026-10-08", 30),
+        done("2026-10-09"),
+      ],
+      todayStr: "2026-10-09",
+      historyStartedAt: null,
+    });
+    expect(m.activeDays).toBe(3);
+    expect(m.bestDay).toEqual({ date: "2026-10-08", minutes: 120 });
+    expect(m.totalMinutes).toBe(130);
+  });
+
+  it("全空：活跃 0 天、单日最佳 null、连续 0", () => {
+    const m = buildStudyMomentum({ events: [], todayStr: "2026-10-09", historyStartedAt: null });
+    expect(m.activeDays).toBe(0);
+    expect(m.bestDay).toBeNull();
+    expect(m.streakDays).toBe(0);
+    expect(m.activeToday).toBe(false);
+  });
 });

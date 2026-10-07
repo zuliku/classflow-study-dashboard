@@ -30,6 +30,10 @@ export interface StudyMomentum {
   streakDays: number;
   activeToday: boolean;
   totalMinutes: number;
+  /** 84 天内有投入的天数 */
+  activeDays: number;
+  /** 单日最高（分钟 + 日期；无投入日为 null） */
+  bestDay: { date: string; minutes: number } | null;
 }
 
 export interface MomentumEventLike {
@@ -119,11 +123,20 @@ export function buildStudyMomentum(input: {
     cursor = shiftDateStr(cursor, -1);
   }
 
+  const totalMinutes = Math.round(days.reduce((sum, d) => sum + d.minutes, 0) * 10) / 10;
+  const activeDays = days.filter((d) => d.active).length;
+  const best = days.reduce<{ date: string; minutes: number } | null>(
+    (acc, d) => (d.minutes > (acc?.minutes ?? 0) ? { date: d.date, minutes: d.minutes } : acc),
+    null
+  );
+
   return {
     days,
     streakDays,
     activeToday,
-    totalMinutes: Math.round(days.reduce((sum, d) => sum + d.minutes, 0) * 10) / 10,
+    totalMinutes,
+    activeDays,
+    bestDay: best,
   };
 }
 
