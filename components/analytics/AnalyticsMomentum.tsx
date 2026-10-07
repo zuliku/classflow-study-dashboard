@@ -138,7 +138,7 @@ export function AnalyticsMomentum({
             <div className="ux-skeleton h-[220px] mt-3 w-full rounded-xl bg-alabaster animate-pulse" aria-label="动量加载中" />
           ) : (
             <div className="pt-3 flex flex-col gap-4 xl:flex-row xl:items-stretch">
-              {/* 热力：月份刻度 + 放大格点，窄屏横向滚（不挤压） */}
+              {/* 热力（视觉主体）：月份刻度 + 大格点，内容宽；窄屏横向滚 */}
               <div className="shrink-0">
                 <div
                   data-testid="momentum-heatmap"
@@ -153,7 +153,7 @@ export function AnalyticsMomentum({
                       </span>
                       {col.map(({ day }, ri) =>
                         day === null ? (
-                          <span key={ri} className="w-4 h-4" aria-hidden="true" />
+                          <span key={ri} className="w-5 h-5" aria-hidden="true" />
                         ) : (
                           <span
                             key={day.date}
@@ -161,7 +161,7 @@ export function AnalyticsMomentum({
                             data-level={day.level}
                             data-unknown={day.unknown || undefined}
                             className={cn(
-                              "w-4 h-4 rounded-[4px]",
+                              "w-5 h-5 rounded-[5px]",
                               day.unknown && "border border-dashed border-line-strong"
                             )}
                             style={{
