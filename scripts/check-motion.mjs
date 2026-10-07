@@ -47,6 +47,8 @@ const WARN_PATTERNS = [
   { name: "transition-[left/top/right/bottom]（优先 transform）", regex: /transition-\[[^\]]*\b(left|top|right|bottom)\b[^\]]*\]/g },
   // 布局尺寸过渡：JS 直写高度处禁用；结构折叠/进度/分段暂白名单
   { name: "transition-[width/height]（JS 直写高度处禁用）", regex: /transition-\[[^\]]*\b(width|height|min-height|max-height)\b[^\]]*\]/g },
+  // 网格轨道过渡：repeat 条数变化不可插值（MiniCalendar 5↔6 周永不播），只留占位误导；结构折叠走 ExitCollapse
+  { name: "transition-[grid]（轨道数变化不可插值）", regex: /transition-\[[^\]]*\bgrid-template-(rows|columns)\b[^\]]*\]/g },
   // JS 直接写布局属性：优先 transform（autoGrow 高度直写除外，其处禁止配 height 过渡）
   { name: "style.layout 直写（优先 transform）", regex: /\.style\.(left|top|width|height)\s*=/g },
 ];
@@ -59,14 +61,20 @@ const WARN_ALLOW_FILES = new Set([
 ]);
 
 // 布局过渡 WARN 豁免（有意为之，勿扩散）：
-// - ExitCollapse：grid 结构折叠（exit-only 160ms + 内层 inert，IM4B 规范）
+// - ExitCollapse / DisclosureRegion：grid 0fr↔1fr 结构折叠标准件（IM4B/IM2B）
 // - SegmentedControl/KiroModeCapsule：transform+width（width 只在切换瞬间 layout 一次，非逐帧）
-// 其余（ReasoningControl 滑块 / Timetable-Timeline 拖拽跟手 / Terminal max-height / TimelineKeyLane）
-// 保持 WARN 可见，留给后续批次收敛，不在此静默。
+// - KiroComposer 模型下线 CTA / KiroContextBar 整条 / ReminderCenter 编辑器：同语义手写 0fr↔1fr
+//   （ExitCollapse 内层常驻 overflow-hidden 会裁 popover，故手写；注释已立约）
+// 其余（ReasoningControl 滑块 / Timetable-Timeline 拖拽跟手 / Terminal max-height / TimelineKeyLane /
+// MiniCalendar-UpcomingDDL repeat 条数）保持 WARN 可见，留给后续批次收敛，不在此静默。
 const WARN_TRANSITION_ALLOW = [
   "components/ui/ExitCollapse.tsx",
+  "components/ui/DisclosureRegion.tsx",
   "components/ui/SegmentedControl.tsx",
   "components/kiro/KiroModeCapsule.tsx",
+  "components/kiro/KiroComposer.tsx",
+  "components/kiro/KiroContextBar.tsx",
+  "components/reminders/ReminderCenter.tsx",
 ];
 // JS 直写布局属性 WARN 豁免：autoGrow 直写 height 无过渡是有意正确模式
 //（bug 是直写+过渡并存；直写本身保留），仅此两处豁免。
@@ -104,7 +112,8 @@ function walk(dir) {
           const isStyleWarn = p.name.startsWith("style.layout");
           if (isTransitionWarn && WARN_TRANSITION_ALLOW.includes(relPosix)) continue;
           if (isStyleWarn && WARN_STYLE_ALLOW.includes(relPosix)) continue;
-          const m = content.match(p.regex);
+          // WARN 同 FAIL 用去注释后 code 匹配（注释里提及写法本身不是旁路，如 Shelf 注释）
+          const m = code.match(p.regex);
           if (m) warnings.push(`${p.name}: ${rel} x${m.length}`);
         }
       }

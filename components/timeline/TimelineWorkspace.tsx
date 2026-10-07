@@ -957,7 +957,8 @@ export function TimelineWorkspace() {
               data-testid="unscheduled-ghost"
               className={cn(
                 "absolute left-1 right-1 z-[4] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
-                "transition-[top,background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
+                // 跟手 Ghost：与 study-block-ghost 同模式，top 逐帧更新必须 1:1（过渡会永远追赶）
+                "transition-[background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
                 !unscheduledDrag.valid
                   ? "border-danger/60 bg-danger-bg/40"
                   : unscheduledDrag.courseOverlaps.length > 0

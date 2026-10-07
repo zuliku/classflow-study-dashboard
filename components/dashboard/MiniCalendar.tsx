@@ -668,8 +668,9 @@ export function MiniCalendar() {
         data-selected-date={selectedDateKey}
         key={monthKey}
         className={cn(
-          // 5 周↔6 周行数变化高度过渡（此前下方 Agenda 被顶跳）
-          "relative grid grid-cols-7 gap-1 text-xs h-full transition-[grid-template-rows] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+          // 5 周↔6 周行数变化：repeat 条数变化不可插值，过渡永不播（此前注释误记为修复顶跳）；
+          // 真实防跳靠 flex-1 弹性回流 + Agenda DisclosureRegion + hysteresis 显隐决策。过渡已删，勿加回。
+          "relative grid grid-cols-7 gap-1 text-xs h-full",
           monthDir !== 0 && "ux-month-enter"
         )}
         style={{

@@ -189,8 +189,8 @@ export function UpcomingDDL() {
         ) : (
           <div
             key={`${safePage}-${pageSize}-${density}-${cardHeight}`}
-            // 行数变化高度过渡（此前条数增减整区瞬变）
-            className="grid ux-agenda-enter transition-[grid-template-rows] duration-[var(--motion-base)] ease-[var(--ease-standard)]"
+            // 行数变化：repeat 条数变化不可插值，过渡永不播；保留 ux-agenda-enter 入场 SEE
+            className="grid ux-agenda-enter"
             style={{ gridTemplateRows: `repeat(${pagedItems.length}, ${cardHeight}px)`, gap: `${metrics.gap}px` }}
           >
             {pagedItems.map((task) => {
