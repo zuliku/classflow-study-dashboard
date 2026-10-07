@@ -10,6 +10,7 @@ import {
   AnalyticsSummaryStripSkeleton,
 } from "@/components/analytics/AnalyticsSummaryStrip";
 import { AnalyticsVerdict } from "@/components/analytics/AnalyticsVerdict";
+import { AnalyticsMomentum } from "@/components/analytics/AnalyticsMomentum";
 import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
 import { buildAnalyticsVerdict } from "@/lib/analytics/verdict";
 import { LearningTrendChart } from "@/components/analytics/LearningTrendChart";
@@ -287,6 +288,13 @@ export function LearningAnalyticsView() {
                   <div style={staggerStyle(1)} className="ux-settle">
                     <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
                   </div>
+                  {/* 学习动量（12 周热力 + 连续天数 + 双环；独立查询，与 range preset 无关） */}
+                  <div style={staggerStyle(2)} className="ux-settle">
+                    <AnalyticsMomentum
+                      planRatio={data.overview.actualToPlanRatio}
+                      onTimeRate={data.overview.onTimeRate}
+                    />
+                  </div>
 
                   <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
@@ -298,7 +306,7 @@ export function LearningAnalyticsView() {
                   <div className={ANALYTICS_PAIRED_GRID}>
                     <div
                       className="bg-surface border border-line rounded-2xl p-4 shadow-subtle ux-settle"
-                      style={staggerStyle(2)}
+                      style={staggerStyle(3)}
                       data-testid="learning-trend-card"
                     >
                       <AnalyticsCardHeader eyebrow="走势总览" title="学习趋势" />
@@ -310,7 +318,7 @@ export function LearningAnalyticsView() {
                   </div>
 
                   {/* 投入与节奏（Distribution；Course/Rhythm 各自 content-fit，不强制等高） */}
-                  <section style={staggerStyle(3)} className="ux-settle">
+                  <section style={staggerStyle(4)} className="ux-settle">
                     <button
                       type="button"
                       onClick={() => setDistOpen((v) => !v)}
@@ -345,7 +353,7 @@ export function LearningAnalyticsView() {
                   </section>
 
                   {/* 执行情况（reliability-aware：partial 只显示已记录，不显示伪精确按时率） */}
-                  <section style={staggerStyle(4)} className="ux-settle">
+                  <section style={staggerStyle(5)} className="ux-settle">
                     <button
                       type="button"
                       onClick={() => setExecOpen((v) => !v)}

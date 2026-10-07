@@ -215,6 +215,10 @@ demoTest("A：Desktop 层级齐全（Summary / Trend / 值得注意 / 投入与�
   await expect(page.getByText("专注节奏", { exact: true })).toBeVisible();
   await expect(page.getByText("执行情况", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("下一步", { exact: true })).toBeVisible();
+  // 动量区：热力可见 + 连续 4 天（周一～周四有记录，周五冻结时钟下今日未动但保持）
+  await expect(page.getByTestId("analytics-momentum")).toBeVisible();
+  await expect(page.getByTestId("momentum-heatmap")).toBeVisible();
+  await expect(page.getByTestId("momentum-streak-value")).toContainText("4 天");
 });
 
 demoTest("B：1920×1080 流式布局——占满工作区（无 1500 上限，d96b007 意图），Header/Body 对齐", async ({ page }) => {
