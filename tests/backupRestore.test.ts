@@ -338,3 +338,40 @@ describe("stripFailedMaterialRefs（写入失败不悬指）", () => {
     expect(stripFailedMaterialRefs(courses, [])).toBe(courses);
   });
 });
+
+describe("commitBackupRestore 缺文件摘除（不悬指）", () => {
+  it("ZIP 缺包：missingMaterials 摘除 storageKey 并计数返回", async () => {
+    const data = buildBackupData();
+    data.courses[0].materials = [
+      { id: "m1", title: "讲义.pdf", type: "pdf", uploadDate: "2026-08-01", storageKey: "f_gone" },
+    ];
+    const zip = await makeZip(data, {}); // 声明但无文件
+    const prepared = await prepareBackupRestore(toFile(zip, "backup.zip"));
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    const restored: { data?: ClassFlowBackupData } = {};
+    const result = await commitBackupRestore(prepared.prepared, {
+      restoreAppData: (d) => { restored.data = d; },
+    });
+    expect(result.strippedMissing).toEqual(["f_gone"]);
+    expect(restored.data?.courses[0].materials[0].storageKey).toBeUndefined();
+  });
+
+  it("JSON：全部 storageKey 视为缺失摘除", async () => {
+    const data = buildBackupData();
+    data.courses[0].materials = [
+      { id: "m1", title: "讲义.pdf", type: "pdf", uploadDate: "2026-08-01", storageKey: "f1" },
+    ];
+    const prepared = await prepareBackupRestore(
+      toFile(new Blob([backupJSON(data)]), "backup.json")
+    );
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    const restored: { data?: ClassFlowBackupData } = {};
+    const result = await commitBackupRestore(prepared.prepared, {
+      restoreAppData: (d) => { restored.data = d; },
+    });
+    expect(result.strippedMissing).toEqual(["f1"]);
+    expect(restored.data?.courses[0].materials[0].storageKey).toBeUndefined();
+  });
+});

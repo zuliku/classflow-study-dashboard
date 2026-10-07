@@ -114,6 +114,8 @@ export async function prepareBackupRestore(file: File): Promise<PrepareResult> {
 
 export interface CommitResult {
   savedFailures: string[];
+  /** 备份内缺失文件的 storageKey（ZIP 缺包 + JSON 全量）：已从元数据摘除，需重新上传 */
+  strippedMissing: string[];
   health: MaterialAvailability;
 }
 
@@ -196,7 +198,24 @@ export async function commitBackupRestore(
     };
   }
 
+  // 备份内缺失文件的 storageKey 同样摘除（此前只展示不摘，恢复即批量悬指）：
+  // ZIP 缺包 + JSON（materials 为空，全部 storageKey 视为缺失）。与头像 strip 同不变量。
+  const strippedMissing: string[] = prepared.missingMaterials.map((m) => m.storageKey);
+  if (prepared.sourceType === "json") {
+    for (const c of restoreData.courses) {
+      for (const m of c.materials) {
+        if (m.storageKey && !strippedMissing.includes(m.storageKey)) strippedMissing.push(m.storageKey);
+      }
+    }
+  }
+  if (strippedMissing.length > 0) {
+    restoreData = {
+      ...restoreData,
+      courses: stripFailedMaterialRefs(restoreData.courses, strippedMissing),
+    };
+  }
+
   api.restoreAppData(restoreData);
   const health = await checkMaterialAvailability(restoreData.courses);
-  return { savedFailures, health };
+  return { savedFailures, strippedMissing, health };
 }

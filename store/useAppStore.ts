@@ -1308,6 +1308,9 @@ export const useAppStore = create<AppState>()(
         // History：Backup 不含 History → 先重置旧 History（避免旧 History + Backup Data 混合）；
         // 允许 completed Focus backfill（restore 后 Runtime 会跑）
         resetLearningHistoryForDomainReset();
+        // 归一丢条计数（恢复后 toast 明示；此前总数按清洗前计数，用户数着课程恢复完却少了）
+        let droppedRestore = 0;
+        const inputLen = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
         set((state) => {
           // 恢复与 hydrate 同一归一口径：脏备份（手改 JSON / 旧版本缺字段）不得直写入库
           const assignments = data.assignments.map(normalizeAssignment);
@@ -1370,6 +1373,25 @@ export const useAppStore = create<AppState>()(
           // 学期非法（totalWeeks 非正整数等）→ 保留当前学期；周钳位用有效周数，防 NaN 污染
           const restoredSemester = isValidSemester(data.semester) ? data.semester : state.semester;
           const restoredTotalWeeks = restoredSemester.totalWeeks;
+          // 归一丢条计数：输入条数 - 落库条数（提醒/计划经 reconcile 增补只多不少，不计入；
+          // 日历 legacy 转换可能增补，单项钳零避免掩盖真实丢弃）
+          const drop = (input: unknown, kept: number): number =>
+            Math.max(0, inputLen(input) - kept);
+          droppedRestore =
+            drop(data.courses, courses.length) +
+            drop(data.schedules, schedules.length) +
+            drop(data.calendarMarks, calendarMarks.length) +
+            drop(data.reminders, restoredReminders.length) +
+            drop(data.studyBlocks, reconciledRestore.studyBlocks.length) +
+            (Array.isArray(data.bellSchedules) ? drop(data.bellSchedules, bellSchedules.length) : 0) +
+            (Array.isArray(data.scheduleOccurrenceOverrides)
+              ? drop(
+                  data.scheduleOccurrenceOverrides,
+                  (data.scheduleOccurrenceOverrides as unknown[])
+                    .map(normalizeHydratedOverride)
+                    .filter((o) => o !== null).length
+                )
+              : 0);
           return {
             userProfile:
               data.userProfile && typeof data.userProfile === "object"
@@ -1395,12 +1417,24 @@ export const useAppStore = create<AppState>()(
               : [],
             bellSchedules,
             activeBellScheduleId,
+            // 恢复后教学周按恢复的学期重算（此前沿用恢复前周次，跨学期备份 timetable/outlook 全偏）
             currentSemesterWeek: Math.min(
-              Math.max(state.currentSemesterWeek, 1),
+              Math.max(getSemesterWeek(new Date(), restoredSemester), 1),
               restoredTotalWeeks
             ),
           };
         });
+        if (droppedRestore > 0) {
+          console.warn(`[restore] ${droppedRestore} 条非法数据已丢弃（脏备份/旧版本缺字段）`);
+          try {
+            useToastStore.getState().pushToast({
+              message: `备份中有 ${droppedRestore} 条数据格式非法已跳过`,
+              type: "warning",
+            });
+          } catch {
+            /* toast 未就绪不阻塞恢复 */
+          }
+        }
       },
 
       addCourseWithSchedule: (courseData, scheduleSlots, context) => {

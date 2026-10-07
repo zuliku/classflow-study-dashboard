@@ -60,8 +60,9 @@ export function DataSettings() {
         import("@/lib/dev/fullDemoData").then(({ buildFullDemoData }) => {
           const store = useAppStore.getState();
           const savedProfile = store.userProfile;
-          // 快照当前业务数据，供 Toast 撤销一次恢复（profile 以当前真实为准）
-          const snapshot = {
+          // 快照当前业务数据，供 Toast 撤销一次恢复（profile 以当前真实为准）；
+          // 深拷贝：restoreAppData 归一化与演示期写入不得污染快照引用
+          const snapshot = structuredClone({
             userProfile: savedProfile,
             semester: store.semester,
             courses: store.courses,
@@ -76,7 +77,7 @@ export function DataSettings() {
             scheduleOccurrenceOverrides: store.scheduleOccurrenceOverrides,
             bellSchedules: store.bellSchedules,
             activeBellScheduleId: store.activeBellScheduleId,
-          };
+          });
           store.restoreAppData(buildFullDemoData());
           // 兑现“个人资料不受影响”：restoreAppData 整库覆盖，演示载入把真名回填
           useAppStore.getState().updateUserProfile(savedProfile);
@@ -88,6 +89,8 @@ export function DataSettings() {
             actionLabel: "撤销",
             onAction: () => {
               useAppStore.getState().restoreAppData(snapshot);
+              // 撤销后教学周按恢复的学期重算（否则停留在演示周）
+              useAppStore.getState().resetToCurrentWeek();
             },
           });
         });

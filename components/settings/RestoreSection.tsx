@@ -55,10 +55,13 @@ export function RestoreSection({
     if (!prepared || isCommitting) return;
     setIsCommitting(true);
     try {
-      const { savedFailures } = await commitBackupRestore(prepared, { restoreAppData });
+      const { savedFailures, strippedMissing } = await commitBackupRestore(prepared, { restoreAppData });
       const warnings: string[] = [...prepared.integrity.warnings];
       if (savedFailures.length > 0) {
         warnings.push(`${savedFailures.length} 个附件未能恢复`);
+      }
+      if (strippedMissing.length > 0) {
+        warnings.push(`${strippedMissing.length} 个附件在备份中缺失已跳过，请重新上传`);
       }
       onRestored({
         courses: prepared.summary.courses,
