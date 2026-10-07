@@ -159,7 +159,7 @@ export function LearningAnalyticsView() {
     <div className="flex flex-1 min-h-0 flex-col">
       {/* App Chrome V2.3：WorkspaceHeader + AnalyticsWorkspaceViewBar（与 Body 同步拉伸，大屏充分利用宽度，保留 24–32px 安全边距）
           S4-2：sticky chrome wrapper（Header + ViewBar 同 Assignments/Timeline 一起钉住；此前 shrink-0 使顶栏随滚） */}
-      <div className="sticky top-0 z-20 shrink-0">
+      <div className="sticky top-0 z-20 shrink-0" data-testid="analytics-header-inner">
         <WorkspaceHeader
           title="学习洞察"
           context="从学习历史中理解你的投入与节奏"

@@ -4,15 +4,53 @@ import { test as demoTest } from "./demoFixtures";
 /**
  * Learning Analytics V3（Truth & IA）focused E2E：
  * A. Desktop 层级：Summary Strip / 学习趋势 / 值得注意 / 投入与节奏 / 执行情况 齐全
- * B. 1920×1080：内容 max-width ≈1500 居中（不无限拉伸）
- * C. Signals h-fit：signals 高度明显 < trend 高度（不 stretch）
- * D. 投入与节奏：Course Investment 高于 Focus Rhythm，top 对齐、高度不相等
+ * B. 1920×1080：流式占满工作区（d96b007 意图，无 1500 上限）+ Header/Body 对齐
+ * C. 配对行等高（ca62dac 意图：grid stretch，signals 与 Trend 同高顶对齐）
+ * D. 投入与节奏等高顶对齐（ca62dac 意图）
  * E. 课程投入显示真实课程名（snapshot）；无多行「未关联课程」；unlinked 唯一聚合
- * F. 本周趋势 label 为「8/17 周一」格式（非 raw ISO）
+ * F. 本周趋势 label 为「M/d 周一」格式（非 raw ISO、无补零）
  */
 
 const visibleText = (page: Page, text: string | RegExp) =>
   page.getByText(text as string).filter({ visible: true }).first();
+
+/**
+ * 时间冻结（周内稳健性）：把页面时钟拨到本周五 12:00。
+ * 种子事件全部落在周一～周四（最晚 f7 周四 10:00），应用按 occurredAt > now 排除未来事件
+ * （正确行为）；不冻结时，周三前运行会丢 f6/f7（总额 -25 分钟），周一早上丢更多 →
+ * 总额/几何/课程名断言全灭。只偏移 Date（定时器/rAF 不动），presence/动画/超时语义不受影响；
+ * 同一周内，周一锚点/趋势 label/学期周均不变。
+ */
+async function freezeToFridayNoon(page: Page) {
+  const now = new Date();
+  const dow = now.getDay() === 0 ? 7 : now.getDay();
+  const friday = new Date(now);
+  friday.setDate(now.getDate() + (5 - dow));
+  friday.setHours(12, 0, 0, 0);
+  await page.addInitScript((frozenTs: number) => {
+    const RealDate = Date;
+    const OFFSET = frozenTs - RealDate.now();
+    class ShiftedDate extends RealDate {
+      constructor(...args: never[]) {
+        super();
+        const inst =
+          args.length === 0
+            ? new RealDate(RealDate.now() + OFFSET)
+            : Reflect.construct(RealDate, args, new.target);
+        Object.setPrototypeOf(inst, new.target.prototype);
+        return inst;
+      }
+      static now(): number {
+        return RealDate.now() + OFFSET;
+      }
+    }
+    window.Date = ShiftedDate as unknown as DateConstructor;
+  }, friday.getTime());
+}
+
+demoTest.beforeEach(async ({ page }) => {
+  await freezeToFridayNoon(page);
+});
 
 /**
  * 浏览器侧 seed Learning History（raw IndexedDB，schema 与 lib/history/store 一致）。
@@ -179,7 +217,7 @@ demoTest("A：Desktop 层级齐全（Summary / Trend / 值得注意 / 投入与�
   await expect(page.getByText("下一步", { exact: true })).toBeVisible();
 });
 
-demoTest("B：1920×1080 内容 max-width ≈1500 且在 workspace 内居中（不无限拉伸）", async ({ page }) => {
+demoTest("B：1920×1080 流式布局——占满工作区（无 1500 上限，d96b007 意图），Header/Body 对齐", async ({ page }) => {
   await seedLearningHistory(page);
   await openAnalytics(page, 1920, 1080);
 
@@ -188,16 +226,15 @@ demoTest("B：1920×1080 内容 max-width ≈1500 且在 workspace 内居中（�
   await expect(bodyInner).toBeVisible();
   const body = (await bodyInner.boundingBox())!;
   const header = (await headerInner.boundingBox())!;
-  expect(body.width).toBeLessThanOrEqual(1500 + 2);
+  // 流式：body 基本占满 main 宽度（仅 gutter 差值），不再居中留白
+  const main = (await page.locator("main").first().boundingBox())!;
+  expect(main.width - body.width).toBeLessThanOrEqual(64);
   // Header 与 Body 同宽对齐
   expect(Math.abs(header.x - body.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(header.width - body.width)).toBeLessThanOrEqual(2);
-  // 在 main workspace 内居中
-  const main = (await page.locator("main").first().boundingBox())!;
-  expect(Math.abs(body.x - main.x - (main.width - body.width) / 2)).toBeLessThanOrEqual(4);
 });
 
-demoTest("C：Signals h-fit（signals 明显矮于 Trend，不被 stretch）", async ({ page }) => {
+demoTest("C：配对行等高（grid stretch；signals 与 Trend 同高顶对齐，ca62dac 意图）", async ({ page }) => {
   await seedLearningHistory(page);
   await openAnalytics(page);
 
@@ -206,11 +243,12 @@ demoTest("C：Signals h-fit（signals 明显矮于 Trend，不被 stretch）", a
   await expect(signals).toBeVisible();
   const trendBox = (await trendCard.boundingBox())!;
   const signalsBox = (await signals.boundingBox())!;
-  // 只要求明显矮于（不等高；不要求精确比例）
-  expect(signalsBox.height).toBeLessThan(trendBox.height * 0.8);
+  // 等高 + 顶对齐（不等高断言已随等高重构废弃）
+  expect(Math.abs(signalsBox.height - trendBox.height)).toBeLessThanOrEqual(2);
+  expect(Math.abs(signalsBox.y - trendBox.y)).toBeLessThanOrEqual(2);
 });
 
-demoTest("D：Course Investment 高于 Focus Rhythm；top 对齐、不等高", async ({ page }) => {
+demoTest("D：投入与节奏等高顶对齐（grid stretch，ca62dac 意图）", async ({ page }) => {
   await seedLearningHistory(page);
   await openAnalytics(page);
 
@@ -220,7 +258,7 @@ demoTest("D：Course Investment 高于 Focus Rhythm；top 对齐、不等高", a
   await expect(rhythm).toBeVisible();
   const inv = (await investment.boundingBox())!;
   const rhy = (await rhythm.boundingBox())!;
-  expect(inv.height).toBeGreaterThan(rhy.height + 10);
+  expect(Math.abs(inv.height - rhy.height)).toBeLessThanOrEqual(2);
   expect(Math.abs(inv.y - rhy.y)).toBeLessThanOrEqual(4);
 });
 
@@ -241,12 +279,12 @@ demoTest("F：本周趋势 label 为「M/d 周一」格式（非 raw ISO）", as
   await seedLearningHistory(page);
   await openAnalytics(page);
 
-  // 周一 label（本周一日期动态计算）
+  // 周一 label（本周一日期动态计算；应用格式为无补零 M/d，与图表注释一致）
   const now = new Date();
   const dow = now.getDay() === 0 ? 7 : now.getDay();
   const mon = new Date(now);
   mon.setDate(now.getDate() - (dow - 1));
-  const monLabel = `${mon.getMonth() + 1}/${String(mon.getDate()).padStart(2, "0")} 周一`;
+  const monLabel = `${mon.getMonth() + 1}/${mon.getDate()} 周一`;
   await expect(page.getByText(monLabel, { exact: true }).first()).toBeVisible();
   // raw ISO 不作为最终标签
   await expect(page.getByText(/^\d{4}-\d{2}-\d{2}$/).first()).toHaveCount(0);
