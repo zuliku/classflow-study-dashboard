@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Inbox, Archive, Eye, Trash2, Check, Clock, Reply, X } from "lucide-react";
+import { Inbox, Archive, Eye, Trash2, Check, Clock, Reply, X, Search } from "lucide-react";
 import { useInboxStore } from "@/store/useInboxStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -21,6 +21,8 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
   const items = useInboxStore((s) => s.items);
   const updateStatus = useInboxStore((s) => s.updateStatus);
   const [filter, setFilter] = useState<InboxStatus | "all">("unread");
+  // Codex-style 小搜索：发件人 / 主题 / 正文（与状态筛选叠加）
+  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ExternalInboxItem | null>(null);
   const [replyItem, setReplyItem] = useState<ExternalInboxItem | null>(null);
   // ---- Exit payload snapshot（Motion V2.1）----
@@ -35,20 +37,31 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
   if (replyItem) lastReplyRef.current = replyItem;
   const shownReply = replyItem ?? lastReplyRef.current;
 
-  const filtered = useMemo(() => {
-    if (filter === "all") return items;
-    return items.filter((it) => it.status === filter);
-  }, [items, filter]);
+  const { filtered, filtering } = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = filter === "all" ? items : items.filter((it) => it.status === filter);
+    if (q === "") return { filtered: base, filtering: false };
+    return {
+      filtered: base.filter(
+        (it) =>
+          (it.senderDisplay ?? "").toLowerCase().includes(q) ||
+          (it.subject ?? "").toLowerCase().includes(q) ||
+          it.text.toLowerCase().includes(q)
+      ),
+      filtering: true,
+    };
+  }, [items, filter, query]);
 
   const retained = useExitPresenceList({ items: filtered, getId: (it) => (it as ExternalInboxItem).id, resetKey: filter });
 
   const unreadCount = useMemo(() => items.filter((it) => it.status === "unread").length, [items]);
 
-  // Root close cleanup: selected / replyItem must not persist across reopen
+  // Root close cleanup: selected / replyItem / 搜索必须跨 reopen 重置
   useEffect(() => {
     if (!open) {
       setSelected(null);
       setReplyItem(null);
+      setQuery("");
     }
   }, [open]);
 
@@ -99,9 +112,47 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
         </div>
       </div>
 
+      {/* 搜索：发件人 / 主题 / 正文（与状态筛选叠加） */}
+      <div className="shrink-0 px-3 pt-2">
+        <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line-soft bg-background focus-within:border-line-strong transition-colors">
+          <Search className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索发件人、主题、正文..."
+            aria-label="搜索收件箱"
+            className="flex-1 min-w-0 bg-transparent text-xs text-charcoal placeholder:text-sandrift/70 focus:outline-none"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="清空搜索"
+              className="p-0.5 rounded text-sandrift hover:text-charcoal transition-colors shrink-0"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto p-3">
         {retained.length === 0 ? (
-          <p key={filter} className="ux-page text-xs text-sandrift text-center py-8">暂无消息</p>
+          filtering ? (
+            <div className="flex flex-col items-center text-center gap-1.5 py-8">
+              <Search className="w-6 h-6 text-sandrift" aria-hidden="true" />
+              <p className="text-xs font-bold text-charcoal">无匹配消息</p>
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="mt-1 px-3 h-7 rounded-lg text-[11px] font-bold text-satin-grey bg-alabaster border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+              >
+                清除搜索
+              </button>
+            </div>
+          ) : (
+            <p key={filter} className="ux-page text-xs text-sandrift text-center py-8">暂无消息</p>
+          )
         ) : (
           <div key={filter} className="space-y-2 ux-page">
             {retained.map(({ item, exiting }) => (

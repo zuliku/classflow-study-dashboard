@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Bell, Plus, Trash2, X, PencilLine, Check, Clock, CalendarClock } from "lucide-react";
+import { Bell, Plus, Trash2, X, PencilLine, Check, Clock, CalendarClock, Search } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -90,6 +90,8 @@ export function ReminderCenter() {
   const [editor, setEditor] = useState<{ mode: "create" } | { mode: "edit"; reminder: Reminder } | null>(null);
   const [draft, setDraft] = useState<StandaloneDraft>({ title: "", date: "", time: "23:59", note: "" });
   const [error, setError] = useState("");
+  // Codex-style 小搜索：标题 / 备注 / 来源行过滤（分组保留；空结果给清除入口）
+  const [query, setQuery] = useState("");
 
   // Composer presence：editor 置 null 后保留最后一个快照播 exit（纯 UI snapshot，不复制 domain 数据）。
   // Motion Contract：presence 取 exit 常量，与下方 !duration-[--motion-exit-base] 同源（此前误用 enter 档 180）。
@@ -118,7 +120,19 @@ export function ReminderCenter() {
     retainedReminders.filter((e) => e.exiting).map((e) => [e.item.id, true])
   );
   // 分组基于 visual 列表（含 exiting 快照）→ 删除最后一条时空态不提前出现
-  const { upcoming, history } = getReminderCenterGroups(retainedReminders.map((e) => e.item));
+  const searchQuery = query.trim().toLowerCase();
+  const filtering = searchQuery !== "";
+  const searchedItems = !filtering
+    ? retainedReminders.map((e) => e.item)
+    : retainedReminders
+        .map((e) => e.item)
+        .filter(
+          (r) =>
+            r.title.toLowerCase().includes(searchQuery) ||
+            (r.note ?? "").toLowerCase().includes(searchQuery) ||
+            metaLine(r).toLowerCase().includes(searchQuery)
+        );
+  const { upcoming, history } = getReminderCenterGroups(searchedItems);
 
   // 打开 → 统一标记 fired && !readAt 为已读（一次 set；presence exit 不触发）
   useEffect(() => {
@@ -127,12 +141,13 @@ export function ReminderCenter() {
   }, [isOpen]);
 
   // 关闭整个 Center（Header X / Esc / outside / 任何 close() 路径）→ 结束本次 editor session：
-  // editor 清零 + 清 error + 清 composer 快照——重新打开绝不 stale 旧 Composer / draft。
+  // editor 清零 + 清 error + 清 composer 快照 + 清搜索——重新打开绝不 stale 旧 Composer / draft。
   // 不破坏 Panel 自身 170ms exit presence（composer 随 Panel 整体淡出；重开时不闪旧 editor）。
   useEffect(() => {
     if (isOpen) return;
     setEditor(null);
     setError("");
+    setQuery("");
     lastEditorRef.current = null;
   }, [isOpen]);
 
@@ -378,6 +393,30 @@ export function ReminderCenter() {
             </div>
           </div>
 
+          {/* 搜索：标题 / 备注 / 来源行；分组保留，空结果给清除入口 */}
+          <div className="px-3 pt-2 shrink-0">
+            <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line-soft bg-background focus-within:border-line-strong transition-colors">
+              <Search className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索提醒..."
+                aria-label="搜索提醒"
+                className="flex-1 min-w-0 bg-transparent text-xs text-charcoal placeholder:text-sandrift/70 focus:outline-none"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="清空搜索"
+                  className="p-0.5 rounded text-sandrift hover:text-charcoal transition-colors shrink-0"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* New Reminder Composer（presence-aware：enter grid 展开 / exit grid 折叠 + fade；不跟列表滚动） */}
           {composerPresence.mounted && renderedEditor && (
             <div
@@ -457,7 +496,23 @@ export function ReminderCenter() {
             data-testid="reminder-center-list"
             className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-4"
           >
-            {/* Upcoming Group */}
+            {/* 搜索无结果：隐藏分组，给清除入口（分组空态的新建引导只在非过滤时出现） */}
+            {filtering && upcoming.length === 0 && history.length === 0 ? (
+              <div className="flex flex-col items-center text-center gap-1.5 px-4 py-10">
+                <Search className="w-7 h-7 text-sandrift" aria-hidden="true" />
+                <p className="text-xs font-bold text-charcoal">无匹配提醒</p>
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="mt-1 px-3 h-7 rounded-lg text-[11px] font-bold text-satin-grey bg-alabaster border border-line hover:text-charcoal hover:border-line-strong transition-colors"
+                >
+                  清除搜索
+                </button>
+              </div>
+            ) : (
+              <>
+            {/* Upcoming Group（过滤时空组隐藏） */}
+            {(!filtering || upcoming.length > 0) && (
             <section className="rounded-xl border border-line overflow-hidden bg-surface">
               <div className="flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-line-soft bg-[#F7F5F5]/60">
                 <h3 className="text-[11px] font-bold text-charcoal">即将提醒</h3>
@@ -497,8 +552,10 @@ export function ReminderCenter() {
                 )}
               </ExitCollapse>
             </section>
+            )}
 
-            {/* History Group（视觉权重低于 Upcoming） */}
+            {/* History Group（视觉权重低于 Upcoming；过滤时空组隐藏） */}
+            {(!filtering || history.length > 0) && (
             <section className="rounded-xl border border-line overflow-hidden bg-surface">
               <div className="flex items-center justify-between px-3 pt-2.5 pb-2 border-b border-line-soft bg-[#F7F5F5]/60">
                 <h3 className="text-[11px] font-bold text-charcoal">历史提醒</h3>
@@ -528,6 +585,9 @@ export function ReminderCenter() {
                 )}
               </ExitCollapse>
             </section>
+            )}
+              </>
+            )}
           </div>
         </div>
       )}

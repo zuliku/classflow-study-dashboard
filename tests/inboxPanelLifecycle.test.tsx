@@ -148,6 +148,22 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
+  it("搜索：按发件人/主题/正文过滤；无匹配给清除入口", async () => {
+    const onOpenChange = vi.fn();
+    render(<InboxPanel open={true} onOpenChange={onOpenChange} />);
+    expect(screen.getByTestId("inbox-item-item-1")).toBeTruthy();
+    const input = screen.getByLabelText("搜索收件箱") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "不存在的内容xyz" } });
+    // 退出快照播完后移除（与删除行动画同窗口）
+    await waitFor(() => expect(screen.queryByTestId("inbox-item-item-1")).toBeNull());
+    expect(screen.getByText("无匹配消息")).toBeTruthy();
+    fireEvent.click(screen.getByText("清除搜索"));
+    expect(screen.getByTestId("inbox-item-item-1")).toBeTruthy();
+    // 按发件人命中
+    fireEvent.change(screen.getByLabelText("搜索收件箱"), { target: { value: "alice" } });
+    expect(screen.getByTestId("inbox-item-item-1")).toBeTruthy();
+  });
+
   it("close root Inbox clears selected/reply state (reopen does not restore old overlay)", async () => {
     const Wrapper = () => {
       const [open, setOpen] = React.useState(true);
