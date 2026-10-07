@@ -17,6 +17,8 @@ function Ring({
   display,
   toneClass,
   trackClass = "text-alabaster",
+  size = 60,
+  bare = false,
 }: {
   /** 0..1，null = 无数据（空环） */
   fraction: number | null;
@@ -24,30 +26,39 @@ function Ring({
   display: string;
   toneClass: string;
   trackClass?: string;
+  size?: number;
+  /** 紧凑横 tile 内使用：只画环，文字由外部排版 */
+  bare?: boolean;
 }) {
-  const r = 24;
-  const c = 2 * Math.PI * r;
+  const r = size * 0.4;
+  const c = size / 2;
+  const circ = 2 * Math.PI * r;
   const f = fraction === null ? 0 : Math.min(1, Math.max(0, fraction));
+  const strokeWidth = Math.max(5, size * 0.115);
   return (
     <div className="flex flex-col items-center gap-1">
-      <svg width="60" height="60" viewBox="0 0 60 60" role="img" aria-label={`${label}${display}`}>
-        <circle cx="30" cy="30" r={r} fill="none" strokeWidth="7" className={trackClass} stroke="currentColor" />
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${label}${display}`}>
+        <circle cx={c} cy={c} r={r} fill="none" strokeWidth={strokeWidth} className={trackClass} stroke="currentColor" />
         <circle
-          cx="30"
-          cy="30"
+          cx={c}
+          cy={c}
           r={r}
           fill="none"
-          strokeWidth="7"
+          strokeWidth={strokeWidth}
           strokeLinecap="round"
           className={toneClass}
           stroke="currentColor"
-          strokeDasharray={c}
-          strokeDashoffset={c * (1 - f)}
-          transform="rotate(-90 30 30)"
+          strokeDasharray={circ}
+          strokeDashoffset={circ * (1 - f)}
+          transform={`rotate(-90 ${c} ${c})`}
         />
       </svg>
-      <p className="text-[11px] font-bold text-charcoal tabular-nums">{display}</p>
-      <p className="text-[10px] text-sandrift -mt-0.5">{label}</p>
+      {!bare && (
+        <>
+          <p className="text-[11px] font-bold text-charcoal tabular-nums">{display}</p>
+          <p className="text-[10px] text-sandrift -mt-0.5">{label}</p>
+        </>
+      )}
     </div>
   );
 }
@@ -137,9 +148,9 @@ export function AnalyticsMomentum({
           {loading || !data ? (
             <div className="ux-skeleton h-[220px] mt-3 w-full rounded-xl bg-alabaster animate-pulse" aria-label="动量加载中" />
           ) : (
-            <div className="pt-3 flex flex-col gap-4 xl:flex-row xl:items-stretch">
-              {/* 热力（视觉主体）：月份刻度 + 大格点，内容宽；窄屏横向滚 */}
-              <div className="shrink-0">
+            <div className="pt-3 flex flex-col gap-3">
+              {/* 热力整块置顶（GitHub 式通栏） */}
+              <div>
                 <div
                   data-testid="momentum-heatmap"
                   role="img"
@@ -191,35 +202,52 @@ export function AnalyticsMomentum({
                   </span>
                 </div>
               </div>
-              {/* 三统计等宽 tile：连续 / 计划达成 / 按时完成 */}
-              <div className="flex-1 min-w-0 grid grid-cols-3 gap-3">
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-2 py-3 flex flex-col items-center justify-center gap-1 text-center">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-danger/10 text-warning">
+              {/* 三统计压缩横 tile：连续 / 计划达成 / 按时完成 */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex items-center gap-2.5 min-w-0">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-warning">
                     <Flame className="h-4 w-4" aria-hidden="true" />
                   </span>
-                  <p className="text-xl font-extrabold text-charcoal tabular-nums leading-none">
-                    <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
-                  </p>
-                  <p className="text-[10px] text-sandrift">连续学习</p>
-                  <p className="text-[10px] font-semibold text-satin-grey leading-tight">
-                    {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
-                  </p>
+                  <span className="min-w-0">
+                    <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                      <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
+                    </span>
+                    <span className="mt-1 block text-[10px] text-sandrift">
+                      连续学习 · {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
+                    </span>
+                  </span>
                 </div>
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-2 py-3 flex flex-col items-center justify-center gap-1">
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex items-center gap-2.5 min-w-0">
                   <Ring
                     fraction={planRatio === null ? null : planRatio / 100}
                     label="计划达成"
                     display={planRatio === null ? "—" : `${Math.round(planRatio)}%`}
                     toneClass="text-sandrift"
+                    size={44}
+                    bare
                   />
+                  <span className="min-w-0">
+                    <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                      {planRatio === null ? "—" : `${Math.round(planRatio)}%`}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-sandrift">计划达成</span>
+                  </span>
                 </div>
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-2 py-3 flex flex-col items-center justify-center gap-1">
+                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex items-center gap-2.5 min-w-0">
                   <Ring
                     fraction={onTimeRate === null ? null : onTimeRate / 100}
                     label="按时完成"
                     display={onTimeRate === null ? "—" : `${Math.round(onTimeRate)}%`}
                     toneClass="text-success"
+                    size={44}
+                    bare
                   />
+                  <span className="min-w-0">
+                    <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                      {onTimeRate === null ? "—" : `${Math.round(onTimeRate)}%`}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-sandrift">按时完成</span>
+                  </span>
                 </div>
               </div>
             </div>
