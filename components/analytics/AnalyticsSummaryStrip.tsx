@@ -32,7 +32,11 @@ export function AnalyticsSummaryStrip({
           <p className="text-[11px] font-semibold text-sandrift">{m.label}</p>
           <p
             data-testid={`summary-value-${m.label}`}
-            className="text-[22px] font-extrabold leading-tight text-charcoal tabular-nums"
+            className={cn(
+              // Hero 锚点：首项（实际专注）放大为全页最大数字，其余保持 22px 层级
+              "font-extrabold leading-tight tabular-nums",
+              i === 0 ? "text-[30px] text-charcoal" : "text-[22px] text-charcoal"
+            )}
           >
             {m.view.value}
           </p>
@@ -63,7 +67,7 @@ export function AnalyticsSummaryStripSkeleton() {
       {["实际专注", "完成任务", "计划执行", "按时完成"].map((label, i) => (
         <div key={label} className={summaryCellDividerClasses(i)}>
           <div className="h-3 w-12 rounded bg-alabaster animate-pulse" />
-          <div className="h-6 w-20 rounded bg-alabaster animate-pulse" />
+          <div className={cn("rounded bg-alabaster animate-pulse", i === 0 ? "h-[30px] w-24" : "h-6 w-20")} />
           <div className="h-2.5 w-24 rounded bg-alabaster animate-pulse" />
         </div>
       ))}

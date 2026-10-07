@@ -9,6 +9,8 @@ import {
   AnalyticsSummaryStrip,
   AnalyticsSummaryStripSkeleton,
 } from "@/components/analytics/AnalyticsSummaryStrip";
+import { AnalyticsVerdict } from "@/components/analytics/AnalyticsVerdict";
+import { buildAnalyticsVerdict } from "@/lib/analytics/verdict";
 import { LearningTrendChart } from "@/components/analytics/LearningTrendChart";
 import { LearningSignalsCard } from "@/components/analytics/LearningSignalsCard";
 import { CourseInvestmentCard } from "@/components/analytics/CourseInvestmentCard";
@@ -231,6 +233,15 @@ export function LearningAnalyticsView() {
                 </>
               ) : (
                 <>
+                  {/* 结论横幅：一句话判断 + 一步行动（新增表达层，不碰既有标题/数据口径） */}
+                  <AnalyticsVerdict
+                    verdict={buildAnalyticsVerdict({
+                      signals: data.signals,
+                      overview: data.overview,
+                      comparisonAvailable: data.coverage.comparisonAvailable,
+                    })}
+                    onAction={navigate}
+                  />
                   {/* Summary Strip（一个共同 surface，替代四张独立卡） */}
                   <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
 
