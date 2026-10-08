@@ -3179,7 +3179,23 @@ export const useAppStore = create<AppState>()(
         bellSchedules: state.bellSchedules,
         activeBellScheduleId: state.activeBellScheduleId,
       }),
-      migrate: (persistedState) => sanitizePersistedState(persistedState),
+      migrate: (persistedState, version) => {
+        // 未来版本降级保护：v8 之后的结构旧代码读不懂，静默整形会永久丢字段；
+        // 拒载并保留当前初始态（merge 遇 undefined 即保留），提示用户升级应用
+        if (typeof version === "number" && version > 8) {
+          console.warn(`[useAppStore] unsupported persist version v${version}，已跳过载入，请升级应用`);
+          try {
+            useToastStore.getState().pushToast({
+              message: "本地数据来自更新的版本，已跳过载入以保护数据。请升级应用后重启。",
+              type: "error",
+            });
+          } catch {
+            /* toast 未就绪不阻塞水合 */
+          }
+          return undefined as never;
+        }
+        return sanitizePersistedState(persistedState);
+      },
       // Hydration 结果监控：localStorage 损坏（JSON.parse 失败 / getItem 抛错）时
       // zustand 会静默吞掉错误并把 Store 留在初始空态。若不记录，启动 Blob 对账会把
       // 「引用集合为空」当成真实状态，删除全部课程附件 Blob（不可逆数据放大损失）。

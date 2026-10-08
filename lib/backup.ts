@@ -146,9 +146,13 @@ export function validateBackup(raw: unknown): BackupValidationResult {
   }
 
   if (raw.version !== undefined && raw.version !== BACKUP_VERSION) {
+    // 未来版本备份（降级导入）与旧版本区别提示：前者升级应用可解，后者需重导
+    const newer = typeof raw.version === "number" && raw.version > BACKUP_VERSION;
     return {
       ok: false,
-      error: `备份版本太旧，打不开，请用当前版本重新导出后再导入`,
+      error: newer
+        ? `这个备份来自更新的版本（v${raw.version}），请先升级应用后再导入`
+        : `备份版本太旧，打不开，请用当前版本重新导出后再导入`,
     };
   }
 

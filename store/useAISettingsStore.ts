@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import { createGuardedStorage, subscribeCrossWindowSync } from "@/lib/persistStorage";
 import { useToastStore } from "@/store/useToastStore";
 import { AIProviderId, AICustomConfig, AISettings } from "@/lib/ai/providers/types";
-import { getDefaultModel } from "@/lib/ai/providers/registry";
+import { getDefaultModel, getModelsForProvider } from "@/lib/ai/providers/registry";
 import { KiroReasoningEffort } from "@/lib/ai/reasoning/types";
 
 /**
@@ -121,15 +121,16 @@ export const useAISettingsStore = create<AISettingsState>()(
         if (sanitized.provider && sanitized.provider !== current.provider && !sanitized.model) {
           sanitized.model = getDefaultModel(sanitized.provider);
         }
-        // model 非法或 provider 已回落但 model 不匹配提供商前缀，做一次最小修复
-        if (sanitized.model && sanitized.provider) {
-          const validForProvider =
-            sanitized.provider === "custom-openai"
-              ? true
-              : sanitized.model.startsWith(sanitized.provider === "deepseek" ? "deepseek-" : sanitized.provider === "opencode-go" ? "" : "");
-          // 保守：仅当 deepseek 模型却落在 opencode-go 等明显越界时回落
-          if (!validForProvider && sanitized.provider === "deepseek" && !sanitized.model.startsWith("deepseek-")) {
-            sanitized.model = getDefaultModel("deepseek");
+        // model 非法或 provider 已回落但 model 不匹配提供商，做一次最小修复：
+        // 按该 provider 真实模型表校验（此前 startsWith("") 恒真，非法/下线模型永不回落）
+        if (sanitized.model && sanitized.provider && sanitized.provider !== "custom-openai") {
+          try {
+            const validIds = getModelsForProvider(sanitized.provider).map((m) => m.id);
+            if (validIds.length > 0 && !validIds.includes(sanitized.model)) {
+              sanitized.model = getDefaultModel(sanitized.provider);
+            }
+          } catch {
+            /* 模型表不可用时保留原值，不误伤 */
           }
         }
         return { ...current, ...sanitized };

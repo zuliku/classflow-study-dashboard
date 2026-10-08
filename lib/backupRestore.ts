@@ -9,6 +9,7 @@ import {
 import { findDataIntegrityIssues, classifyIntegrityIssues } from "@/lib/dataIntegrity";
 import { saveFileBlob } from "@/lib/fileStorage";
 import { saveAvatarBlob, deleteAvatarBlob } from "@/lib/profileAvatar";
+import { flushLearningHistoryQueue } from "@/lib/history/recorder";
 
 /**
  * Backup Restore orchestrator：
@@ -216,6 +217,12 @@ export async function commitBackupRestore(
   }
 
   api.restoreAppData(restoreData);
+  // History reset 是队列异步：落盘后再 toast，避免 Analytics 在 Reset 落盘前读到旧史混新数
+  try {
+    await flushLearningHistoryQueue();
+  } catch {
+    /* best-effort：History 失败不阻塞恢复结果 */
+  }
   const health = await checkMaterialAvailability(restoreData.courses);
   return { savedFailures, strippedMissing, health };
 }

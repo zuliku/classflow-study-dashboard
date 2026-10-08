@@ -1,9 +1,11 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import type { ExternalInboxItem, InboxSource, InboxStatus } from "@/lib/inbox/types";
 import { createHash } from "@/lib/inbox/dedupe";
+import { createGuardedStorage, subscribeCrossWindowSync } from "@/lib/persistStorage";
+import { useToastStore } from "@/store/useToastStore";
 
 interface InboxState {
   items: ExternalInboxItem[];
@@ -69,14 +71,27 @@ export const useInboxStore = create<InboxState>()(
     }),
     {
       name: "classflow-inbox-v1",
-      storage: createJSONStorage(() => {
-        if (typeof localStorage !== "undefined") return localStorage;
-        return {
-          getItem: () => null,
-          setItem: () => {},
-          removeItem: () => {},
-        } as unknown as Storage;
-      }),
+      storage: createGuardedStorage(() =>
+        useToastStore.getState().pushToast({
+          message: "本地存储空间已满，最新更改可能无法保存，请备份后清理空间。",
+          type: "error",
+        })
+      ),
+      // 跨窗 rehydrate 归一：远端超长正文截断（与 partialize 同口径），防脏库直写入库
+      merge: (persistedState, currentState) => {
+        const s = persistedState as Partial<InboxState> | undefined;
+        if (!s || typeof s !== "object") return currentState;
+        const items = Array.isArray(s.items)
+          ? s.items
+              .filter((it) => it && typeof it.id === "string")
+              .map((it) => ({
+                ...it,
+                text: typeof it.text === "string" ? it.text.slice(0, 2000) : "",
+                attachments: Array.isArray(it.attachments) ? it.attachments.slice(0, 3) : [],
+              }))
+          : [];
+        return { ...currentState, ...s, items };
+      },
       partialize: (state) => ({
         items: state.items.map((it) => ({
           id: it.id,
@@ -99,6 +114,9 @@ export const useInboxStore = create<InboxState>()(
     }
   )
 );
+
+// 跨窗口收敛：他窗写入同 key 后去抖 rehydrate（此前收件箱跨窗分叉，未读覆盖已读）
+subscribeCrossWindowSync(useInboxStore, "classflow-inbox-v1");
 
 /** 仅测试：内存隔离实例 */
 export function createTestInboxStore() {

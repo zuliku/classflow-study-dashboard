@@ -192,6 +192,22 @@ export const useKiroComputerStore = create<KiroComputerState>()(
         })
       ),
       version: 2,
+      // 降级/脏数据归一：开关非 boolean 即回默认 false（此前透传，脏值直接生效）
+      merge: (persistedState, currentState) => {
+        const s = persistedState as Partial<KiroComputerState> | undefined;
+        if (!s || typeof s !== "object") return currentState;
+        const bool = (v: unknown, fb: boolean): boolean => (typeof v === "boolean" ? v : fb);
+        return {
+          ...currentState,
+          ...s,
+          computerEnabled: bool(s.computerEnabled, false),
+          terminalEnabled: bool(s.terminalEnabled, false),
+          desktopControlEnabled: bool(s.desktopControlEnabled, false),
+          desktopActionEnabled: bool(s.desktopActionEnabled, false),
+          desktopClipboardEnabled: bool(s.desktopClipboardEnabled, false),
+          backgroundEnabled: bool(s.backgroundEnabled, false),
+        };
+      },
       migrate: (persistedState, version) => {
         if (version >= 2) return persistedState as Partial<KiroComputerState>;
         const s = persistedState as

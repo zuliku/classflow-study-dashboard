@@ -6,7 +6,7 @@
  * - userImageBytes = 用户直接附加图片（preprocess 后）的实际字节
  * - remainingTurnBytes = totalLimit - userImageBytes（用户图片优先，不能静默丢弃）
  * - pdfBudgetBytes = min(pdfLimitBytes, remainingTurnBytes)：扫描 PDF 可用剩余额度
- * - overBudget = userImageBytes > totalLimit（此时整个 Send 必须被阻止）
+ * - overBudget = userImageBytes > totalLimit（此时整个 Send 必须被阻止，提示用户删减后重发）
  *
  * 注意：这是编码前的二进制预算（binary image bytes），不是 HTTP request
  * Content-Length；转为 data URL / Base64 后实际 JSON 请求会更大（约 4/3 膨胀）。

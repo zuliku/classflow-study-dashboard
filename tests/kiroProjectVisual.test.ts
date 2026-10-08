@@ -123,7 +123,7 @@ describe("read_project_visual", () => {
     expect((await getFileBlob(f.storageKey))?.size).toBe(5 * MIB);
     // preprocess 产物（≤2MiB）进入 evidence
     expect(preprocess).toHaveBeenCalledTimes(1);
-    expect(ledger.remaining().totalBytes).toBe(10 * MIB - 1024);
+    expect(ledger.remaining().totalBytes).toBe(14 * MIB - 1024);
   });
 
   it("跨 Project visual read 被拒绝：Blob/preprocess/endpoint 全部 0 调用", async () => {
@@ -189,7 +189,7 @@ describe("read_project_visual", () => {
   it("VISION_BUDGET_EXHAUSTED：reservation 失败时 endpoint 0 calls（预算已耗尽）", async () => {
     const p = await createKiroProject({ name: "P" });
     const f = await setupImage(p.id);
-    const ledger = createVisionTurnRuntimeBudget({ initialUserImageBytes: 10 * MIB });
+    const ledger = createVisionTurnRuntimeBudget({ initialUserImageBytes: 14 * MIB });
     const extractEvidence = vi.fn(async () => noEvidence);
     const preprocess = vi.fn(async (file: File) => ({ file, originalSize: 1, outputSize: 1, originalWidth: 1, originalHeight: 1, outputWidth: 1, outputHeight: 1, resized: false, reencoded: false }));
     const r = await executeReadProjectVisual(
@@ -268,7 +268,7 @@ describe("read_project_visual", () => {
     if (!r.ok) expect(r.code).toBe("PAGE_SELECTION_REQUIRED");
     expect(renderPages).toHaveBeenCalledTimes(0);
     expect(extractEvidence).toHaveBeenCalledTimes(0);
-    expect(ledger.remaining()).toEqual({ totalBytes: 10 * MIB, pdfBytes: 8 * MIB, pdfPages: 6 });
+    expect(ledger.remaining()).toEqual({ totalBytes: 14 * MIB, pdfBytes: 10 * MIB, pdfPages: 6 });
   });
 
   it("shared PDF page cap：attachment 已用 4 pages → Project 最多 2（不足时 VISION_PDF_PAGE_LIMIT_REACHED）", async () => {
@@ -372,7 +372,7 @@ describe("read_project_visual（V1.3B.1 kind / gate 硬化）", () => {
     expect(extract).toHaveBeenCalledTimes(0);
     expect(renderPages).toHaveBeenCalledTimes(0);
     expect(extractEvidence).toHaveBeenCalledTimes(0);
-    expect(ledger.remaining()).toEqual({ totalBytes: 10 * MIB, pdfBytes: 8 * MIB, pdfPages: 6 });
+    expect(ledger.remaining()).toEqual({ totalBytes: 14 * MIB, pdfBytes: 10 * MIB, pdfPages: 6 });
   });
 
   it("DOCX 项目资料 → NOT_VISUAL_FILE，全部 0 调用", async () => {
@@ -429,7 +429,7 @@ describe("read_project_visual（V1.3B.1 kind / gate 硬化）", () => {
     expect(renderPages).toHaveBeenCalledTimes(0);
     expect(extractEvidence).toHaveBeenCalledTimes(0);
     // Ledger 完全不消费
-    expect(ledger.remaining()).toEqual({ totalBytes: 10 * MIB, pdfBytes: 8 * MIB, pdfPages: 6 });
+    expect(ledger.remaining()).toEqual({ totalBytes: 14 * MIB, pdfBytes: 10 * MIB, pdfPages: 6 });
   });
 
   it("显式 pages=[12] → truncated=false（单页请求 100% 满足，不得因剩余额度误标）", async () => {
@@ -475,7 +475,7 @@ describe("read_project_visual（V1.3B.1 kind / gate 硬化）", () => {
     if (!r.ok) expect(r.code).toBe("INVALID_INPUT");
     expect(renderPages).toHaveBeenCalledTimes(0);
     expect(extractEvidence).toHaveBeenCalledTimes(0);
-    expect(ledger.remaining()).toEqual({ totalBytes: 10 * MIB, pdfBytes: 8 * MIB, pdfPages: 6 });
+    expect(ledger.remaining()).toEqual({ totalBytes: 14 * MIB, pdfBytes: 10 * MIB, pdfPages: 6 });
   });
 
   it("预算裁剪 [1,2,3,4] 剩 2 页 → pages=[1,2]，truncated=true", async () => {

@@ -12,8 +12,9 @@
  * - capability gate：vision !== true → VISION_MODEL_REQUIRED（不发请求）
  * - image MIME gate：isVisionMimeSupported（不发请求）
  * - 普通 text PDF → NOT_VISUAL_FILE（不发请求；本阶段不做 text-PDF 图表视觉）
- * - 预算：共享 Turn Vision Ledger（10 MiB total / 8 MiB PDF / 6 pages），async-exclusive reservation，
- *   并发 visual calls 不能 overspend；失败不 refund（conservative）
+ * - 预算：共享 Turn Vision Ledger（14 MiB total / 10 MiB PDF / 6 pages），async-exclusive reservation，
+ *   并发 visual calls 不能 overspend；失败不 refund（conservative）。
+ *   预算耗尽是终态但给模型可选方案（降页/转文字层/新轮），禁止编造未读内容。
  * - storageKey 绝不进入 Tool Output / Vision route
  * - page number 只来自实际 rasterized 页（模型永不生成页码）；Citation availablePages 只含成功 evidence 页
  */
@@ -262,7 +263,13 @@ export async function executeReadProjectVisual(
     // async-exclusive reservation（payload 已准备 → 即使后续失败也不 refund）
     const reserved = await opts.ledger.reserveImageExclusive(prepared.file.size);
     if (!reserved) {
-      return { ok: false, code: "VISION_BUDGET_EXHAUSTED", message: "本轮视觉预算已用完，请在新一轮提问中读取。" };
+      // 预算耗尽是终态但不是死胡同：把选择权交还模型（降页/换文本层/新轮），禁止编造未读内容
+      return {
+        ok: false,
+        code: "VISION_BUDGET_EXHAUSTED",
+        message:
+          "本轮视觉预算已用完。请从以下选择其一并明确告知用户：1) 改用 read_project_file 读取该资料的文字层；2) 让用户在新一轮提问中读取；3) 指定更少页面重试。绝不能编造未实际读取的页面内容。",
+      };
     }
     const evidence = await extractEvidence({
       images: [prepared.file],
@@ -327,10 +334,20 @@ export async function executeReadProjectVisual(
   // ---- 预算 pre-check（reservation 前，不消耗）----
   const remaining = opts.ledger.remaining();
   if (remaining.pdfPages <= 0) {
-    return { ok: false, code: "VISION_PDF_PAGE_LIMIT_REACHED", message: "本轮扫描 PDF 页面读取已达上限。" };
+    return {
+      ok: false,
+      code: "VISION_PDF_PAGE_LIMIT_REACHED",
+      message:
+        "本轮扫描 PDF 页面读取已达上限。请从以下选择其一并明确告知用户：1) 用 pages 参数只指定最关键的 1-2 页重试；2) 改用 read_project_file 读取文字层；3) 让用户在新一轮提问中读取。绝不能编造未实际读取的页面内容。",
+    };
   }
   if (remaining.pdfBytes <= 0 || remaining.totalBytes <= 0) {
-    return { ok: false, code: "VISION_BUDGET_EXHAUSTED", message: "本轮视觉预算已用完，请在新一轮提问中读取。" };
+    return {
+      ok: false,
+      code: "VISION_BUDGET_EXHAUSTED",
+      message:
+        "本轮视觉预算已用完。请从以下选择其一并明确告知用户：1) 用 pages 参数只指定最关键的 1-2 页重试；2) 改用 read_project_file 读取文字层；3) 让用户在新一轮提问中读取。绝不能编造未实际读取的页面内容。",
+    };
   }
 
   // ---- async-exclusive：页选择 + rasterize（按实际 rendered pages/bytes 扣减）----
@@ -368,7 +385,12 @@ export async function executeReadProjectVisual(
     };
   }
   if (rendered.pages.length === 0) {
-    return { ok: false, code: "VISION_BUDGET_EXHAUSTED", message: "剩余视觉预算不足以渲染该 PDF 页面。" };
+    return {
+      ok: false,
+      code: "VISION_BUDGET_EXHAUSTED",
+      message:
+        "剩余视觉预算不足以渲染该 PDF 页面。请改用 read_project_file 读取文字层，或让用户在新一轮提问中读取。绝不能编造未实际读取的页面内容。",
+    };
   }
 
   // ---- Vision 转录（锁外）----

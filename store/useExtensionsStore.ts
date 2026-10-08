@@ -1,9 +1,11 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import type { ExtensionKind, ExtensionRecord, ExtensionStatus, ChannelProvider } from "@/lib/extensions/types";
 import { createId } from "@/lib/utils";
+import { createGuardedStorage, subscribeCrossWindowSync } from "@/lib/persistStorage";
+import { useToastStore } from "@/store/useToastStore";
 
 /**
  * Extensions Store — 仅保存 metadata + credentialRef，绝不保存 secret。
@@ -111,15 +113,12 @@ export const useExtensionsStore = create<ExtensionsState>()(
     }),
     {
       name: "classflow-extensions-v1",
-      storage: createJSONStorage(() => {
-        if (typeof localStorage !== "undefined") return localStorage;
-        // Vitest node env fallback（永不持久化，仅内存）
-        return {
-          getItem: () => null,
-          setItem: () => {},
-          removeItem: () => {},
-        } as unknown as Storage;
-      }),
+      storage: createGuardedStorage(() =>
+        useToastStore.getState().pushToast({
+          message: "本地存储空间已满，最新更改可能无法保存，请备份后清理空间。",
+          type: "error",
+        })
+      ),
       // 白名单：仅 extensions 与 activeTab；绝不持久化 secret
       partialize: (state) => ({
         extensions: state.extensions.map((e) => ({
@@ -152,6 +151,9 @@ export const useExtensionsStore = create<ExtensionsState>()(
     }
   )
 );
+
+// 跨窗口收敛：他窗写入同 key 后去抖 rehydrate（与 6 个偏好 store 对齐；此前双窗扩展发散，旧 set 全量回写复活）
+subscribeCrossWindowSync(useExtensionsStore, "classflow-extensions-v1");
 
 /** 仅测试：创建内存隔离实例 */
 export function createTestExtensionsStore() {
