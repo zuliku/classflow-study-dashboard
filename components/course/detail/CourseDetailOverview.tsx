@@ -5,6 +5,7 @@ import { BookOpen, MapPin, User } from "lucide-react";
 import { Course } from "@/types";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { Field } from "@/components/ui/Field";
+import { InlineErrorState } from "@/components/ui/InlineErrorState";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 
@@ -114,7 +115,11 @@ export function CourseDetailOverview({
               rows={2}
             />
           </Field>
-          {error && <p className="text-[11px] font-bold text-danger">{error}</p>}
+          {error && (
+            <InlineErrorState className="border-0 bg-transparent px-0 py-0 text-[11px]">
+              {error}
+            </InlineErrorState>
+          )}
         </div>
       </DisclosureRegion>
     </section>

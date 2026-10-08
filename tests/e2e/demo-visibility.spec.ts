@@ -11,7 +11,7 @@ async function seedAutoInject(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.getByText("已载入完整演示数据").first()).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(1500); // PageTransition 动画完成
+  // 后续断言均为语义可见性（自带等待），不再硬等 PageTransition 时长
 }
 
 const visibleText = (page: Page, text: string | RegExp) =>

@@ -20,6 +20,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Field } from "@/components/ui/Field";
+import { InlineErrorState } from "@/components/ui/InlineErrorState";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
 import { navigateReminderTarget } from "@/lib/reminders/reminderNavigation";
@@ -476,7 +477,11 @@ export function ReminderCenter() {
                       aria-label="提醒备注"
                     />
                   </Field>
-                  {error && <p className="text-[10px] font-semibold text-danger">{error}</p>}
+                  {error && (
+                    <InlineErrorState className="border-0 bg-transparent px-0 py-0 text-[10px]">
+                      {error}
+                    </InlineErrorState>
+                  )}
                   <div className="flex items-center justify-end gap-2">
                     <Button variant="secondary" onClick={cancelEditor}>
                       取消

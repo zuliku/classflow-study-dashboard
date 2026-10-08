@@ -8,6 +8,7 @@ import { SettingsView } from "@/components/settings/SettingsView";
 import { SettingsSection } from "@/types";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
+import { isVisibleElement } from "@/lib/focusVisibility";
 
 /**
  * 设置中心 Modal：居中弹层，固定宽高（桌面 ≈1040×740）。
@@ -51,13 +52,13 @@ export function SettingsModal() {
     if (!isOpen) return;
     const focusSearch = () => {
       const stored = searchInputRef.current;
-      if (stored && stored.offsetParent !== null) {
+      if (stored && isVisibleElement(stored)) {
         stored.focus();
         return;
       }
       // 尺寸切换后 ref 可能指向隐藏输入框：回退查找当前可见的搜索框
       const visible = document.querySelector<HTMLInputElement>('input[aria-label="搜索设置"]');
-      if (visible && visible.offsetParent !== null) visible.focus();
+      if (visible && isVisibleElement(visible)) visible.focus();
     };
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {

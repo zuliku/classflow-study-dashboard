@@ -75,9 +75,9 @@ test("输入守卫：输入框聚焦时 N / ? / / 不触发全局命令", async 
   // 输入框内容应为 "n?"
   await expect(page.getByRole("textbox", { name: "命令中心搜索" })).toHaveValue("n?");
 
-  // Esc 关闭后（等退出动画结束、焦点归位），? 才真正打开指南
+  // Esc 关闭后（等退出卸载完成、焦点归位），? 才真正打开指南
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
+  await expect(page.getByTestId("command-center")).toHaveCount(0);
   await page.keyboard.press("?");
   await expect(page.getByText("键盘快捷键")).toBeVisible();
   await expect(page.getByText("打开命令中心")).toBeVisible();
@@ -101,7 +101,7 @@ test("单键快捷键关闭：N/? 不触发，Cmd+K 与 Cmd+, 仍生效", async 
     "false"
   );
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
+  await expect(page.getByTestId("settings-view")).toHaveCount(0);
 
   // N 不再触发新建任务
   await page.keyboard.press("n");
@@ -114,7 +114,7 @@ test("单键快捷键关闭：N/? 不触发，Cmd+K 与 Cmd+, 仍生效", async 
   await page.keyboard.press("Control+k");
   await expect(page.getByTestId("command-center")).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
+  await expect(page.getByTestId("command-center")).toHaveCount(0);
 
   // Cmd/Ctrl+, 打开设置
   await page.keyboard.press("Control+,");

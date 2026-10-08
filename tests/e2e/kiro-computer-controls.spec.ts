@@ -56,9 +56,8 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
 
   // 6. Settings → Agent 与权限：Computer ON + 模式 = 计划（同一 store）
   await page.locator("aside").first().getByRole("button", { name: "设置" }).first().click();
-  await page.waitForTimeout(700);
+  await expect(page.getByRole("navigation", { name: "设置导航" })).toBeVisible();
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Agent 与权限" }).click();
-  await page.waitForTimeout(400);
   await expect(page.getByTestId("settings-kiro-agent")).toBeVisible();
   const agentToggle = page.getByRole("switch", { name: "允许 Kiro 操作文件" });
   await expect(agentToggle).toHaveAttribute("aria-checked", "true");
@@ -81,15 +80,13 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
 
   // 7. Settings → Kiro：思考程度可调（deepseek-v4-flash 支持 thinking；与 Composer 同一 store）
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro" }).click();
-  await page.waitForTimeout(400);
   await expect(page.getByTestId("settings-kiro").getByText("思考程度", { exact: true })).toBeVisible();
   await expect(page.getByTestId("settings-kiro").getByText("当前模型不可调")).toHaveCount(0);
 
   // 8. 返回 Kiro：状态仍一致（Composer ↔ Settings 同一 store）
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
+  await expect(page.getByTestId("settings-view")).toHaveCount(0);
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
-  await page.waitForTimeout(600);
   await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "true");
   await expect(composer.getByRole("button", { name: "权限模式" })).toContainText("计划");
 
@@ -98,9 +95,9 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
 
   // 9b. Workspace Management：删除最后一个 Sandbox → row 消失 + 允许 Kiro 操作文件 OFF
   await page.locator("aside").first().getByRole("button", { name: "设置" }).first().click();
-  await page.waitForTimeout(700);
+  await expect(page.getByRole("navigation", { name: "设置导航" })).toBeVisible();
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Agent 与权限" }).click();
-  await page.waitForTimeout(400);
+  await expect(page.getByTestId("settings-kiro-agent")).toBeVisible();
   await workspaceRows.first().getByRole("button", { name: /删除工作区/ }).click();
   const confirmDialog = page.getByRole("alertdialog");
   await expect(confirmDialog).toContainText("删除 Kiro 内置工作区");
@@ -113,9 +110,8 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
 
   // 10. Responsive sanity：1100×700 下 Composer/Send 可见，权限菜单仍在 viewport 内
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
+  await expect(page.getByTestId("settings-view")).toHaveCount(0);
   await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
-  await page.waitForTimeout(600);
   // 删除后 Computer OFF；重新打开走 canonical Sandbox 引导（再次创建且仅一个）
   await expect(composer.getByRole("button", { name: "Computer" })).toHaveAttribute("aria-pressed", "false");
   await composer.getByRole("button", { name: "Computer" }).click();

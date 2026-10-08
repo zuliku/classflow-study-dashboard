@@ -648,7 +648,7 @@ function EditQQDialog({ open, target, onOpenChange, onSaved }: { open: boolean; 
         </div>
         <div><Field label="允许用户"><Input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} data-testid="qq-edit-allowed-users" /></Field></div>
         <div><Field label="允许群"><Input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} data-testid="qq-edit-allowed-groups" /></Field></div>
-        {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
+        {error && <InlineErrorState>{error}</InlineErrorState>}
         <div className="flex items-center gap-2">
           <div className="flex-1" />
           <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>取消</Button>

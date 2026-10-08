@@ -7,6 +7,7 @@ import { AppCommand } from "@/lib/commands";
 import { computeContextMenuPosition } from "@/lib/contextMenuPosition";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS } from "@/lib/motion";
+import { isVisibleElement } from "@/lib/focusVisibility";
 import { cn } from "@/lib/utils";
 
 /**
@@ -278,8 +279,9 @@ export function AssignmentContextMenu({
         e.preventDefault();
         const root = menuRef.current;
         if (!root) return;
+        // 可见性走统一口径（fixed 定位下 offsetParent 为 null，不可用布局判断）
         const items = Array.from(root.querySelectorAll<HTMLButtonElement>("button:not([disabled])")).filter(
-          (el) => el.getClientRects().length > 0
+          (el) => isVisibleElement(el)
         );
         if (items.length === 0) return;
         const idx = items.indexOf(document.activeElement as HTMLButtonElement);

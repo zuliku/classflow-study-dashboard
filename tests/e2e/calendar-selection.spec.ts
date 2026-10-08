@@ -37,13 +37,17 @@ test("Calendar：indicator 唯一，点击日期后移动到新位置且 agenda 
   const before = await indicator.boundingBox();
   expect(before!.width).toBeGreaterThan(0);
 
-  // 点击 3 天后：indicator 位置移动
+  // 点击 3 天后：indicator 位置移动（poll 位移，不硬等过渡时长）
   await page.locator(`[data-calendar-day="${target}"]`).click();
   await expect(indicator).toHaveCount(1);
   await expect(page.locator("[data-selected-date]")).toHaveAttribute("data-selected-date", target);
-  await page.waitForTimeout(300); // 等 180ms 过渡结束
-  const after = await indicator.boundingBox();
-  expect(Math.abs(after!.x - before!.x) + Math.abs(after!.y - before!.y)).toBeGreaterThan(0);
+  await expect
+    .poll(async () => {
+      const box = await indicator.boundingBox();
+      if (!box || !before) return 0;
+      return Math.abs(box.x - before.x) + Math.abs(box.y - before.y);
+    })
+    .toBeGreaterThan(0);
 
   // agenda 内容对应目标日期
   const [, m, d] = target.split("-").map(Number);

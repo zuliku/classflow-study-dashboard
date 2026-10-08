@@ -2,6 +2,7 @@
 
 import React from "react";
 import { PopoverPanel, PopoverPanelProps } from "@/components/ui/Popover";
+import { isVisibleElement } from "@/lib/focusVisibility";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,7 +18,8 @@ function focusMenuItem(container: HTMLElement | null, dir: 1 | -1 | "first" | "l
     container.querySelectorAll<HTMLButtonElement>(
       '[role="menuitem"]:not([disabled]),[role="menuitemradio"]:not([disabled])'
     )
-  ).filter((el) => el.offsetParent !== null || el.getClientRects().length > 0);
+    // 可见性走统一口径（不查 offsetParent/rects：jsdom 无布局，fixed 祖先下也误杀）
+  ).filter((el) => isVisibleElement(el));
   if (items.length === 0) return;
   const active = document.activeElement as HTMLElement | null;
   const idx = active ? items.indexOf(active as HTMLButtonElement) : -1;

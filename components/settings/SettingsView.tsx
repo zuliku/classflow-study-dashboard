@@ -23,6 +23,7 @@ import {
   SETTING_IDS,
 } from "@/lib/settingsRegistry";
 import { runRegistryDomValidation } from "@/lib/settingsRegistryValidation";
+import { isVisibleElement } from "@/lib/focusVisibility";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
@@ -49,7 +50,7 @@ interface SettingsViewProps {
 /** 绑定 ref 时只保留可见的搜索框（桌面/移动各渲染一个，另一个 display:none 会覆盖 ref） */
 function bindVisibleSearchInput(ref: React.Ref<HTMLInputElement>) {
   return (el: HTMLInputElement | null) => {
-    if (!el || el.offsetParent !== null) {
+    if (!el || isVisibleElement(el)) {
       if (typeof ref === "function") ref(el);
       else if (ref && typeof ref === "object" && "current" in ref) {
         (ref as React.MutableRefObject<HTMLInputElement | null>).current = el;

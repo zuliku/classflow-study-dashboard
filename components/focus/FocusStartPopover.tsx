@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Play } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { InlineErrorState } from "@/components/ui/InlineErrorState";
 import { Popover, PopoverPanel } from "@/components/ui/Popover";
 import { FOCUS_MAX_PLANNED_MINUTES, FOCUS_MIN_PLANNED_MINUTES } from "@/lib/focus/focusDomain";
 import { FOCUS_ERROR_MESSAGES, FOCUS_PRESETS } from "@/lib/focus/focusView";
@@ -112,7 +113,11 @@ export function FocusStartPopover({
                 className="h-7 w-[76px] rounded-lg border border-line-strong bg-surface px-2 text-[11px] font-bold text-charcoal outline-none focus:border-charcoal"
               />
             </div>
-            {error && <p className="mt-1 text-[11px] font-semibold text-danger">{error}</p>}
+            {error && (
+              <InlineErrorState className="mt-1 border-0 bg-transparent px-0 py-0 text-[11px]">
+                {error}
+              </InlineErrorState>
+            )}
           </div>
 
           <input

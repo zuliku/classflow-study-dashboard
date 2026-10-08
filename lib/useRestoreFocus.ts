@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isVisibleElement } from "@/lib/focusVisibility";
 
 /**
  * 打开 Overlay 时记录触发元素，关闭后把焦点还给它，
@@ -8,18 +9,12 @@ import { useEffect, useRef } from "react";
  * - open=true 且 restoreKey 变化（如详情从 Task A 切到 Task B）→ 在安全条件下把 opener
  *   更新为“最近一次导致实体切换的可聚焦 trigger”，关闭后焦点回到当前实体，而非旧实体。
  * - 不提供 restoreKey 的 consumer：行为与旧版完全一致（只在 open 变化时记录）。
- * 安全条件：activeElement 是有效 HTMLElement 且不是 body。
+ * 可见性走统一口径（lib/focusVisibility），与 useFocusTrap 同轨。
  */
 function isFocusableTarget(el: HTMLElement | null): el is HTMLElement {
   if (!el || el === document.body) return false;
   if ((el as HTMLButtonElement).disabled) return false;
-  if (el.closest("[inert],[hidden],[aria-hidden='true']")) return false;
-  try {
-    const style = getComputedStyle(el);
-    if (style.display === "none" || style.visibility === "hidden") return false;
-  } catch {
-    return false;
-  }
+  if (!isVisibleElement(el)) return false;
   return typeof el.focus === "function";
 }
 

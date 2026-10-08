@@ -1,4 +1,5 @@
 import React from "react";
+import { isVisibleElement, isFieldsetDisabled } from "@/lib/focusVisibility";
 
 /**
  * 焦点陷阱（命令面板 / Modal 可选启用）：
@@ -17,21 +18,9 @@ const FOCUSABLE_SELECTOR =
 
 export function getFocusableElements(root: HTMLElement): HTMLElement[] {
   const all = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-  return all.filter((el) => {
-    if (el.closest("[hidden], [aria-hidden='true']")) return false;
-    // P1 无障碍：fieldset[disabled] 内仍可被 Tab 到 → 排除（选择器只排除了自身 disabled）
-    if (el.closest("fieldset[disabled]")) return false;
-    // 计算样式隐藏（内联 style="display:none" / visibility:hidden 及 CSS 类隐藏）
-    // 注意：jsdom 无布局（getClientRects 恒为空），不得以 rect/offsetParent 判可见，否则测试与 SSR 全灭；
-    // 仅以计算样式为准，真实浏览器 display:none 也会被 getComputedStyle 捕获。
-    try {
-      const style = typeof getComputedStyle === "function" ? getComputedStyle(el) : null;
-      if (style && (style.visibility === "hidden" || style.display === "none")) return false;
-    } catch {
-      /* jsdom/旧环境无 getComputedStyle：忽略，按可见处理 */
-    }
-    return true;
-  });
+  // 可见性走统一口径（lib/focusVisibility）：hidden/aria-hidden/inert + 计算样式，
+  // 不查 offsetParent/rects（jsdom 无布局恒空，fixed/transform 祖先下也为 null，会误杀）
+  return all.filter((el) => isVisibleElement(el) && !isFieldsetDisabled(el));
 }
 
 export function useFocusTrap(

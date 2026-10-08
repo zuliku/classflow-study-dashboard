@@ -12,6 +12,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Field } from "@/components/ui/Field";
+import { InlineErrorState } from "@/components/ui/InlineErrorState";
 import { SkillDistillDialog } from "@/components/kiro/SkillDistillDialog";
 import { ChannelSettings } from "@/components/settings/ChannelSettings";
 import { extractWorkflowTrace } from "@/lib/ai/skills/workflowTrace";
@@ -777,7 +778,7 @@ function McpAddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenCh
             {testResult.ok && (testResult as { tools?: unknown[] }).tools && <p className="text-[11px] font-normal mt-1">{(testResult as { tools?: unknown[] }).tools?.length ?? 0} 个工具已发现</p>}
           </div>
         )}
-        {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}
+        {error && <InlineErrorState>{error}</InlineErrorState>}
         <div className="flex items-center gap-2">
           <Button type="button" variant="secondary" size="sm" onClick={handleTest} data-testid="mcp-test">测试连接</Button>
           <div className="flex-1" />
@@ -1115,9 +1116,9 @@ function SkillEditorDialog({
           </p>
         </Field>
         {error && (
-          <p data-testid="skill-editor-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">
+          <InlineErrorState testid="skill-editor-error">
             {error}
-          </p>
+          </InlineErrorState>
         )}
         <div className="flex items-center justify-between gap-2 pt-1">
           <Button
