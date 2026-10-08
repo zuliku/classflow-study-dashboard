@@ -253,8 +253,17 @@ function worklogTimelinePropsEqual(
  * Assistant 任一可见 part（content / worklog / action）出现后自动消失，绝不与消息 Logo 同时出现。
  * V4.6：与 KiroMessage 共用 KiroAssistantShell（geometry 一致），无 animate-enter（transient
  * system state 不需要 200ms slide/fade——真实事件到达即展示）。
+ * 心跳：挂载起 1s tick 显示已等待秒数（长 reasoning 首 token 前数分钟零反馈 → 有计时可感知存活；
+ * 仅本小组件重渲染；首 token 到达即卸载，不影响流式）。
  */
 export function KiroPendingIndicator() {
+  const mountedAtRef = React.useRef<number>(Date.now());
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const waitedSec = Math.max(0, Math.floor((Date.now() - mountedAtRef.current) / 1000));
   return (
     <KiroAssistantShell>
       <div
@@ -264,7 +273,9 @@ export function KiroPendingIndicator() {
         aria-atomic="true"
         className="flex items-center gap-1.5"
       >
-        <span className="text-xs font-medium text-charcoal">正在准备</span>
+        <span className="text-xs font-medium text-charcoal">
+          正在准备{waitedSec >= 3 ? ` · 已等待 ${waitedSec} 秒` : ""}
+        </span>
         <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />
       </div>
     </KiroAssistantShell>

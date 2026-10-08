@@ -52,7 +52,7 @@ function cellTitle(day: MomentumDay): string {
  */
 export function AnalyticsMomentum() {
   const [open, setOpen] = useState(true);
-  const { data, loading, error } = useStudyMomentum();
+  const { data, loading, error, refresh } = useStudyMomentum();
   const columns = useHeatColumns(data?.days ?? []);
   // 每列月份刻度（与前列同月则省略，保持 GitHub 式稀疏标注）
   const monthLabels = useMemo(
@@ -71,7 +71,40 @@ export function AnalyticsMomentum() {
     return out;
   }, [monthLabels]);
 
-  if (error || (!loading && !data)) return null;
+  // error/空数据不再静默消失（与前瞻/历史 error→文案+重试同语言；refresh 已接线）
+  if (error || (!loading && !data)) {
+    return (
+      <section>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="w-full flex items-center justify-between mb-3 text-left group"
+        >
+          <h2 className="text-[13px] font-bold text-charcoal">学习动量</h2>
+          <ChevronDown
+            className={cn(
+              "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
+              !open && "-rotate-90"
+            )}
+            aria-hidden="true"
+          />
+        </button>
+        <DisclosureRegion open={open}>
+          <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-danger">学习动量加载失败，请稍后重试。</p>
+            <button
+              type="button"
+              onClick={() => refresh()}
+              className="h-7 px-3 rounded-lg bg-surface border border-line text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors"
+            >
+              重试
+            </button>
+          </div>
+        </DisclosureRegion>
+      </section>
+    );
+  }
 
   return (
     <section>
@@ -186,6 +219,12 @@ export function AnalyticsMomentum() {
                   </span>
                 </div>
               </div>
+              {/* 全零空态弱提示（84 天全 0 时热力空白，给一个开始入口而非沉默数字） */}
+              {data.activeDays === 0 && data.totalMinutes === 0 && (
+                <p className="text-[11px] text-sandrift">
+                  完成 1 个任务或一次专注，热力图即开始点亮。
+                </p>
+              )}
             </div>
           )}
         </div>
