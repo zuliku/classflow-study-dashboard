@@ -195,7 +195,7 @@ async function openAnalytics(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "学习洞察" }).first().click();
   await expect(page.getByRole("heading", { name: "学习洞察" })).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(800); // snapshot 计算 + 动画
+  // 后续断言均为语义可见性（自带等待），不再硬等 snapshot/动画时长
 }
 
 demoTest("本周指标：专注/完成任务/计划/按时率 + 对比 + 信号", async ({ page }) => {
@@ -233,7 +233,6 @@ demoTest("近 4 周 range：coverage 提示出现、对比/信号消失", async 
 
   // 切到近 4 周
   await page.getByRole("button", { name: "近 4 周" }).click();
-  await page.waitForTimeout(800);
 
   // current.from（28d 前）早于 historyStartedAt → 提示可见（V3 文案）
   await expect(visibleText(page, /部分历史记录不完整/)).toBeVisible();
@@ -243,9 +242,9 @@ demoTest("近 4 周 range：coverage 提示出现、对比/信号消失", async 
   await expect(visibleText(page, /↑ 25%/)).toHaveCount(0);
   await expect(visibleText(page, /专注投入增加/)).toHaveCount(0);
 
-  // 切回本周 → 提示消失
+  // 切回本周 → 提示消失（先等肯定信号落定，再断言缺席，避免与切换竞速）
   await page.getByRole("button", { name: "本周" }).click();
-  await page.waitForTimeout(800);
+  await expect(visibleText(page, /完成任务/)).toBeVisible();
   await expect(page.getByTestId("analytics-coverage-notice")).toHaveCount(0);
 });
 

@@ -169,7 +169,7 @@ async function openAnalytics(page: Page) {
   await page.reload();
   await page.getByRole("button", { name: "学习洞察" }).first().click();
   await expect(page.getByRole("heading", { name: "学习洞察" })).toBeVisible({ timeout: 20000 });
-  await page.waitForTimeout(1500);
+  await expect(page.getByTestId("analytics-body")).toBeVisible();
 }
 
 demoTest("Outlook → 优化已有计划 → Rebalance Proposal → 预览 Ghost → Apply（ID 保持）→ Undo（恢复）", async ({ page }) => {
@@ -237,9 +237,8 @@ demoTest("Outlook → 优化已有计划 → Rebalance Proposal → 预览 Ghost
   });
   expect(afterPreviewBlock?.date).toBe(beforeBlock?.date); // preview 不写 Store
 
-  // 回洞察 → Apply → Confirm
+  // 回洞察 → Apply → Confirm（卡片自带等待，后续断言语义化，不硬等）
   await page.getByRole("button", { name: "学习洞察" }).first().click();
-  await page.waitForTimeout(800);
   const cardAgain = page.getByTestId("study-rebalance-proposal").filter({ visible: true }).first();
   await expect(cardAgain).toBeVisible({ timeout: 10000 });
   await cardAgain.getByTestId("study-rebalance-apply").click();
@@ -295,20 +294,20 @@ demoTest("Outlook → 优化已有计划 → Rebalance Proposal → 预览 Ghost
   });
   expect(updatedKiro.some((e) => e.source === "kiro" && e.entityId === "sb1")).toBe(true);
 
-  // Undo（toast 撤销）→ 同一 ID 恢复原位置
+  // Undo（toast 撤销）→ 同一 ID 恢复原位置（poll 存储落定，不硬等）
   await page.getByRole("button", { name: "撤销" }).first().click();
-  await page.waitForTimeout(800);
-  const afterUndo = await page.evaluate(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("classflow-storage-v2") ?? "{}") as {
-        state?: { studyBlocks?: { id: string; date: string; startTime: string }[] };
-      };
-      return (stored.state?.studyBlocks ?? []).find((b) => b.id === "sb1");
-    } catch {
-      return null;
-    }
-  });
-  expect(afterUndo?.date).toBe(beforeBlock!.date);
-  expect(afterUndo?.startTime).toBe(beforeBlock!.startTime);
+  const readSb1 = () =>
+    page.evaluate(() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("classflow-storage-v2") ?? "{}") as {
+          state?: { studyBlocks?: { id: string; date: string; startTime: string }[] };
+        };
+        return (stored.state?.studyBlocks ?? []).find((b) => b.id === "sb1") ?? null;
+      } catch {
+        return null;
+      }
+    });
+  await expect.poll(async () => (await readSb1())?.date ?? null, { timeout: 10000 }).toBe(beforeBlock!.date);
+  await expect.poll(async () => (await readSb1())?.startTime ?? null, { timeout: 10000 }).toBe(beforeBlock!.startTime);
   await sse.close();
 });

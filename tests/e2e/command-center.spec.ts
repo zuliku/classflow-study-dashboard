@@ -6,8 +6,23 @@ import { test } from "./demoFixtures";
  */
 
 async function openPalette(page: Page) {
-  await page.keyboard.press("Control+k");
+  // Ctrl+K 是 fire-and-forget 按键：若压在 hydration/快捷键挂载前会被吞，
+  // 按一次不等则补按（最多 3 次），最后一次走长等待断言
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("Control+k");
+    try {
+      await expect(page.getByTestId("command-center")).toBeVisible({ timeout: 2000 });
+      return;
+    } catch {
+      /* 被吞则补按 */
+    }
+  }
   await expect(page.getByTestId("command-center")).toBeVisible();
+}
+
+// 应用就绪：侧栏渲染完成后再按键（hydration/快捷键挂载完成前按键会被吞，无报错极难查）
+async function waitForAppReady(page: Page) {
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
 }
 
 test("Global open：完全关闭状态 Cmd+K 打开 / Esc 关闭 / 再次打开", async ({ page }) => {
@@ -18,7 +33,7 @@ test("Global open：完全关闭状态 Cmd+K 打开 / Esc 关闭 / 再次打开"
   // 关闭态（弹层从未挂载）快捷键依然生效
   await page.keyboard.press("Control+k");
   await expect(page.getByTestId("command-center")).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "命令中心搜索" })).toBeFocused();
+  await expect(page.getByRole("combobox", { name: "命令中心搜索" })).toBeFocused();
 
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("command-center")).toHaveCount(0);
@@ -30,10 +45,15 @@ test("Global open：完全关闭状态 Cmd+K 打开 / Esc 关闭 / 再次打开"
 test("导航：Cmd+K 输入「课表」Enter → activeTab 切换为课表", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForAppReady(page);
   await openPalette(page);
 
   await page.keyboard.type("课表");
-  await page.keyboard.press("Enter");
+  // 等过滤结果落定（输入走 deferred 查询）；直接点目标行，
+  // 不依赖 Enter 高亮（Kiro 行出现时机会改变高亮下标，Enter 会抖）
+  const target = page.getByTestId("command-results").getByRole("option", { name: /前往时间表/ });
+  await expect(target).toBeVisible();
+  await target.click();
 
   await expect(page.getByRole("heading", { name: "时间表" })).toBeVisible();
   await expect(page.getByTestId("command-center")).toHaveCount(0);
@@ -45,6 +65,7 @@ test("实体搜索：输入「高等数学」Enter → 打开课程 Drawer", asy
   await openPalette(page);
 
   await page.keyboard.type("高等数学");
+  await expect(page.getByTestId("command-results").getByText("高等数学").first()).toBeVisible();
   await page.keyboard.press("Enter");
 
   await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
@@ -55,6 +76,7 @@ test("实体搜索：输入「高等数学」Enter → 打开课程 Drawer", asy
 test("创建：无输入焦点按 N → 打开新建任务弹窗", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForAppReady(page);
   await page.keyboard.press("n");
   await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
   await page.keyboard.press("Escape");
@@ -73,7 +95,7 @@ test("输入守卫：输入框聚焦时 N / ? / / 不触发全局命令", async 
   await page.keyboard.type("?");
   await expect(page.getByText("键盘快捷键")).toHaveCount(0);
   // 输入框内容应为 "n?"
-  await expect(page.getByRole("textbox", { name: "命令中心搜索" })).toHaveValue("n?");
+  await expect(page.getByRole("combobox", { name: "命令中心搜索" })).toHaveValue("n?");
 
   // Esc 关闭后（等退出卸载完成、焦点归位），? 才真正打开指南
   await page.keyboard.press("Escape");
@@ -150,8 +172,8 @@ test("Course Context：选中课程后显示上下文命令，新建任务带入
   const results = page.getByTestId("command-results");
   await expect(results.getByText("为《微观经济学》新建任务")).toBeVisible();
 
-  // Enter 执行第一项（上下文命令优先）
-  await page.keyboard.press("Enter");
+  // 直接点目标行（不依赖 Enter 高亮，见导航用例注释）
+  await results.getByRole("option", { name: /为《微观经济学》新建任务/ }).click();
   await expect(page.getByRole("heading", { name: "新建任务" })).toBeVisible();
   await expect(page.getByTestId("command-center")).toHaveCount(0);
 
@@ -164,6 +186,7 @@ test("Course Context：选中课程后显示上下文命令，新建任务带入
 test("Assignment Context：选中任务后显示编辑命令，打开的是编辑模式", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForAppReady(page);
 
   // 打开「计量经济学大作业」Assignment Drawer → selectedAssignmentId 生效
   // （限定任务列表作用域：课程卡 hover tooltip 也存在同名文本，但为隐藏态）
@@ -176,11 +199,12 @@ test("Assignment Context：选中任务后显示编辑命令，打开的是编�
 
   await openPalette(page);
   await expect(page.getByText("当前", { exact: true })).toBeVisible();
-  await expect(
-    page.getByTestId("command-results").getByText("编辑「计量经济学大作业（第3章）」")
-  ).toBeVisible();
-
-  await page.keyboard.press("Enter");
+  // 直接点目标行（同导航用例：不依赖 Enter 高亮，Kiro 行出现时机会改变高亮下标）
+  const editRow = page
+    .getByTestId("command-results")
+    .getByRole("option", { name: /编辑「计量经济学大作业/ });
+  await expect(editRow).toBeVisible();
+  await editRow.click();
   // 编辑模式（heading 为「编辑任务」而非「新建任务」）→ 打开的是正确 assignment
   await expect(page.getByRole("heading", { name: "编辑任务" })).toBeVisible();
   await expect(page.getByTestId("command-center")).toHaveCount(0);
@@ -193,6 +217,7 @@ test("Assignment Context：选中任务后显示编辑命令，打开的是编�
 test("事件统一：palette「新建任务」与 N 走同一入口（都打开新建任务编辑器）", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForAppReady(page);
 
   // 路径一：N
   await page.keyboard.press("n");

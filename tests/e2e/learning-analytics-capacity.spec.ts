@@ -154,7 +154,7 @@ async function openAnalytics(page: Page) {
   await page.reload();
   await page.getByRole("button", { name: "学习洞察" }).first().click();
   await expect(page.getByRole("heading", { name: "学习洞察" })).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(1500);
+  await expect(page.getByTestId("analytics-body")).toBeVisible();
 }
 
 demoTest("容量 UI：需求 4h / 普通时间尚缺 1h / 放宽课程约束后仍缺 1h；一个任务容量不足；最早容量缺口条", async ({ page }) => {

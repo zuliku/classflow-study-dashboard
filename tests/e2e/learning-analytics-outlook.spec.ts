@@ -122,7 +122,7 @@ async function openAnalytics(page: Page) {
   await page.reload();
   await page.getByRole("button", { name: "学习洞察" }).first().click();
   await expect(page.getByRole("heading", { name: "学习洞察" })).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(1200);
+  await expect(page.getByTestId("analytics-body")).toBeVisible();
 }
 
 demoTest("学习前瞻 UI：demo 全部缺估时 → 5 个截止任务 · 5 个缺估时 · 缺估时行文案", async ({ page }) => {

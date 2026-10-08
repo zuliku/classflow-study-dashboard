@@ -259,7 +259,7 @@ async function openAnalytics(page: Page) {
   await page.reload();
   await page.getByRole("button", { name: "学习洞察" }).first().click();
   await expect(page.getByRole("heading", { name: "学习洞察" })).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(800);
+  await expect(page.getByTestId("analytics-body")).toBeVisible();
 }
 
 function toolCallSSE(toolCallId: string, toolName: string, input: Record<string, unknown>): string[] {
@@ -427,17 +427,18 @@ demoTest("本周回顾 → 规划下周：进入已有 Planning Pipeline；Apply
   await proposalCard.getByTestId("study-plan-apply").click();
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect(page.getByText(/已创建 \d+ 个学习时段/).first()).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(500);
-  const studyBlocksAfterApply = await page.evaluate(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("classflow-storage-v2") ?? "{}") as {
-        state?: { studyBlocks?: unknown[] };
-      };
-      return (stored.state?.studyBlocks ?? []).length;
-    } catch {
-      return -1;
-    }
-  });
-  expect(studyBlocksAfterApply).toBeGreaterThan(studyBlocksBefore);
+  // 写入落盘 poll（persist 为同步直写，poll 到数变即走，不硬等）
+  const readBlockCount = () =>
+    page.evaluate(() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("classflow-storage-v2") ?? "{}") as {
+          state?: { studyBlocks?: unknown[] };
+        };
+        return (stored.state?.studyBlocks ?? []).length;
+      } catch {
+        return -1;
+      }
+    });
+  await expect.poll(readBlockCount, { timeout: 10000 }).toBeGreaterThan(studyBlocksBefore);
   await sse.close();
 });
