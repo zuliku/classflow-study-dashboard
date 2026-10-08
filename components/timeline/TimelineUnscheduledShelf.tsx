@@ -5,7 +5,7 @@ import { ChevronDown, GripVertical, CalendarPlus } from "lucide-react";
 import { Assignment } from "@/types";
 import { usePresence } from "@/lib/usePresence";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
-import { MOTION_EXIT_MS } from "@/lib/motion";
+import { MOTION_EXIT_MS, EASE } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -48,10 +48,10 @@ export function TimelineUnscheduledShelf({
     fromHeightRef.current = 0;
     const to = el.offsetHeight;
     if (!from || Math.abs(to - from) < 2) return;
-    // 与 --motion-base（180ms）/ --ease-standard 同源（WAAPI 不解析 var()，此处抄值并注明）
+    // 与 --motion-base（180ms）/ --ease-standard 同源（WAAPI 不解析 var()，引用 EASE 真值）
     const anim = el.animate([{ height: `${from}px` }, { height: `${to}px` }], {
       duration: 180,
-      easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+      easing: EASE.standard,
     });
     return () => anim.cancel();
   }, [expanded, reducedMotion]);

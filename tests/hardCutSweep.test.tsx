@@ -158,18 +158,7 @@ describe("硬切深筛源码契约", () => {
     expect(src).not.toMatch(/\{attachments\.length > 0 && \(\s*<div/);
   });
 
-  it("Composer ＋菜单：常挂载受控 presence（关闭播退出，不硬卸）", () => {
-    const src = read("components/kiro/KiroComposer.tsx");
-    expect(src).toContain('open={openMenu === "add"}');
-    expect(src).not.toMatch(/\{\s*openMenu === "add" && \(\s*<PopoverPanel/);
-  });
-
-  it("建议条：presence + 折叠退场 + 进入淡入（发送消费不硬切顶布局）", () => {
-    const src = read("components/kiro/KiroContextSuggestions.tsx");
-    expect(src).toContain("usePresence(open, MOTION_EXIT_MS.panel)");
-    expect(src).toContain("ExitCollapse");
-    expect(src).toContain("animate-enter");
-  });
+  // ＋菜单常挂载 + 建议条 presence/折叠（motionContract 同锁，此处不重复）：见 motionContract.test.tsx P2/P3 段
 
   it("深度 Batch1：Kiro 消息/会话/导航/历史/检查器对称进退", () => {
     const message = read("components/kiro/KiroMessage.tsx");
@@ -195,6 +184,13 @@ describe("硬切深筛源码契约", () => {
     expect(mini).toContain("noticePresence.mounted");
     expect(mini).toContain("leavingFileKeys");
     expect(mini).toContain("busyPresence.mounted");
+    // Batch4 唯一增量（其余与 Batch1/motionContract 重复，已并入此处，Batch4 整 it 已删）
+    const artifacts = read("components/kiro/computer/KiroRecentArtifactsPopover.tsx");
+    expect(artifacts).toContain("panelPresence.mounted");
+    const lightbox = read("components/kiro/KiroMarkdown.tsx");
+    expect(lightbox).toContain("lightboxPresence.mounted");
+    const importDialog = read("components/kiro/TimetableImportPreviewDialog.tsx");
+    expect(importDialog).toContain("dialogPresence.mounted");
   });
 
   it("深度 Batch2：工作区横幅/反馈/提醒行/抽屉对称进退", () => {
@@ -249,32 +245,7 @@ describe("硬切深筛源码契约", () => {
     expect(sidebar).toContain('key={String(effectiveCollapsed)}');
   });
 
-  it("深度 Batch4：会话/检查器/导航/历史/预览/终端/消息卡片", () => {
-    const session = read("components/kiro/computer/session/KiroComputerSessionSurface.tsx");
-    expect(session).toContain("animate-enter");
-    const inspector = read("components/kiro/inspector/KiroInspectorOutputs.tsx");
-    expect(inspector).toContain("DisclosureRegion open={showRecent}");
-    const sources = read("components/kiro/inspector/KiroInspectorSources.tsx");
-    expect(sources).toContain("animate-enter");
-    const thread = read("components/kiro/KiroThreadRow.tsx");
-    expect(thread).toContain("KiroMenuPanel");
-    const history = read("components/kiro/KiroHistoryPanel.tsx");
-    expect(history).toContain("resetKey: query");
-    const home = read("components/kiro/navigation/KiroNavigatorHome.tsx");
-    expect(home).toContain("DisclosureRegion open={showAllThreads}");
-    const terminal = read("components/kiro/computer/KiroTerminalBlock.tsx");
-    expect(terminal).toContain("transition-[max-height]");
-    const navigator = read("components/kiro/navigation/KiroNavigator.tsx");
-    expect(navigator).toContain("KIRO_MOTION_MS.popoverExit");
-    const inspectorShell = read("components/kiro/inspector/KiroInspector.tsx");
-    expect(inspectorShell).toContain("ease-[var(--ease-exit)]");
-    const artifacts = read("components/kiro/computer/KiroRecentArtifactsPopover.tsx");
-    expect(artifacts).toContain("panelPresence.mounted");
-    const lightbox = read("components/kiro/KiroMarkdown.tsx");
-    expect(lightbox).toContain("lightboxPresence.mounted");
-    const importDialog = read("components/kiro/TimetableImportPreviewDialog.tsx");
-    expect(importDialog).toContain("dialogPresence.mounted");
-  });
+  // 深度 Batch4 已并入 Batch1（仅 3 行增量，见上；其余与 Batch1/motionContract 重复，不双留）
 
   it("深度 Batch5：工作区横幅/反馈/提醒/表格/抽屉/历史/课表/弹层", () => {
     const grid = read("components/dashboard/TimetableGrid.tsx");

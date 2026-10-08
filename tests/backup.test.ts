@@ -148,3 +148,14 @@ describe("BackupSection 导出完整性回归", () => {
     expect(src).toContain("studyBlocks,");
   });
 });
+
+describe("validateBackup 版本区分（BatchK）", () => {
+  it("未来版本提示升级应用；旧版本提示重导", () => {
+    const newer = validateBackup({ version: 2, data: {} });
+    expect(newer.ok).toBe(false);
+    if (!newer.ok) expect(newer.error).toContain("升级");
+    const older = validateBackup({ version: 0, data: {} });
+    expect(older.ok).toBe(false);
+    if (!older.ok) expect(older.error).toContain("重新导出");
+  });
+});

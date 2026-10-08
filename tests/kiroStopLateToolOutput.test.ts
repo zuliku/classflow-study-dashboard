@@ -13,6 +13,9 @@ import { join } from "node:path";
  *
  * 修复契约：emitToolOutput 在 stoppedTurnMessageIdRef 非 null（用户已 Stop 本 turn）
  * 时直接丢弃回填；ref 由 handleStop 设置、下一次 send 重置。
+ * 哨兵补充（首 token 未到时尾消息还是 user，id 取不到正确值）：userStopFlagRef 与 id
+ * 守卫并联，Stop 武装、新发送解除；三处读取点（emitToolOutput/turnExecution/isCancelled）
+ * 与五处解除点同步维护。
  *
  * 注：useKiroChat 依赖完整 Kiro Session/Provider 环境，jsdom 下无法构造真实 hook
  * harness（仓库现状无对应测试基建），故本回归以源码契约锁实现结构；
@@ -29,8 +32,8 @@ describe("stop → late tool output guard", () => {
     const addIdx = body.indexOf("chat.addToolOutput");
     expect(dropIdx).toBeGreaterThan(-1);
     expect(addIdx).toBeGreaterThan(dropIdx);
-    // 早退 return 必须出现在 addToolOutput 之前
-    expect(body.slice(0, addIdx)).toMatch(/return;\s*\n\s*\/\/ V4\.6|if \(stoppedTurnMessageIdRef\.current !== null\) \{\s*\n\s*return;/);
+    // 早退 return 必须出现在 addToolOutput 之前（哨兵与 id 守卫并联，任一成立即丢弃）
+    expect(body.slice(0, addIdx)).toMatch(/return;\s*\n\s*\/\/ V4\.6|if \(stoppedTurnMessageIdRef\.current !== null(\s*\|\|\s*userStopFlagRef\.current)?\) \{\s*\n\s*return;/);
   });
 
   it("handleStop 负责置位 stopped ref；send/reset 路径负责清位", () => {
@@ -39,6 +42,17 @@ describe("stop → late tool output guard", () => {
     expect(stopFn![0]).toContain("stoppedTurnMessageIdRef.current =");
     // 至少存在多处 reset-to-null（新会话 / 新 send / conversation switch）
     expect(src.match(/stoppedTurnMessageIdRef\.current = null;/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
+  it("Stop 哨兵与 id 守卫并联：武装/解除/读取点齐全", () => {
+    // 武装：handleStop 置 true
+    expect(src).toContain("userStopFlagRef.current = true;");
+    // 解除：五处与 stopped ref 同步清 false（新 send/edit/retry/new/load）
+    const clears = src.match(/userStopFlagRef\.current = false;/g) ?? [];
+    expect(clears.length).toBeGreaterThanOrEqual(5);
+    // 读取：emitToolOutput 丢弃、turnExecution settled、isCancelled 三处并联
+    expect(src).toContain("stoppedTurnMessageIdRef.current !== null || userStopFlagRef.current");
+    expect(src).toContain("stoppedTurnMessageIdRef.current === live.id || userStopFlagRef.current");
   });
 
   it("fire-and-forget 工具执行器统一经 emitToolOutput 回填（守卫单点生效）", () => {
