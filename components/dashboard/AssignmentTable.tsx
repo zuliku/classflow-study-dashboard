@@ -304,7 +304,15 @@ export function AssignmentTable({
   const [ctxMenuOpen, setCtxMenuOpen] = useState(false);
   const lastCtxAnchorRef = useRef<{ anchorX: number; anchorY: number; ids: string[]; highlightedId: string | null } | null>(null);
   const handleListKeyDown = (e: React.KeyboardEvent) => {
-    if (e.target !== e.currentTarget) return;
+    // 焦点落在行内可交互元素（checkbox/按钮/输入框/菜单/弹窗）时让其原生处理；
+    // 行内文本/行容器本身则走列表键（此前 target!==currentTarget，焦点进 checkbox 后 J/K 全失灵）
+    const t = e.target as HTMLElement | null;
+    if (t && t !== e.currentTarget) {
+      const interactive = t.closest?.(
+        "input,button,select,textarea,a,[contenteditable='true'],[role='menu'],[role='dialog'],[role='menuitem']"
+      );
+      if (interactive) return;
+    }
     const k = e.key;
 
     // 单键快捷键关闭：只保留标准可访问键盘操作（方向键 / Home / End / Enter / Cmd+A / Esc）
@@ -506,10 +514,13 @@ export function AssignmentTable({
         onClick={(e) => handleRowClick(e, task.id)}
         onContextMenu={(e) => handleRowContextMenu(e, task.id)}
         onMouseEnter={() => {
-          if (isWorkspace) setHighlightedAssignmentId(task.id);
+          // 触屏 tap 会触发 mouseenter 抢键盘 highlight：仅真实 hover 设备跟随
+          if (isWorkspace && window.matchMedia?.("(hover: hover)").matches) {
+            setHighlightedAssignmentId(task.id);
+          }
         }}
-        role="button"
-        tabIndex={-1}
+        // 行容器是鼠标点击面，键盘走外层列表容器（J/K/Enter）；不声明 role=button，
+        // 否则读屏报“按钮”却永远 Tab 不到（tabIndex -1）
         data-assignment-id={task.id}
         className={cn(
           isWorkspace && compactDensity ? "p-2" : "p-3",
@@ -672,6 +683,7 @@ export function AssignmentTable({
               isWorkspace && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
             )}
             title="编辑任务"
+            aria-label={`编辑任务 ${task.title}`}
           >
             <Edit2 className="w-3.5 h-3.5" />
           </button>
@@ -686,6 +698,7 @@ export function AssignmentTable({
               isWorkspace && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
             )}
             title="删除任务"
+            aria-label={`删除任务 ${task.title}`}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

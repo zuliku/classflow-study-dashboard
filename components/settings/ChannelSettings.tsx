@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Field } from "@/components/ui/Field";
+import { InlineErrorState } from "@/components/ui/InlineErrorState";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Switch } from "@/components/ui/Switch";
 import { useToastStore } from "@/store/useToastStore";
@@ -428,7 +429,7 @@ function AddQQPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChan
       </div>
       <div><Field label="允许用户 QQ / OpenID（逗号分隔，空=不限制）"><Input value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} placeholder="user1, user2" data-testid="qq-add-allowed-users" /></Field></div>
       <div><Field label="允许群 ID（逗号分隔）"><Input value={allowedGroups} onChange={(e) => setAllowedGroups(e.target.value)} placeholder="group1, group2" data-testid="qq-add-allowed-groups" /></Field></div>
-      {error && <p data-testid="qq-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
+      {error && <InlineErrorState testid="qq-add-error">{error}</InlineErrorState>}
       <div className="flex items-center gap-2">
         <div className="flex-1" />
         <Button type="button" variant="primary" size="sm" onClick={handleSave} loading={saving} loadingLabel="保存中…" data-testid="qq-save">保存</Button>
@@ -487,7 +488,7 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
           <li>回复仅回复发件人，保持原线程</li>
         </ul>
       </div>
-      {error && <p data-testid="gmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
+      {error && <InlineErrorState testid="gmail-add-error">{error}</InlineErrorState>}
       <button type="button" onClick={handleConnect} disabled={saving} data-testid="gmail-connect-oauth" className="w-full h-10 bg-charcoal hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-60 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] ux-press">
         <Mail className="w-4 h-4" />{saving ? "正在打开授权页面…" : "连接 Gmail"}
       </button>
@@ -552,7 +553,7 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
         <p className="text-[11px] text-sandrift">仅读取收件箱 · 首次同步最近 7 天最多 50 封 · 之后每分钟自动同步 · 附件仅显示基本信息，不会自动下载</p>
         <p className="text-[11px] text-sandrift">获取授权码：QQ 邮箱 → 设置 → 账户 → 生成授权码</p>
       </div>
-      {error && <p data-testid="qqmail-add-error" className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2 animate-enter">{error}</p>}
+      {error && <InlineErrorState testid="qqmail-add-error">{error}</InlineErrorState>}
       <div className="flex items-center gap-2">
         <div className="flex-1" />
         <Button type="button" variant="primary" size="sm" onClick={handleSave} loading={saving} loadingLabel="保存中…" data-testid="qqmail-save">保存</Button>

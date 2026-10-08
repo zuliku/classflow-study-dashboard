@@ -91,13 +91,13 @@ async function openCourseDrawer(page: import("@playwright/test").Page) {
   return drawer;
 }
 
-base("A+B：课程 → Floating Course Hub（non-modal；宽度 ~500px）+ 首屏核心信息与主操作", async ({ page }) => {
+base("A+B：课程 → Floating Course Hub（真模态；宽度 ~500px）+ 首屏核心信息与主操作", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   const drawer = await openCourseDrawer(page);
 
-  // floating non-blocking contextual panel：不声明 aria-modal（背景可交互，不冒充 modal）
-  await expect(drawer).not.toHaveAttribute("aria-modal", "true");
+  // floating 亦为真模态（背景阻塞 + 焦点陷阱，与 Task/DDL 抽屉一致）
+  await expect(drawer).toHaveAttribute("aria-modal", "true");
 
   // 等 enter transition settle 后测量宽度（约 500px family）
   const panel = drawer;
@@ -453,29 +453,22 @@ base("O：Course Library V5 —— 同一 Grid row 等高（top/bottom/height �
  * 固定：c1 数据结构与算法 = 1 时段 · 7 任务 · 6 资料；c2 操作系统 = 1 时段 · 0 任务 · 0 资料。
  */
 
-base("P：A→B 切换 outer shell 不 remount；任意采样帧 header/body 同实体（无 mixed snapshot）", async ({ page }) => {
+base("P：A→B 切换走关闭→重开；任意采样帧 header/body 同实体（无 mixed snapshot）", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   const drawer = await openCourseDrawer(page);
   await expect(drawer.getByText("1 个时段 · 7 个任务 · 6 份资料", { exact: true })).toBeVisible();
 
-  // 标记 outer shell（若 remount，标记即丢失）
-  await drawer.evaluate((el) => {
-    (el as HTMLElement & { __ownershipProbe?: string }).__ownershipProbe = "same-shell";
-  });
-
-  // 背景点击 Course B（floating non-modal 保持背景可交互）
+  // 真模态下开着面板点不到背景任务：切换实体 = 关闭 → 点选 B → 重开（同一 shell 位复用）
+  await drawer.getByRole("button", { name: "关闭" }).click();
+  await expect(drawer).toHaveCount(0);
   await page.getByRole("button", { name: "操作系统", exact: true }).click();
-
-  // shell 必须仍是同一 DOM 节点
-  const stillSame = await drawer.evaluate((el) => {
-    return (el as HTMLElement & { __ownershipProbe?: string }).__ownershipProbe === "same-shell";
-  });
-  expect(stillSame).toBe(true);
+  const drawerB = page.getByRole("dialog", { name: "课程详情" });
+  await expect(drawerB).toBeVisible({ timeout: 8000 });
 
   // 连续采样整个 swap 过程：header 与 body 必须同实体；A 帧统计=6 份资料，B 帧=0 份资料
   await expect(async () => {
-    const f = await drawer.evaluate((el) => {
+    const f = await drawerB.evaluate((el) => {
       const scope = el as HTMLElement;
       const headerId = scope
         .querySelector("[data-displayed-course-id]")
@@ -495,35 +488,38 @@ base("P：A→B 切换 outer shell 不 remount；任意采样帧 header/body 同
   }).toPass({ timeout: 4000 });
 
   // settle 后：B Header/Body 一致、B 统计、无 A materials、A 任务消失
-  await expect(drawer.getByRole("heading", { name: "操作系统" })).toBeVisible();
-  await expect(drawer.locator('[data-testid="course-detail-body"]')).toHaveAttribute(
+  await expect(drawerB.getByRole("heading", { name: "操作系统" })).toBeVisible();
+  await expect(drawerB.locator('[data-testid="course-detail-body"]')).toHaveAttribute(
     "data-displayed-course-id",
     "c2"
   );
-  await expect(drawer.getByText("1 个时段 · 0 个任务 · 0 份资料", { exact: true })).toBeVisible();
-  await expect(drawer.getByText("第1章 讲义.pdf", { exact: true })).toHaveCount(0);
-  await expect(drawer.getByText("数据结构任务 1", { exact: true })).toHaveCount(0);
+  await expect(drawerB.getByText("1 个时段 · 0 个任务 · 0 份资料", { exact: true })).toBeVisible();
+  await expect(drawerB.getByText("第1章 讲义.pdf", { exact: true })).toHaveCount(0);
+  await expect(drawerB.getByText("数据结构任务 1", { exact: true })).toHaveCount(0);
 });
 
-base("Q：Reduced Motion：A→B 立即一致（无 stale interactive 窗口）", async ({ page }) => {
+base("Q：Reduced Motion：关闭→重开立即一致（无 stale interactive 窗口）", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   await page.emulateMedia({ reducedMotion: "reduce" });
   const drawer = await openCourseDrawer(page);
 
+  await drawer.getByRole("button", { name: "关闭" }).click();
+  await expect(drawer).toHaveCount(0);
   await page.getByRole("button", { name: "操作系统", exact: true }).click();
+  const drawerB = page.getByRole("dialog", { name: "课程详情" });
   // 立即（无 60ms）：Header/Body/统计全部 B
-  await expect(drawer.locator('[data-testid="course-detail-body"]')).toHaveAttribute(
+  await expect(drawerB.locator('[data-testid="course-detail-body"]')).toHaveAttribute(
     "data-displayed-course-id",
     "c2",
     { timeout: 1500 }
   );
-  await expect(drawer.getByRole("heading", { name: "操作系统" })).toBeVisible();
-  await expect(drawer.getByText("1 个时段 · 0 个任务 · 0 份资料", { exact: true })).toBeVisible();
-  await expect(drawer.getByText("第1章 讲义.pdf", { exact: true })).toHaveCount(0);
+  await expect(drawerB.getByRole("heading", { name: "操作系统" })).toBeVisible();
+  await expect(drawerB.getByText("1 个时段 · 0 个任务 · 0 份资料", { exact: true })).toBeVisible();
+  await expect(drawerB.getByText("第1章 讲义.pdf", { exact: true })).toHaveCount(0);
 });
 
-base("R：swap-out 期间旧 A 内容 non-interactive（inert + More disabled）；settle 后恢复", async ({ page }) => {
+base.fixme("R：swap-out 期间旧 A 内容 non-interactive（开着面板后台切换已下线，见 P）", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));
   // 冻结时钟：swap 的 60ms timer 由 fastForward 精确控制（pauseAt 后不再实时走动）

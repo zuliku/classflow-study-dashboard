@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { UISelect } from "@/components/ui/Select";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
+import { InlineErrorState } from "@/components/ui/InlineErrorState";
 import { getNewTaskDefaults } from "@/lib/taskDefaults";
 import { normalizeEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { cn } from "@/lib/utils";
@@ -225,9 +226,9 @@ export function QuickAddCard({
               <X className="w-3.5 h-3.5" />
             </button>
             {ddlError && (
-              <span role="alert" className="text-[11px] font-semibold text-danger">
+              <InlineErrorState className="text-[11px] font-semibold border-0 bg-transparent px-0 py-0">
                 {ddlError}
-              </span>
+              </InlineErrorState>
             )}
           </div>
         ) : (

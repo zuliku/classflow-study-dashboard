@@ -1197,6 +1197,11 @@ export function useKiroChat({
   const pendingAutoContinueRef = useRef(false);
   /** 用户 Stop 的 turn message id：其遗留的 pending tool part 不再视为 in-flight */
   const stoppedTurnMessageIdRef = useRef<string | null>(null);
+  /**
+   * 用户 Stop 哨兵（与 message id 互补）：首 token 未到时 messages 尾还是 user，
+   * id 守卫取不到正确 id 会失效；哨兵不依赖消息落盘，Stop 即武装、新发送即解除。
+   */
+  const userStopFlagRef = useRef(false);
   /** P0：preflight 世代（Stop 递增作废在途准备链；sendMessage 前校验，过期直接丢弃） */
   const preflightGenerationRef = useRef(0);
   /** P0：发送同步互斥（同 tick 双击穿透 state 异步 → 同步 ref 守卫；finally 必释放） */
@@ -1875,7 +1880,8 @@ export function useKiroChat({
       // 否则 SDK 的 sendAutomaticallyWhen 检测到「最后一个 pending tool → output-available」
       // 会发起全新 provider 请求 —— 表现为「按了停止却继续跑」（Stop 后自动续跑 bug）。
       // ref 在下一次 send 时重置为 null，正常 turn 的工具回填不受影响。
-      if (stoppedTurnMessageIdRef.current !== null) {
+      // 哨兵兜底 id 守卫：首 token 未到时尾消息还是 user，id 取不到正确值
+      if (stoppedTurnMessageIdRef.current !== null || userStopFlagRef.current) {
         return;
       }
       // V4.6：真实 tool 时间点（test-only；不记录 tool 内容）
@@ -1926,7 +1932,10 @@ export function useKiroChat({
           p.state !== "output-error"
       );
       if (hasPendingToolPart) {
-        return stoppedTurnMessageIdRef.current === live.id ? "settled" : "awaiting-tool-result";
+        // Stop 后该 turn 不再 in-flight（哨兵兜底 id 误标：停在旧 assistant 会提前 settled，不停则永不 settled）
+        return stoppedTurnMessageIdRef.current === live.id || userStopFlagRef.current
+          ? "settled"
+          : "awaiting-tool-result";
       }
     }
     return "settled";
@@ -2338,7 +2347,7 @@ export function useKiroChat({
           onPlanProposed: handlePlanProposed,
           planConversationId: conversationIdRef.current ?? "",
           // Computer Use Phase 2：Stop 后 GUI action / observe 一律拒绝执行（Emergency Stop）
-          isCancelled: () => stoppedTurnMessageIdRef.current !== null,
+          isCancelled: () => stoppedTurnMessageIdRef.current !== null || userStopFlagRef.current,
           // P5：真实观察截图 → 「最近画面」（UI-only；绝不进入 Tool Output / 模型）
           onDesktopObservationEvidence: (evidence) => {
             useDesktopSessionPreviewStore.getState().setPreview(evidence);
@@ -3085,6 +3094,7 @@ export function useKiroChat({
       try {
       // P0：新 Turn 清 Stop 标记（此前只在 edit/new/load 清，正常发送不清 → 首轮工具结果被静默丢弃卡 awaiting-tool-result）
       stoppedTurnMessageIdRef.current = null;
+      userStopFlagRef.current = false;
       userStopSuppressTimeoutRef.current = false;
       // P0：preflight 世代令牌（Stop/新发送递增；await 链后校验，过期直接丢弃不再 sendMessage）
       const preflightGen = ++preflightGenerationRef.current;
@@ -3659,6 +3669,7 @@ export function useKiroChat({
       viewCacheRef.current.clear();
       liveTurnCommitsRef.current.clear();
       stoppedTurnMessageIdRef.current = null;
+      userStopFlagRef.current = false;
       pendingAutoContinueRef.current = false;
       // 保留 prefix 之前的 undoRegistry（不 clear）
       chat.setMessages(prefix);
@@ -3679,6 +3690,7 @@ export function useKiroChat({
       return;
     }
     stoppedTurnMessageIdRef.current = null;
+    userStopFlagRef.current = false;
     const c = latestChatRef.current;
     // Defense in depth：含 Write Tool 的轮次或历史恢复轮次禁止 regenerate（即使 UI 误调用）
     if (!lastTurnCanRegenerate(c.messages)) {
@@ -3794,6 +3806,7 @@ export function useKiroChat({
     viewCacheRef.current.clear();
     liveTurnCommitsRef.current.clear();
     stoppedTurnMessageIdRef.current = null;
+    userStopFlagRef.current = false;
     pendingAutoContinueRef.current = false;
     resetDocumentFailureFuse();
     turnSourcesRef.current = [];
@@ -3858,6 +3871,7 @@ export function useKiroChat({
       viewCacheRef.current.clear();
       liveTurnCommitsRef.current.clear();
       stoppedTurnMessageIdRef.current = null;
+      userStopFlagRef.current = false;
       preflightGenerationRef.current += 1;
       pendingAutoContinueRef.current = false;
       resetDocumentFailureFuse();
@@ -4123,8 +4137,10 @@ export function useKiroChat({
   /** Stop：清除 stale approvals（旧 Approval 不能在新会话执行）；awaiting task → cancelled；
    *  Desktop Terminal V1：立即 cancel 所有活跃 terminal process tree（bridge.cancel；每个 execution 一次） */
   const handleStop = useCallback(() => {
-    // P0：作废在途 preflight（准备链 await 后校验丢弃，preparing 卡住可点取消）
+    // P0：作废在途 preflight（准备链 await 后校验丢弃，preparing 卡住可取消）
     preflightGenerationRef.current += 1;
+    // P0：武装 Stop 哨兵（不依赖消息落盘；id 守卫保留作 fast-path，哨兵兜底首 token 未到窗口）
+    userStopFlagRef.current = true;
     pendingExecutionsRef.current.clear();
     // plan-approve 偏离门：Stop 遗弃未决策 deviation 标记（不记偏离）
     pendingDeviationApprovalsRef.current.clear();

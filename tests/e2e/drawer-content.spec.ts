@@ -50,8 +50,8 @@ test("CourseDetailDrawer：编辑态修改字段 + 保存 → 回 view mode 数�
   await page.getByRole("heading", { name: "微观经济学" }).first().click();
   const drawer = page.getByRole("dialog", { name: "课程详情" });
   await expect(drawer).toBeVisible();
-  // Floating Course Hub：non-blocking contextual panel，不声明 aria-modal
-  await expect(drawer).not.toHaveAttribute("aria-modal", "true");
+  // Floating Course Hub 亦为真模态（背景阻塞 + 焦点陷阱 + aria-modal，与 Task/DDL 抽屉一致）
+  await expect(drawer).toHaveAttribute("aria-modal", "true");
 
   // 进入编辑态 → 修改教师 → 保存（Header [取消] [保存]）
   await drawer.getByRole("button", { name: "编辑课程信息" }).click();
