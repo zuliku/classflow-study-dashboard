@@ -262,7 +262,7 @@ export function ReminderCenter() {
             handleOpenItem(r);
           }}
           className={cn(
-            "w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-alabaster/60 transition-colors",
+            "cv-list-item-compact w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-alabaster/60 transition-colors",
             isHistory && "opacity-75",
             entering && "animate-enter"
           )}

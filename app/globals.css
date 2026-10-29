@@ -514,6 +514,19 @@ button:disabled {
     contain-intrinsic-size: auto 640px;
   }
 
+  /* 通用长列表行级隔离（Inbox / Reminder Center）：屏外行跳过渲染/布局/绘制，
+     DOM 保留（查找/无障碍/测试/E2E 选择器不受影响）；intrinsic-size 会记忆已渲染行的真实高度。
+     估算值只影响首次进入长列表的滚动条长度，滚动即修正，不引入 JS 测量或虚拟列表状态。 */
+  .cv-list-item {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 132px;
+  }
+
+  .cv-list-item-compact {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 52px;
+  }
+
   /* 详情面板内容切换（Workflow UX Motion M2）：semantic entity 立即切换 +
      新内容 ux-detail-swap-in 轻量进入（DetailContentStage；无旧内容 fade-out timer） */
   .ux-detail-swap-in {

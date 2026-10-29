@@ -13,13 +13,13 @@ import {
   KiroArtifactType,
 } from "@/lib/ai/computer/artifacts/types";
 import {
-  artifactDbAll,
   artifactDbCommitMetadataRevision,
   artifactDbCommitRevision,
   artifactDbCreateArtifact,
   artifactDbCreateStructuredArtifact,
   artifactDbDelete,
   artifactDbGet,
+  artifactDbListByWorkspace,
   artifactDbPut,
   artifactDbRestoreMetadataRevision,
   artifactSourceDelete,
@@ -38,13 +38,21 @@ function now(): string {
   return new Date().toISOString();
 }
 
-function logicalKey(workspaceId: string, rootId: string, relativePath: string): string {
-  return `${workspaceId}\u0000${rootId}\u0000${relativePath}`;
-}
-
-async function findByLogicalKey(key: string): Promise<KiroArtifact | null> {
-  const all = await artifactDbAll();
-  return all.find((a) => logicalKey(a.workspaceId, a.rootId, a.relativePath) === key) ?? null;
+/**
+ * 定位 logical location：先用 workspaceId 索引缩小范围，再精确比对 root/path。
+ * 旧版本全库 getAll + find；v2 index 让多 workspace 场景不再互相拖慢。
+ */
+async function findByLogicalKey(
+  workspaceId: string,
+  rootId: string,
+  relativePath: string
+): Promise<KiroArtifact | null> {
+  const inWorkspace = await artifactDbListByWorkspace(workspaceId);
+  return (
+    inWorkspace.find(
+      (a) => a.rootId === rootId && a.relativePath === relativePath
+    ) ?? null
+  );
 }
 
 async function writeSource(artifactId: string, document: KiroDocument, revision: number, rendererVersion?: number): Promise<boolean> {
@@ -119,7 +127,7 @@ export async function registerCreatedArtifact(input: {
   sourceTaskId?: string;
   document?: KiroDocument;
 }): Promise<KiroArtifact> {
-  const existing = await findByLogicalKey(logicalKey(input.workspaceId, input.rootId, input.relativePath));
+  const existing = await findByLogicalKey(input.workspaceId, input.rootId, input.relativePath);
   if (existing) {
     // 同 logical location 已有旧 identity：先清理旧记录，再原子创建（保持「新文件替换旧」语义；
     // 清理本身先于创建，避免新旧共存）
@@ -143,7 +151,7 @@ export async function adoptWorkspaceArtifact(input: {
   type: KiroArtifactType;
   title?: string;
 }): Promise<KiroArtifact> {
-  const existing = await findByLogicalKey(logicalKey(input.workspaceId, input.rootId, input.relativePath));
+  const existing = await findByLogicalKey(input.workspaceId, input.rootId, input.relativePath);
   if (existing) {
     if (existing.source === "kiro-created") {
       // 绝不降级：保留 identity + Source IR + revision
@@ -164,12 +172,11 @@ export async function findArtifactByLocation(
   rootId: string,
   relativePath: string
 ): Promise<KiroArtifact | null> {
-  return findByLogicalKey(logicalKey(workspaceId, rootId, relativePath));
+  return findByLogicalKey(workspaceId, rootId, relativePath);
 }
 
 export async function listArtifactsForWorkspace(workspaceId: string): Promise<KiroArtifact[]> {
-  const all = await artifactDbAll();
-  return all.filter((a) => a.workspaceId === workspaceId);
+  return artifactDbListByWorkspace(workspaceId);
 }
 
 /** rename/move 后同步位置：只改 rootId/relativePath/displayName/updatedAt；revision 不变 */
@@ -198,8 +205,7 @@ export async function getArtifactSource(id: string): Promise<KiroArtifactSourceR
 
 /** Settings 删除 Workspace：清理 Artifact metadata + Kiro-owned source IR（不动真实文件） */
 export async function removeArtifactsForWorkspace(workspaceId: string): Promise<void> {
-  const all = await artifactDbAll();
-  const targets = all.filter((a) => a.workspaceId === workspaceId);
+  const targets = await artifactDbListByWorkspace(workspaceId);
   for (const artifact of targets) {
     await artifactSourceDelete(artifact.id);
     await artifactDbDelete(artifact.id);
@@ -265,9 +271,8 @@ export async function listRecentArtifactsForWorkspace(
   limit = 12
 ): Promise<KiroArtifact[]> {
   const clamped = Math.max(1, Math.min(limit, 12));
-  const all = await artifactDbAll();
+  const all = await artifactDbListByWorkspace(workspaceId);
   return all
-    .filter((a) => a.workspaceId === workspaceId)
     .sort((a, b) => {
       const aTime = Date.parse(a.updatedAt);
       const bTime = Date.parse(b.updatedAt);

@@ -9,7 +9,9 @@ import { ComputerError } from "@/lib/ai/computer/errors";
 const ARTIFACT_DB = "classflow-kiro-artifacts-v1";
 export const ARTIFACT_STORE = "artifacts";
 export const ARTIFACT_SOURCE_STORE = "sources";
-const ARTIFACT_VERSION = 1;
+/** v2：按 workspaceId 建非唯一索引，workspace 列表/定位不再全库扫描 */
+export const ARTIFACT_WORKSPACE_INDEX = "workspaceId";
+const ARTIFACT_VERSION = 2;
 
 function openArtifactDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
@@ -19,11 +21,16 @@ function openArtifactDb(): Promise<IDBDatabase | null> {
     }
     const req = indexedDB.open(ARTIFACT_DB, ARTIFACT_VERSION);
     req.onupgradeneeded = () => {
-      if (!req.result.objectStoreNames.contains(ARTIFACT_STORE)) {
-        req.result.createObjectStore(ARTIFACT_STORE);
+      const db = req.result;
+      // v1 → v2：保留既有 stores 与数据，只增量补 workspaceId index（绝不 deleteDatabase 重建）
+      const artifactStore = db.objectStoreNames.contains(ARTIFACT_STORE)
+        ? req.transaction!.objectStore(ARTIFACT_STORE)
+        : db.createObjectStore(ARTIFACT_STORE);
+      if (!artifactStore.indexNames.contains(ARTIFACT_WORKSPACE_INDEX)) {
+        artifactStore.createIndex(ARTIFACT_WORKSPACE_INDEX, "workspaceId", { unique: false });
       }
-      if (!req.result.objectStoreNames.contains(ARTIFACT_SOURCE_STORE)) {
-        req.result.createObjectStore(ARTIFACT_SOURCE_STORE);
+      if (!db.objectStoreNames.contains(ARTIFACT_SOURCE_STORE)) {
+        db.createObjectStore(ARTIFACT_SOURCE_STORE);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -88,6 +95,62 @@ export async function artifactDbAll(): Promise<KiroArtifact[]> {
       const req = tx.objectStore(ARTIFACT_STORE).getAll();
       req.onsuccess = () => resolve((req.result as KiroArtifact[]) ?? []);
       req.onerror = () => resolve([]);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * 按 workspaceId 读取 artifacts（v2 index 查询）。
+ * 旧库未完成迁移时 index 暂不可见：退回一次全量扫描过滤，保证功能不被迁移时序阻塞。
+ */
+export async function artifactDbListByWorkspace(workspaceId: string): Promise<KiroArtifact[]> {
+  const db = await openArtifactDb();
+  if (!db) return [];
+  try {
+    return await new Promise((resolve) => {
+      const tx = db.transaction(ARTIFACT_STORE, "readonly");
+      const store = tx.objectStore(ARTIFACT_STORE);
+      if (!store.indexNames.contains(ARTIFACT_WORKSPACE_INDEX)) {
+        const req = store.getAll();
+        req.onsuccess = () =>
+          resolve(
+            ((req.result as KiroArtifact[]) ?? []).filter((a) => a.workspaceId === workspaceId)
+          );
+        req.onerror = () => resolve([]);
+        return;
+      }
+      const req = store.index(ARTIFACT_WORKSPACE_INDEX).getAll(IDBKeyRange.only(workspaceId));
+      req.onsuccess = () => resolve((req.result as KiroArtifact[]) ?? []);
+      req.onerror = () => resolve([]);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export interface ArtifactDbStats {
+  artifacts: number;
+  sources: number;
+}
+
+/** 设置页诊断：只做 count，不把 metadata/IR 读进内存；不可用时返回 null */
+export async function artifactDbStats(): Promise<ArtifactDbStats | null> {
+  const db = await openArtifactDb();
+  if (!db) return null;
+  try {
+    return await new Promise((resolve) => {
+      const tx = db.transaction([ARTIFACT_STORE, ARTIFACT_SOURCE_STORE], "readonly");
+      const artifactReq = tx.objectStore(ARTIFACT_STORE).count();
+      const sourceReq = tx.objectStore(ARTIFACT_SOURCE_STORE).count();
+      tx.oncomplete = () =>
+        resolve({
+          artifacts: artifactReq.result ?? 0,
+          sources: sourceReq.result ?? 0,
+        });
+      tx.onerror = () => resolve(null);
+      tx.onabort = () => resolve(null);
     });
   } finally {
     db.close();
