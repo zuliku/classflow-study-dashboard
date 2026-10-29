@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { X, BookOpen, CheckCircle2, Clock, Flag, ListChecks, CalendarClock, Tags } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/store/useAppStore";
 import { usePresence } from "@/lib/usePresence";
 import { useInertOnHidden } from "@/lib/useInertOnHidden";
@@ -30,7 +31,20 @@ export function AssignmentPeekPanel() {
     calendarMarks,
     semester,
     currentSemesterWeek,
-  } = useAppStore();
+  } = useAppStore(
+    // P2 性能：Peek 只需自身字段；整 store 订阅会让无关写入触发退出动画重渲染
+    useShallow((s) => ({
+      assignmentPeekId: s.assignmentPeekId,
+      setAssignmentPeekId: s.setAssignmentPeekId,
+      assignments: s.assignments,
+      courses: s.courses,
+      studyBlocks: s.studyBlocks,
+      schedules: s.schedules,
+      calendarMarks: s.calendarMarks,
+      semester: s.semester,
+      currentSemesterWeek: s.currentSemesterWeek,
+    }))
+  );
   const liveAssignment = assignments.find((a) => a.id === assignmentPeekId) ?? null;
 
   // Motion Contract（BUG-072 修正）：入场 --motion-panel(230)；退场对齐 Drawer 家族

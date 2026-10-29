@@ -4,7 +4,7 @@ import { test } from "./demoFixtures";
 /**
  * App Chrome V2 — Collapsible Sidebar / Profile Card / Workspace View Bar / Command Center E2E：
  * 1) Sidebar：≥1280 折叠/展开 + 持久化；768–1279 强制 rail；tooltip；Active Plate 正常
- * 2) Profile Card：展开信息完整 + 点击 → 设置个人资料；折叠仅头像；0 学分降级
+ * 2) Profile Card：展开信息完整 + 点击 → 设置个人资料（深链姓名行）；折叠仅头像；今日任务进度
  * 3) Task View Bar：视图/counts/筛选/搜索/归档 迁移后语义不变
  * 4) Command Center：导航与 Sidebar 同一文案；视图命令原子切换；打开提醒/设置
  * 5) Mobile：Bottom Nav 不变，无桌面侧栏回归
@@ -74,7 +74,7 @@ test("Sidebar 768–1279：强制 icon rail（无展开泄漏，无折叠按钮�
 
 // ==================== 2. Profile Card ====================
 
-test("Profile Card：展开显示姓名/学院/学分进度；点击 → 设置个人资料", async ({ page }) => {
+test("Profile Card：展开显示姓名/学院/今日进度；点击 → 设置个人资料", async ({ page }) => {
   await openSettings(page);
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
@@ -83,13 +83,15 @@ test("Profile Card：展开显示姓名/学院/学分进度；点击 → 设置�
   await expect(card).toBeVisible();
   await expect(card.getByText("张同学", { exact: true })).toBeVisible();
   await expect(card.getByText("经济与管理学院")).toBeVisible();
-  await expect(card.getByText("本学期学分进度")).toBeVisible();
-  await expect(card.getByText(/64 \/ 80 学分/)).toBeVisible();
+  await expect(card.getByText("今日任务进度")).toBeVisible();
+  await expect(card.getByText(/\d+ \/ \d+ 项/)).toBeVisible();
 
   // 整卡可点击 → Settings → profile section（settingsTargetSection 机制）
   await card.click();
   await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
   await expect(page.getByTestId("settings-profile")).toBeVisible();
+  // 深链直达姓名行（不是只停在 profile section 顶部）
+  await expect(page.locator('[data-setting-id="profile-name"]')).toBeVisible();
 });
 
 test("Profile Card：折叠态仅头像，tooltip 含姓名；点击行为一致", async ({ page }) => {
@@ -109,24 +111,14 @@ test("Profile Card：折叠态仅头像，tooltip 含姓名；点击行为一致
   await expect(page.getByTestId("settings-profile")).toBeVisible();
 });
 
-test("Profile Card：totalCredits = 0 → 不显示 0/0 进度，降级「完善学业信息」", async ({ page }) => {
-  await page.addInitScript(() => {
-    const raw = localStorage.getItem("classflow-storage-v2");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.state?.userProfile) {
-        parsed.state.userProfile.completedCredits = 0;
-        parsed.state.userProfile.totalCredits = 0;
-        localStorage.setItem("classflow-storage-v2", JSON.stringify(parsed));
-      }
-    }
-  });
+test("Profile Card：今日任务进度显示真实计数，不再显示学分段", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   const card = page.getByRole("button", { name: "打开个人资料" });
   await expect(card).toBeVisible();
-  await expect(card.getByText("完善学业信息")).toBeVisible();
-  await expect(card.getByText(/0 \/ 0 学分/)).toHaveCount(0);
+  await expect(card.getByText("今日任务进度")).toBeVisible();
+  await expect(card.getByText(/\d+ \/ \d+ 项/)).toBeVisible();
+  await expect(card.getByText(/学分进度/)).toHaveCount(0);
 });
 
 // ==================== 3. Task View Bar ====================

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/store/useAppStore";
 import { findDataIntegrityIssues } from "@/lib/dataIntegrity";
 import { checkMaterialAvailability, MaterialAvailability } from "@/lib/backupPackage";
@@ -20,7 +21,16 @@ export interface DataHealthState {
 
 /** 数据状态：完整性（用户语义）+ 课程资料可用性合并；进入页面或点击「重新检查」时计算 */
 export function DataHealth() {
-  const { courses, schedules, assignments, calendarMarks, groupProjects } = useAppStore();
+  const { courses, schedules, assignments, calendarMarks, groupProjects } = useAppStore(
+    // P2 性能：只订阅完整性检查所需数据，避免设置页随无关状态反复计算
+    useShallow((s) => ({
+      courses: s.courses,
+      schedules: s.schedules,
+      assignments: s.assignments,
+      calendarMarks: s.calendarMarks,
+      groupProjects: s.groupProjects,
+    }))
+  );
   const [health, setHealth] = useState<DataHealthState | null>(null);
   const [isChecking, setIsChecking] = useState(false);
 

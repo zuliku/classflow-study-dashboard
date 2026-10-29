@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import { BookOpen, FileUp, Plus } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
+import { useShallow } from "zustand/react/shallow";
 import { useToastStore } from "@/store/useToastStore";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
@@ -49,7 +50,21 @@ export function CoursesWorkspace() {
     setAddCourseModalOpen,
     setImportScheduleModalOpen,
     addCourseMaterial,
-  } = useAppStore();
+  } = useAppStore(
+    // P2 性能：精确订阅（整 store 订阅会让任何无关 set 都重渲染课程库）
+    useShallow((s) => ({
+      courses: s.courses,
+      schedules: s.schedules,
+      assignments: s.assignments,
+      semester: s.semester,
+      scheduleOccurrenceOverrides: s.scheduleOccurrenceOverrides,
+      setSelectedCourseId: s.setSelectedCourseId,
+      setSelectedAssignmentId: s.setSelectedAssignmentId,
+      setAddCourseModalOpen: s.setAddCourseModalOpen,
+      setImportScheduleModalOpen: s.setImportScheduleModalOpen,
+      addCourseMaterial: s.addCourseMaterial,
+    }))
+  );
   const pushToast = useToastStore((s) => s.pushToast);
 
   const totalCredits = courses.reduce((sum, c) => sum + c.credit, 0);

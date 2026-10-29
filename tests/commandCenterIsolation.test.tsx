@@ -127,6 +127,21 @@ describe("OverlayBoundary：单个面板崩溃不影响应用", () => {
     expect(screen.getByTestId("ok-child")).toBeTruthy();
   });
 
+  it("Workspace 兜底：传 fallback 时渲染替代内容，并使用自定义提示文案", () => {
+    const { container } = render(
+      <OverlayBoundary
+        name="workspace-test"
+        errorMessage="这个页面暂时无法显示，已隔离故障。"
+        fallback={<div data-testid="workspace-fallback">crash</div>}
+      >
+        <Boom />
+      </OverlayBoundary>
+    );
+    expect(screen.getByTestId("workspace-fallback")).toBeTruthy();
+    expect(container.firstChild).not.toBeNull();
+    expect(useToastStore.getState().toasts.some((t) => t.message.includes("已隔离故障"))).toBe(true);
+  });
+
   it("崩溃后 children 变化且超过冷却 → 自动恢复（入口不会永久打不开）", () => {
     vi.useFakeTimers();
     const { rerender } = render(

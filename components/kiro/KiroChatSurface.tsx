@@ -146,7 +146,8 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
 
   // P3：Access Menu 的权限摘要（只含 boolean preference，不含 runtime 事实）
   const openKiroSettings = useCallback(() => {
-    setSettingsTargetSection("kiro");
+    // 深链直达当前服务（Provider）行；section 仅作回退
+    setSettingsTargetSection("kiro", "ai-provider");
     setSettingsModalOpen(true);
   }, [setSettingsTargetSection, setSettingsModalOpen]);
 

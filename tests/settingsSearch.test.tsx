@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { searchSettings } from "@/lib/settingsRegistry";
+import { useAppStore } from "@/store/useAppStore";
 
 // polyfill ResizeObserver for jsdom
 if (typeof (globalThis as any).ResizeObserver === "undefined") {
@@ -54,6 +55,7 @@ function Harness({ initialQuery = "" }: { initialQuery?: string }) {
 describe("Settings Search Truth", () => {
   beforeEach(() => {
     localStorage.clear();
+    useAppStore.getState().setSettingsTargetSection(null);
     scrollSpy.mockClear();
     // jsdom requestAnimationFrame mock 立即执行
     vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
@@ -128,5 +130,34 @@ describe("Settings Search Truth", () => {
     expect(searchSettings("完成提示").some((s) => s.id === "focus-completion-notification")).toBe(false);
     expect(searchSettings("Kiro 启动专注").some((s) => s.id === "focus-kiro-duration")).toBe(false);
     expect(searchSettings("focus-completion-notification").length).toBe(0);
+  });
+
+  it("外部深链直达具体设置行并高亮；同 section 重复深链仍会重新定位", async () => {
+    useAppStore.getState().setSettingsTargetSection("profile", "profile-name");
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<Harness />);
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const target = container.querySelector('[data-setting-id="profile-name"]') as HTMLElement | null;
+    expect(target, "deep-link target should exist").toBeTruthy();
+    expect(target?.getAttribute("data-highlighted")).toBe("true");
+    expect(scrollSpy).toHaveBeenCalled();
+    // 深链 intent 已被消费（不会影响下次打开设置）
+    expect(useAppStore.getState().settingsTargetSection).toBeNull();
+    expect(useAppStore.getState().settingsTargetSettingId).toBeNull();
+
+    scrollSpy.mockClear();
+    await act(async () => {
+      useAppStore.getState().setSettingsTargetSection("profile", "profile-name");
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(scrollSpy, "same-section repeat deep link should scroll again").toHaveBeenCalled();
+
+    act(() => root.unmount());
+    container.remove();
   });
 });

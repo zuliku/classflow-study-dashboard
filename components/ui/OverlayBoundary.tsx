@@ -10,14 +10,25 @@ import { useToastStore } from "@/store/useToastStore";
  * - componentDidCatch 只记录 name + message（不含用户数据），并提示用户可重试。
  * - 自动恢复：children 变化（父级重渲染 / HMR 更新）且距上次崩溃超过冷却时间 →
  *   清除错误状态重试一次，避免「崩溃一次后该入口永久打不开」。
+ * - Workspace 隔离可传 fallback：渲染替代内容（并提供可见重试入口）；
+ *   缺省（Overlay）保持 null 静默卸载。
  */
+export interface OverlayBoundaryProps {
+  name: string;
+  children: React.ReactNode;
+  /** 崩溃时渲染的替代内容；缺省 null（Overlay 静默卸载，不遮挡应用） */
+  fallback?: React.ReactNode;
+  /** 崩溃 toast 文案；缺省按 Overlay 语义提示 */
+  errorMessage?: string;
+}
+
 export class OverlayBoundary extends React.Component<
-  { name: string; children: React.ReactNode },
+  OverlayBoundaryProps,
   { hasError: boolean }
 > {
   private lastErrorAt = 0;
 
-  constructor(props: { name: string; children: React.ReactNode }) {
+  constructor(props: OverlayBoundaryProps) {
     super(props);
     this.state = { hasError: false };
   }
@@ -32,7 +43,7 @@ export class OverlayBoundary extends React.Component<
     console.error(`[classflow:overlay] ${this.props.name} crashed: ${message}`);
     try {
       useToastStore.getState().pushToast({
-        message: "这个面板暂时无法打开，请重试。",
+        message: this.props.errorMessage ?? "这个面板暂时无法打开，请重试。",
         type: "error",
       });
     } catch {
@@ -40,7 +51,7 @@ export class OverlayBoundary extends React.Component<
     }
   }
 
-  componentDidUpdate(prevProps: { children: React.ReactNode }): void {
+  componentDidUpdate(prevProps: OverlayBoundaryProps): void {
     if (!this.state.hasError) return;
     if (prevProps.children === this.props.children) return;
     // 冷却 1.5s：避免持续错误导致的渲染风暴；冷却后允许一次自动重试
@@ -49,7 +60,7 @@ export class OverlayBoundary extends React.Component<
   }
 
   render(): React.ReactNode {
-    if (this.state.hasError) return null;
+    if (this.state.hasError) return this.props.fallback ?? null;
     return this.props.children;
   }
 }

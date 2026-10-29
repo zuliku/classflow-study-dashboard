@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
@@ -132,7 +133,31 @@ export function TimelineWorkspace() {
     addCalendarMark,
     scheduleOccurrenceOverrides,
     focusSessions,
-  } = useAppStore();
+  } = useAppStore(
+    // P2 性能：精确订阅（整 store 订阅会让任何无关 set 都重渲染整个时间表工作区）
+    useShallow((s) => ({
+      courses: s.courses,
+      schedules: s.schedules,
+      assignments: s.assignments,
+      calendarMarks: s.calendarMarks,
+      groupProjects: s.groupProjects,
+      studyBlocks: s.studyBlocks,
+      semester: s.semester,
+      currentSemesterWeek: s.currentSemesterWeek,
+      setCurrentSemesterWeek: s.setCurrentSemesterWeek,
+      preferences: s.preferences,
+      setAddCourseModalOpen: s.setAddCourseModalOpen,
+      setImportScheduleModalOpen: s.setImportScheduleModalOpen,
+      setFullTimetableModalOpen: s.setFullTimetableModalOpen,
+      addStudyBlock: s.addStudyBlock,
+      deleteStudyBlock: s.deleteStudyBlock,
+      setSelectedAssignmentId: s.setSelectedAssignmentId,
+      updateStudyBlock: s.updateStudyBlock,
+      addCalendarMark: s.addCalendarMark,
+      scheduleOccurrenceOverrides: s.scheduleOccurrenceOverrides,
+      focusSessions: s.focusSessions,
+    }))
+  );
   const pushToast = useToastStore((s) => s.pushToast);
   const handoff = useKiroHandoff();
   // Ghost Preview（Kiro Planning Proposal；ephemeral，不写 Store / localStorage）
@@ -1235,7 +1260,7 @@ export function TimelineWorkspace() {
             label="时间表设置"
             onClick={() => {
               setMoreOpen(false);
-              useAppStore.getState().setSettingsTargetSection?.("semester");
+              useAppStore.getState().setSettingsTargetSection?.("semester", "show-weekends");
               useAppStore.getState().setSettingsModalOpen(true);
             }}
           />

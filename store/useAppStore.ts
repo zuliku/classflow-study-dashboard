@@ -747,7 +747,9 @@ export interface AppState {
   setSettingsModalOpen: (open: boolean) => void;
   /** 外部请求打开的设置 section（如 Kiro「配置 AI 服务」）；SettingsView 消费后清空 */
   settingsTargetSection: SettingsSection | null;
-  setSettingsTargetSection: (section: SettingsSection | null) => void;
+  /** 可选目标设置行（复用搜索跳转的滚动 + 高亮；section 同时作为回退） */
+  settingsTargetSettingId: string | null;
+  setSettingsTargetSection: (section: SettingsSection | null, settingId?: string | null) => void;
   /** Command Center 子视图：默认命令面板；? 打开快捷键指南 */
   searchModalView: "palette" | "guide";
   setSearchModalView: (view: "palette" | "guide") => void;
@@ -1148,7 +1150,12 @@ export const useAppStore = create<AppState>()(
       isSettingsModalOpen: false,
       setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
       settingsTargetSection: null,
-      setSettingsTargetSection: (section) => set({ settingsTargetSection: section }),
+      settingsTargetSettingId: null,
+      setSettingsTargetSection: (section, settingId = null) =>
+        set({
+          settingsTargetSection: section,
+          settingsTargetSettingId: section ? settingId : null,
+        }),
       searchModalView: "palette",
       setSearchModalView: (view) => set({ searchModalView: view }),
       highlightedAssignmentId: null,

@@ -213,6 +213,7 @@ test("J：More — 导入课表 / 全屏 / 时间表设置 可用", async ({ pag
   await page.getByRole("menu", { name: "更多操作" }).getByRole("menuitem", { name: "时间表设置" }).click();
   await expect(page.getByTestId("settings-view")).toBeVisible();
   await expect(page.getByTestId("settings-semester")).toBeVisible();
+  await expect(page.locator('[data-setting-id="show-weekends"]')).toBeVisible();
 });
 
 test("K：Filter / Quick / More 三向互斥（同一时刻只有一个菜单打开）", async ({ page }) => {

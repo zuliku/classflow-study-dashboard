@@ -126,15 +126,59 @@ export function SettingsView({
     return value === gate.requiresValue;
   }
 
-  // 外部请求跳转（如 Kiro「配置 AI 服务」）：切 section 并消费
+  // ---- 搜索结果 / 外部深链共用的跳转高亮状态 ----
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [reveal, setReveal] = useState<RevealRequest | null>(null);
+  /** 同一 section 内重复深链也要重新滚动：递增序号触发定位 effect */
+  const [targetSeq, setTargetSeq] = useState(0);
+  const pendingTargetRef = useRef<string | null>(null);
+  const highlightTimer = React.useRef<number | null>(null);
+  const highlightedElRef = useRef<HTMLElement | null>(null);
+  const pushToast = useToastStore((s) => s.pushToast);
+  const reducedMotion = useEffectiveReducedMotion();
+
+  const clearHighlight = () => {
+    const prev = highlightedElRef.current;
+    if (!prev) return;
+    prev.classList.remove("bg-pastel-mint/60");
+    prev.removeAttribute("data-highlighted");
+    highlightedElRef.current = null;
+  };
+
+  /** 真正执行跳转：切 section、清搜索、必要时展开 disclosure，并触发滚动 + 高亮 */
+  const jumpTo = (setting: SettingDefinition) => {
+    clearHighlight();
+    setSection(setting.section);
+    onClearSearch();
+    setHighlightedId(null);
+    pendingTargetRef.current = setting.id;
+    setTargetSeq((v) => v + 1);
+    if (setting.disclosure) {
+      setReveal((prev) => ({ key: setting.disclosure as DisclosureKey, seq: (prev?.seq ?? 0) + 1 }));
+    }
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+  };
+
+  // 外部请求跳转（如 Kiro「配置 AI 服务」/ 个人资料卡 / 时间表设置）：
+  // 有目标 setting 时复用搜索跳转的滚动 + 高亮；只有 section 时仍可安全回退。
   const settingsTargetSection = useAppStore((s) => s.settingsTargetSection);
+  const settingsTargetSettingId = useAppStore((s) => s.settingsTargetSettingId);
   const setSettingsTargetSection = useAppStore((s) => s.setSettingsTargetSection);
   React.useEffect(() => {
-    if (settingsTargetSection) {
+    if (!settingsTargetSection) return;
+    const target = settingsTargetSettingId ? findSettingById(settingsTargetSettingId) : null;
+    if (target) {
+      jumpTo(target);
+    } else {
       setSection(settingsTargetSection);
-      setSettingsTargetSection(null);
+      setHighlightedId(null);
+      pendingTargetRef.current = null;
+      setTargetSeq((v) => v + 1);
     }
-  }, [settingsTargetSection, setSettingsTargetSection]);
+    setSettingsTargetSection(null);
+    // jumpTo 依赖 props 回调；由 target 变化驱动，重复消费由 Store 清空保证
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsTargetSection, settingsTargetSettingId, setSettingsTargetSection]);
 
   const searchResults = useMemo(
     () => (searchQuery.trim() ? searchSettings(searchQuery) : []),
@@ -151,26 +195,6 @@ export function SettingsView({
       });
     }
   }, []);
-
-  // ---- 搜索结果跳转：切 section → 清空搜索 → 目标挂载后滚动 + 高亮 ----
-  const [highlightedId, setHighlightedId] = useState<string | null>(null);
-  const [reveal, setReveal] = useState<RevealRequest | null>(null);
-  const pendingTargetRef = useRef<string | null>(null);
-  const highlightTimer = React.useRef<number | null>(null);
-  const pushToast = useToastStore((s) => s.pushToast);
-  const reducedMotion = useEffectiveReducedMotion();
-
-  /** 真正执行跳转：切 section、清搜索、必要时展开 disclosure */
-  const jumpTo = (setting: SettingDefinition) => {
-    setSection(setting.section);
-    onClearSearch();
-    setHighlightedId(null);
-    pendingTargetRef.current = setting.id;
-    if (setting.disclosure) {
-      setReveal((prev) => ({ key: setting.disclosure as DisclosureKey, seq: (prev?.seq ?? 0) + 1 }));
-    }
-    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-  };
 
   /** 搜索结果点击：gate 未满足 → 跳控制设置 + 简明提示（绝不修改用户偏好） */
   const handleJump = (setting: SettingDefinition) => {
@@ -199,16 +223,21 @@ export function SettingsView({
     let raf = 0;
     const attempt = () => {
       tries += 1;
-      const el = viewRootRef.current?.querySelector(`[data-setting-id="${targetId}"]`) ?? null;
+      const el = (viewRootRef.current?.querySelector(
+        `[data-setting-id="${targetId}"]`
+      ) ?? null) as HTMLElement | null;
       if (el) {
         pendingTargetRef.current = null;
+        clearHighlight();
         el.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
-        // DOM 级高亮：不依赖 row 是否接收 highlighted prop（搜索跳转一律可用）
+        // DOM 级高亮：不依赖 row 是否接收 highlighted prop（搜索跳转 / 深链一律可用）
         el.classList.add("bg-pastel-mint/60");
+        el.setAttribute("data-highlighted", "true");
+        highlightedElRef.current = el;
         setHighlightedId(targetId);
         if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
         highlightTimer.current = window.setTimeout(() => {
-          el.classList.remove("bg-pastel-mint/60");
+          if (highlightedElRef.current === el) clearHighlight();
           setHighlightedId(null);
         }, 900);
         return;
@@ -225,7 +254,7 @@ export function SettingsView({
     };
     raf = requestAnimationFrame(attempt);
     return () => cancelAnimationFrame(raf);
-  }, [section, searchQuery, reveal]);
+  }, [section, searchQuery, reveal, targetSeq]);
 
   const sectionLabel = (sec: SettingsSection) =>
     [...SETTINGS_NAV, ABOUT_NAV].find((n) => n.id === sec)?.label ?? sec;

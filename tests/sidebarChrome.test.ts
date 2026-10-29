@@ -389,7 +389,7 @@ describe("Sidebar Productization V2.1 —— Profile Card restoration", () => {
 
   it("Profile 点击仍打开 Settings → profile section", async () => {
     const card = await readSrc("components/layout/SidebarProfileCard.tsx");
-    expect(card).toContain('setSettingsTargetSection("profile")');
+    expect(card).toContain('setSettingsTargetSection("profile", "profile-name")');
     expect(card).toContain('aria-label="打开个人资料"');
     expect(card).toContain("· 个人资料"); // collapsed tooltip 文案保持
   });

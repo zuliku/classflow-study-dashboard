@@ -35,6 +35,7 @@ import { FocusRuntime } from "@/components/focus/FocusRuntime";
 import { TypographyRuntime } from "@/components/runtime/TypographyRuntime";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { OverlayBoundary } from "@/components/ui/OverlayBoundary";
+import { Button } from "@/components/ui/Button";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { MotionGallery } from "@/components/motion/MotionGallery";
 import { MotionFpsProbe } from "@/components/motion/MotionFpsProbe";
@@ -48,10 +49,33 @@ import { didMainStoreHydrationFail } from "@/store/useAppStore";
 import { listAllProjectFileStorageKeys } from "@/lib/ai/projects/files/db";
 import { resolveStartupTab } from "@/lib/startup";
 
+/**
+ * Workspace 级崩溃兜底：单个工作区渲染失败时只替换该页内容，
+ * 侧边栏 / 底部导航 / 全局 Overlay 仍可用；「重试」重置错误边界与工作区子树。
+ */
+function WorkspaceCrashFallback({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-1 min-h-0 flex-col items-center justify-center gap-3 px-6 py-16 text-center"
+    >
+      <p className="text-sm font-medium text-charcoal">这个页面暂时无法显示</p>
+      <p className="max-w-sm text-xs leading-relaxed text-sandrift">
+        故障已被隔离，侧边栏与其它页面仍可正常使用。可以切换页面后再回来，或直接重试。
+      </p>
+      <Button variant="secondary" size="sm" onClick={onRetry}>
+        重试
+      </Button>
+    </div>
+  );
+}
+
 export default function Home() {
   // Task 13B: Main → Renderer inbox bridge (single subscription at stable root)
   useInboxChannelBridge();
   const [inboxOpen, setInboxOpen] = useState(false);
+  /** Workspace 错误隔离的重试世代：递增 → 错误边界与页面子树整体重挂载 */
+  const [workspaceEpoch, setWorkspaceEpoch] = useState(0);
   const inboxUnreadCount = useInboxStore((s) => s.items.filter((it) => it.status === "unread").length);
   // 精确 selector：避免整 store 订阅导致 UI Chrome 等无关 state 变化触发 Home 全量 render
   // （Overview 内容已抽至 OverviewWorkspace，其数据订阅由该组件自持）
@@ -196,6 +220,16 @@ export default function Home() {
             tab={activeTab}
             className="flex flex-col flex-1 min-h-0"
           >
+          <OverlayBoundary
+            key={`${activeTab}:${workspaceEpoch}`}
+            name={`workspace-${activeTab}`}
+            errorMessage="这个页面暂时无法显示，已隔离故障。"
+            fallback={
+              <WorkspaceCrashFallback
+                onRetry={() => setWorkspaceEpoch((v) => v + 1)}
+              />
+            }
+          >
           {activeTab === "overview" && <OverviewWorkspace />}
 
           {activeTab === "timetable" && <TimelineWorkspace />}
@@ -222,6 +256,7 @@ export default function Home() {
           {activeTab === "group" && <GroupCollaborationView />}
 
           {activeTab === "analytics" && <LearningAnalyticsView />}
+          </OverlayBoundary>
         </PageTransition>
         </main>
       </div>

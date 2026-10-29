@@ -33,7 +33,8 @@ export function SidebarProfileCard({ collapsed }: { collapsed: boolean }) {
 
   const openProfile = () => {
     setSettingsModalOpen(true);
-    setSettingsTargetSection("profile");
+    // 深链直达姓名行（section 仅作回退）
+    setSettingsTargetSection("profile", "profile-name");
   };
 
   const avatar = profileAvatarUrl ? (

@@ -44,6 +44,7 @@ test("Desktop 1440：Sidebar 进入 Kiro，Empty State 与 Composer 可见，未
   await composer.getByRole("button", { name: "配置 AI 服务" }).click();
   await expect(page.getByTestId("settings-view")).toBeVisible();
   await expect(page.getByTestId("settings-kiro")).toBeVisible();
+  await expect(page.locator('[data-setting-id="ai-provider"]')).toBeVisible();
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
   await expect(page.getByTestId("settings-view")).toHaveCount(0);

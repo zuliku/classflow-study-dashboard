@@ -22,6 +22,7 @@ import {
   X,
   MoreHorizontal,
 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
@@ -135,7 +136,24 @@ export function GroupCollaborationView() {
     deleteGroupTask,
     toggleGroupTask,
     setSelectedGroupProjectId,
-  } = useAppStore();
+  } = useAppStore(
+    // P2 性能：精确订阅 projects/courses + 动作；避免整 store 订阅导致协作页随无关状态重渲染
+    useShallow((s) => ({
+      groupProjects: s.groupProjects,
+      courses: s.courses,
+      addGroupProject: s.addGroupProject,
+      updateGroupProject: s.updateGroupProject,
+      deleteGroupProject: s.deleteGroupProject,
+      addGroupMember: s.addGroupMember,
+      updateGroupMember: s.updateGroupMember,
+      deleteGroupMember: s.deleteGroupMember,
+      addGroupTask: s.addGroupTask,
+      updateGroupTask: s.updateGroupTask,
+      deleteGroupTask: s.deleteGroupTask,
+      toggleGroupTask: s.toggleGroupTask,
+      setSelectedGroupProjectId: s.setSelectedGroupProjectId,
+    }))
+  );
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const handoff = useKiroHandoff();
