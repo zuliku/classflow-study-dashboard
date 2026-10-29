@@ -157,6 +157,39 @@ test("Mobile <768：点击课程卡仍进入 Course Drawer，不触发拖动", a
   await expect(page.getByText("课程时间已调整")).toHaveCount(0);
 });
 
+test("隐藏周末：拖周五卡到最右边缘仍在周五，不会写入隐藏的周六", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+
+  // 关闭「显示周末」→ 课表只渲染 5 列
+  await page.locator("aside").first().getByRole("button", { name: "设置" }).first().click();
+  await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "学期与课表" }).click();
+  await page.getByRole("switch", { name: "显示周末" }).click();
+  await expect(page.getByRole("switch", { name: "显示周末" })).toHaveAttribute("aria-checked", "false");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "时间表" }).first().click();
+  await expect(page.getByTestId("timetable-body")).toBeVisible();
+  await expect(page.getByText("周六", { exact: true })).toHaveCount(0);
+
+  const cards = page.locator('[data-testid="schedule-card"]').filter({ hasText: "英语口语" });
+  const before = await cards.count();
+  expect(before).toBeGreaterThan(0);
+  const card = cards.first();
+  const from = await card.boundingBox();
+  const body = await bodyBox(page);
+
+  // 拖到最右边缘：5 列几何下应 clamp 到周五（dayIndex 4），而不是第 6/7 列
+  await dragMouse(
+    page,
+    { x: from!.x + from!.width / 2, y: from!.y + 3 },
+    { x: body!.x + body!.width - 2, y: from!.y + 3 }
+  );
+  await settle(page);
+  expect(await cards.count()).toBe(before);
+  await expect(cards.first()).toBeVisible();
+  await expect(page.getByText("周六", { exact: true })).toHaveCount(0);
+});
+
 test("Resize：拉底部把手，结束时间 15 分钟吸附，刷新后仍在", async ({ page }) => {
   await openWorkspace(page);
 

@@ -1039,6 +1039,7 @@ export function AssignmentTable({
                     应用
                   </button>
                 </div>
+                <p className="text-[10px] text-sandrift">仅调整已有截止时间的任务</p>
               </div>
               {/* 模式二：整体提前/延后 N 天 */}
               <div className="space-y-1 pt-2 border-t border-line-soft">
@@ -1060,7 +1061,7 @@ export function AssignmentTable({
                     应用
                   </button>
                 </div>
-                <p className="text-[10px] text-sandrift">各任务相对日期差保持不变，HH:mm 时间均保留</p>
+                <p className="text-[10px] text-sandrift">各任务相对日期差保持不变，HH:mm 时间均保留；无截止时间的任务会跳过</p>
               </div>
             </span>
           )}

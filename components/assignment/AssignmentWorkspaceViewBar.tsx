@@ -144,8 +144,9 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
         />
       </div>
 
-      {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；与文件内 ux-fade 同进入语义） */}
-      {view === "focus" && atRiskCount > 0 && (
+      {/* Part B：Focus 内轻量 Risk Filter（有风险时显示；风险清零但筛选仍开着时保留按钮，
+          否则列表被过滤成空态后用户无处关闭筛选） */}
+      {view === "focus" && (atRiskCount > 0 || riskOnly) && (
         <button
           onClick={() => setRiskOnly(!riskOnly)}
           data-testid="focus-risk-filter"
@@ -157,7 +158,7 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
           }`}
         >
           <AlertTriangle className="w-3 h-3" />
-          有风险 {atRiskCount}
+          {atRiskCount > 0 ? `有风险 ${atRiskCount}` : "清除风险筛选"}
         </button>
       )}
 

@@ -289,6 +289,15 @@ export function GroupCollaborationView() {
     if (memberForm.mode === "edit") {
       const existing = selectedProject.members.find((m) => m.id === memberForm.memberId);
       if (existing) {
+        // 与删除同规则：不允许把唯一组长降级为组员（否则项目零负责人）
+        const isLastLeader =
+          existing.role === "leader" &&
+          mRole !== "leader" &&
+          selectedProject.members.filter((m) => m.role === "leader").length <= 1;
+        if (isLastLeader) {
+          pushToast({ type: "warning", message: "项目至少需要一名组长" });
+          return;
+        }
         updateGroupMember(selectedProject.id, {
           ...existing,
           name: mName.trim(),

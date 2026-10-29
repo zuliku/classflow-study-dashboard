@@ -166,14 +166,17 @@ export function FocusRuntime() {
   const prevStatusByIdRef = useRef<Map<string, FocusSession["status"]>>(new Map());
   useEffect(() => {
     let resumedFromPaused = false;
+    let pausedAtZero = false;
+    const now = Date.now();
     for (const s of focusSessions) {
       const prev = prevStatusByIdRef.current.get(s.id);
       if (prev === "paused" && s.status === "running") resumedFromPaused = true;
+      if (s.status === "paused" && deriveFocusClock(s, now).remainingMs <= 0) pausedAtZero = true;
       prevStatusByIdRef.current.set(s.id, s.status);
     }
     if (!initializedRef.current) return;
     scheduleNextRef.current();
-    if (resumedFromPaused) reconcileRef.current();
+    if (resumedFromPaused || pausedAtZero) reconcileRef.current();
   }, [focusSessions, scheduleNext]);
 
   // timeout / visible / focus 统一走 reconcile（重新读 Store，dedup 由 Store completed 保证）

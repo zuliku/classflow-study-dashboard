@@ -20,6 +20,14 @@ export function getFocusRuntimeDecision(
   phase: FocusRuntimePhase
 ): FocusRuntimeDecision {
   if (!session) return "none";
+  // paused 常规语义：时钟冻结（spec：不调度完成 timeout）。
+  // 唯一例外是「暂停时已恰好到点」：remaining=0 却因状态为 paused 永远不结算，
+  // 会留下 00:00 的僵尸会话；此时按自然完成处理（恢复/实时同一出口）。
+  if (session.status === "paused") {
+    const clock = deriveFocusClock(session, now);
+    if (clock.remainingMs > 0) return "none";
+    return phase === "booting" ? "complete-recovered" : "complete-live";
+  }
   if (session.status !== "running") return "none";
   const clock = deriveFocusClock(session, now);
   if (clock.remainingMs > 0) return "none";

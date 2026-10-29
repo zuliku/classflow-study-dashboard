@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/Button";
 export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const items = useInboxStore((s) => s.items);
   const updateStatus = useInboxStore((s) => s.updateStatus);
+  const pushToast = useToastStore((s) => s.pushToast);
   const [filter, setFilter] = useState<InboxStatus | "all">("unread");
   // Codex-style 小搜索：发件人 / 主题 / 正文（与状态筛选叠加）
   const [query, setQuery] = useState("");
@@ -39,7 +40,11 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
 
   const { filtered, filtering } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const base = filter === "all" ? items : items.filter((it) => it.status === filter);
+    // 「全部」只包含未归档：归档需回「归档」筛选查看，避免已处理消息混在活跃列表
+    const base =
+      filter === "all"
+        ? items.filter((it) => it.status !== "archived")
+        : items.filter((it) => it.status === filter);
     if (q === "") return { filtered: base, filtering: false };
     return {
       filtered: base.filter(
@@ -73,6 +78,27 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
     window.dispatchEvent(new CustomEvent("classflow:inbox:process", { detail: { item, wrapped } }));
     updateStatus(item.id, "reviewed");
     setSelected(null);
+  };
+
+  /** 打开详情即视为已读（未读徽标同步消失）；详情快照同步更新，供「标为未读」按钮回切 */
+  const openDetail = (item: ExternalInboxItem) => {
+    if (item.status === "unread") {
+      updateStatus(item.id, "reviewed");
+      setSelected({ ...item, status: "reviewed" });
+      return;
+    }
+    setSelected(item);
+  };
+
+  /** 归档可撤销：恢复到归档前状态（未读/已查看） */
+  const handleArchive = (item: ExternalInboxItem) => {
+    const previous = item.status;
+    updateStatus(item.id, "archived");
+    pushToast({
+      message: "消息已归档",
+      actionLabel: "撤销",
+      onAction: () => updateStatus(item.id, previous),
+    });
   };
 
   return (
@@ -176,7 +202,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setSelected(item)}
+                  onClick={() => openDetail(item)}
                   data-testid={`inbox-view-${item.id}`}
                   className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
                 >
@@ -207,15 +233,27 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                     <span className="text-[11px] text-sandrift" title="此消息来自旧版本，无法直接回复">无法直接回复</span>
                   )
                 )}
-                <button
-                  type="button"
-                  onClick={() => updateStatus(item.id, "archived")}
-                  data-testid={`inbox-archive-${item.id}`}
-                  className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
-                >
-                  <Archive className="w-3 h-3" />
-                  归档
-                </button>
+                {item.status === "archived" ? (
+                  <button
+                    type="button"
+                    onClick={() => updateStatus(item.id, "reviewed")}
+                    data-testid={`inbox-unarchive-${item.id}`}
+                    className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
+                  >
+                    <Archive className="w-3 h-3" />
+                    取消归档
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleArchive(item)}
+                    data-testid={`inbox-archive-${item.id}`}
+                    className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
+                  >
+                    <Archive className="w-3 h-3" />
+                    归档
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -286,6 +324,19 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
               <button type="button" onClick={() => { setReplyItem(shownSelected); setSelected(null); }} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1.5">
                 <Reply className="w-3.5 h-3.5" />
                 {shownSelected.source === "gmail" ? "回复到 Gmail" : shownSelected.source === "qq-mail" ? "回复到 QQ 邮箱" : "回复到 QQ"}
+              </button>
+            )}
+            {shownSelected.status === "reviewed" && (
+              <button
+                type="button"
+                onClick={() => {
+                  updateStatus(shownSelected.id, "unread");
+                  setSelected(null);
+                }}
+                data-testid={`inbox-mark-unread-${shownSelected.id}`}
+                className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster"
+              >
+                标为未读
               </button>
             )}
             <button type="button" onClick={() => setSelected(null)} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">

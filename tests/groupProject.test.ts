@@ -262,6 +262,22 @@ describe("小组项目 Store CRUD", () => {
     expect(useAppStore.getState().groupProjects[0].members).toHaveLength(1);
   });
 
+  it("唯一 leader 不能被降级为组员（编辑成员同走 last_leader 规则）", () => {
+    useAppStore.getState().updateUserProfile({ name: "组长" });
+    useAppStore.getState().addGroupProject({ courseId: "c_1", title: "P" });
+    const id = useAppStore.getState().groupProjects[0].id;
+    const leader = useAppStore.getState().groupProjects[0].members[0];
+
+    useAppStore.getState().updateGroupMember(id, { ...leader, role: "member" });
+    expect(useAppStore.getState().groupProjects[0].members[0].role).toBe("leader");
+
+    // 新增第二组长后允许原组长降级
+    useAppStore.getState().addGroupMember(id, { name: "副组长", role: "leader" });
+    useAppStore.getState().updateGroupMember(id, { ...leader, role: "member" });
+    const roles = useAppStore.getState().groupProjects[0].members.map((m) => m.role);
+    expect(roles.filter((r) => r === "leader")).toHaveLength(1);
+  });
+
   it("Task CRUD：add/update/delete + toggle 自动重算 progress + updatedAt 刷新", () => {
     useAppStore.getState().addGroupProject({ courseId: "c_1", title: "P" });
     const id = useAppStore.getState().groupProjects[0].id;

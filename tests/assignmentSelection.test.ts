@@ -84,6 +84,38 @@ describe("bulk DDL：只改日期，保留原时间", () => {
     expect(moved.progress).toBe(40);
     expect(moved.tags).toEqual(["t"]);
   });
+
+  it("无有效截止时间的任务原样保留（不静默补 23:59）", () => {
+    const noDdl = { ...a("a2", "2026-08-12T23:59:00"), ddl: undefined };
+    const [moved] = bulkApplyDDLDate([noDdl], "2026-09-01");
+    expect(moved).toBe(noDdl);
+    expect(moved.ddl).toBeUndefined();
+  });
+
+  it("批量动作跳过无有效截止时间，Toast 报告实际调整/跳过数量", () => {
+    const withDdl = a("a1", "2026-08-12T18:00:00");
+    const noDdl = { ...a("a2", "2026-08-13T23:59:00"), ddl: undefined };
+    const updates: Assignment[] = [];
+    let message = "";
+    const actions = createAssignmentActions({
+      getAssignments: () => [withDdl, noDdl],
+      updateAssignment: (x) => updates.push(x),
+      setSelectedAssignmentId: () => {},
+      deleteAssignment: () => null,
+      restoreAssignment: () => {},
+      pushToast: (t) => {
+        message = t.message;
+      },
+    });
+
+    actions.setDDLDate(["a1", "a2"], "2026-09-01");
+    expect(updates).toHaveLength(1);
+    expect(updates[0].id).toBe("a1");
+    expect(getLocalDDLDate(updates[0].ddl)).toBe("2026-09-01");
+    expect(getLocalDDLTime(updates[0].ddl)).toBe("18:00");
+    expect(message).toContain("1 项任务截止时间已调整");
+    expect(message).toContain("1 项无有效截止时间已跳过");
+  });
 });
 
 describe("bulk status / priority", () => {

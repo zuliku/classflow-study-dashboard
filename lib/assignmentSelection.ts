@@ -59,15 +59,17 @@ export function sanitizeHighlight(
 
 // ---- Bulk DDL ----
 
-/** 批量调整截止日期：只改日期，保留每项原本的墙钟时间（无 UTC 漂移） */
+/** 批量调整截止日期：只改日期，保留每项原本的墙钟时间（无 UTC 漂移）。
+ *  无有效截止时间的任务原样返回（由调用方统计并提示跳过），不静默补 23:59。 */
 export function bulkApplyDDLDate(
   assignments: Assignment[],
   targetDate: string
 ): Assignment[] {
-  return assignments.map((a) => ({
-    ...a,
-    ddl: combineLocalDateTime(targetDate, getLocalDDLTime(a.ddl)),
-  }));
+  return assignments.map((a) =>
+    parseLocalDDL(a.ddl)
+      ? { ...a, ddl: combineLocalDateTime(targetDate, getLocalDDLTime(a.ddl)) }
+      : a
+  );
 }
 
 /**

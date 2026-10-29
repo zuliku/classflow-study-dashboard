@@ -64,6 +64,13 @@ describe("分钟 ↔ 时间映射", () => {
     expect(pointerToDayIndex(-100, 0, 700)).toBe(0);
     expect(pointerToDayIndex(9999, 0, 700)).toBe(6);
   });
+
+  it("pointerToDayIndex 隐藏周末时只映射 5 列（右边缘 clamp 到周五，不落到隐藏天）", () => {
+    expect(pointerToDayIndex(0, 0, 500, 5)).toBe(0);
+    expect(pointerToDayIndex(250, 0, 500, 5)).toBe(2);
+    expect(pointerToDayIndex(500, 0, 500, 5)).toBe(4);
+    expect(pointerToDayIndex(9999, 0, 500, 5)).toBe(4);
+  });
 });
 
 describe("Move：保持时长 + 边界 clamp", () => {

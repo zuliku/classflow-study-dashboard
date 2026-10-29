@@ -333,7 +333,7 @@ export function TimetableGrid({
   const getDayIndex = (clientX: number) => {
     const rect = gridBodyRef.current?.getBoundingClientRect();
     if (!rect) return 0;
-    return pointerToDayIndex(clientX, rect.left, rect.width);
+    return pointerToDayIndex(clientX, rect.left, rect.width, dayCount);
   };
 
   /** 冲突的另一门课程名（candidate 之外的那一方） */

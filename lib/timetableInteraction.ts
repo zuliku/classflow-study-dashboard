@@ -75,15 +75,20 @@ export function pointerToMinutes(
   return TIMETABLE_DAY_START_MINUTES + ratio * TIMETABLE_TOTAL_MINUTES;
 }
 
-/** Pointer 坐标 → 星期列索引（0–6，周一=0）；跨出左右边界时 clamp */
+/**
+ * Pointer 坐标 → 可见星期列索引（周一=0）；跨出左右边界时 clamp。
+ * dayCount 必须与当前渲染列数一致（隐藏周末时为 5），否则拖到右边缘会映射到
+ * 不存在的周六/周日列，课程被写入隐藏天而从视图消失。
+ */
 export function pointerToDayIndex(
   clientX: number,
   rectLeft: number,
-  rectWidth: number
+  rectWidth: number,
+  dayCount: number = TIMETABLE_DAY_COUNT
 ): number {
-  if (rectWidth <= 0) return 0;
-  const index = Math.floor(((clientX - rectLeft) / rectWidth) * TIMETABLE_DAY_COUNT);
-  return Math.min(Math.max(index, 0), TIMETABLE_DAY_COUNT - 1);
+  if (rectWidth <= 0 || dayCount <= 0) return 0;
+  const index = Math.floor(((clientX - rectLeft) / rectWidth) * dayCount);
+  return Math.min(Math.max(index, 0), dayCount - 1);
 }
 
 /**

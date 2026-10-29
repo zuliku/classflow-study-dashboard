@@ -68,6 +68,7 @@ import {
   FocusErrorCode,
   FocusMutationResult,
   completeFocusSessionRecord,
+  deriveFocusClock,
   finishFocusSessionRecord,
   normalizeFocusSession,
   pauseFocusSessionRecord,
@@ -2961,7 +2962,13 @@ export const useAppStore = create<AppState>()(
         const t = now ?? Date.now();
         const state = get();
         const target = state.focusSessions.find((s) => s.id === sessionId);
-        if (!target || target.status !== "running") {
+        // paused 仅允许在 remaining=0 的到点边界被 runtime 结算（见 getFocusRuntimeDecision）；
+        // 其余 paused 会话保持冻结，等待用户继续或手动结束，避免提前完成被记为 timer。
+        if (
+          !target ||
+          (target.status !== "running" &&
+            (target.status !== "paused" || deriveFocusClock(target, t).remainingMs > 0))
+        ) {
           // 指定 session 不存在或已结算：第二次完成必须失败
           return { ok: false, code: "NO_ACTIVE_FOCUS_SESSION" };
         }
@@ -3055,7 +3062,17 @@ export const useAppStore = create<AppState>()(
         return newMemberId;
       },
 
-      updateGroupMember: (projectId, member) =>
+      updateGroupMember: (projectId, member) => {
+        const project = get().groupProjects.find((p) => p.id === projectId);
+        const existing = project?.members.find((m) => m.id === member.id);
+        // Leader 规则：与删除同口径——不允许把唯一 leader 降级，避免项目零负责人
+        if (
+          existing?.role === "leader" &&
+          member.role !== "leader" &&
+          project!.members.filter((m) => m.role === "leader").length <= 1
+        ) {
+          return;
+        }
         set((state) => ({
           groupProjects: state.groupProjects.map((p) =>
             p.id === projectId
@@ -3066,7 +3083,8 @@ export const useAppStore = create<AppState>()(
                 }
               : p
           ),
-        })),
+        }));
+      },
 
       deleteGroupMember: (projectId, memberId) => {
         const project = get().groupProjects.find((p) => p.id === projectId);

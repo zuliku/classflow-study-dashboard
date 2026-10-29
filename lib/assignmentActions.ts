@@ -1,4 +1,5 @@
 import { Assignment, CalendarMark, Priority } from "@/types";
+import { parseLocalDDL } from "@/lib/ddl";
 import {
   bulkApplyDDLDate,
   bulkApplyPriority,
@@ -69,19 +70,29 @@ export function createAssignmentActions(api: AssignmentActionApi): AssignmentAct
     getAssignments().filter((a) => ids.includes(a.id));
 
   /**
-   * 批量 DDL 修改（指定日期 / 整体平移）：
-   * 记录修改前的原 assignment，应用后给出撤销 Toast；
-   * 撤销时逐项 updateAssignment(original) → 同一 id 恢复原 ddl，
-   * CalendarMark 由 store 的 updateAssignment 自动同步回原日期（sourceId 保留，不重复）。
+   * 批量 DDL 修改（指定日期 / 整体平移 / 清除）：
+   * - 无有效截止时间的任务不参与（不再静默补 23:59），Toast 明确报告跳过数量；
+   * - 记录修改前的原 assignment，应用后给出撤销 Toast；
+   * - 撤销时逐项 updateAssignment(original) → 同一 id 恢复原 ddl，
+   *   CalendarMark 由 store 的 updateAssignment 自动同步回原日期（sourceId 保留，不重复）。
    */
   const applyDDL = (ids: string[], transform: (as: Assignment[]) => Assignment[]) => {
     const originals = targets(ids);
     if (originals.length === 0) return;
-    transform(originals).forEach(updateAssignment);
+    const valid = originals.filter((a) => parseLocalDDL(a.ddl) !== null);
+    const skipped = originals.length - valid.length;
+    if (valid.length === 0) {
+      pushToast({ message: "所选任务均无有效截止时间，未做调整", type: "warning" });
+      return;
+    }
+    transform(valid).forEach(updateAssignment);
     pushToast({
-      message: `${originals.length} 项任务截止时间已调整`,
+      message:
+        skipped > 0
+          ? `${valid.length} 项任务截止时间已调整，${skipped} 项无有效截止时间已跳过`
+          : `${valid.length} 项任务截止时间已调整`,
       actionLabel: "撤销",
-      onAction: () => originals.forEach(updateAssignment),
+      onAction: () => valid.forEach(updateAssignment),
     });
   };
 

@@ -65,6 +65,7 @@ vi.mock("@/components/inbox/QQReplyDialog", () => ({
 
 import { InboxPanel } from "@/components/inbox/InboxPanel";
 import { clearOverlayStack } from "@/lib/overlayStack";
+import { useToastStore } from "@/store/useToastStore";
 
 describe("InboxPanel Lifecycle — Task 16B K", () => {
   beforeEach(() => {
@@ -72,6 +73,7 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     clearOverlayStack();
     inboxState.updateStatus.mockClear();
     inboxState.removeItem.mockClear();
+    useToastStore.setState({ toasts: [] });
     // Ensure items present
     inboxState.items = [
       {
@@ -132,6 +134,38 @@ describe("InboxPanel Lifecycle — Task 16B K", () => {
     await waitFor(() => expect(screen.queryByText("外部消息")).toBeNull());
     // Root inbox should still be in DOM (check header)
     expect(screen.getByText("收件箱")).toBeTruthy();
+  });
+
+  it("查看详情即标为已读；「标为未读」可回切", async () => {
+    const onOpenChange = vi.fn();
+    render(<InboxPanel open={true} onOpenChange={onOpenChange} />);
+    fireEvent.click(screen.getByTestId("inbox-view-item-1"));
+    expect(inboxState.updateStatus).toHaveBeenCalledWith("item-1", "reviewed");
+    const markUnread = screen.getByTestId("inbox-mark-unread-item-1");
+    fireEvent.click(markUnread);
+    expect(inboxState.updateStatus).toHaveBeenCalledWith("item-1", "unread");
+  });
+
+  it("归档提供撤销，且「全部」不混入已归档消息", async () => {
+    const archived = {
+      ...(inboxState.items[0] as Record<string, unknown>),
+      id: "item-2",
+      subject: "旧通知",
+      status: "archived",
+    };
+    inboxState.items = [inboxState.items[0], archived];
+    render(<InboxPanel open={true} onOpenChange={() => {}} />);
+
+    fireEvent.click(screen.getByTestId("inbox-filter-all"));
+    expect(screen.getByTestId("inbox-item-item-1")).toBeTruthy();
+    expect(screen.queryByTestId("inbox-item-item-2")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("inbox-archive-item-1"));
+    expect(inboxState.updateStatus).toHaveBeenCalledWith("item-1", "archived");
+    const toast = useToastStore.getState().toasts.at(-1);
+    expect(toast?.message).toBe("消息已归档");
+    toast?.onAction?.();
+    expect(inboxState.updateStatus).toHaveBeenCalledWith("item-1", "unread");
   });
 
   it("open QQ Reply → close reply → Inbox still usable", async () => {
