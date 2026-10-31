@@ -216,6 +216,28 @@ describe("Kiro Composer — Add Menu", () => {
     expect(useKiroPreferencesStore.getState().webSearchEnabled).toBe(true);
   });
 
+  it("非视觉模型：添加图片禁用并解释原因（不提供无效入口）", async () => {
+    await renderComposer({ visionEnabled: false });
+    await click('[data-testid="kiro-composer-add"]');
+    const image = q('[data-testid="kiro-composer-add-image"]') as HTMLButtonElement;
+    expect(image.disabled).toBe(true);
+    expect(image.title).toContain("不支持图片输入");
+    expect(image.textContent).toContain("添加图片");
+    // 附件 / 课程资料 / 上下文入口不受视觉能力影响
+    const menu = q('[data-testid="kiro-composer-add-menu"]')!;
+    for (const label of ["上传文件", "课程资料", "ClassFlow 上下文"]) {
+      expect(menu.textContent, label).toContain(label);
+    }
+  });
+
+  it("视觉模型：添加图片可用（不误禁用）", async () => {
+    await renderComposer({ visionEnabled: true });
+    await click('[data-testid="kiro-composer-add"]');
+    const image = q('[data-testid="kiro-composer-add-image"]') as HTMLButtonElement;
+    expect(image.disabled).toBe(false);
+    expect(image.title).toBe("");
+  });
+
   it("课程资料与上下文为同一 Popover 内的子视图", async () => {
     await renderComposer();
     await click('[data-testid="kiro-composer-add"]');

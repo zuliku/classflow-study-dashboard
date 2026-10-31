@@ -1050,6 +1050,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                         scopeLocked={currentTurnScopeLocked}
                         preferencesLocked={nextTurnPreferencesLocked}
                         webSearchEnabled={webSearchEnabled}
+                        visionEnabled={visionEnabled}
                         onToggleWebSearch={() => setWebSearchEnabled(!webSearchEnabled)}
                         onFiles={onAddFiles}
                         onAddMaterial={onAddMaterial}

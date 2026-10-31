@@ -30,6 +30,13 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  * - 新模型的 reasoning 档位以官方 Go model variants 为准（none 表示关闭，不进入档位）；
  * - 新模型 vision 仅在厂商/家族有明确多模态证据时开启，否则保守关闭（绝不按名字猜）。
  *
+ * 视频输入（暂不支持，勿加虚假开关）：
+ * - 官方部分模型（Qwen3.8 Max / Kimi K3.1 Pro / MiMo V2.6 Flash）原生支持视频理解，
+ *   但本项目三条 transport 的 message part 只接受 text / image（Anthropic Messages 额外支持 PDF），
+ *   没有任何 video part，发送必然被 AI SDK / provider 拒绝；
+ * - 因此 registry 不声明 video capability、Composer 不提供视频入口。要支持视频输入需要
+ *   新增 provider 原生视频 part（例如 @ai-sdk/google）或网关侧抽帧预处理，属独立任务。
+ *
  * 历史验证要点：
  * - kimi-k3 / mimo-v2.5：Phase 3.3B live（PNG/JPEG/WEBP 颜色识别通过）
  * - grok-4.7：2026-09 live（text / tool / PNG-JPEG-WEBP / reasoning high 通过）

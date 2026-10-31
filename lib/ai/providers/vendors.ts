@@ -20,9 +20,11 @@ export const AI_PROVIDER_META: Record<AIModelVendor, AIModelVendorMeta> = {
   meta: { id: "meta", name: "Meta", logo: "/ai-providers/meta.svg" },
   // LongCat 官方品牌标暂缺：字母标占位（深色圆角 + LC），待官方标替换
   longcat: { id: "longcat", name: "Meituan · LongCat", logo: "/ai-providers/longcat.svg" },
-  // Google / StepFun 官方品牌标暂缺：字母标占位，待官方标替换
+  // Gemini 官方四角星渐变标
   google: { id: "google", name: "Google", logo: "/ai-providers/google.svg" },
+  // StepFun 官方品牌标暂缺：字母标占位，待官方标替换
   stepfun: { id: "stepfun", name: "StepFun", logo: "/ai-providers/stepfun.svg" },
+  // Claude 官方太阳标（terracotta）
   anthropic: { id: "anthropic", name: "Anthropic · Claude", logo: "/ai-providers/anthropic.svg" },
 };
 

@@ -33,6 +33,7 @@ export function KiroComposerAddMenu({
   scopeLocked,
   preferencesLocked,
   webSearchEnabled,
+  visionEnabled,
   onToggleWebSearch,
   onFiles,
   onAddMaterial,
@@ -44,6 +45,8 @@ export function KiroComposerAddMenu({
   /** 下一 Turn preference 锁（联网搜索） */
   preferencesLocked: boolean;
   webSearchEnabled: boolean;
+  /** 当前模型是否接受图片输入（false → 禁用「添加图片」并解释原因，不静默丢图） */
+  visionEnabled: boolean;
   onToggleWebSearch: () => void;
   onFiles: (files: File[]) => void;
   onAddMaterial: (ref: { courseId: string; courseName: string; materialId: string; title: string; type: string }) => void;
@@ -171,9 +174,16 @@ export function KiroComposerAddMenu({
       <button
         type="button"
         role="menuitem"
-        disabled={scopeLocked}
+        disabled={scopeLocked || !visionEnabled}
         onClick={() => pickFiles("image/png,image/jpeg,image/webp,.jpg,.jpeg,.png,.webp", imageRef)}
-        title={scopeLocked ? "当前 Turn 已冻结，下一条消息可改" : undefined}
+        title={
+          scopeLocked
+            ? "当前 Turn 已冻结，下一条消息可改"
+            : !visionEnabled
+              ? "当前模型不支持图片输入，请切换支持视觉的模型"
+              : undefined
+        }
+        data-testid="kiro-composer-add-image"
         className={ROOT_ROW}
       >
         <ImageIcon className="w-4 h-4 text-sandrift shrink-0" />

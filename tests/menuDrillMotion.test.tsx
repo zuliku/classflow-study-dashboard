@@ -40,6 +40,7 @@ function renderMenu() {
         scopeLocked={false}
         preferencesLocked={false}
         webSearchEnabled={false}
+        visionEnabled
         onToggleWebSearch={vi.fn()}
         onFiles={vi.fn()}
         onAddMaterial={vi.fn()}

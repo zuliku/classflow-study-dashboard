@@ -9,6 +9,7 @@ import {
 } from "@/lib/ai/reasoning/providerOptions";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { FIXED_REASONING } from "@/lib/ai/reasoning/types";
+import type { KiroReasoningEffort } from "@/lib/ai/reasoning/types";
 import { AIModelDefinition } from "@/lib/ai/providers/types";
 import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
 import { OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
@@ -445,4 +446,43 @@ describe("Qwen3.8 Max（anthropic-effort：thinking budget 上限阶梯）", () 
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "qwen3.8-max", requested: "xhigh" })).toBe("xhigh");
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "qwen3.8-max", requested: "high" })).toBe("default");
   });
+});
+
+describe("2026-10 官方目录：新增 / 扩展模型 → Composer 档位", () => {
+  // 档位顺序必须与官方 variants 一致（default 恒在首位）；UI 分段与 effective 共用同一列表
+  const cases: { id: string; efforts: KiroReasoningEffort[] }[] = [
+    { id: "claude-haiku-5-5", efforts: ["default", "low", "medium", "high", "xhigh", "max"] },
+    { id: "gemini-4-argon", efforts: ["default", "low", "medium", "high"] },
+    { id: "kimi-k3.1-pro", efforts: ["default", "low", "high", "max"] },
+    { id: "minimax-m3.1-flash", efforts: ["default", "low", "medium", "high", "xhigh", "max"] },
+    {
+      id: "muse-spark-1.2-contributor",
+      efforts: ["default", "minimal", "low", "medium", "high", "xhigh"],
+    },
+    { id: "step-5-preview", efforts: ["default", "low", "medium", "high"] },
+    { id: "deepseek-v4-pro", efforts: ["default", "high", "max"] },
+    { id: "glm-5.2", efforts: ["default", "high", "max"] },
+    { id: "hy3", efforts: ["default", "low", "high"] },
+    { id: "hy4-preview", efforts: ["default", "high"] },
+    { id: "qwen3.8-flash", efforts: ["default", "low", "medium", "xhigh"] },
+    { id: "qwen3.7-plus", efforts: ["default", "high", "max"] },
+    { id: "grok-4.7", efforts: ["default", "low", "medium", "high", "xhigh"] },
+  ];
+
+  for (const { id, efforts } of cases) {
+    it(`${id}：可调、档位齐全且每个档位都不会被折叠成 default`, () => {
+      const definition = OPENCODE_MODELS.find((m) => m.id === id);
+      expect(definition, id).toBeDefined();
+      const capability = getReasoningCapability(definition!);
+      expect(capability.adjustable).toBe(true);
+      expect(capability.supportedEfforts).toEqual(efforts);
+      for (const effort of efforts) {
+        expect(normalizeReasoningEffort(capability, effort), effort).toBe(effort);
+        expect(
+          resolveEffectiveReasoningEffort({ provider: "opencode-go", model: id, requested: effort }),
+          effort
+        ).toBe(effort);
+      }
+    });
+  }
 });
