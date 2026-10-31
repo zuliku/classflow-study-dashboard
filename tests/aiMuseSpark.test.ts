@@ -7,9 +7,9 @@ import { getReasoningCapability, normalizeReasoningEffort, resolveReasoningProvi
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { resolveModelDefinition, createLanguageModelFromDefinition } from "@/lib/ai/providers/resolver";
 
-// 2026-09：Go 限额表同步为 Muse Spark 1.3；2026-09-16 去旧留新，1.2 移出目录。
-// 1.3 的 vision/reasoning 未经 live 验证 → 保守不声明（fixed/default），待 gated live smoke 后放开。
-// 1.2 时代的 live verified 行为测试由 kimi-k3 / gpt-5.6-luna 等保留模型的用例继续覆盖。
+// 2026-09：Go 限额表同步为 Muse Spark 1.3（vision live 无识别 → 保守关闭）。
+// 2026-10-29 官方目录重新包含 1.2 Contributor；1.2 时代的 live verified
+// （responses vision + reasoning minimal..xhigh）恢复沿用。
 describe("Muse Spark 1.3 — registry", () => {
   const def = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.3-contributor")!;
 
@@ -34,8 +34,14 @@ describe("Muse Spark 1.3 — registry", () => {
     expect(def.capabilities.reasoning?.supportedEfforts).toEqual(["default", "minimal", "low", "medium", "high", "xhigh"]);
   });
 
-  it("旧款 muse-spark-1.2-contributor 已按去旧留新移出目录", () => {
-    expect(OPENCODE_MODELS.some((m) => m.id === "muse-spark-1.2-contributor")).toBe(false);
+  it("2026-10-29 官方目录恢复 muse-spark-1.2-contributor（responses + vision + reasoning）", () => {
+    const old = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.2-contributor");
+    expect(old).toBeDefined();
+    expect(old?.transport).toBe("openai-responses");
+    expect(old?.capabilities.vision).toBe(true);
+    expect(old?.capabilities.reasoning?.supportedEfforts).toEqual([
+      "default", "minimal", "low", "medium", "high", "xhigh",
+    ]);
   });
 
   it("vendor meta：Meta 本地 SVG（非 hotlink）", () => {
@@ -52,8 +58,9 @@ describe("Muse Spark 1.3 — registry", () => {
     expect(models.some((m) => m.id === "muse-spark-1.3-contributor")).toBe(true);
     const vendors = models.map((m) => m.vendor);
     const unique = Array.from(new Set(vendors.map((v) => v ?? "")));
-    // 深思：deepseek < kimi < longcat < meta < mimo < minimax < openai < qwen < tencent < xai < zai
-    expect(unique).toEqual(["deepseek", "kimi", "longcat", "meta", "mimo", "minimax", "openai", "qwen", "tencent", "xai", "zai"]);
+    // 深思：anthropic < deepseek < google < kimi < longcat < meta < mimo < minimax
+    // < openai < qwen < stepfun < tencent < xai < zai
+    expect(unique).toEqual(["anthropic", "deepseek", "google", "kimi", "longcat", "meta", "mimo", "minimax", "openai", "qwen", "stepfun", "tencent", "xai", "zai"]);
     // 验证 vendor 交叉不存在
     const seen = new Set<string>();
     let last: string | null = null;
@@ -75,7 +82,7 @@ describe("Muse Spark 1.3 — remote filtering (filterRemoteGoModels)", () => {
   it("已知 ID 保留 verified transport；未知模型跳过（不默认 openai-chat）", () => {
     const out = filterRemoteGoModels([
       { id: "muse-spark-1.3-contributor" },
-      { id: "grok-4.6" },
+      { id: "grok-4.7" },
       { id: "gpt-5.6-luna" },
       { id: "some-unknown-model" },
       { id: "muse-spark-1.3-contributor" }, // 去重
@@ -83,7 +90,7 @@ describe("Muse Spark 1.3 — remote filtering (filterRemoteGoModels)", () => {
     ]);
     expect(out).toEqual([
       { id: "muse-spark-1.3-contributor", transport: "openai-responses" },
-      { id: "grok-4.6", transport: "openai-responses" },
+      { id: "grok-4.7", transport: "openai-responses" },
       { id: "gpt-5.6-luna", transport: "openai-responses" },
     ]);
   });
@@ -161,15 +168,15 @@ describe("Muse Spark 1.3 — vision / PDF capability (live verified 无)", () =>
     expect(isVisionMimeSupported(cap, undefined, "photo.jpg")).toBe(false);
   });
 
-  it("非 vision 模型 MIME gate 对比（hy3 / longcat-2.0 / deepseek-v4-flash）", () => {
-    for (const model of ["hy3", "longcat-2.0", "deepseek-v4-flash"]) {
+  it("非 vision 模型 MIME gate 对比（hy3 / longcat-2.0 / step-5-preview）", () => {
+    for (const model of ["hy3", "longcat-2.0", "step-5-preview"]) {
       const cap = getModelCapabilities({ provider: "opencode-go", model });
       expect(cap.vision).toBe(false);
       expect(isVisionMimeSupported(cap, "image/png")).toBe(false);
     }
   });
 
-  it("文档确认 vision 模型 MIME gate 通过（glm-5.3-flash / qwen3.8-flash / minimax-m3 / qwen3.7-plus / grok-4.6）", () => {
+  it("文档确认 vision 模型 MIME gate 通过（glm-5.3-flash / qwen3.8-flash / minimax-m3 / qwen3.7-plus / grok-4.7）", () => {
     const trio = ["image/jpeg", "image/png", "image/webp"];
     for (const model of ["glm-5.3-flash", "qwen3.8-flash", "minimax-m3", "qwen3.7-plus"]) {
       const cap = getModelCapabilities({ provider: "opencode-go", model });
@@ -177,11 +184,9 @@ describe("Muse Spark 1.3 — vision / PDF capability (live verified 无)", () =>
       expect(cap.visionMimeTypes, model).toEqual(trio);
       expect(isVisionMimeSupported(cap, "image/webp"), model).toBe(true);
     }
-    // Grok 官方仅声明 JPEG/PNG
-    const grok = getModelCapabilities({ provider: "opencode-go", model: "grok-4.6" });
+    const grok = getModelCapabilities({ provider: "opencode-go", model: "grok-4.7" });
     expect(grok.vision).toBe(true);
-    expect(grok.visionMimeTypes).toEqual(["image/jpeg", "image/png"]);
-    expect(isVisionMimeSupported(grok, "image/webp")).toBe(false);
+    expect(grok.visionMimeTypes).toEqual(trio);
   });
 });
 

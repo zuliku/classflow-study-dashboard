@@ -390,7 +390,8 @@ describe("/api/ai/models", () => {
     const data = (await res.json()) as { models: { id: string }[]; source: string };
     expect(data.source).toBe("registry");
     expect(data.models.map((m) => m.id)).toContain("glm-5.3-flash");
-    expect(data.models.map((m) => m.id)).toContain("grok-4.6"); // Responses 已支持 → 出现在 fallback
+    expect(data.models.map((m) => m.id)).toContain("grok-4.7"); // Responses 已支持 → 出现在 fallback
+    expect(data.models.map((m) => m.id)).toContain("claude-haiku-5-5"); // 2026-10 官方新增
   });
 
   it("opencode-go：远端成功 → transport 原样保留；未知模型过滤", async () => {
@@ -400,9 +401,9 @@ describe("/api/ai/models", () => {
           object: "list",
           data: [
             { id: "glm-5.3-flash" },
-            { id: "minimax-m3" },
-            { id: "qwen3.7-plus" },
-            { id: "grok-4.6" },
+            { id: "minimax-m3.1-flash" },
+            { id: "claude-haiku-5-5" },
+            { id: "grok-4.7" },
             { id: "gpt-5.6-luna" },
             { id: "brand-new-model" },
           ],
@@ -415,9 +416,9 @@ describe("/api/ai/models", () => {
     expect(data.source).toBe("remote");
     const byId = new Map(data.models.map((m) => [m.id, m.transport]));
     expect(byId.get("glm-5.3-flash")).toBe("openai-chat");
-    expect(byId.get("minimax-m3")).toBe("anthropic-messages");
-    expect(byId.get("qwen3.7-plus")).toBe("anthropic-messages");
-    expect(byId.get("grok-4.6")).toBe("openai-responses");
+    expect(byId.get("minimax-m3.1-flash")).toBe("openai-chat");
+    expect(byId.get("claude-haiku-5-5")).toBe("anthropic-messages");
+    expect(byId.get("grok-4.7")).toBe("openai-responses");
     expect(byId.get("gpt-5.6-luna")).toBe("openai-responses");
     expect(byId.has("brand-new-model")).toBe(false); // 未知 + 无 transport：跳过，不猜
   });

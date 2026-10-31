@@ -1,9 +1,11 @@
 /**
- * 2026-09-23 第二批模型能力放开（依据厂商官方文档，非 live probe）：
- * - gpt-5.6-luna：vision + reasoning 档位扩展（xhigh / max）
+ * 模型能力契约（2026-09-23 文档放开 + 2026-10-29 官方目录同步）：
+ * - gpt-5.6-luna：vision + reasoning [default,low,medium,high,xhigh,max]
  * - deepseek-v4.1-flash：vision + reasoning [default,low,high,max]
  * - glm-5.3：reasoning [default,low,high,max]（官方 text-only → vision 保持关闭）
- * - qwen3.8-max / kimi-k2.7-code / mimo-v2-omni：vision
+ * - qwen3.8-max / kimi-k2.7-code：vision
+ * - 2026-10 新增：claude-haiku-5-5（vision + anthropic-effort）、gemini-4-argon（vision）、
+ *   kimi-k3.1-pro / minimax-m3.1-flash（vision + effort）、muse-spark-1.2（vision + responses effort）
  *
  * 这些声明直接驱动附件 gate（图片是否可发）与 Kiro 思考程度滑块；
  * 本文件锁定「能力声明 → 传输层 providerOptions」的端到端语义。
@@ -12,6 +14,7 @@ import { describe, it, expect } from "vitest";
 import { OPENCODE_MODELS } from "@/lib/ai/providers/openCodeGo";
 import { getModelCapabilities, isVisionMimeSupported } from "@/lib/ai/providers/capabilities";
 import {
+  ANTHROPIC_EFFORT_BUDGET_TOKENS,
   getReasoningCapability,
   normalizeReasoningEffort,
   resolveReasoningProviderOptions,
@@ -31,7 +34,11 @@ describe("官方文档放开：vision（图片可发送）", () => {
     "deepseek-v4.1-flash",
     "qwen3.8-max",
     "kimi-k2.7-code",
-    "mimo-v2-omni",
+    "kimi-k3.1-pro",
+    "minimax-m3.1-flash",
+    "gemini-4-argon",
+    "claude-haiku-5-5",
+    "muse-spark-1.2-contributor",
   ])("%s vision=true 且 JPEG/PNG/WEBP 通过 gate", (id) => {
     const cap = getModelCapabilities({ provider: "opencode-go", model: id });
     expect(cap.vision).toBe(true);
@@ -111,6 +118,54 @@ describe("官方文档放开：GPT 5.6 Luna 档位扩展", () => {
 
   it("视觉 + 推理可同时使用（luna 是精选列表默认推理旗舰）", () => {
     const cap = getModelCapabilities({ provider: "opencode-go", model: "gpt-5.6-luna" });
+    expect(cap.vision).toBe(true);
+    expect(cap.reasoning.adjustable).toBe(true);
+  });
+});
+
+describe("2026-10-29 官方目录：新增模型的能力 → providerOptions", () => {
+  it("Claude Haiku 5.5：anthropic-effort 档位齐全，high/max 有 budget 映射", () => {
+    const cap = getReasoningCapability(def("claude-haiku-5-5"));
+    expect(cap).toEqual({
+      adjustable: true,
+      supportedEfforts: ["default", "low", "medium", "high", "xhigh", "max"],
+      mechanism: "anthropic-effort",
+    });
+    for (const effort of ["low", "medium", "high", "xhigh", "max"] as const) {
+      expect(ANTHROPIC_EFFORT_BUDGET_TOKENS[effort], effort).toBeGreaterThan(0);
+      expect(resolveReasoningProviderOptions({ definition: def("claude-haiku-5-5"), effort })).toEqual({
+        thinking: { type: "enabled", budgetTokens: ANTHROPIC_EFFORT_BUDGET_TOKENS[effort] },
+      });
+    }
+    // 预算阶梯严格递增（越高越深，方向正确）
+    expect(ANTHROPIC_EFFORT_BUDGET_TOKENS.low).toBeLessThan(ANTHROPIC_EFFORT_BUDGET_TOKENS.medium);
+    expect(ANTHROPIC_EFFORT_BUDGET_TOKENS.medium).toBeLessThan(ANTHROPIC_EFFORT_BUDGET_TOKENS.high);
+    expect(ANTHROPIC_EFFORT_BUDGET_TOKENS.high).toBeLessThan(ANTHROPIC_EFFORT_BUDGET_TOKENS.xhigh);
+    expect(ANTHROPIC_EFFORT_BUDGET_TOKENS.xhigh).toBeLessThan(ANTHROPIC_EFFORT_BUDGET_TOKENS.max);
+  });
+
+  it("Kimi K3.1 Pro：effort 直通（low/high/max，无 medium）", () => {
+    const definition = def("kimi-k3.1-pro");
+    expect(resolveReasoningProviderOptions({ definition, effort: "medium" })).toBeUndefined();
+    expect(resolveReasoningProviderOptions({ definition, effort: "high" })).toEqual({ reasoningEffort: "high" });
+    expect(resolveProviderOptionsEnvelope({ definition, effort: "max" })).toEqual({
+      "classflow-kiro": { reasoningEffort: "max" },
+    });
+  });
+
+  it("Gemini 4 Argon：翻译层 openai-chat + effort 档位", () => {
+    const definition = def("gemini-4-argon");
+    expect(definition.transport).toBe("openai-chat");
+    expect(resolveReasoningProviderOptions({ definition, effort: "low" })).toEqual({ reasoningEffort: "low" });
+    expect(resolveReasoningProviderOptions({ definition, effort: "max" })).toBeUndefined();
+  });
+
+  it("Muse Spark 1.2：responses effort（minimal..xhigh），vision 可同时使用", () => {
+    const definition = def("muse-spark-1.2-contributor");
+    expect(resolveProviderOptionsEnvelope({ definition, effort: "xhigh" })).toEqual({
+      openai: { reasoningEffort: "xhigh", forceReasoning: true },
+    });
+    const cap = getModelCapabilities({ provider: "opencode-go", model: "muse-spark-1.2-contributor" });
     expect(cap.vision).toBe(true);
     expect(cap.reasoning.adjustable).toBe(true);
   });

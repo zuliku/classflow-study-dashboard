@@ -130,6 +130,9 @@ export function getVendorForModelId(modelId: string): AIModelVendor | null {
   if (modelId.startsWith("qwen")) return "qwen";
   if (modelId.startsWith("muse-")) return "meta";
   if (modelId.startsWith("longcat-")) return "longcat";
+  if (modelId.startsWith("gemini-")) return "google";
+  if (modelId.startsWith("step-")) return "stepfun";
+  if (modelId.startsWith("claude-")) return "anthropic";
   return null;
 }
 

@@ -56,8 +56,8 @@ describe("resolveModelDefinition", () => {
     expect(def?.vendor).toBe("openai");
   });
 
-  it("B3. OpenCode Responses：grok-4.6 → openai-responses", async () => {
-    const def = await resolveModelDefinition({ provider: "opencode-go", model: "grok-4.6" });
+  it("B3. OpenCode Responses：grok-4.7 → openai-responses", async () => {
+    const def = await resolveModelDefinition({ provider: "opencode-go", model: "grok-4.7" });
     expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("xai");
   });
@@ -180,13 +180,13 @@ describe("createLanguageModelFromDefinition（Adapter 选择）", () => {
     expect(anthropicFactory).not.toHaveBeenCalled();
   });
 
-  it("F3b. grok-4.6 同样走 @ai-sdk/openai .responses", () => {
+  it("F3b. grok-4.7 同样走 @ai-sdk/openai .responses", () => {
     const m = createLanguageModelFromDefinition(
-      { id: "grok-4.6", name: "Grok 4.6", provider: "opencode-go", vendor: "xai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+      { id: "grok-4.7", name: "Grok 4.7", provider: "opencode-go", vendor: "xai", transport: "openai-responses", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
       { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-go" }
     );
     expect(providerOf(m)).toBe("openai");
-    expect(modelIdOf(m)).toBe("grok-4.6");
+    expect(modelIdOf(m)).toBe("grok-4.7");
     expect(openAIFactory).toHaveBeenCalledTimes(1);
     expect(openAICompatibleFactory).not.toHaveBeenCalled();
   });
@@ -261,18 +261,19 @@ describe("resolveLanguageModel（统一入口）", () => {
 });
 
 describe("OpenCode 注册表完整性", () => {
-  it("OPENCODE_MODELS：每个模型 transport 均为已支持值；远端同步新增 gpt-6-luna / mimo-v2.6-flash 后 23 款", () => {
+  it("OPENCODE_MODELS：每个模型 transport 均为已支持值；2026-10-29 官方目录 28 款", () => {
     const ids = new Set(OPENCODE_MODELS.map((m) => m.id));
-    expect(OPENCODE_MODELS).toHaveLength(23);
+    expect(OPENCODE_MODELS).toHaveLength(28);
     for (const id of [
-      "glm-5.3-flash", "glm-5.3", "kimi-k3",
-      "kimi-k2.7-code",
-      "deepseek-v4.1-flash",
-      "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro", "mimo-v2.6-pro", "mimo-v2.6-flash",
-      "hy3", "hy4-preview", "longcat-2.0",
-      "grok-4.6", "grok-4.7", "gpt-6-luna", "gpt-5.6-luna",
-      "muse-spark-1.3-contributor",
-      "minimax-m3", "minimax-m2.7",
+      "glm-5.3-flash", "glm-5.3", "glm-5.2", "kimi-k3",
+      "kimi-k3.1-pro", "kimi-k2.7-code",
+      "deepseek-v4.1-flash", "deepseek-v4-pro",
+      "mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.6-pro", "mimo-v2.6-flash",
+      "hy3", "hy4-preview", "longcat-2.0", "step-5-preview",
+      "gemini-4-argon", "minimax-m3.1-flash",
+      "grok-4.7", "gpt-6-luna", "gpt-5.6-luna",
+      "muse-spark-1.2-contributor", "muse-spark-1.3-contributor",
+      "minimax-m3", "claude-haiku-5-5",
       "qwen3.7-plus", "qwen3.8-flash", "qwen3.8-max",
     ]) {
       expect(ids.has(id), id).toBe(true);

@@ -36,7 +36,6 @@ describe("官方可核实 contextWindowTokens", () => {
     const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
     expect(byId.get("gpt-5.6-luna")?.contextWindowTokens).toBe(1_050_000); // OpenAI 模型页
     expect(byId.get("grok-4.7")?.contextWindowTokens).toBe(500_000); // xAI Models & Pricing
-    expect(byId.get("grok-4.6")?.contextWindowTokens).toBe(500_000);
     expect(byId.get("kimi-k3")?.contextWindowTokens).toBe(1_000_000); // Kimi 官方 quickstart
     expect(byId.get("kimi-k2.7-code")?.contextWindowTokens).toBe(262_144); // Kimi 官方 256K
     expect(byId.get("deepseek-v4.1-flash")?.contextWindowTokens).toBe(1_000_000); // DeepSeek 官方 1M
@@ -46,8 +45,6 @@ describe("官方可核实 contextWindowTokens", () => {
     expect(byId.get("qwen3.7-plus")?.contextWindowTokens).toBe(1_000_000);
     expect(byId.get("qwen3.8-flash")?.contextWindowTokens).toBe(1_000_000);
     expect(byId.get("minimax-m3")?.contextWindowTokens).toBe(1_000_000); // MiniMax 官方表
-    expect(byId.get("minimax-m2.7")?.contextWindowTokens).toBe(204_800);
-    expect(byId.get("mimo-v2-omni")?.contextWindowTokens).toBe(262_144); // 小米官方 256K
   });
 
   it("DeepSeek 内置 provider 模型同样标注（官方 1M）", () => {
@@ -66,6 +63,14 @@ describe("官方可核实 contextWindowTokens", () => {
       "hy3",
       "hy4-preview",
       "longcat-2.0",
+      "kimi-k3.1-pro",
+      "minimax-m3.1-flash",
+      "gemini-4-argon",
+      "claude-haiku-5-5",
+      "step-5-preview",
+      "deepseek-v4-pro",
+      "glm-5.2",
+      "muse-spark-1.2-contributor",
     ]) {
       expect(byId.get(id)?.contextWindowTokens, id).toBeUndefined();
     }

@@ -20,6 +20,10 @@ export const AI_PROVIDER_META: Record<AIModelVendor, AIModelVendorMeta> = {
   meta: { id: "meta", name: "Meta", logo: "/ai-providers/meta.svg" },
   // LongCat 官方品牌标暂缺：字母标占位（深色圆角 + LC），待官方标替换
   longcat: { id: "longcat", name: "Meituan · LongCat", logo: "/ai-providers/longcat.svg" },
+  // Google / StepFun 官方品牌标暂缺：字母标占位，待官方标替换
+  google: { id: "google", name: "Google", logo: "/ai-providers/google.svg" },
+  stepfun: { id: "stepfun", name: "StepFun", logo: "/ai-providers/stepfun.svg" },
+  anthropic: { id: "anthropic", name: "Anthropic · Claude", logo: "/ai-providers/anthropic.svg" },
 };
 
 /** 未知厂商的统一 fallback（ProviderLogo 组件兜底） */

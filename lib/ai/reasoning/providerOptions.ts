@@ -26,13 +26,17 @@ import { AIModelDefinition, AICustomConfig } from "@/lib/ai/providers/types";
  * 止思考直接回答）。档位映射只能是“上限阶梯”，保证方向正确（越高越深），不声称
  * 等价于厂商原生档位。
  * 取值锚点（阿里云百炼官方）：Model Studio 默认 4000；可用范围 1～32768。
- * low=4000（官方默认）、medium=8000、xhigh=16000 —— 保守翻倍阶梯，远低于上下文，
- * 不会因 budget 耗尽截断正常回答（超限只停思考，不停正文）。
+ * low=4000（官方默认）、medium=8000、high=12000、xhigh=16000、max=24000 ——
+ * 单调递增阶梯，远低于上下文，不会因 budget 耗尽截断正常回答（超限只停思考，不停正文）。
+ * 2026-10：Claude Haiku 5.5 / Qwen3.7 Plus / Qwen3.8 Flash 的官方 variants 含 high/max，
+ * 补齐映射；未声明这些档位的模型（如 Qwen3.8 Max）不受影响。
  */
 export const ANTHROPIC_EFFORT_BUDGET_TOKENS: Record<string, number> = {
   low: 4000,
   medium: 8000,
+  high: 12000,
   xhigh: 16000,
+  max: 24000,
 };
 
 /** 从模型定义解析 ReasoningCapability（未声明 → fixed） */

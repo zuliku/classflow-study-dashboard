@@ -135,7 +135,14 @@ describe("Vision Capability（真实约束）", () => {
     expect(getModelCapabilities({ provider: "opencode-go", model: "qwen3.8-flash" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "qwen3.7-plus" }).vision).toBe(true);
     expect(getModelCapabilities({ provider: "opencode-go", model: "minimax-m3" }).vision).toBe(true);
-    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.6" }).vision).toBe(true);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.7" }).vision).toBe(true);
+    // 2026-10 官方新增：Claude / Gemini / Kimi K3.1 / MiniMax M3.1 Flash / Muse Spark 1.2
+    for (const model of ["claude-haiku-5-5", "gemini-4-argon", "kimi-k3.1-pro", "minimax-m3.1-flash", "muse-spark-1.2-contributor"]) {
+      expect(getModelCapabilities({ provider: "opencode-go", model }).vision, model).toBe(true);
+    }
+    expect(getModelCapabilities({ provider: "opencode-go", model: "step-5-preview" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "deepseek-v4-pro" }).vision).toBe(false);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.2" }).vision).toBe(false);
     // 无 vision 声明：混元 Hy3 / LongCat-2.0（纯语言）/ DeepSeek-V4-Flash（vision 属独立 -vision-exp 模型）
     expect(getModelCapabilities({ provider: "opencode-go", model: "hy3" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "hy4-preview" }).vision).toBe(false);
@@ -242,7 +249,7 @@ describe("Vision MIME gate（isVisionMimeSupported，Phase 3.3A）", () => {
     for (const model of ["glm-5.3-flash", "qwen3.8-flash", "qwen3.7-plus", "minimax-m3"]) {
       expect(getModelCapabilities({ provider: "opencode-go", model }).visionMimeTypes, model).toEqual(["image/jpeg", "image/png", "image/webp"]);
     }
-    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.6" }).visionMimeTypes).toEqual(["image/jpeg", "image/png"]);
+    expect(getModelCapabilities({ provider: "opencode-go", model: "grok-4.7" }).visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(getModelCapabilities({ provider: "custom-openai", model: "x", custom: { providerName: "", baseURL: "", model: "x", vision: true } }).visionMimeTypes).toBeUndefined();
   });
 

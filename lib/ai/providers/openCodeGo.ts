@@ -2,73 +2,44 @@
 import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 
 /**
- * OpenCode Go 官方模型注册表（Task 10 + Phase 3.0/3.1，2026-09 按 Go 使用/限额表同步；
- * 2026-09-16 按远端 /v1/models 实测 37 款同步为 36 款）：
- * 以官方 endpoint 表为准，每个模型声明真实 transport
- * （openai-chat / openai-responses / anthropic-messages）。
+ * OpenCode Go 官方模型注册表（Task 10 + Phase 3.0/3.1）。
  *
- * source-of-truth 规则：
+ * 2026-10-29 按官方 Go 模型表（/docs/go）与远端 /v1/models 全量同步为 28 款非免费模型：
+ * - 官方 30 款中排除 2 款免费模型（beam-free / iceman-contributor-free，免费额度与付费
+ *   Provider 语义不同，不进入选择器）；
+ * - 移除已不在官方列表的 grok-4.6 / mimo-v2-omni / minimax-m2.7；
+ * - 新增 kimi-k3.1-pro / minimax-m3.1-flash / gemini-4-argon / claude-haiku-5-5 /
+ *   step-5-preview / deepseek-v4-pro / glm-5.2 / muse-spark-1.2-contributor。
+ *
+ * source-of-truth 规则（不变）：
  * - /v1/models（远端）= availability source（「当前是否可用」）
  * - 官方 endpoint 表 + 本 verified registry = transport / vendor / capabilities / 展示名 source
  * 本列表是 /models 无法获取时的 fallback，也是远端模型 transport 的唯一来源
  * （远端 /models 只返回 id，不返回 transport；未知模型一律跳过，绝不猜测协议）。
  *
- * 新增模型 transport 按同厂商已验证家族归属（同协议族），能力一律保守
- * （streaming/tools 开；vision/reasoning 未经 live 验证不开）；
- * omen-alpha（未知厂商、无协议证据）按规则跳过，不进入注册表。
+ * transport 来自官方 endpoint 表：
+ * - openai-responses：Grok 4.7 / GPT 6 Luna / GPT 5.6 Luna / Muse Spark 1.2 / 1.3
+ * - anthropic-messages：Claude Haiku 5.5 / MiniMax M3 / Qwen3.7 Plus / Qwen3.8 Flash / Max
+ * - openai-chat：其余（Kimi / DeepSeek / GLM / MiMo / Hy / LongCat / Step / MiniMax M3.1 Flash）
+ * - Gemini 4 Argon 官方原生端点是 Google（@ai-sdk/google，未安装）。OpenCode 文档明确
+ *   「每个文本模型也可经其他 API 翻译调用」→ 走已验证的 openai-chat 翻译层，不新增
+ *   未安装的 Google transport（无法 live 验证，不发明协议）。
  *
- * 2026-09-16 去旧留新（19 款）：同家族旧版（deepseek v4-flash/v4-pro/flash/vision-exp、
- * kimi k2.5/k2.6、glm 5/5.1/5.2、qwen 3.5/3.6-plus/3.7-max、minimax m2.5、hy3-preview、
- * grok-4.5、muse-spark-1.2、mimo-v2-pro）移出选择器；默认模型同步为 deepseek-v4.1-flash。
- * 已持久化的旧选择由设置页「模型已不可用，请重新选择」诚实承接，不静默覆盖。
+ * 能力声明规则：
+ * - 已有 live/官方文档证据的模型保留原声明（不因同步回退）；
+ * - 新模型的 reasoning 档位以官方 Go model variants 为准（none 表示关闭，不进入档位）；
+ * - 新模型 vision 仅在厂商/家族有明确多模态证据时开启，否则保守关闭（绝不按名字猜）。
  *
- * 2026-09-03 live/文档验证后放开（key：live = 真实 Go probe，docs = 厂商官方文档）：
- * - grok-4.6（xai, responses）：reasoning [default,low,medium,high] live 通过（B/C；
- *   D continuation 空文本两次，待跟进，不阻塞档位声明）；vision=true + JPEG/PNG（xAI 官方 docs）
- * - hy4-preview（tencent 混元, chat）：与 Hy3 同协议族；发布报道无 vision 声明 → vision 不开
- * - glm-5.3-flash（zai, chat）：vision=true + JPEG/PNG/WEBP（智谱官方：原生多模态）
- * - qwen3.8-flash（qwen, messages）：vision=true + JPEG/PNG/WEBP（阿里官方：图文视频输入）
- * - qwen3.7-plus（qwen, messages）：同官方表确认 vision，顺手补上（此前保守 false）
- * - minimax-m3（minimax, messages）：vision=true + JPEG/PNG/WEBP（MiniMax 官方：原生多模态）
- * - longcat-2.0（longcat 美团, chat）：LongCat 官方文档兼容 OpenAI Chat Completions；
- *   2.0 为纯语言 coding 模型（视觉属 LongCat-Next/Omni 线）→ vision 不开
- * - muse-spark-1.3-contributor（meta, responses）：reasoning [default,minimal,low,medium,high,xhigh]
- *   live 通过（max 无输出，不声明；high 以上 hungry， trivial prompt 约 450+ reasoning tokens）；
- *   vision PNG/JPEG/WEBP 均无识别 → vision 不开
- * - deepseek-v4-flash：旧版已移出；deepseek 系仅保留 v4.1-flash（vision 不开）
- *
- * 2026-09-23 第二批按厂商官方文档放开（用户选择「只用官方文档」，不做 live probe）：
- * - gpt-5.6-luna（openai, responses）：vision=true + JPEG/PNG/WEBP（OpenAI images-vision）；
- *   reasoning 档位扩至 [default,low,medium,high,xhigh,max]（OpenAI reasoning：none/low/medium/high/xhigh/max）
- * - deepseek-v4.1-flash（deepseek, chat）：vision=true + JPEG/PNG/WEBP（DeepSeek Models & Pricing）；
- *   reasoning [default,low,high,max]（Thinking Mode：reasoning_effort low/high/max，默认开启、无 medium）
- * - glm-5.3（zai, chat）：vision 保持 false（官方明确 text-only）；
- *   reasoning [default,low,high,max]（官方：thinking 常开不可关，reasoning_effort low/high/max）
- * - qwen3.8-max（qwen, messages）：vision=true + JPEG/PNG/WEBP（阿里云百炼：图像/视频理解列表）
- * - kimi-k2.7-code（kimi, chat）：vision=true + JPEG/PNG/WEBP（Kimi 官方：text/image/video 输入）；
- *   thinking 常开且无 effort 参数 → 不声明 reasoning
- * - mimo-v2-omni（mimo, chat）：vision=true + JPEG/PNG/WEBP（小米官方：全模态基座）
- * 未取得官方能力证据的模型（hy3 / hy4-preview / longcat-2.0 / mimo-v2.5-pro / minimax-m2.7 等）保持保守。
- *
- * 远端 /v1/models 实测同步（Go 列表 43 款）：
- * - 新增 gpt-6-luna（openai, responses，2026-09-22 发布）：OpenAI 官方模型页确认
- *   Responses API + reasoning.effort none/low/medium/high/xhigh/max（默认 medium）+
- *   1,050,000 context + 文图输入 → 与 5.6-luna 同档声明，进入精选首位（最新优先）
- * - 新增 mimo-v2.6-flash（mimo, chat，同 v2.6-pro 协议族）：小米官方确认原生全模态
- *   （文本/图像/视频/音频理解）+ 1M context → vision 开；effort 参数无证据 → 不声明 reasoning
- * - 其余远端新增（kimi-k2.6 / longcat-2.5-preview-free / space-bunny-free / hy3-preview /
- *   glm-5.x 旧版 / deepseek 旧版 / qwen 旧版 / grok-4.5 / muse-spark-1.2 / minimax-m2.5 /
- *   mimo-v2-pro）按去旧留新与无证据不收录原则暂不进入注册表（space-bunny 未知厂商，同 omen-alpha 跳过）
- *
- * 思考程度覆盖扩展（官方文档档）：
- * - glm-5.3-flash：智谱 + 阿里云 + TokenHub 三源确认 reasoning_effort 支持 low/high/max
- *   （默认 max，thinking 常开不可关），与 glm-5.3 同档位同 mechanism（effort 直通）
- * - 暂缓（有思考但无可用档位形态，暴露分段选择器属虚假 control，一律不声明）：
- *   MiniMax 全系（M3 effort 值仅开关深度，M2.x 常开不可调；官方明确不调节深度）、
- *   mimo 全系（v2.5/pro 仅 thinking 开关，effort 各档效果一致；omni/flash 无档位证据）、
- *   hy3/hy4-preview（adaptive 自适应，档位即默认值，无可调差）、
- *   kimi-k2.7-code（常开且无 effort 参数）、longcat-2.0（无 thinking 证据）
- * （qwen3.8-max 见下：档位经 anthropic-effort 放开，不在此列）
+ * 历史验证要点：
+ * - kimi-k3 / mimo-v2.5：Phase 3.3B live（PNG/JPEG/WEBP 颜色识别通过）
+ * - grok-4.7：2026-09 live（text / tool / PNG-JPEG-WEBP / reasoning high 通过）
+ * - muse-spark-1.2：live（responses vision + reasoning minimal..xhigh；chat vision 400）
+ * - gpt-5.6-luna / gpt-6-luna：OpenAI 官方 reasoning.effort none..max + 文图输入
+ * - deepseek-v4.1-flash：DeepSeek 官方 vision + thinking low/high/max
+ * - glm-5.3 / glm-5.3-flash：智谱官方 text-only（5.3）/ 原生多模态（5.3-flash）+ effort low/high/max
+ * - qwen3.8-max：阿里云百炼图像/视频理解 + reasoning low/medium/xhigh（anthropic-effort）
+ * - minimax-m3 / kimi-k2.7-code / qwen3.8-flash / qwen3.7-plus：官方多模态证据 → vision 开
+ * - longcat-2.0：纯语言 coding 模型 → vision 不开
  */
 export const OPENCODE_MODELS: AIModelDefinition[] = [
   // ---- OpenAI Chat Completions（官方 endpoint：/v1/chat/completions）----
@@ -98,25 +69,57 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     // Kimi 官方 quickstart：Kimi K3 为 1M-token context window
     contextWindowTokens: 1_000_000,
   },
+  // 2026-10-29 官方 Go 新增：Kimi K3.1 Pro（同 Kimi 多模态家族 → 文/图/视频输入；
+  // variants low/high/max，无 medium）
+  {
+    id: "kimi-k3.1-pro",
+    name: "Kimi K3.1 Pro",
+    provider: "opencode-go",
+    vendor: "kimi",
+    transport: "openai-chat",
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: true,
+      fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "low", "high", "max"],
+        mechanism: "effort",
+      },
+    },
+  },
   { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", provider: "opencode-go", vendor: "kimi", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 262_144 },
   // DeepSeek 官方 Models & Pricing + Thinking Mode：DeepSeek-V4.1-Flash 支持 Vision（PNG/JPEG/WEBP）；
   // thinking 默认开启，reasoning_effort 支持 low/high/max（无 medium）→ 走 "effort" 直通
   { id: "deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" } }, contextWindowTokens: 1_000_000 },
+  // DeepSeek V4 Pro：官方 variants high/max（无 low/medium）；纯文本推理模型，vision 不开
+  { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "opencode-go", vendor: "deepseek", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false, reasoning: { adjustable: true, supportedEfforts: ["default", "high", "max"], mechanism: "effort" } } },
   { id: "mimo-v2.5", name: "MiMo V2.5", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] } },
   { id: "mimo-v2.6-pro", name: "MiMo V2.6 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "high"], mechanism: "effort" } } },
   // 小米官方（MiMo V2.6 系列同协议族）：Flash 为原生全模态（文本/图像/视频/音频理解）+ 1M context；
   // effort 参数无官方证据 → 不声明 reasoning（保守）
   { id: "mimo-v2.6-flash", name: "MiMo V2.6 Flash", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
-  // 小米官方：MiMo-V2-Omni 为全模态基座（图像/视频/音频输入）→ vision 开
-  { id: "mimo-v2-omni", name: "MiMo V2 Omni", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 262_144 },
   { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", provider: "opencode-go", vendor: "mimo", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
-  { id: "hy4-preview", name: "Hy4 preview", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  // 2026-10-29 官方 Go variants：hy3 none/low/high；hy4-preview none/high
+  { id: "hy3", name: "Hy3", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false, reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high"], mechanism: "effort" } } },
+  { id: "hy4-preview", name: "Hy4 preview", provider: "opencode-go", vendor: "tencent", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false, reasoning: { adjustable: true, supportedEfforts: ["default", "high"], mechanism: "effort" } } },
   { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" } }, contextWindowTokens: 1_000_000 },
   // 智谱官方 GLM-5.3 文档：text-only（vision 不开）；thinking 常开不可关，
   // reasoning_effort 支持 low/high/max（默认 max，无 medium）
   { id: "glm-5.3", name: "GLM 5.3", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false, reasoning: { adjustable: true, supportedEfforts: ["default", "low", "high", "max"], mechanism: "effort" } }, contextWindowTokens: 1_000_000 },
+  // 2026-10-29 官方 Go 新增：GLM-5.2（text-only；variants high/max）
+  { id: "glm-5.2", name: "GLM 5.2", provider: "opencode-go", vendor: "zai", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false, reasoning: { adjustable: true, supportedEfforts: ["default", "high", "max"], mechanism: "effort" } } },
   { id: "longcat-2.0", name: "LongCat 2.0", provider: "opencode-go", vendor: "longcat", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false } },
+  // 2026-10-29 官方 Go 新增：Step 5 Preview（variants low/medium/high；无多模态证据 → vision 不开）
+  { id: "step-5-preview", name: "Step 5 Preview", provider: "opencode-go", vendor: "stepfun", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: false, fileParts: false, reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "high"], mechanism: "effort" } } },
+  // Gemini 4 Argon：官方原生端点 @ai-sdk/google（未安装）；OpenCode 文档明确文本模型可经其他
+  // API 翻译调用 → 走已验证的 openai-chat。Gemini 原生多模态（图像输入）→ vision 开。
+  { id: "gemini-4-argon", name: "Gemini 4 Argon", provider: "opencode-go", vendor: "google", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "high"], mechanism: "effort" } } },
+  // MiniMax M3.1 Flash：官方 chat endpoint（与 M3 的 Messages 不同）；原生多模态 →
+  // vision 开；variants low/medium/high/xhigh/max
+  { id: "minimax-m3.1-flash", name: "MiniMax M3.1 Flash", provider: "opencode-go", vendor: "minimax", transport: "openai-chat", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "high", "xhigh", "max"], mechanism: "effort" } } },
   // ---- OpenAI Responses（官方 endpoint：/v1/responses → @ai-sdk/openai）----
   // Phase 3.1 正式接入。保守能力声明：vision/fileParts 未经 OpenCode Go proxy 实测不开。
   // grok-4.5 等旧版已按去旧留新移出（同 xai responses 协议族；如回归远端列表再收录）
@@ -133,37 +136,14 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       fileParts: false,
       visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
       // 2026-09 live probe：text / tool call / PNG-JPEG-WEBP 颜色识别 / reasoning high 全部通过
-      // （reasoning effort 经 openai Responses reasoning.effort 直通；沿用 4.6 家族档位）
+      // （reasoning effort 经 openai Responses reasoning.effort 直通；官方 Go variants 另含 xhigh）
       reasoning: {
         adjustable: true,
-        supportedEfforts: ["default", "low", "medium", "high"],
+        supportedEfforts: ["default", "low", "medium", "high", "xhigh"],
         mechanism: "openai-responses-effort",
       },
     },
     // xAI 官方 Models & Pricing：grok-4.7 context = 500k
-    contextWindowTokens: 500_000,
-  },
-  {
-    id: "grok-4.6",
-    name: "Grok 4.6",
-    provider: "opencode-go",
-    vendor: "xai",
-    transport: "openai-responses",
-    capabilities: {
-      streaming: true,
-      tools: true,
-      vision: true,
-      fileParts: false,
-      visionMimeTypes: ["image/jpeg", "image/png"],
-      // 2026-09-03 live：reasoning low/medium/high outbound 回显 + 文本通过（Smoke B/C）；
-      // 官方边界沿用 4.5（low/medium/high，默认 high，不能关闭）+ forceReasoning。
-      reasoning: {
-        adjustable: true,
-        supportedEfforts: ["default", "low", "medium", "high"],
-        mechanism: "openai-responses-effort",
-      },
-    },
-    // xAI 官方 Models & Pricing：grok-4.6 context = 500k
     contextWindowTokens: 500_000,
   },
   {
@@ -217,6 +197,27 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
     // OpenAI 官方模型页：gpt-6-luna 1,050,000 context window（922K max input / 128K max output）
     contextWindowTokens: 1_050_000,
   },
+  // 2026-10-29 官方 Go 回归：Muse Spark 1.2 Contributor。1.2 时代 live 已验证 responses
+  // vision（PNG/JPEG/WEBP 颜色识别）与 reasoning minimal..xhigh；沿用同家族 contributor 端点。
+  {
+    id: "muse-spark-1.2-contributor",
+    name: "Muse Spark 1.2",
+    provider: "opencode-go",
+    vendor: "meta",
+    transport: "openai-responses",
+    capabilities: {
+      streaming: true,
+      tools: true,
+      vision: true,
+      fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+      reasoning: {
+        adjustable: true,
+        supportedEfforts: ["default", "minimal", "low", "medium", "high", "xhigh"],
+        mechanism: "openai-responses-effort",
+      },
+    },
+  },
   {
     id: "muse-spark-1.3-contributor",
     name: "Muse Spark 1.3",
@@ -238,13 +239,15 @@ export const OPENCODE_MODELS: AIModelDefinition[] = [
       },
     },
   },
-  // muse-spark-1.2 等旧版已按去旧留新移出（如回归远端列表再收录）
   // ---- Anthropic Messages（官方 endpoint：/v1/messages）----
   // V1 保守能力声明：streaming + tools 为强要求；vision/fileParts 未经实测不开
   { id: "minimax-m3", name: "MiniMax M3", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
-  { id: "minimax-m2.7", name: "MiniMax M2.7", provider: "opencode-go", vendor: "minimax", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: false, fileParts: false }, contextWindowTokens: 204_800 },
-  { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
-  { id: "qwen3.8-flash", name: "Qwen3.8 Flash", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"] }, contextWindowTokens: 1_000_000 },
+  // 2026-10-29 官方 Go 新增：Claude Haiku 5.5（Anthropic Messages；vision 模型；
+  // variants none/low/medium/high/xhigh/max → anthropic thinking budget 阶梯，none 不进入档位）
+  { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", provider: "opencode-go", vendor: "anthropic", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "high", "xhigh", "max"], mechanism: "anthropic-effort" } } },
+  // Qwen3.7 Plus variants none/high/max；Qwen3.8 Flash variants none/low/medium/xhigh
+  { id: "qwen3.7-plus", name: "Qwen3.7 Plus", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "high", "max"], mechanism: "anthropic-effort" } }, contextWindowTokens: 1_000_000 },
+  { id: "qwen3.8-flash", name: "Qwen3.8 Flash", provider: "opencode-go", vendor: "qwen", transport: "anthropic-messages", capabilities: { streaming: true, tools: true, vision: true, fileParts: false, visionMimeTypes: ["image/jpeg", "image/png", "image/webp"], reasoning: { adjustable: true, supportedEfforts: ["default", "low", "medium", "xhigh"], mechanism: "anthropic-effort" } }, contextWindowTokens: 1_000_000 },
   // 阿里云百炼官方：qwen3.8-max 同时列于「文本生成」与「图像/视频理解」→ vision 开；
   // 千问AI平台官方：reasoning_effort 档位 low/medium/xhigh（默认 xhigh）→ 经
   // anthropic-effort（thinking budget 上限阶梯，见 providerOptions）放开
@@ -256,24 +259,24 @@ export const OPENCODE_DEFAULT_MODEL = "deepseek-v4.1-flash";
 /**
  * 选择器精选列表（Kiro 模型选择器展示的唯一来源；顺序 = 展示顺序）。
  *
- * 产品策略（2026-09）：**少而精** —— 每个厂商仅保留最新 / 最强的一款，新的与能力强的优先：
- * - 旗舰推理：GPT 6 Luna（OpenAI，2026-09-22 发布，精选首位）/ GPT 5.6 Luna / Grok 4.7（xAI）/
- *   Muse Spark 1.3（Meta，默认高推理）
- * - 多模态旗舰：Kimi K3 / MiMo V2.6 Pro / GLM 5.3 Flash / MiniMax M3（均支持图片理解）
- * - 默认快模型：DeepSeek V4.1 Flash；Qwen 旗舰：Qwen3.8 Max
+ * 产品策略（2026-10-29 官方目录同步）：**少而精（≤10）** —— 新 / 强优先，覆盖主要厂商：
+ * - 旗舰推理：GPT 6 Luna（OpenAI）/ Claude Haiku 5.5（Anthropic，新）/ Gemini 4 Argon
+ *   （Google，新）/ Kimi K3.1 Pro（新）/ GPT 5.6 Luna / Grok 4.7（xAI）
+ * - 多模态 + 快模型：MiniMax M3.1 Flash（新）/ DeepSeek V4.1 Flash（默认）
+ * - 旗舰综合：Qwen3.8 Max / GLM 5.3 Flash
  * 未入选的已验证模型仍保留在 OPENCODE_MODELS（transport / 历史选择可继续解析），只是不在选择器中展示。
  */
 export const OPENCODE_SELECTOR_MODEL_IDS: readonly string[] = [
   "gpt-6-luna",
+  "claude-haiku-5-5",
+  "gemini-4-argon",
+  "kimi-k3.1-pro",
   "gpt-5.6-luna",
   "grok-4.7",
-  "muse-spark-1.3-contributor",
-  "kimi-k3",
+  "minimax-m3.1-flash",
   "deepseek-v4.1-flash",
-  "mimo-v2.6-pro",
-  "glm-5.3-flash",
   "qwen3.8-max",
-  "minimax-m3",
+  "glm-5.3-flash",
 ];
 
 /** 精选模型（按精选顺序；过滤掉注册表缺失项，fail closed） */

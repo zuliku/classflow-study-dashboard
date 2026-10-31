@@ -19,28 +19,29 @@ describe("Provider Registry", () => {
     expect(DEEPSEEK_MODELS[0].name).toBe("V4 Flash");
   });
 
-  it("OpenCode Go：官方三 transport 注册表（chat + responses + messages；远端同步新增 gpt-6-luna / mimo-v2.6-flash 后 23 款）", () => {
+  it("OpenCode Go：官方三 transport 注册表（2026-10-29 官方目录 28 款非免费模型）", () => {
     const models = getModelsForProvider("opencode-go");
     const ids = models.map((m) => m.id);
-    expect(ids).toHaveLength(23);
+    expect(ids).toHaveLength(28);
     for (const id of [
-      "glm-5.3-flash", "glm-5.3",
-      "kimi-k3", "kimi-k2.7-code",
-      "deepseek-v4.1-flash",
-      "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro", "mimo-v2.6-pro", "mimo-v2.6-flash",
+      "glm-5.3-flash", "glm-5.3", "glm-5.2",
+      "kimi-k3", "kimi-k3.1-pro", "kimi-k2.7-code",
+      "deepseek-v4.1-flash", "deepseek-v4-pro",
+      "mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.6-pro", "mimo-v2.6-flash",
       "hy3", "hy4-preview",
-      "longcat-2.0",
+      "longcat-2.0", "step-5-preview",
+      "gemini-4-argon", "minimax-m3.1-flash",
       // openai-responses 模型（Phase 3.1 正式接入）
-      "gpt-6-luna", "gpt-5.6-luna", "grok-4.6", "grok-4.7",
-      "muse-spark-1.3-contributor",
+      "gpt-6-luna", "gpt-5.6-luna", "grok-4.7",
+      "muse-spark-1.2-contributor", "muse-spark-1.3-contributor",
       // anthropic-messages 模型
-      "minimax-m3", "minimax-m2.7",
+      "minimax-m3", "claude-haiku-5-5",
       "qwen3.7-plus", "qwen3.8-flash", "qwen3.8-max",
     ]) {
       expect(ids, id).toContain(id);
     }
-    // 去旧留新移出的旧版不再出现
-    for (const retired of ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-flash", "deepseek-v4-flash-vision-exp", "kimi-k2.6", "kimi-k2.5", "glm-5.2", "glm-5.1", "glm-5", "mimo-v2-pro", "hy3-preview", "grok-4.5", "muse-spark-1.2-contributor", "minimax-m2.5", "qwen3.7-max", "qwen3.6-plus", "qwen3.5-plus"]) {
+    // 官方列表已移除 / 免费模型 / 历史旧版不进入注册表
+    for (const retired of ["grok-4.6", "mimo-v2-omni", "minimax-m2.7", "beam-free", "iceman-contributor-free", "deepseek-v4-flash", "deepseek-flash", "deepseek-v4-flash-vision-exp", "kimi-k2.6", "kimi-k2.5", "glm-5.1", "glm-5", "mimo-v2-pro", "hy3-preview", "grok-4.5", "minimax-m2.5", "qwen3.7-max", "qwen3.6-plus", "qwen3.5-plus"]) {
       expect(ids, retired).not.toContain(retired);
     }
     // 未知厂商 omen-alpha（无协议证据）绝不进入注册表
@@ -56,9 +57,9 @@ describe("Provider Registry", () => {
 
   it("OpenCode transport 划分与官方 endpoint 表一致", () => {
     const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m.transport]));
-    const chatModels = ["glm-5.3-flash", "glm-5.3", "kimi-k3", "kimi-k2.7-code", "deepseek-v4.1-flash", "mimo-v2.5", "mimo-v2-omni", "mimo-v2.5-pro", "hy3", "hy4-preview", "longcat-2.0"];
-    const responsesModels = ["grok-4.6", "gpt-5.6-luna", "muse-spark-1.3-contributor"];
-    const messagesModels = ["minimax-m3", "minimax-m2.7", "qwen3.7-plus", "qwen3.8-flash", "qwen3.8-max"];
+    const chatModels = ["glm-5.3-flash", "glm-5.3", "glm-5.2", "kimi-k3", "kimi-k3.1-pro", "kimi-k2.7-code", "deepseek-v4.1-flash", "deepseek-v4-pro", "mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.6-pro", "mimo-v2.6-flash", "hy3", "hy4-preview", "longcat-2.0", "step-5-preview", "gemini-4-argon", "minimax-m3.1-flash"];
+    const responsesModels = ["grok-4.7", "gpt-5.6-luna", "gpt-6-luna", "muse-spark-1.2-contributor", "muse-spark-1.3-contributor"];
+    const messagesModels = ["minimax-m3", "claude-haiku-5-5", "qwen3.7-plus", "qwen3.8-flash", "qwen3.8-max"];
     for (const id of chatModels) expect(byId.get(id), id).toBe("openai-chat");
     for (const id of responsesModels) expect(byId.get(id), id).toBe("openai-responses");
     for (const id of messagesModels) expect(byId.get(id), id).toBe("anthropic-messages");
@@ -76,9 +77,10 @@ describe("Provider Registry", () => {
       seen.add(key);
       last = key;
     }
-    // 厂商首字母序：deepseek < kimi < longcat < meta < mimo < minimax < openai < qwen < tencent < xai < zai
+    // 厂商首字母序：anthropic < deepseek < google < kimi < longcat < meta < mimo < minimax
+    // < openai < qwen < stepfun < tencent < xai < zai
     const unique = Array.from(new Set(vendors.map((v) => v ?? "")));
-    expect(unique).toEqual(["deepseek", "kimi", "longcat", "meta", "mimo", "minimax", "openai", "qwen", "tencent", "xai", "zai"]);
+    expect(unique).toEqual(["anthropic", "deepseek", "google", "kimi", "longcat", "meta", "mimo", "minimax", "openai", "qwen", "stepfun", "tencent", "xai", "zai"]);
     // 组内能力降序：qwen3.7-plus / qwen3.8-flash 同分按 id 稳定
     const qwenIdx = models.map((m) => m.id);
     expect(qwenIdx.indexOf("qwen3.7-plus")).toBeLessThan(qwenIdx.indexOf("qwen3.8-flash"));
@@ -111,7 +113,7 @@ describe("Provider Registry", () => {
       { id: "minimax-m3" },
       { id: "qwen3.7-plus" },
       { id: "gpt-5.6-luna" }, // openai-responses：已支持 → 保留
-      { id: "grok-4.6" }, // openai-responses：已支持 → 保留
+      { id: "grok-4.7" }, // openai-responses：已支持 → 保留
       { id: "muse-spark-1.3-contributor" }, // openai-responses：Muse Spark 1.3 → 保留
       { id: "longcat-2.0" }, // openai-chat：LongCat → 保留
       { id: "some-unknown-model" }, // 未知 → 跳过（远端不返回 transport，绝不猜测）
@@ -122,7 +124,7 @@ describe("Provider Registry", () => {
       { id: "minimax-m3", transport: "anthropic-messages" },
       { id: "qwen3.7-plus", transport: "anthropic-messages" },
       { id: "gpt-5.6-luna", transport: "openai-responses" },
-      { id: "grok-4.6", transport: "openai-responses" },
+      { id: "grok-4.7", transport: "openai-responses" },
       { id: "muse-spark-1.3-contributor", transport: "openai-responses" },
       { id: "longcat-2.0", transport: "openai-chat" },
     ]);
@@ -130,7 +132,7 @@ describe("Provider Registry", () => {
 
   it("OPENCODE_MODELS 中不存在 transport 黑名单/白名单漂移：每个模型 transport 均来自注册表声明", () => {
     expect(OPENCODE_MODELS.some((m) => m.id === "gpt-5.6-luna")).toBe(true);
-    expect(OPENCODE_MODELS.some((m) => m.id === "grok-4.6")).toBe(true);
+    expect(OPENCODE_MODELS.some((m) => m.id === "grok-4.7")).toBe(true);
     expect(OPENCODE_MODELS.some((m) => m.id === "muse-spark-1.3-contributor")).toBe(true);
     expect(OPENCODE_MODELS.some((m) => m.id === "longcat-2.0")).toBe(true);
     expect(
@@ -154,17 +156,15 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     });
   });
 
-  it("2. grok-4.6 已注册，transport = openai-responses，reasoning live 通过，vision 按官方 docs", () => {
-    const def = OPENCODE_MODELS.find((m) => m.id === "grok-4.6");
+  it("2. grok-4.7 已注册，transport = openai-responses，reasoning live 通过 + 官方 variants xhigh", () => {
+    const def = OPENCODE_MODELS.find((m) => m.id === "grok-4.7");
     expect(def?.transport).toBe("openai-responses");
     expect(def?.vendor).toBe("xai");
-    expect(def?.name).toBe("Grok 4.6");
-    // xAI 官方声明图像输入（jpg/jpeg/png）→ vision 开，白名单不含 webp
+    expect(def?.name).toBe("Grok 4.7");
     expect(def?.capabilities.vision).toBe(true);
-    expect(def?.capabilities.visionMimeTypes).toEqual(["image/jpeg", "image/png"]);
-    // 2026-09-03 live：reasoning low/medium/high 通过（Smoke B/C）
+    expect(def?.capabilities.visionMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(def?.capabilities.reasoning?.adjustable).toBe(true);
-    expect(def?.capabilities.reasoning?.supportedEfforts).toEqual(["default", "low", "medium", "high"]);
+    expect(def?.capabilities.reasoning?.supportedEfforts).toEqual(["default", "low", "medium", "high", "xhigh"]);
     expect(def?.capabilities.reasoning?.mechanism).toBe("openai-responses-effort");
   });
 
@@ -203,11 +203,11 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     expect(getVendorForModelId("longcat-2.0")).toBe("longcat");
   });
 
-  it("4. filterRemoteGoModels：glm-5.3-flash / minimax-m3 / grok-4.6 / gpt-5.6-luna / muse-spark-1.3-contributor 保留各自 transport；unknown 过滤", () => {
+  it("4. filterRemoteGoModels：glm-5.3-flash / minimax-m3 / grok-4.7 / gpt-5.6-luna / muse-spark-1.3-contributor 保留各自 transport；unknown 过滤", () => {
     const out = filterRemoteGoModels([
       { id: "glm-5.3-flash" },
       { id: "minimax-m3" },
-      { id: "grok-4.6" },
+      { id: "grok-4.7" },
       { id: "gpt-5.6-luna" },
       { id: "muse-spark-1.3-contributor" },
       { id: "some-unknown-model" },
@@ -215,9 +215,54 @@ describe("OpenCode Phase 3.1：openai-responses registry 与过滤一致性", ()
     expect(out).toEqual([
       { id: "glm-5.3-flash", transport: "openai-chat" },
       { id: "minimax-m3", transport: "anthropic-messages" },
-      { id: "grok-4.6", transport: "openai-responses" },
+      { id: "grok-4.7", transport: "openai-responses" },
       { id: "gpt-5.6-luna", transport: "openai-responses" },
       { id: "muse-spark-1.3-contributor", transport: "openai-responses" },
+    ]);
+  });
+
+  it("4b. 2026-10-29 官方新增 8 款：transport / vendor / 能力声明", () => {
+    const byId = new Map(OPENCODE_MODELS.map((m) => [m.id, m]));
+    expect(byId.get("kimi-k3.1-pro")?.transport).toBe("openai-chat");
+    expect(byId.get("kimi-k3.1-pro")?.vendor).toBe("kimi");
+    expect(byId.get("kimi-k3.1-pro")?.capabilities.reasoning?.supportedEfforts).toEqual([
+      "default", "low", "high", "max",
+    ]);
+
+    expect(byId.get("minimax-m3.1-flash")?.transport).toBe("openai-chat");
+    expect(byId.get("minimax-m3.1-flash")?.vendor).toBe("minimax");
+    expect(byId.get("minimax-m3.1-flash")?.capabilities.vision).toBe(true);
+    expect(byId.get("minimax-m3.1-flash")?.capabilities.reasoning?.supportedEfforts).toEqual([
+      "default", "low", "medium", "high", "xhigh", "max",
+    ]);
+
+    expect(byId.get("gemini-4-argon")?.transport).toBe("openai-chat");
+    expect(byId.get("gemini-4-argon")?.vendor).toBe("google");
+    expect(byId.get("gemini-4-argon")?.capabilities.vision).toBe(true);
+
+    expect(byId.get("claude-haiku-5-5")?.transport).toBe("anthropic-messages");
+    expect(byId.get("claude-haiku-5-5")?.vendor).toBe("anthropic");
+    expect(byId.get("claude-haiku-5-5")?.capabilities.reasoning?.mechanism).toBe("anthropic-effort");
+    expect(byId.get("claude-haiku-5-5")?.capabilities.reasoning?.supportedEfforts).toEqual([
+      "default", "low", "medium", "high", "xhigh", "max",
+    ]);
+
+    expect(byId.get("step-5-preview")?.transport).toBe("openai-chat");
+    expect(byId.get("step-5-preview")?.vendor).toBe("stepfun");
+    expect(byId.get("step-5-preview")?.capabilities.vision).toBe(false);
+
+    expect(byId.get("deepseek-v4-pro")?.transport).toBe("openai-chat");
+    expect(byId.get("deepseek-v4-pro")?.capabilities.reasoning?.supportedEfforts).toEqual([
+      "default", "high", "max",
+    ]);
+
+    expect(byId.get("glm-5.2")?.transport).toBe("openai-chat");
+    expect(byId.get("glm-5.2")?.capabilities.vision).toBe(false);
+
+    expect(byId.get("muse-spark-1.2-contributor")?.transport).toBe("openai-responses");
+    expect(byId.get("muse-spark-1.2-contributor")?.capabilities.vision).toBe(true);
+    expect(byId.get("muse-spark-1.2-contributor")?.capabilities.reasoning?.supportedEfforts).toEqual([
+      "default", "minimal", "low", "medium", "high", "xhigh",
     ]);
   });
 
@@ -237,36 +282,46 @@ describe("模型 → 厂商（Logo）映射", () => {
   });
 
   it("模型 → 厂商映射正确（不靠名称猜测）", () => {
-    expect(getVendorForModelId("grok-4.6")).toBe("xai");
+    expect(getVendorForModelId("grok-4.7")).toBe("xai");
     expect(getVendorForModelId("glm-5.3-flash")).toBe("zai");
     expect(getVendorForModelId("kimi-k3")).toBe("kimi");
+    expect(getVendorForModelId("kimi-k3.1-pro")).toBe("kimi");
     expect(getVendorForModelId("deepseek-v4-flash")).toBe("deepseek");
     expect(getVendorForModelId("mimo-v2.5")).toBe("mimo");
     expect(getVendorForModelId("hy3")).toBe("tencent");
     expect(getVendorForModelId("hy4-preview")).toBe("tencent");
     expect(getVendorForModelId("minimax-m3")).toBe("minimax");
+    expect(getVendorForModelId("minimax-m3.1-flash")).toBe("minimax");
     expect(getVendorForModelId("qwen3.7-plus")).toBe("qwen");
     expect(getVendorForModelId("qwen3.8-flash")).toBe("qwen");
     expect(getVendorForModelId("longcat-2.0")).toBe("longcat");
     expect(getVendorForModelId("muse-spark-1.3-contributor")).toBe("meta");
+    expect(getVendorForModelId("gemini-4-argon")).toBe("google");
+    expect(getVendorForModelId("step-5-preview")).toBe("stepfun");
+    expect(getVendorForModelId("claude-haiku-5-5")).toBe("anthropic");
   });
 
   it("去旧留新 19 款的图标映射：注册表声明优先，前缀兜底一致", () => {
     const cases: [string, AIModelVendor][] = [
       ["kimi-k2.7-code", "kimi"],
-      ["minimax-m2.7", "minimax"],
+      ["minimax-m3.1-flash", "minimax"],
       ["glm-5.3", "zai"],
+      ["glm-5.2", "zai"],
       ["deepseek-v4.1-flash", "deepseek"],
+      ["deepseek-v4-pro", "deepseek"],
       ["qwen3.8-max", "qwen"],
-      ["mimo-v2-omni", "mimo"], ["mimo-v2.5-pro", "mimo"],
+      ["mimo-v2.5-pro", "mimo"],
       ["hy3", "tencent"], ["hy4-preview", "tencent"],
-      ["grok-4.6", "xai"],
+      ["grok-4.7", "xai"],
+      ["muse-spark-1.2-contributor", "meta"],
       ["muse-spark-1.3-contributor", "meta"],
       ["kimi-k3", "kimi"], ["minimax-m3", "minimax"],
       ["glm-5.3-flash", "zai"],
       ["mimo-v2.5", "mimo"],
       ["qwen3.7-plus", "qwen"], ["qwen3.8-flash", "qwen"],
       ["gpt-5.6-luna", "openai"], ["longcat-2.0", "longcat"],
+      ["gemini-4-argon", "google"], ["step-5-preview", "stepfun"],
+      ["claude-haiku-5-5", "anthropic"],
     ];
     for (const [id, vendor] of cases) {
       expect(getVendorForModelId(id), id).toBe(vendor);
@@ -296,6 +351,9 @@ describe("模型 → 厂商（Logo）映射", () => {
     expect(getVendorForModelId("minimax-m3-turbo")).toBe("minimax");
     expect(getVendorForModelId("qwen3-x-max")).toBe("qwen");
     expect(getVendorForModelId("muse-spark-1.2-turbo")).toBe("meta");
+    expect(getVendorForModelId("gemini-5-ultra")).toBe("google");
+    expect(getVendorForModelId("step-6")).toBe("stepfun");
+    expect(getVendorForModelId("claude-opus-6")).toBe("anthropic");
     expect(getVendorForModelId("mystery-model")).toBeNull();
   });
 

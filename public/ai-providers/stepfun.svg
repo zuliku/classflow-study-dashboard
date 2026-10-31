@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- StepFun 字母标占位（官方品牌标待替换）：深色圆角 + 白色 SF -->
+  <rect x="2" y="2" width="44" height="44" rx="10" fill="#1F2937"/>
+  <text x="24" y="31" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">SF</text>
+</svg>

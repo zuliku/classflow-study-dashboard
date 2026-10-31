@@ -286,8 +286,8 @@ describe("resolveEffectiveReasoningEffort（requested → effective，UI/Turn Sn
   });
 
   it("3. OpenCode Go fixed requested=high → default", () => {
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "deepseek-v4-flash", requested: "high" })).toBe("default");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.6", requested: "max" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "longcat-2.0", requested: "high" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "kimi-k2.7-code", requested: "max" })).toBe("default");
   });
 
   it("4. Custom reasoningEffort=true requested=high → high", () => {
@@ -311,9 +311,9 @@ describe("resolveEffectiveReasoningEffort（requested → effective，UI/Turn Sn
   });
 });
 
-describe("GPT 5.6 Luna / Grok 4.6（openai-responses-effort）", () => {
+describe("GPT 5.6 Luna / Grok 4.7（openai-responses-effort）", () => {
   const lunaDef = OPENCODE_MODELS.find((m) => m.id === "gpt-5.6-luna")!;
-  const grokDef = OPENCODE_MODELS.find((m) => m.id === "grok-4.6")!;
+  const grokDef = OPENCODE_MODELS.find((m) => m.id === "grok-4.7")!;
 
   it("1. GPT Luna capability：adjustable=true", () => {
     const cap = getReasoningCapability(lunaDef);
@@ -365,33 +365,34 @@ describe("GPT 5.6 Luna / Grok 4.6（openai-responses-effort）", () => {
     ).toEqual({ "classflow-kiro": { reasoningEffort: "high" } });
   });
 
-  it("7. Grok 4.6：live verified → adjustable，同 mechanism 复用", () => {
+  it("7. Grok 4.7：live verified → adjustable，同 mechanism 复用（官方 variants 含 xhigh）", () => {
     const cap = getReasoningCapability(grokDef);
     expect(cap.adjustable).toBe(true);
     expect(cap.mechanism).toBe("openai-responses-effort");
-    expect(cap.supportedEfforts).toEqual(["default", "low", "medium", "high"]);
+    expect(cap.supportedEfforts).toEqual(["default", "low", "medium", "high", "xhigh"]);
     // 与 Luna 同一映射（无 Grok-specific envelope / mechanism）
     expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "low" })).toEqual({ reasoningEffort: "low", forceReasoning: true });
     expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "medium" })).toEqual({ reasoningEffort: "medium", forceReasoning: true });
     expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "high" })).toEqual({ reasoningEffort: "high", forceReasoning: true });
+    expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "xhigh" })).toEqual({ reasoningEffort: "xhigh", forceReasoning: true });
     expect(resolveReasoningProviderOptions({ definition: grokDef, effort: "max" })).toBeUndefined();
     expect(resolveProviderOptionsEnvelope({ definition: grokDef, effort: "high", base: { store: false } })).toEqual({
       openai: { store: false, reasoningEffort: "high", forceReasoning: true },
     });
   });
 
-  it("8. OpenCode Go DeepSeek aliases 仍 fixed（不因名字复用 DeepSeek official capability）", () => {
-    for (const id of ["deepseek-v4-flash", "deepseek-v4-pro"]) {
+  it("8. OpenCode Go 无档位模型仍 fixed（不因名字推断 effort）", () => {
+    for (const id of ["kimi-k2.7-code", "longcat-2.0"]) {
       const def = OPENCODE_MODELS.find((m) => m.id === id)!;
       expect(getReasoningCapability(def).adjustable, id).toBe(false);
     }
   });
 
-  it("effective：Luna/Grok requested=high → high；OpenCode DeepSeek → default；max → default", () => {
+  it("effective：Luna/Grok requested=high → high；无档位模型 → default；max → default", () => {
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "gpt-5.6-luna", requested: "high" })).toBe("high");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.6", requested: "high" })).toBe("high");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.6", requested: "max" })).toBe("default");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "deepseek-v4-flash", requested: "high" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.7", requested: "high" })).toBe("high");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "grok-4.7", requested: "max" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "longcat-2.0", requested: "high" })).toBe("default");
   });
 });
 
@@ -406,7 +407,13 @@ describe("Qwen3.8 Max（anthropic-effort：thinking budget 上限阶梯）", () 
   });
 
   it("2. 档位 → thinking budget（上限语义；官方默认 4000 为 low 锚点）", () => {
-    expect(ANTHROPIC_EFFORT_BUDGET_TOKENS).toEqual({ low: 4000, medium: 8000, xhigh: 16000 });
+    expect(ANTHROPIC_EFFORT_BUDGET_TOKENS).toEqual({
+      low: 4000,
+      medium: 8000,
+      high: 12000,
+      xhigh: 16000,
+      max: 24000,
+    });
     expect(resolveReasoningProviderOptions({ definition: qwenMaxDef, effort: "default" })).toBeUndefined();
     expect(resolveReasoningProviderOptions({ definition: qwenMaxDef, effort: "low" })).toEqual({
       thinking: { type: "enabled", budgetTokens: 4000 },
