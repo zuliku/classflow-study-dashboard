@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
  *   menu role=listbox；item role=option / aria-selected
  * - 键盘：Enter/Space 打开；↑↓ 导航；Home/End；Enter 选择；Escape 关闭并聚焦回 trigger；Tab 关闭
  * - 鼠标：click 打开/选择；outside click 关闭；scroll/resize 关闭
+ * - 结构：外壳 overflow-hidden；searchable 时搜索栏固定在滚动区外，只有下方选项列表滚动，
+ *   避免 sticky 搜索栏与滚动内容同容器时文字从搜索栏上方缝隙透出（模型/课程等长列表通用）
  * - 动画（Motion Contract）：open = opacity + translateY(2px→0)；enter = --motion-fast，
  *   exit = --motion-exit-fast，unmount = MOTION_EXIT_MS.fast（共享 usePresence，同源对应）
  * - focus：mouse 点击不保留刺眼 ring；键盘 focus-visible 轻量 ring（:focus-visible）
@@ -307,7 +309,10 @@ export function UISelect<T extends string | number>({
               zIndex: 100,
             }}
             className={cn(
-              "overflow-y-auto overflow-x-clip scrollbar-none rounded-lg border border-line bg-surface shadow-card py-1 pointer-events-auto",
+              // 固定外壳：搜索栏在滚动区外，选项只在其下方的列表内滚动。
+              // 若搜索栏与选项同处一个滚动容器（sticky + padding），滚动时选项文字会从
+              // 搜索栏上方的 padding/边框缝隙透出，形成「搜索框上出现文字」的穿帮。
+              "flex flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-card pointer-events-auto",
               // opacity + transform 同一 transition-property（此前 transition-opacity + transition-transform
               // 两条声明打架，只有一个生效，opacity 无过渡直接闪现）
               "transition-[opacity,transform] ease-[var(--ease-standard)]",
@@ -320,7 +325,7 @@ export function UISelect<T extends string | number>({
             onKeyDown={onMenuKeyDown}
           >
             {searchable && (
-              <div className="sticky top-0 z-10 px-1.5 pt-1.5 pb-1 bg-surface">
+              <div className="shrink-0 px-1.5 pt-1.5 pb-1 bg-surface" data-testid="ui-select-search">
                 <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line-soft bg-background focus-within:border-line-strong transition-colors">
                   <Search className="w-3.5 h-3.5 text-sandrift shrink-0" aria-hidden="true" />
                   <input
@@ -345,46 +350,51 @@ export function UISelect<T extends string | number>({
                 </div>
               </div>
             )}
-            {filtered.length === 0 && (
-              <div role="status" className="px-3 py-2.5 text-xs text-sandrift">
-                无匹配选项
-              </div>
-            )}
-            {filtered.map((opt, i) => {
-              const isSelected = opt.value === value;
-              const isActive = i === activeIndex;
-              return (
-                <button
-                  key={String(opt.value)}
-                  type="button"
-                  id={`${listboxId}-option-${i}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  data-index={i}
-                  tabIndex={-1}
-                  onClick={() => selectOption(i)}
-                  onMouseEnter={() => setActiveIndex(i)}
-                  className={cn(
-                    "flex w-full items-center gap-1.5 px-2.5 text-xs font-semibold text-left",
-                    "focus:outline-none",
-                    itemClassName ?? "h-9",
-                    isSelected
-                      ? "bg-pastel-mint/50 text-charcoal font-bold"
-                      : isActive
-                        ? "bg-alabaster text-charcoal"
-                        : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
-                  )}
-                >
-                  <span className="w-4 shrink-0 flex items-center justify-center">
-                    {isSelected && <Check className="w-3.5 h-3.5 text-charcoal" aria-hidden="true" />}
-                  </span>
-                  {/* 常规 label 单行完整显示；仅超过菜单 max-width 时才省略 */}
-                  <span className="whitespace-nowrap overflow-hidden text-ellipsis" title={opt.label}>
-                    {opt.label}
-                  </span>
-                </button>
-              );
-            })}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto overflow-x-clip scrollbar-none py-1"
+              data-testid="ui-select-options"
+            >
+              {filtered.length === 0 && (
+                <div role="status" className="px-3 py-2.5 text-xs text-sandrift">
+                  无匹配选项
+                </div>
+              )}
+              {filtered.map((opt, i) => {
+                const isSelected = opt.value === value;
+                const isActive = i === activeIndex;
+                return (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    id={`${listboxId}-option-${i}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    data-index={i}
+                    tabIndex={-1}
+                    onClick={() => selectOption(i)}
+                    onMouseEnter={() => setActiveIndex(i)}
+                    className={cn(
+                      "flex w-full items-center gap-1.5 px-2.5 text-xs font-semibold text-left",
+                      "focus:outline-none",
+                      itemClassName ?? "h-9",
+                      isSelected
+                        ? "bg-pastel-mint/50 text-charcoal font-bold"
+                        : isActive
+                          ? "bg-alabaster text-charcoal"
+                          : "text-satin-grey hover:bg-alabaster hover:text-charcoal"
+                    )}
+                  >
+                    <span className="w-4 shrink-0 flex items-center justify-center">
+                      {isSelected && <Check className="w-3.5 h-3.5 text-charcoal" aria-hidden="true" />}
+                    </span>
+                    {/* 常规 label 单行完整显示；仅超过菜单 max-width 时才省略 */}
+                    <span className="whitespace-nowrap overflow-hidden text-ellipsis" title={opt.label}>
+                      {opt.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>,
           document.body
         )}

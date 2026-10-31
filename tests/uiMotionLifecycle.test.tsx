@@ -463,6 +463,20 @@ describe("UISelect lifecycle（共享 usePresence）", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
+  it("searchable：搜索栏在滚动区外（选项不会从搜索栏上方透出）", () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ value: `c${i}`, label: `课程${i}` }));
+    render(<UISelect value="c0" onChange={vi.fn()} options={many} ariaLabel="课程筛选" searchable />);
+    fireEvent.click(screen.getByRole("combobox", { name: "课程筛选" }));
+    const search = screen.getByTestId("ui-select-search");
+    const options = screen.getByTestId("ui-select-options");
+    // 搜索栏与选项列表是兄弟节点：列表滚动时搜索栏不在同一个滚动容器里
+    expect(options.contains(search)).toBe(false);
+    expect(search.parentElement).toBe(options.parentElement);
+    expect(options.className).toContain("overflow-y-auto");
+    expect(options.parentElement!.className).toContain("overflow-hidden");
+    expect(search.className).not.toContain("sticky");
+  });
+
   it("searchable：无匹配时显示空态；空格在搜索框内是输入字符", () => {
     const onChange = vi.fn();
     const many = Array.from({ length: 8 }, (_, i) => ({ value: `c${i}`, label: `课程${i}` }));

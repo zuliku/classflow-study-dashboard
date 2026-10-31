@@ -40,8 +40,8 @@ test("窄 trigger（任务状态）：菜单宽于 trigger，label 完整显示"
     await expect(opt).toBeVisible();
     expect(await opt.textContent()).toBe(label);
   }
-  // 菜单无滚动条视觉（scrollbar-none）
-  await expect(listbox).toHaveClass(/scrollbar-none/);
+  // 菜单选项滚动区无滚动条视觉（scrollbar-none）
+  await expect(listbox.getByTestId("ui-select-options")).toHaveClass(/scrollbar-none/);
 });
 
 test("长 label（动效偏好）：跟随系统 / 完整动效 / 减少动效完整显示", async ({ page }) => {

@@ -107,7 +107,13 @@ test("mobile 390：通用页 dropdown 可用且无横向溢出", async ({ page }
   const motion = page.getByRole("combobox", { name: "动效偏好" });
   await motion.click();
   // Mobile 全屏 Dialog 下用 Select 的键盘契约，避免 body portal 与 viewport resize 的命中测试竞态。
+  // 等焦点真正进入菜单后再按方向键：菜单挂载后的 focus effect 与首次按键存在竞态，
+  // 否则 ArrowDown 仍由 trigger 处理（只会重新 openMenu，activeIndex 不前进）。
+  const listbox = page.getByRole("listbox", { name: "动效偏好" });
+  await expect(listbox).toBeVisible();
+  await expect(listbox.getByRole("option", { name: "跟随系统" })).toBeFocused();
   await page.keyboard.press("ArrowDown");
+  await expect(motion).toHaveAttribute("aria-activedescendant", /-option-1$/);
   await page.keyboard.press("Enter");
   await expect(motion).toHaveText("完整动效");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
@@ -161,8 +167,21 @@ test("模型菜单内部滚动不关闭，滚动后的选项仍可选择；外�
   await expect(listbox).toBeVisible();
   await expect(listbox.getByRole("option", { name: "测试滚动模型 01" })).toBeVisible();
 
+  // 搜索栏固定在滚动区外：与菜单顶边齐平（无 padding 缝隙），选项滚动不会从其上方透出
+  const searchWrap = listbox.getByTestId("ui-select-search");
+  const optionsScroll = listbox.getByTestId("ui-select-options");
+  await expect(searchWrap).toBeVisible();
+  const [menuBox, searchBox] = await Promise.all([listbox.boundingBox(), searchWrap.boundingBox()]);
+  expect(searchBox!.y - menuBox!.y).toBeLessThanOrEqual(1);
+  await expect(optionsScroll).toHaveCSS("overflow-y", "auto");
+  await optionsScroll.evaluate((el) => {
+    el.scrollTop = 300;
+  });
+  const searchAfter = await searchWrap.boundingBox();
+  expect(searchAfter!.y).toBe(searchBox!.y);
+
   // 列表真实可滚动
-  await expect.poll(() => listbox.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  await expect.poll(() => optionsScroll.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
 
   // 菜单内部 wheel 滚动：菜单保持打开
   await listbox.hover();
