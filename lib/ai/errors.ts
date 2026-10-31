@@ -31,7 +31,7 @@ export class AIError extends Error {
 /** 错误 → 友好文案（UI 直接使用） */
 export const AI_ERROR_MESSAGES: Record<AIErrorCode, string> = {
   INVALID_API_KEY: "API Key 无效，请去设置检查 Key 是否填写正确。",
-  MODEL_NOT_FOUND: "该模型已下线或不可用，发送已置灰，请去设置重新选择模型。",
+  MODEL_NOT_FOUND: "该模型已下线或不可用，发送已置灰，请去设置更新模型列表后重新选择。",
   MODEL_UNAVAILABLE: "当前模型暂时不可用，请稍后重试或重新选择。",
   UNSUPPORTED_TRANSPORT: "当前模型的接口类型暂不支持，请换一个模型。",
   RATE_LIMITED: "请求过于频繁，请稍后再试。",

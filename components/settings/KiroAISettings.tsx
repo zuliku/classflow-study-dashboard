@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Check, Loader2, Eye, EyeOff, PlugZap, Globe2, ChevronDown } from "lucide-react";
+import { Check, Loader2, Eye, EyeOff, PlugZap, Globe2, ChevronDown, RefreshCw } from "lucide-react";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { getSessionApiKey, setSessionApiKey } from "@/lib/ai/sessionKeys";
 import { useAIModelCatalog } from "@/hooks/useAIModelCatalog";
@@ -158,7 +158,12 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   }, []);
 
   // 统一模型 Catalog：Settings 与 Composer 共用同一模型集合（Task 10）
-  const { models: catalogModels } = useAIModelCatalog(provider);
+  const {
+    models: catalogModels,
+    refreshing: modelsRefreshing,
+    error: modelsRefreshError,
+    refresh: refreshModels,
+  } = useAIModelCatalog(provider);
   const models = catalogModels;
   const isCustom = provider === "custom-openai";
   // 当前模型不在 Catalog（已下线/远端不可用）：提示重新选择，不自动覆盖；models 为空时不误报（网慢首帧）
@@ -311,6 +316,25 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   />
                   {modelUnavailable && (
                     <span className="text-[10px] font-semibold text-danger">当前模型已不可用，请重新选择。</span>
+                  )}
+                  {/* 一键更新模型列表（绕过服务端短缓存；仅刷新可用性，不改 transport/能力声明） */}
+                  {provider === "opencode-go" && (
+                    <button
+                      type="button"
+                      onClick={refreshModels}
+                      disabled={modelsRefreshing}
+                      data-testid="ai-model-refresh"
+                      title="从 OpenCode Go 获取最新可用模型列表"
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-sandrift hover:text-charcoal transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className={cn("w-3 h-3", modelsRefreshing && "animate-spin")} />
+                      {modelsRefreshing ? "正在更新模型列表…" : "更新模型列表"}
+                    </button>
+                  )}
+                  {modelsRefreshError && (
+                    <span className="text-[10px] text-danger" role="status">
+                      {modelsRefreshError}
+                    </span>
                   )}
                 </div>
               </SettingsRow>

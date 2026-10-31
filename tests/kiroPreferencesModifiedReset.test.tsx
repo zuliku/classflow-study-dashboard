@@ -29,7 +29,14 @@ import {
 } from "@/lib/ai/web/vision/credentials";
 
 vi.mock("@/hooks/useAIModelCatalog", () => ({
-  useAIModelCatalog: () => ({ models: [] }),
+  useAIModelCatalog: () => ({
+    models: [],
+    loading: false,
+    refreshing: false,
+    source: "registry",
+    error: null,
+    refresh: () => {},
+  }),
 }));
 
 vi.mock("@/components/settings/KiroMemorySettings", () => ({

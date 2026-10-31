@@ -302,4 +302,69 @@ describe("模型目录 route：精选列表 / all=1 全部模型", () => {
     expect(body.models).toHaveLength(OPENCODE_MODELS.length);
     expect(body.models.map((m) => m.id)).toEqual(getModelsForProvider("opencode-go").map((m) => m.id));
   });
+
+  it("refresh=1：跳过短缓存强制请求官方 /models；普通请求仍命中缓存", async () => {
+    const { resetOpenCodeGoModelsCache } = await import("@/lib/ai/providers/openCodeGo");
+    resetOpenCodeGoModelsCache();
+    let ids = ["grok-4.7"];
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ object: "list", data: ids.map((id) => ({ id })) }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = await handleModels(new Request("http://local/api/ai/models?provider=opencode-go"));
+    expect(((await first.json()) as { source: string }).source).toBe("remote");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    ids = ["deepseek-v4.1-flash"];
+    const cached = await handleModels(
+      new Request("http://local/api/ai/models?provider=opencode-go")
+    );
+    const cachedBody = (await cached.json()) as { models: { id: string }[] };
+    expect(cachedBody.models.map((m) => m.id)).toEqual(["grok-4.7"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const refreshed = await handleModels(
+      new Request("http://local/api/ai/models?provider=opencode-go&refresh=1")
+    );
+    const refreshedBody = (await refreshed.json()) as { models: { id: string }[]; source: string };
+    expect(refreshedBody.source).toBe("remote");
+    expect(refreshedBody.models.map((m) => m.id)).toEqual(["deepseek-v4.1-flash"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(refreshed.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("refresh=1 失败：source=registry，且不污染上一次成功缓存", async () => {
+    const { resetOpenCodeGoModelsCache } = await import("@/lib/ai/providers/openCodeGo");
+    resetOpenCodeGoModelsCache();
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ object: "list", data: [{ id: "grok-4.7" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = await handleModels(new Request("http://local/api/ai/models?provider=opencode-go"));
+    expect(((await first.json()) as { source: string }).source).toBe("remote");
+
+    fetchMock.mockRejectedValueOnce(new Error("network down"));
+    const failed = await handleModels(
+      new Request("http://local/api/ai/models?provider=opencode-go&refresh=1")
+    );
+    const failedBody = (await failed.json()) as { models: { id: string }[]; source: string };
+    expect(failedBody.source).toBe("registry");
+    // registry fallback 仍包含已下线/精选模型，客户端据 source 提示刷新失败
+    expect(failedBody.models.map((m) => m.id)).toEqual([...OPENCODE_SELECTOR_MODEL_IDS]);
+
+    // 刷新失败不写 null 缓存：下一次普通请求继续使用上一次成功结果（不再打远端）
+    const after = await handleModels(new Request("http://local/api/ai/models?provider=opencode-go"));
+    const afterBody = (await after.json()) as { models: { id: string }[]; source: string };
+    expect(afterBody.source).toBe("remote");
+    expect(afterBody.models.map((m) => m.id)).toEqual(["grok-4.7"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

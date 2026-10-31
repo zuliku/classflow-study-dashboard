@@ -24,6 +24,18 @@ describe("useAIModelCatalog transport — Task 16D Phase 20", () => {
     expect(src).toContain("showAllModels ? getModelsForProvider(p) : getSelectorModelsForProvider(p)");
     // 远端请求携带 all=1，且偏好变化触发重取
     expect(src).toContain('showAllModels ? "&all=1" : ""');
-    expect(src).toContain("[provider, showAllModels]");
+    expect(src).toContain("[provider, showAllModels, refreshSeq]");
+  });
+
+  it("2026-10：一键刷新（refresh=1 绕过服务端缓存）暴露 refreshing / error", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "hooks/useAIModelCatalog.ts"), "utf8");
+    // 手动刷新携带 refresh=1，与首次加载区分（不回退 registry fallback）
+    expect(src).toContain('manual ? "&refresh=1" : ""');
+    expect(src).toContain("refreshing");
+    expect(src).toContain("error");
+    expect(src).toContain("refreshSeq");
+    expect(src).toContain("return { models, loading, refreshing, source, error, refresh }");
+    // 刷新失败必须保留当前列表（不 setModels(fallback)）并提示
+    expect(src).toContain("已保留本地列表");
   });
 });

@@ -407,9 +407,16 @@ export function resetOpenCodeGoModelsCache(): void {
   remoteCache = null;
 }
 
-/** 拉取 OpenCode Go 远端模型列表（Server-only）；失败返回 null，由调用方回落 registry */
-export async function fetchOpenCodeGoModels(): Promise<RemoteGoModel[] | null> {
-  if (remoteCache && Date.now() - remoteCache.at < REMOTE_CACHE_TTL_MS) {
+/**
+ * 拉取 OpenCode Go 远端模型列表（Server-only）；失败返回 null，由调用方回落 registry。
+ *
+ * refresh=true（设置页「更新模型列表」）：跳过短缓存读取，强制请求官方 /models。
+ * 失败时不写入 null 缓存（保留上一次成功结果，避免刷新失败污染后续 2 分钟的正常请求）；
+ * 无论是否命中缓存，transport / capabilities 仍以本地 OPENCODE_MODELS 为准。
+ */
+export async function fetchOpenCodeGoModels(options: { refresh?: boolean } = {}): Promise<RemoteGoModel[] | null> {
+  const refresh = options.refresh === true;
+  if (!refresh && remoteCache && Date.now() - remoteCache.at < REMOTE_CACHE_TTL_MS) {
     return remoteCache.models;
   }
   try {
@@ -419,7 +426,7 @@ export async function fetchOpenCodeGoModels(): Promise<RemoteGoModel[] | null> {
       cache: "no-store",
     });
     if (!res.ok) {
-      remoteCache = { at: Date.now(), models: null };
+      if (!refresh) remoteCache = { at: Date.now(), models: null };
       return null;
     }
     const data = (await res.json()) as { models?: { id?: string }[]; data?: { id?: string }[] };
@@ -429,7 +436,7 @@ export async function fetchOpenCodeGoModels(): Promise<RemoteGoModel[] | null> {
     remoteCache = { at: Date.now(), models: filtered };
     return filtered;
   } catch {
-    remoteCache = { at: Date.now(), models: null };
+    if (!refresh) remoteCache = { at: Date.now(), models: null };
     return null;
   }
 }
