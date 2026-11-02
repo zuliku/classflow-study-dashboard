@@ -152,7 +152,7 @@ export function AnalyticsMomentum() {
                         ) : (
                           <span
                             key={day.date}
-                            title={cellTitle(day)}
+                            aria-hidden="true"
                             data-level={day.level}
                             data-unknown={day.unknown || undefined}
                             className={cn(

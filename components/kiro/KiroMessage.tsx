@@ -235,7 +235,6 @@ export function KiroMessage({
                   <span
                     key={s.sourceId}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-alabaster border border-line text-[10px] font-medium text-satin-grey animate-enter"
-                    title={s.name}
                   >
                     <Globe2 className="w-3 h-3 text-sandrift shrink-0" />
                     <span className="truncate max-w-[120px]">{s.name}</span>
@@ -255,7 +254,6 @@ export function KiroMessage({
                 <button
                   onClick={copyMarkdownSource}
                   aria-label="复制"
-                  title="复制 Markdown"
                   className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
                 >
                   <Copy className="w-3.5 h-3.5" />
@@ -265,7 +263,6 @@ export function KiroMessage({
                   <button
                     onClick={onRetry}
                     aria-label="重新生成"
-                    title="重新生成"
                     className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -277,7 +274,6 @@ export function KiroMessage({
                     onClick={toggleMore}
                     aria-label="消息更多操作"
                     aria-expanded={more.open}
-                    title="更多"
                     className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
                   >
                     <MoreHorizontal className="w-3.5 h-3.5" />
@@ -468,7 +464,6 @@ export function KiroUserMessage({
                         data-testid="kiro-sent-image-preview"
                         onClick={() => setPreviewSource({ file: liveSource!.file, name: a.name })}
                         aria-label={`查看原图 ${a.name}`}
-                        title="查看原图"
                         className="w-5 h-5 rounded overflow-hidden border border-line-soft shrink-0 focus:outline-none focus:ring-2 focus:ring-charcoal/20"
                       >
                         <img src={a.thumbnail} alt="" className="w-full h-full object-cover" />
@@ -486,7 +481,6 @@ export function KiroUserMessage({
                   <span className={cn("truncate max-w-[140px]")}>{a.name}</span>
                   {a.tempNotRetained && (
                     <span
-                      title="图片未保留在历史中"
                       className="text-[9px] font-bold text-sandrift bg-alabaster border border-line-soft rounded px-1 py-px shrink-0"
                     >
                       临时附件未保留
@@ -545,7 +539,6 @@ export function KiroUserMessage({
                 onClick={startEdit}
                 disabled={!canEdit || submitting}
                 aria-disabled={!canEdit}
-                title={editDisabledTitle ?? "编辑消息"}
                 className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
               >
                 <Pencil className="w-3.5 h-3.5" />
@@ -554,7 +547,6 @@ export function KiroUserMessage({
               <button
                 onClick={copy}
                 aria-label="复制"
-                title="复制"
                 className="flex items-center gap-1 px-1.5 py-1 rounded-lg text-[11px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
               >
                 <Copy className="w-3.5 h-3.5" />

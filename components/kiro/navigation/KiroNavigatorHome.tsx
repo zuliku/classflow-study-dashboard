@@ -109,7 +109,6 @@ export function KiroNavigatorHome({
                     type="button"
                     onClick={onCreateProject}
                     aria-label="新建项目"
-                    title="新建项目"
                     className="p-1 rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />

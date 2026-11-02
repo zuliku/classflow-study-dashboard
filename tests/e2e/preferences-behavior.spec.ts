@@ -186,7 +186,7 @@ test("defaultDDLTime：改为 21:00 → 新建任务默认截止时间 21:00（�
   // 编辑已有任务 → 回填原 DDL 时间（不受偏好影响）
   await page.getByRole("button", { name: "任务与 DDL" }).first().click();
   await page.locator('[data-assignment-id="a1"]').click();
-  await page.getByTitle("编辑任务").last().click();
+  await page.getByRole("button", { name: "编辑", exact: true }).last().click();
   const editTime = page.locator("input[type='time']").last();
   await expect(editTime).toHaveValue("23:59"); // a1 原 DDL 23:59
 });

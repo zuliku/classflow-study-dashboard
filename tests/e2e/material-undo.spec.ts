@@ -19,10 +19,10 @@ async function openCourseAndUpload(page: Page, fileName: string) {
 async function deleteMaterialRow(page: Page, fileName: string) {
   const row = page
     .locator("div", { hasText: fileName })
-    .filter({ has: page.getByTitle("删除此资料") })
+    .filter({ has: page.getByRole("button", { name: /^删除资料/ }) })
     .last();
   await row.hover();
-  await row.getByTitle("删除此资料").click();
+  await row.getByRole("button", { name: /^删除资料/ }).click();
 }
 
 test("删除资料 → 撤销 → 刷新后仍可预览", async ({ page }) => {

@@ -58,17 +58,21 @@ export function AssignmentDetailActions({
         size="sm"
         onClick={onSchedule}
         disabled={scheduleDisabled}
+        aria-label={
+          scheduleDisabled
+            ? `日程：${scheduleDisabledTitle ?? "当前状态无需继续安排学习时间"}`
+            : undefined
+        }
         className="h-8 px-2.5"
-        title={scheduleDisabled ? scheduleDisabledTitle ?? "当前状态无需继续安排学习时间" : "安排学习时间"}
       >
         <CalendarPlus className="h-3.5 w-3.5" />
         日程
       </Button>
-      <Button variant="secondary" size="sm" onClick={onReminder} className="h-8 px-2.5" title="设置提醒">
+      <Button variant="secondary" size="sm" onClick={onReminder} className="h-8 px-2.5">
         <Bell className="h-3.5 w-3.5" />
         提醒
       </Button>
-      <Button variant="secondary" size="sm" onClick={onEdit} className="h-8 px-2.5" title="编辑任务">
+      <Button variant="secondary" size="sm" onClick={onEdit} className="h-8 px-2.5">
         <Edit3 className="h-3.5 w-3.5" />
         编辑
       </Button>

@@ -126,7 +126,6 @@ export function ComputerApprovalDialog({
               className="w-full justify-center"
               disabled={busy}
               onClick={() => decide(d)}
-              title={COMPUTER_APPROVAL_DECISION_HINTS[d]}
               data-testid={`approval-${d}`}
             >
               {COMPUTER_APPROVAL_DECISION_LABELS[d]}

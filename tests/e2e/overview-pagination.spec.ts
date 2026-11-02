@@ -63,7 +63,7 @@ test("Case C：删除导致总页数减少 → 当前页自动 clamp（不出现
 
   const row = page.locator(ROW("a6"));
   await row.hover();
-  await row.getByTitle("删除任务").click();
+  await row.getByRole("button", { name: /^删除任务/ }).click();
   // 批量删除动作带 ConfirmDialog（确认按钮在 DOM 末尾，.last() 避免命中行的删除按钮）
   await expect(page.getByRole("button", { name: "删除任务" }).last()).toBeVisible();
   await page.getByRole("button", { name: "删除任务" }).last().click();

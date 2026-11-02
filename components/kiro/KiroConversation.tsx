@@ -288,7 +288,6 @@ export function KiroConversation({
             {conversationSummary && (
               <div className="flex justify-center">
                 <span
-                  title="较早内容已压缩"
                   className="text-[10px] text-sandrift bg-[#F7F5F5] border border-line px-2 py-0.5 rounded-full"
                 >
                   较早对话已压缩
@@ -382,7 +381,6 @@ export function KiroConversation({
           ref={scrollBtnInertRef}
           onClick={scrollToBottom}
           aria-label="回到底部"
-          title="回到底部"
           aria-hidden={!showScrollBtn}
           className={cn(
             "absolute bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-surface border border-line shadow-subtle flex items-center justify-center text-sandrift hover:text-charcoal hover:border-line-strong z-10",

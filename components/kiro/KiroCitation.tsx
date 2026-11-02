@@ -38,7 +38,6 @@ export function KiroCitation({
         data-testid="kiro-citation"
         data-citation-source={source.sourceId}
         className="inline-flex items-center gap-1 align-baseline mx-[0.15em] px-1.5 py-px rounded-md bg-pastel-mint/70 border border-line text-[11px] font-semibold text-charcoal whitespace-nowrap max-w-[220px]"
-        title={source.domain ? `${label} · ${source.domain}` : label}
       >
         <Globe2 className="w-3 h-3 text-sandrift shrink-0" aria-hidden="true" />
         <span className="truncate min-w-0">{webLabel(source)}</span>
@@ -63,7 +62,6 @@ export function KiroCitation({
       data-testid="kiro-citation"
       data-citation-source={source.sourceId}
       className="inline-flex items-center gap-1 align-baseline mx-[0.15em] px-1.5 py-px rounded-md bg-pastel-mint/70 border border-line text-[11px] font-semibold text-charcoal whitespace-nowrap max-w-[220px]"
-      title={label}
     >
       <BookOpen className="w-3 h-3 text-sandrift shrink-0" aria-hidden="true" />
       <span className="truncate min-w-0">{label}</span>

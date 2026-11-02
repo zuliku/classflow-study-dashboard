@@ -253,7 +253,6 @@ export function MiniChatApp() {
         <button
           type="button"
           aria-label={onTop ? "取消置顶" : "置顶显示"}
-          title={onTop ? "取消置顶" : "置顶显示"}
           className="mini-no-drag w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
           onClick={() => {
             const next = !onTop;
@@ -270,7 +269,6 @@ export function MiniChatApp() {
         <button
           type="button"
           aria-label="隐藏迷你窗"
-          title="隐藏（主窗口可重新打开）"
           className="mini-no-drag w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
           onClick={() => {
             try {
@@ -376,7 +374,6 @@ export function MiniChatApp() {
           <div className="flex items-center gap-1">
             <label
               className="mini-no-drag w-8 h-8 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors cursor-pointer"
-              title="添加附件"
               aria-label="添加附件"
             >
               <Plus className="w-4 h-4" />
@@ -391,7 +388,7 @@ export function MiniChatApp() {
               />
             </label>
             {snapshot && snapshot.attachments.length > 0 && (
-              <span className="text-[10px] text-sandrift" title={snapshot.attachments.map((a) => a.name).join("、")}>
+              <span className="text-[10px] text-sandrift">
                 主窗口附件 {snapshot.attachments.length} 个
               </span>
             )}

@@ -476,7 +476,6 @@ function AllDayMark({ item }: { item: TimelineItem }) {
   if (!item.calendarMarkId) {
     return (
       <span
-        title={`${item.title}（全天）`}
         className="block truncate text-[10px] font-semibold text-satin-grey bg-alabaster/80 border border-line rounded px-1 py-px"
       >
         {label}
@@ -493,7 +492,6 @@ function AllDayMark({ item }: { item: TimelineItem }) {
   return (
     <button
       type="button"
-      title={`${item.title}（全天）`}
       aria-label={`${item.title}，${typeLabel}，${dateLabel} 全天`}
       onClick={() => setSelectedCalendarMarkId(item.calendarMarkId!)}
       onKeyDown={cardKeyHandler(() => setSelectedCalendarMarkId(item.calendarMarkId!))}

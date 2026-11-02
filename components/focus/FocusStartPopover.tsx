@@ -79,7 +79,7 @@ export function FocusStartPopover({
         <div className="space-y-2.5">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift">开始专注</p>
-            <p className="mt-0.5 truncate text-xs font-bold text-charcoal" title={assignmentTitle}>
+            <p className="mt-0.5 truncate text-xs font-bold text-charcoal">
               {assignmentTitle}
             </p>
           </div>

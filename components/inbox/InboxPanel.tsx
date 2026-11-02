@@ -230,7 +230,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                       {item.source === "gmail" ? "回复到 Gmail" : item.source === "qq-mail" ? "回复到 QQ 邮箱" : "回复到 QQ"}
                     </button>
                   ) : (
-                    <span className="text-[11px] text-sandrift" title="此消息来自旧版本，无法直接回复">无法直接回复</span>
+                    <span className="text-[11px] text-sandrift">无法直接回复</span>
                   )
                 )}
                 {item.status === "archived" ? (

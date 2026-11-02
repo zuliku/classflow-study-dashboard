@@ -157,7 +157,7 @@ export function TaskBreakdownProposalCard({ proposals }: { proposals: TaskBreakd
     }
     if (locked) {
       return (
-        <span className="text-[10px] font-semibold text-sandrift" title="已提交/已完成的任务不能应用拆解">
+        <span className="text-[10px] font-semibold text-sandrift">
           已完成任务，无法应用拆解
         </span>
       );

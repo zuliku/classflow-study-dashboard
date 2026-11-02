@@ -180,8 +180,8 @@ base("长课程名：单行 truncate 不撑高 row；Footer 不存在", async ({
   // 单行 truncate：scrollWidth <= clientWidth
   const overflow = await title.evaluate((el) => el.scrollWidth - el.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
-  // title attribute 保留完整名称
-  await expect(title).toHaveAttribute("title", "高级数据结构与算法设计及复杂度分析");
+  // 不使用原生 title 浮层（完整名称由可见文本 / 无障碍名称承载）
+  await expect(title).not.toHaveAttribute("title");
   // Footer 完全移除
   await expect(card.locator("footer")).toHaveCount(0);
   await expect(card.getByText("课程详情", { exact: true })).toHaveCount(0);

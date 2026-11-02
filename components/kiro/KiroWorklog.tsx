@@ -34,7 +34,7 @@ function WorkingElapsed() {
   const secs = Math.max(0, Math.round((now - startedRef.current) / 1000));
   if (secs < 5) return null;
   return (
-    <span className="shrink-0 text-[10px] tabular-nums text-sandrift" title={secs > 30 ? "仍在进行，可继续等待或停止本轮" : undefined}>
+    <span className="shrink-0 text-[10px] tabular-nums text-sandrift">
       {secs > 30 ? `仍在进行 · ${secs}s` : `${secs}s`}
     </span>
   );

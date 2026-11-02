@@ -1033,7 +1033,6 @@ export const KiroComposer = React.memo(function KiroComposer({
                     aria-label="添加"
                     aria-expanded={openMenu === "add"}
                     aria-haspopup="menu"
-                    title="添加文件、资料与上下文"
                     data-testid="kiro-composer-add"
                     className={cn(
                       "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",

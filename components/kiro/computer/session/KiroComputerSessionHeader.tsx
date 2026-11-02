@@ -125,7 +125,6 @@ export function KiroComputerSessionHeader({
             data-testid="computer-session-dismiss"
             onClick={onDismiss}
             aria-label="收起"
-            title="收起"
             className="w-6 h-6 rounded-md flex items-center justify-center text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
           >
             <X className="w-3.5 h-3.5" />

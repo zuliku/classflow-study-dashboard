@@ -137,7 +137,6 @@ export function FilePreviewModal() {
               <button
                 type="button"
                 onClick={handleCreateTask}
-                title="基于此资料创建任务"
                 aria-label="基于此资料创建任务"
                 className="flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-line-strong hover:border-charcoal text-charcoal text-xs font-bold rounded-xl transition-colors duration-[var(--motion-fast)]"
               >

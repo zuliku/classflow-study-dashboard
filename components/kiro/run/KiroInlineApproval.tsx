@@ -101,7 +101,6 @@ export function KiroInlineApproval({
             data-testid={`approval-${decision}`}
             disabled={busy}
             onClick={() => decide(decision)}
-            title={COMPUTER_APPROVAL_DECISION_HINTS[decision]}
             className={cn(
               "h-8 px-3 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
               decision === "deny"
@@ -125,7 +124,6 @@ export function KiroInlineApproval({
               setBusy(true);
               onBulkDecision("allow-once");
             }}
-            title="队列中剩余审批一次全部允许（仅本次操作有效）"
             className="h-8 px-3 rounded-lg text-[11px] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-line-strong bg-surface text-charcoal hover:border-charcoal"
           >
             批量允许这一次（{queueLength} 项）

@@ -97,7 +97,7 @@ describe("AnalyticsSummaryStrip", () => {
     h.cleanup();
   });
 
-  it("E：detail 不使用 truncate（可信度信息必须可读）+ title 保留完整文本", () => {
+  it("E：detail 不使用 truncate（可信度信息必须可读）+ 不使用原生 title 浮层", () => {
     const h = render(
       <AnalyticsSummaryStrip
         metrics={[
@@ -114,7 +114,7 @@ describe("AnalyticsSummaryStrip", () => {
     );
     const detail = h.container.querySelector('[data-testid="summary-detail-计划执行"]')!;
     expect(detail.className).not.toContain("truncate");
-    expect(detail.getAttribute("title")).toContain("3 小时 12 分");
+    expect(detail.getAttribute("title")).toBeNull();
     h.cleanup();
   });
 

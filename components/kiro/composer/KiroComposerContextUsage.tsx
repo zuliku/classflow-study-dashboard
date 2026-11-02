@@ -71,7 +71,6 @@ export function KiroComposerContextUsage({
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title={label}
         data-testid="kiro-composer-context-usage"
         data-tone={tone}
         className={cn(

@@ -96,7 +96,6 @@ export function TimelineActiveFocusChip({ quiet = false }: { quiet?: boolean }) 
       onClick={shownInteractive ? shownOpen : undefined}
       disabled={!shownInteractive}
       aria-label={`当前专注：${targetLabel}${running ? `，剩余 ${shown.remainingText}` : "（已暂停）"}`}
-      title={`当前专注 · ${targetLabel}`}
       className={cn(
         // h-8 与 Header 右区其他按钮同高同基线；标题收紧，避免最宽元素挤压
         "flex h-8 items-center gap-1.5 text-left",

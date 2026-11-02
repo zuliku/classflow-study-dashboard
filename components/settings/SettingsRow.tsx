@@ -47,7 +47,6 @@ export function SettingsRow({
           <button
             onClick={onReset}
             aria-label={resetAriaLabel ?? `将${title}恢复默认`}
-            title="恢复默认"
             className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors opacity-70 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-charcoal/30 shrink-0"
           >
             <RotateCcw className="w-3.5 h-3.5" />

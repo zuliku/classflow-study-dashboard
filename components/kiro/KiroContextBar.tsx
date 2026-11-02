@@ -141,7 +141,6 @@ export function KiroContextBar({
       onClick={() => handleRemove(c.key)}
       disabled={locked}
       aria-label={`移除上下文：${formatKiroContextDisplayLabel(c)}`}
-      title={getKiroContextVisualRole(c) === "ambient" ? "本次对话中不使用此上下文" : "移除"}
       className={cn(
         "p-0.5 rounded-full text-sandrift/80 hover:text-danger transition-colors shrink-0 disabled:opacity-35 disabled:cursor-not-allowed",
         revealOnHover &&
@@ -182,7 +181,6 @@ export function KiroContextBar({
                 "inline-flex items-center gap-1 pl-2.5 pr-1 h-7 max-w-[200px] rounded-full bg-alabaster/70 border border-line text-[11px] font-semibold text-charcoal shrink-0",
                 enteringContextKeys.has(c.key) && "animate-enter"
               )}
-              title={describeKiroContextRef(c)}
             >
               <span className="truncate">{formatKiroContextDisplayLabel(c)}</span>
               {removeButton(c, false)}

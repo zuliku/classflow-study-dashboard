@@ -34,7 +34,6 @@ export function KiroNavigatorPlate({
         className
       )}
       aria-hidden="true"
-      title={kiroRuntimeStatusAriaLabel(status)}
     >
       <span className="absolute inset-0 rounded-xl kiro-ring" />
       <span className="relative w-full h-full rounded-[11px] bg-surface border border-line-soft flex items-center justify-center">

@@ -117,7 +117,6 @@ export function TimelineUnscheduledShelf({
                   ? (e) => onAssignmentPointerDown(e, a)
                   : undefined
               }
-              title={directManipulationEnabled ? "拖到时间表快速安排 1 小时" : undefined}
               className={cn(
                 "inline-flex items-center gap-1.5 pl-1.5 pr-1 h-7 rounded-lg bg-surface border border-line text-[11px] font-semibold text-charcoal max-w-[240px] shrink-0",
                 directManipulationEnabled && !isDragging && "cursor-grab select-none",
@@ -128,7 +127,7 @@ export function TimelineUnscheduledShelf({
               {directManipulationEnabled && (
                 <GripVertical className="w-3 h-3 text-sandrift shrink-0" aria-hidden="true" />
               )}
-              <span title={a.title} className="truncate min-w-0">{a.title}</span>
+              <span className="truncate min-w-0">{a.title}</span>
               <span className="text-[10px] text-sandrift font-medium shrink-0">{ddlText(a)}</span>
               <button
                 onPointerDown={(e) => e.stopPropagation()}
@@ -137,7 +136,6 @@ export function TimelineUnscheduledShelf({
                   onArrange(a);
                 }}
                 aria-label={`安排 ${a.title}`}
-                title="精准设置时间"
                 className="flex items-center gap-0.5 p-1 rounded text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors shrink-0"
               >
                 <CalendarPlus className="w-3 h-3" />

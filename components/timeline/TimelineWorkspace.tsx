@@ -763,20 +763,12 @@ export function TimelineWorkspace() {
       schedules: weekSchedules,
             semester,
           }).filter((o) => isCourseOverlapApproved(b, o)).length;
-          const timeHint = `${b.startTime}–${b.endTime}（${formatCompactMinutes(rawE - rawS)}）`;
-          const titleText = linkedAssignment
-            ? `${b.title} · ${timeHint} · 点击打开任务`
-            : `${b.title} · ${timeHint}`;
           // 主区域内容（linked button / standalone div 共用排版）：focus 状态 + title + 课程重叠批准 + duration
-          const focusTooltip = focusRunning
-            ? `任务《${b.title}》正在专注`
-            : `任务《${b.title}》专注已暂停`;
           const blockMainContent = (
             <>
               {isReleasedBlock && showMeta && (
                 <span
                   className="shrink-0 text-[9px] font-bold text-sandrift"
-                  title="学习计划已释放（任务已结束），不占用未来安排容量"
                 >
                   已释放
                 </span>
@@ -784,11 +776,11 @@ export function TimelineWorkspace() {
               {isFocusAnchor && !isReleasedBlock &&
                 (focusRunning ? (
                   <span
+                    aria-hidden="true"
                     className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#2E7D5B]"
-                    title={focusTooltip}
                   />
                 ) : (
-                  <span className="flex shrink-0 items-center" title={focusTooltip}>
+                  <span aria-hidden="true" className="flex shrink-0 items-center">
                     <Pause className="h-2 w-2 text-satin-grey" aria-hidden="true" />
                   </span>
                 ))}
@@ -798,7 +790,6 @@ export function TimelineWorkspace() {
                     "shrink-0 text-[9px] font-bold",
                     focusRunning ? "text-charcoal" : "text-satin-grey"
                   )}
-                  title={focusTooltip}
                 >
                   {focusRunning ? "专注中" : "已暂停"}
                 </span>
@@ -811,7 +802,6 @@ export function TimelineWorkspace() {
                   className={cn(
                     "shrink-0 text-[9px] text-sandrift bg-white/70 border border-line rounded px-1 py-px",
                   )}
-                  title="已确认与课程时间重叠（课程时间变化后会重新检查）"
                 >
                   已确认课程重叠
                 </span>
@@ -829,7 +819,8 @@ export function TimelineWorkspace() {
             <div
               key={b.id}
               data-testid="timeline-study-block"
-              title={titleText}
+              data-start-time={b.startTime}
+              data-end-time={b.endTime}
               onPointerDown={(e) => {
                 // Workflow UX V9：新 pointer session 重置 suppression；
                 // 不 preventDefault / 不立即 capture——保留 main button 原生 focus/click 激活路径，
@@ -1040,7 +1031,6 @@ export function TimelineWorkspace() {
             <div
               key={g.id}
               data-testid="timeline-ghost-block"
-              title={`${g.title} · ${gStateLabel}（未保存）`}
               className={cn(
                 "absolute left-1 right-1 z-[3] rounded-lg border border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
                 gHard
@@ -1084,7 +1074,6 @@ export function TimelineWorkspace() {
             <div
               key={`rebalance-${m.blockId}`}
               data-testid="timeline-rebalance-ghost"
-              title={`${m.title} · ${tLabel}（未保存）`}
               className={cn(
                 "absolute left-1 right-1 z-[3] rounded-lg border border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
                 tHard
@@ -1239,7 +1228,6 @@ export function TimelineWorkspace() {
           onClick={toggleMore}
           aria-label="更多操作"
           aria-expanded={moreOpen}
-          title="更多"
         >
           <MoreHorizontal className="w-3.5 h-3.5" />
         </IconButton>
@@ -1280,7 +1268,6 @@ export function TimelineWorkspace() {
         onClick={toggleQuick}
         aria-label="新建"
         aria-expanded={quickOpen}
-        title="新建"
       >
           <Plus className="w-3.5 h-3.5" />
       </IconButton>
@@ -1566,7 +1553,6 @@ function CourseTaskMarker({
           }}
           onBlur={scheduleClose}
           className="w-[20px] h-[20px] -m-[1px] flex items-center justify-center rounded-full cursor-pointer outline-none transition-[opacity,box-shadow] duration-[var(--motion-fast)] hover:ring-2 hover:ring-inset hover:ring-[#A87952]/40"
-          title="查看重叠的学习任务"
         >
           <span
             className={cn(
@@ -1632,7 +1618,6 @@ function CourseTaskMarker({
                       setSelectedAssignmentId(linkedAssignmentId);
                     }}
                     aria-label={`打开任务 ${b.title}`}
-                    title={`打开任务 ${b.title}`}
                     className={cn(
                       "w-full text-left rounded-md px-1 -mx-1 py-0.5 cursor-pointer",
                       "hover:bg-alabaster transition-colors duration-[var(--motion-fast)]",

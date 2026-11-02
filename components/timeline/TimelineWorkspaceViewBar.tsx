@@ -59,7 +59,6 @@ export function TimelineWorkspaceViewBar({
         onClick={onPrevWeek}
         disabled={currentSemesterWeek <= 1}
         aria-label="上一周"
-        title="上一周"
       >
         <ChevronLeft className="w-4 h-4" />
       </IconButton>
@@ -69,7 +68,6 @@ export function TimelineWorkspaceViewBar({
         onClick={onNextWeek}
         disabled={currentSemesterWeek >= totalWeeks}
         aria-label="下一周"
-        title="下一周"
       >
         <ChevronRight className="w-4 h-4" />
       </IconButton>
@@ -78,7 +76,6 @@ export function TimelineWorkspaceViewBar({
         type="button"
         onClick={onToday}
         disabled={isCurrentWeek}
-        title={isCurrentWeek ? "已在当前周" : "回到本周"}
         className={cn(
           "h-7 px-2.5 rounded-lg text-[11px] font-bold transition-colors",
           isCurrentWeek
@@ -102,7 +99,6 @@ export function TimelineWorkspaceViewBar({
         onClick={onFilterToggle}
         aria-label="筛选"
         aria-expanded={filterOpen}
-        title="筛选"
         className={cn(filterActive && !filterOpen && "bg-alabaster text-charcoal")}
       >
         <span className="relative inline-flex">
@@ -123,7 +119,7 @@ export function TimelineWorkspaceViewBar({
         className="w-44 p-1.5 space-y-0.5"
       >
         <p className="px-1.5 pb-1 text-[10px] font-bold text-sandrift">显示</p>
-        <FilterToggle label="课程" checked disabled hint="时间表骨架，恒显示" />
+        <FilterToggle label="课程" checked disabled />
         {filterOptions.map((opt) => (
           <FilterToggle
             key={opt.key}
@@ -151,13 +147,11 @@ function FilterToggle({
   checked,
   onChange,
   disabled,
-  hint,
 }: {
   label: string;
   checked: boolean;
   onChange?: (v: boolean) => void;
   disabled?: boolean;
-  hint?: string;
 }) {
   return (
     <div
@@ -165,7 +159,6 @@ function FilterToggle({
         "flex items-center gap-2 px-1.5 py-1.5 rounded-lg text-[11px] font-semibold text-charcoal hover:bg-alabaster transition-colors",
         disabled ? "cursor-default opacity-80" : "cursor-pointer"
       )}
-      title={hint}
       onClick={() => {
         if (!disabled) onChange?.(!checked);
       }}

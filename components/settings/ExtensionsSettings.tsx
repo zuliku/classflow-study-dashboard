@@ -493,7 +493,6 @@ export function ExtensionsSettings() {
                           size="sm"
                           onClick={() => handleSkillTest(skill.name)}
                           data-testid={`skill-test-${skill.name}`}
-                          title="检查 Skill 文件格式与激活条件"
                         >
                           <BadgeCheck className="w-3 h-3" />
                           检查

@@ -540,7 +540,6 @@ export function AssignmentDrawer() {
               <button
                 onClick={handleOpenCourse}
                 className="group flex min-w-0 items-center gap-1 text-xs font-semibold text-sandrift"
-                title="查看课程"
               >
                 <BookOpen className="h-3.5 w-3.5 text-[#A48F82]" />
                 <span className="truncate transition-colors group-hover:text-charcoal group-hover:underline">
@@ -566,7 +565,6 @@ export function AssignmentDrawer() {
                 size="sm"
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-label="更多操作"
-                title="更多操作"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </IconButton>
@@ -794,7 +792,6 @@ export function AssignmentDrawer() {
                       {linkedMaterials.length > 0 && (
                         <button
                           onClick={handleMaterialAskKiro}
-                          title="根据关联资料请 Kiro 分析"
                           className="text-[10px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
                         >
                           根据资料分析
@@ -862,7 +859,6 @@ export function AssignmentDrawer() {
                               type="button"
                               onClick={() => previewMaterial(m)}
                               aria-label={`预览资料《${m.title}》`}
-                              title="预览资料"
                               className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md text-left focus-visible:outline-2 focus-visible:outline-charcoal/30"
                             >
                               <MaterialTypeIcon type={m.type} />
@@ -876,7 +872,6 @@ export function AssignmentDrawer() {
                               size="sm"
                               onClick={() => toggleMaterial(m.id)}
                               aria-label={`解除关联 ${m.title}`}
-                              title="解除关联（不删除课程资料）"
                               className="h-6 w-6 shrink-0"
                             >
                               <X className="h-3 w-3" />

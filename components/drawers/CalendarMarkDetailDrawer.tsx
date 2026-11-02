@@ -255,7 +255,7 @@ export function CalendarMarkDetailDrawer() {
                 size="sm"
                 onClick={handleViewInTimeline}
                 disabled={!timelineReachable}
-                title={!timelineReachable ? "不在当前学期范围内" : undefined}
+                aria-label={!timelineReachable ? "在时间表查看（不在当前学期范围内）" : undefined}
                 className="h-8 px-3"
               >
                 <CalendarDays className="h-3.5 w-3.5" />
@@ -308,7 +308,7 @@ export function CalendarMarkDetailDrawer() {
               size="sm"
               onClick={handleViewInTimeline}
               disabled={!timelineReachable}
-              title={!timelineReachable ? "不在当前学期范围内" : undefined}
+              aria-label={!timelineReachable ? "在时间表查看（不在当前学期范围内）" : undefined}
               className="h-8 px-3"
             >
               <CalendarDays className="h-3.5 w-3.5" />

@@ -346,7 +346,6 @@ export function AddAssignmentModal() {
                     type="button"
                     onClick={() => setInitialMaterialId(null)}
                     aria-label="移除关联资料"
-                    title="移除关联资料（不删除课程资料）"
                     className="shrink-0 rounded-md p-0.5 text-sandrift transition-colors hover:bg-danger-bg hover:text-danger"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -497,7 +496,6 @@ export function AddAssignmentModal() {
                         size="sm"
                         onClick={() => handleRemoveSubtask(idx)}
                         aria-label="删除子任务"
-                        title="删除子任务"
                         className="h-8 w-8"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

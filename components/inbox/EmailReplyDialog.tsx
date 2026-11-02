@@ -271,7 +271,7 @@ useEffect(() => {
         <div className="flex items-center gap-2">
           <div className="flex-1" />
           <Button variant="secondary" size="sm" onClick={handleCancelPrepare}>取消</Button>
-          <Button variant="primary" size="sm" loading={saving} loadingLabel="发送中..." onClick={handleConfirm} disabled={confirmLocked} title={confirmLocked ? "结果不确定已锁定，请先去已发送检查" : undefined} data-testid="email-reply-confirm">{confirmLocked ? "已锁定，去检查" : "确认发送"}</Button>
+          <Button variant="primary" size="sm" loading={saving} loadingLabel="发送中..." onClick={handleConfirm} disabled={confirmLocked} data-testid="email-reply-confirm">{confirmLocked ? "已锁定，去检查" : "确认发送"}</Button>
         </div>
       </Dialog>
     </>

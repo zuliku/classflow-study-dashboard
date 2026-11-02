@@ -192,7 +192,6 @@ export function KiroImagePreviewDialog({
             data-testid="kiro-image-preview-close"
             onClick={onClose}
             aria-label="关闭预览"
-            title="关闭预览"
             className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
           >
             <X className="w-4 h-4" />

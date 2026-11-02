@@ -221,8 +221,8 @@ describe("Kiro Composer — Add Menu", () => {
     await click('[data-testid="kiro-composer-add"]');
     const image = q('[data-testid="kiro-composer-add-image"]') as HTMLButtonElement;
     expect(image.disabled).toBe(true);
-    expect(image.title).toContain("不支持图片输入");
-    expect(image.textContent).toContain("添加图片");
+    expect(image.textContent).toContain("不支持图片输入");
+    expect(image.getAttribute("title")).toBeNull();
     // 附件 / 课程资料 / 上下文入口不受视觉能力影响
     const menu = q('[data-testid="kiro-composer-add-menu"]')!;
     for (const label of ["上传文件", "课程资料", "ClassFlow 上下文"]) {
@@ -235,7 +235,7 @@ describe("Kiro Composer — Add Menu", () => {
     await click('[data-testid="kiro-composer-add"]');
     const image = q('[data-testid="kiro-composer-add-image"]') as HTMLButtonElement;
     expect(image.disabled).toBe(false);
-    expect(image.title).toBe("");
+    expect(image.getAttribute("title")).toBeNull();
   });
 
   it("课程资料与上下文为同一 Popover 内的子视图", async () => {

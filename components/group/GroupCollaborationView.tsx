@@ -523,7 +523,6 @@ export function GroupCollaborationView() {
               type="button"
               onClick={openCreateProject}
               aria-label="新建项目"
-              title="新建项目"
               className="rounded-lg p-1 text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal focus-visible:outline-2 focus-visible:outline-charcoal/30"
             >
               <Plus className="w-4 h-4" />
@@ -612,7 +611,6 @@ export function GroupCollaborationView() {
                         size="sm"
                         onClick={() => setProjectMoreOpen((v) => !v)}
                         aria-label="更多项目操作"
-                        title="更多操作"
                       >
                         <MoreHorizontal className="w-4 h-4" />
                       </IconButton>
@@ -688,7 +686,6 @@ export function GroupCollaborationView() {
                                   size="sm"
                                   onClick={() => openEditMember(m)}
                                   aria-label={`编辑成员 ${m.name}`}
-                                  title="编辑成员"
                                   className="h-6 w-6"
                                 >
                                   <Pencil className="w-3 h-3" />
@@ -698,7 +695,6 @@ export function GroupCollaborationView() {
                                   size="sm"
                                   onClick={() => handleRemoveMember(m.id)}
                                   aria-label={`移除成员 ${m.name}`}
-                                  title="移除成员"
                                   className="h-6 w-6"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -812,7 +808,6 @@ export function GroupCollaborationView() {
                                 size="sm"
                                 onClick={() => openEditTask(task.id)}
                                 aria-label={`编辑任务 ${task.title}`}
-                                title="编辑任务"
                                 className="h-6 w-6"
                               >
                                 <Pencil className="w-3 h-3" />
@@ -822,7 +817,6 @@ export function GroupCollaborationView() {
                                 size="sm"
                                 onClick={() => handleDeleteTask(task.id)}
                                 aria-label={`删除任务 ${task.title}`}
-                                title="删除任务"
                                 className="h-6 w-6"
                               >
                                 <Trash2 className="w-3 h-3" />

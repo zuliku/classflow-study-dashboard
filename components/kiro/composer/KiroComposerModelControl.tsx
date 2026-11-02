@@ -73,7 +73,6 @@ export function KiroComposerModelControl({
         aria-expanded={open}
         aria-haspopup="menu"
         disabled={disabled}
-        title={modelUnavailable ? "当前模型已不可用，请重新选择" : activeModelName}
         data-testid="kiro-composer-model"
         data-model-open={open}
         className={cn(

@@ -34,8 +34,7 @@ test("StudyBlock drag：周一 13:00 → 周五 18:00–19:00；Undo 恢复", as
 
   const block = page.getByTestId("timeline-study-block").first();
   await expect(block).toBeVisible();
-  const blockTitle = await block.getAttribute("title");
-  expect(blockTitle).toContain("13:00");
+  expect(await block.getAttribute("data-start-time")).toBe("13:00");
 
   // 目标：周五（day 5）18:30 位置（mockData 周五 16:00–17:40 有课；offset 30min → 18:00–19:00 空闲）
   const day5 = page.locator('[data-timetable-day="5"]').first();
@@ -69,16 +68,15 @@ test("StudyBlock drag：周一 13:00 → 周五 18:00–19:00；Undo 恢复", as
 
   // 落库：block 移动到周五 18:00–19:00（offset 30min 保持 grab 位置）
   const moved = page.getByTestId("timeline-study-block").first();
-  const movedTitle = await moved.getAttribute("title");
-  expect(movedTitle).toContain("18:00");
-  expect(movedTitle).toContain("19:00");
+  expect(await moved.getAttribute("data-start-time")).toBe("18:00");
+  expect(await moved.getAttribute("data-end-time")).toBe("19:00");
 
   // Undo：恢复周一 13:00–14:00
   await page.getByRole("button", { name: "撤销" }).first().click();
   await page.waitForTimeout(400);
-  const restored = await page.getByTestId("timeline-study-block").first().getAttribute("title");
-  expect(restored).toContain("13:00");
-  expect(restored).toContain("14:00");
+  const restored = page.getByTestId("timeline-study-block").first();
+  expect(await restored.getAttribute("data-start-time")).toBe("13:00");
+  expect(await restored.getAttribute("data-end-time")).toBe("14:00");
 });
 
 test("StudyBlock drag 冲突：拖到另一学习计划 → danger ghost + Store 不变", async ({ page }) => {
@@ -107,7 +105,7 @@ test("StudyBlock drag 冲突：拖到另一学习计划 → danger ghost + Store
   await page.locator("aside").first().getByRole("button", { name: "时间表" }).first().click();
   await page.waitForTimeout(800);
 
-  const block = page.locator('[data-testid="timeline-study-block"][title*="13:00"]');
+  const block = page.locator('[data-testid="timeline-study-block"][data-start-time="13:00"]');
   const bBox = await block.boundingBox();
   const day1 = page.locator('[data-timetable-day="1"]').first();
   const dayBox = await day1.boundingBox();

@@ -617,7 +617,6 @@ export function MiniCalendar() {
           <button
             onClick={handleResetToday}
             aria-label="回到今天"
-            title="回到今天"
             className={
               compactHeaderControls
                 ? "w-8 h-8 flex items-center justify-center rounded-lg bg-alabaster hover:bg-alba text-charcoal transition-colors"
@@ -633,7 +632,6 @@ export function MiniCalendar() {
           <button
             onClick={handlePrevMonth}
             className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-            title="上一月"
             aria-label="上一月"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
@@ -641,7 +639,6 @@ export function MiniCalendar() {
           <button
             onClick={handleNextMonth}
             className="w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-            title="下一月"
             aria-label="下一月"
           >
             <ChevronRight className="w-3.5 h-3.5" />
@@ -918,9 +915,6 @@ export function MiniCalendar() {
                   onPointerMove={cell.kind === "ddl" ? handleDDLPointerMove : undefined}
                   onPointerUp={cell.kind === "ddl" ? handleDDLPointerUp : undefined}
                   onPointerCancel={cell.kind === "ddl" ? cancelDrag : undefined}
-                  title={
-                    cell.kind === "ddl" && draggable ? "拖动调整截止日期" : undefined
-                  }
                   className={cn(
                     "h-12 rounded-lg border flex flex-col items-center justify-center gap-0.5 transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                     cell.kind === "course" && "cursor-pointer hover:opacity-90",

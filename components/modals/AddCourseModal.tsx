@@ -274,7 +274,6 @@ export function AddCourseModal() {
                           type="button"
                           onClick={() => handleRemoveSlot(idx)}
                           aria-label="删除此时段"
-                          title="删除此时段"
                           className="h-7 w-7"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -360,7 +359,6 @@ export function AddCourseModal() {
                       size="md"
                       selected={colorIndex === i}
                       onSelect={() => setColorIndex(i)}
-                      title={c.name}
                       ariaLabel={`课程颜色 ${c.name}`}
                     />
                   ))}

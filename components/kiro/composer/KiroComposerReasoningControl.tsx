@@ -134,7 +134,6 @@ export function KiroComposerReasoningControl({
         aria-expanded={open}
         aria-haspopup="dialog"
         disabled={disabled}
-        title={`思考程度：${reasoningEffortLabel(effort)}`}
         data-testid="kiro-composer-reasoning"
         className={cn(
           "flex items-center h-9 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",

@@ -190,7 +190,6 @@ function ChangeList({
                 <button
                   onClick={() => onPreview(artifactId)}
                   aria-label={`预览 ${c.displayName}`}
-                  title="预览"
                   className="w-6 h-6 rounded-md flex items-center justify-center text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -198,7 +197,6 @@ function ChangeList({
                 <button
                   onClick={() => void onDownload(artifactId)}
                   aria-label={`下载 ${c.displayName}`}
-                  title="下载"
                   className="w-6 h-6 rounded-md flex items-center justify-center text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -206,7 +204,6 @@ function ChangeList({
                 <button
                   onClick={() => onDelete(artifactId, c.displayName)}
                   aria-label={`删除 ${c.displayName}`}
-                  title="删除文件"
                   className="w-6 h-6 rounded-md flex items-center justify-center text-sandrift hover:text-danger hover:bg-danger-bg transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

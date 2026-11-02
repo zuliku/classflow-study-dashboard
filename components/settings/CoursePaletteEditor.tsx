@@ -38,7 +38,6 @@ export function CoursePaletteEditor({
               key={c.toUpperCase()}
               color={c}
               size="sm"
-              title={c}
               className={i > 0 ? "-ml-2 ring-2 ring-surface rounded-full" : "ring-2 ring-surface rounded-full"}
             />
           ))

@@ -230,7 +230,7 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
         </span>
         {/* P0：终态显示 exitCode（此前只参与 memo 比较从未渲染，失败无从下手） */}
         {!running && activity.exitCode !== null && activity.exitCode !== 0 && (
-          <span className="text-[10px] tabular-nums text-danger shrink-0" title="进程退出码，非 0 即失败">
+          <span className="text-[10px] tabular-nums text-danger shrink-0">
             exit {activity.exitCode}
           </span>
         )}

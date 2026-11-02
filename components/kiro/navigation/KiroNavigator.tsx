@@ -381,7 +381,6 @@ export function KiroNavigator() {
               onClick={() => expand()}
               aria-label={runtimeStatus === "idle" ? "展开对话" : `${runtimeStatusAria}，展开对话`}
               aria-expanded={false}
-              title={runtimeStatusAria}
               className="group/plate rounded-xl transition-colors"
             >
               <KiroNavigatorPlate status={runtimeStatus} />
@@ -391,7 +390,6 @@ export function KiroNavigator() {
               type="button"
               onClick={newChat}
               aria-label="新对话"
-              title={transitioning ? "正在切换会话…" : "新对话"}
               disabled={transitioning}
               className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-sandrift"
             >
@@ -401,7 +399,6 @@ export function KiroNavigator() {
               type="button"
               onClick={() => expand()}
               aria-label="最近对话"
-              title="最近对话"
               className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             >
               <HistoryIcon className="w-4 h-4" />
@@ -410,7 +407,6 @@ export function KiroNavigator() {
               type="button"
               onClick={() => expand({ focusSearch: true })}
               aria-label="搜索对话"
-              title="搜索对话"
               className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             >
               <Search className="w-4 h-4" />
@@ -422,7 +418,6 @@ export function KiroNavigator() {
                 expand();
               }}
               aria-label="打开项目"
-              title="项目"
               className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
             >
               <KIRO_PROJECT_ICON className="w-4 h-4" />
@@ -433,7 +428,6 @@ export function KiroNavigator() {
                 type="button"
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-label="对话更多操作"
-                title="对话更多操作"
                 aria-expanded={moreOpen}
                 className="w-9 h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
               >

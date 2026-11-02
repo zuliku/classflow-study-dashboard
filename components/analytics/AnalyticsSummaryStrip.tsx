@@ -43,7 +43,6 @@ export function AnalyticsSummaryStrip({
           {m.view.detail && (
             <p
               data-testid={`summary-detail-${m.label}`}
-              title={m.view.detail}
               className="text-[10px] leading-snug text-satin-grey line-clamp-2 min-h-[2.5em]"
             >
               {m.view.detail}

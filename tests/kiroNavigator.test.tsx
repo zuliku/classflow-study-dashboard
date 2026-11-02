@@ -590,10 +590,10 @@ describe("Kiro Navigator — Runtime Status（完整保留 + 与展开状态解�
     }
   });
 
-  it("idle：collapsed title=Kiro 且 expanded 不显示状态小字", async () => {
+  it("idle：collapsed 无原生 title 且 expanded 不显示状态小字", async () => {
     await renderNavigator();
     const button = container!.querySelector('button[aria-label="展开对话"]') as HTMLButtonElement;
-    expect(button.getAttribute("title")).toBe("Kiro");
+    expect(button.getAttribute("title")).toBeNull();
     await click("展开对话");
     expect(container!.querySelector('[data-testid="kiro-navigator-runtime-status-text"]')).toBeNull();
   });

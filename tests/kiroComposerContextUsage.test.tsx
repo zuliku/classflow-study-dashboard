@@ -91,7 +91,7 @@ describe("上下文占用 ring — 状态与可访问性", () => {
     const button = q('[data-testid="kiro-composer-context-usage"]')!;
     expect(button.getAttribute("data-tone")).toBe("ok");
     expect(button.getAttribute("aria-label")).toBe("上下文 9.8k / 24k");
-    expect(button.getAttribute("title")).toBe("上下文 9.8k / 24k");
+    expect(button.getAttribute("title")).toBeNull();
     expect(button.querySelectorAll("circle").length).toBe(2);
     expect(button.querySelectorAll("circle")[1].getAttribute("stroke-dasharray")).toBeTruthy();
   });

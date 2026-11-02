@@ -137,11 +137,6 @@ export function CoursePaletteDialog({
                   removable
                   removeDisabled={value.length <= MIN_COURSE_PALETTE_SIZE}
                   onRemove={() => handleRemove(c)}
-                  title={
-                    value.length <= MIN_COURSE_PALETTE_SIZE
-                      ? `${c}（至少保留 1 种颜色）`
-                      : `${c} · 点击右上 × 移除`
-                  }
                 />
               ))}
             </div>

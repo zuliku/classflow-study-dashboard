@@ -84,7 +84,6 @@ export function buildOverviewStudyBlockLayers(input: {
             <div
               key={b.id}
               data-testid="overview-timetable-study-block"
-              title={`${b.title} · ${b.startTime}–${b.endTime}`}
               className="absolute left-1 right-1 z-[2] rounded-lg border border-dashed border-line bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none"
               style={{ top: `${topPct}%`, height: `${Math.max(heightPct, 2)}%`, minHeight: 4 }}
             >
@@ -128,7 +127,6 @@ export function buildOverviewCourseTaskMarkers(input: {
         className="absolute z-[7] pointer-events-none"
         style={{ top: 4, right: ctx.hasConflict ? 26 : 6 }}
         aria-label={`${blocks.length} 个学习任务与本课程时间重叠`}
-        title={`${blocks.length} 个学习任务与本课程时间重叠：${label}`}
       >
         <span className="block w-[7px] h-[7px] rounded-full bg-[#A87952]" />
       </div>

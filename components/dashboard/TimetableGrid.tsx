@@ -564,7 +564,6 @@ export function TimetableGrid({
             <button
               onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
               disabled={currentSemesterWeek <= 1}
-              title="上一周"
               aria-label="上一周"
               className="flex items-center justify-center w-5 h-5 rounded hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-satin-grey"
             >
@@ -576,7 +575,6 @@ export function TimetableGrid({
             <button
               onClick={() => setCurrentSemesterWeek(currentSemesterWeek + 1)}
               disabled={currentSemesterWeek >= semester.totalWeeks}
-              title="下一周"
               aria-label="下一周"
               className="flex items-center justify-center w-5 h-5 rounded hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-satin-grey"
             >
@@ -810,7 +808,6 @@ export function TimetableGrid({
                           onPointerMove={(e) => handleCardPointerMove(e, sched)}
                           onPointerUp={(e) => handleCardPointerUp(e, sched)}
                           onPointerCancel={cancelInteraction}
-                          title={editingEnabled ? "拖动调整上课时间" : undefined}
                           className={cn(
                             "absolute inset-0 rounded-xl shadow-subtle border flex flex-col justify-between overflow-hidden group select-none",
                             // 只过渡实际会变化的属性（透明度/阴影/边框），避免无关属性建立 transition
@@ -834,7 +831,9 @@ export function TimetableGrid({
                         >
                         {/* Top Section */}
                         <div className="space-y-0.5 min-w-0">
-                          {/* 1. Course Title */}
+                          {/* 1. Course Title
+                              课表卡是信息密集的软件特性：课程名/教师/地点保留原生 title，
+                              用于 hover 查看被 truncate 的完整文本（产品例外，见 nativeTitleContract）。 */}
                           <div className="flex items-start justify-between">
                             <h4 title={course.name} className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal truncate min-w-0 flex-1">
                               {course.name}
@@ -853,7 +852,6 @@ export function TimetableGrid({
                                 }}
                                 onPointerDown={(e) => e.stopPropagation()}
                                 className="text-[10px] bg-danger text-white px-1.5 py-0.5 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
-                                title="查看冲突"
                               >
                                 冲突
                               </button>
@@ -872,7 +870,6 @@ export function TimetableGrid({
                         <div className="flex items-center text-[10px] sm:text-[11px] opacity-90 pt-0.5 border-t border-black/5 font-medium leading-none mt-0.5">
                           {sched.source === "extra" && (
                             <span
-                              title="补课"
                               className="text-[11px] font-extrabold leading-none shrink-0 opacity-80 mr-1"
                             >
                               <span aria-hidden="true">+</span>
@@ -888,7 +885,6 @@ export function TimetableGrid({
                           <button
                             data-testid="resize-handle"
                             aria-label="调整课程结束时间"
-                            title="拖动调整结束时间"
                             onPointerDown={(e) => handleResizePointerDown(e, sched)}
                             onPointerMove={(e) => handleResizePointerMove(e, sched)}
                             onPointerUp={(e) => handleResizePointerUp(e, sched)}

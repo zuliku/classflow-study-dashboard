@@ -115,7 +115,6 @@ export function CourseLibraryCard({
             <button
               type="button"
               onClick={onOpenCourse}
-              title={course.name}
               className="block max-w-full truncate text-[15px] font-bold leading-snug text-charcoal text-left transition-colors hover:text-black"
             >
               {course.name}
@@ -235,7 +234,6 @@ export function CourseLibraryCard({
                   "group/task flex w-full items-center justify-between gap-2 text-left",
                   PREVIEW_ROW_HEIGHT
                 )}
-                title={`${row.title}（打开任务详情）`}
               >
                 <span className="min-w-0 truncate text-[11px] font-semibold text-charcoal group-hover/task:text-black">
                   {row.title}
@@ -314,7 +312,6 @@ export function CourseLibraryCard({
                   PREVIEW_ROW_HEIGHT,
                   newMaterialIds.has(m.id) && "animate-enter"
                 )}
-                title={`${m.title}（预览资料）`}
               >
                 <MaterialTypeIcon type={m.type} />
                 <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-charcoal/90 group-hover/mat:text-charcoal">

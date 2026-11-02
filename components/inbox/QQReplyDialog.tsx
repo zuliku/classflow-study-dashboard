@@ -250,7 +250,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
         <div className="flex items-center gap-2">
           <div className="flex-1" />
           <button type="button" onClick={handleCancelPrepare} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg">取消</button>
-          <button type="button" onClick={handleConfirm} disabled={saving || confirmLocked} data-testid="qq-reply-confirm" title={confirmLocked ? "结果不确定已锁定，请先去 QQ 检查" : undefined} className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "发送中..." : confirmLocked ? "已锁定，去检查" : "确认发送"}</button>
+          <button type="button" onClick={handleConfirm} disabled={saving || confirmLocked} data-testid="qq-reply-confirm" className="h-8 px-5 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black disabled:opacity-60">{saving ? "发送中..." : confirmLocked ? "已锁定，去检查" : "确认发送"}</button>
         </div>
       </Dialog>
     </>

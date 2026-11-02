@@ -165,7 +165,6 @@ export function KiroComposerAddMenu({
         role="menuitem"
         disabled={scopeLocked}
         onClick={() => pickFiles(".pdf,.docx,.txt,.md", fileRef)}
-        title={scopeLocked ? "当前 Turn 已冻结，下一条消息可改" : undefined}
         className={ROOT_ROW}
       >
         <Paperclip className="w-4 h-4 text-sandrift shrink-0" />
@@ -176,18 +175,16 @@ export function KiroComposerAddMenu({
         role="menuitem"
         disabled={scopeLocked || !visionEnabled}
         onClick={() => pickFiles("image/png,image/jpeg,image/webp,.jpg,.jpeg,.png,.webp", imageRef)}
-        title={
-          scopeLocked
-            ? "当前 Turn 已冻结，下一条消息可改"
-            : !visionEnabled
-              ? "当前模型不支持图片输入，请切换支持视觉的模型"
-              : undefined
-        }
         data-testid="kiro-composer-add-image"
         className={ROOT_ROW}
       >
         <ImageIcon className="w-4 h-4 text-sandrift shrink-0" />
-        添加图片
+        <span className="min-w-0 flex-1 truncate">
+          添加图片
+          {!visionEnabled && (
+            <span className="text-sandrift font-normal">（当前模型不支持图片输入）</span>
+          )}
+        </span>
       </button>
       {/* P1：无课程时仍可点进资料视图看空态（此前直接灰掉，新用户不知要先建课） */}
       <button
@@ -195,13 +192,6 @@ export function KiroComposerAddMenu({
         role="menuitem"
         disabled={scopeLocked}
         onClick={() => setView("materials")}
-        title={
-          scopeLocked
-            ? "当前 Turn 已冻结，下一条消息可改"
-            : courses.length === 0
-              ? "暂无课程，先去创建课程再添加资料"
-              : undefined
-        }
         className={ROOT_ROW}
       >
         <FolderOpen className="w-4 h-4 text-sandrift shrink-0" />
@@ -216,7 +206,6 @@ export function KiroComposerAddMenu({
         role="menuitem"
         disabled={scopeLocked}
         onClick={() => setView("context")}
-        title={scopeLocked ? "当前 Turn 已冻结，下一条消息可改" : undefined}
         className={ROOT_ROW}
       >
         <AtSign className="w-4 h-4 text-sandrift shrink-0" />

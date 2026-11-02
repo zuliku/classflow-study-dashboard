@@ -107,7 +107,7 @@ export function AssignmentDetailExecution({
                 ? `${formatEstimatedMinutes(scheduleSummary.minutes) ?? `${scheduleSummary.minutes} 分钟`} · ${scheduleSummary.blockCount} 个时段`
                 : "未安排"}
               {releasedScheduleCount > 0 && (
-                <span className="ml-1 text-[10px] font-medium text-sandrift" title="任务结束后的历史计划已释放，不占用未来安排容量">
+                <span className="ml-1 text-[10px] font-medium text-sandrift">
                   · 已释放 {releasedScheduleCount} 个旧计划
                 </span>
               )}
@@ -116,7 +116,7 @@ export function AssignmentDetailExecution({
               type="button"
               onClick={onViewSchedule}
               disabled={viewScheduleDisabled}
-              title={viewScheduleDisabled ? viewScheduleDisabledTitle : undefined}
+              aria-label={viewScheduleDisabled ? viewScheduleDisabledTitle : undefined}
               className={cn(
                 "shrink-0 text-[11px] font-bold transition-colors",
                 viewScheduleDisabled

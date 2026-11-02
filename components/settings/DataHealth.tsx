@@ -184,7 +184,6 @@ export function DataHealth() {
           onClick={runCheck}
           disabled={isChecking}
           className="p-1 text-sandrift hover:bg-alba rounded-lg transition-colors disabled:opacity-50"
-          title="重新检查"
           aria-label="重新检查"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? "animate-spin" : ""}`} />

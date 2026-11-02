@@ -68,7 +68,6 @@ export function KiroSendControl({
       }}
       disabled={disabled}
       aria-label={ariaLabel}
-      title={ariaLabel}
       data-send-state={state}
       className={cn(
         // P0 产品化：idle 为描边幽灵态（此前 charcoal 40% 实心，与可点态过近）

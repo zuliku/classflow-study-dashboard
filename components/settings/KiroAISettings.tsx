@@ -324,7 +324,6 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                       onClick={refreshModels}
                       disabled={modelsRefreshing}
                       data-testid="ai-model-refresh"
-                      title="从 OpenCode Go 获取最新可用模型列表"
                       className="inline-flex items-center gap-1 text-[10px] font-semibold text-sandrift hover:text-charcoal transition-colors disabled:opacity-50"
                     >
                       <RefreshCw className={cn("w-3 h-3", modelsRefreshing && "animate-spin")} />

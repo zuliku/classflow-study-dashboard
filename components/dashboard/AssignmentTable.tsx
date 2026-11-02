@@ -557,7 +557,6 @@ export function AssignmentTable({
           <div className="min-w-0 flex-1">
             <div className="flex items-center space-x-2">
               <h4
-                title={task.title}
                 className={`text-xs font-bold truncate min-w-0 flex-1 ${
                   isCompleted
                     ? "line-through text-sandrift"
@@ -599,7 +598,7 @@ export function AssignmentTable({
             </div>
 
             <div className="flex items-center space-x-2 text-[10px] text-sandrift mt-1">
-              <span title={course?.name || "通用"} className="truncate min-w-0 font-semibold">{course?.name || "通用"}</span>
+              <span className="truncate min-w-0 font-semibold">{course?.name || "通用"}</span>
               <span>·</span>
               <span className={hasDdl ? "whitespace-nowrap" : "text-satin-grey/70 whitespace-nowrap"}>截止: {formattedDate}</span>
               {task.estimatedMinutes && isWorkspace && (
@@ -670,7 +669,6 @@ export function AssignmentTable({
                   ? "opacity-100"
                   : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
               )}
-              title="Kiro 拆解为步骤"
               aria-label={`Kiro 拆解 ${task.title}`}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -682,7 +680,6 @@ export function AssignmentTable({
               "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
               isWorkspace && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
             )}
-            title="编辑任务"
             aria-label={`编辑任务 ${task.title}`}
           >
             <Edit2 className="w-3.5 h-3.5" />
@@ -697,7 +694,6 @@ export function AssignmentTable({
               "p-1.5 rounded-lg text-danger hover:bg-danger-bg transition-colors",
               isWorkspace && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
             )}
-            title="删除任务"
             aria-label={`删除任务 ${task.title}`}
           >
             <Trash2 className="w-3.5 h-3.5" />

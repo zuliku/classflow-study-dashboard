@@ -95,7 +95,6 @@ export function CourseCardOverflowPopover({
             <button
               key={row.id}
               type="button"
-              title={row.title}
               onClick={() => onOpenAssignment(row.id)}
               className="flex w-full items-center justify-between gap-2 px-2 py-2 text-left rounded-lg transition-colors hover:bg-alabaster/60"
             >
@@ -115,7 +114,7 @@ export function CourseCardOverflowPopover({
   return (
     <div className="p-2">
       <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-        <p title={course.name} className="min-w-0 truncate text-xs font-bold text-charcoal">
+        <p className="min-w-0 truncate text-xs font-bold text-charcoal">
           {course.name} · 资料 {materials.length}
         </p>
         <button
@@ -146,7 +145,6 @@ export function CourseCardOverflowPopover({
           <button
             key={m.id}
             type="button"
-            title={m.title}
             onClick={() => onPreviewMaterial(m)}
             className="flex w-full items-center gap-2 px-2 py-2 text-left rounded-lg transition-colors hover:bg-alabaster/60"
           >

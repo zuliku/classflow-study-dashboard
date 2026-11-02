@@ -115,7 +115,6 @@ export function KiroInspectorSources() {
                   }
                 }}
                 aria-label={`在对话中定位来源 ${source.name}`}
-                title="在对话中定位引用位置"
                 className="p-1 rounded-md text-sandrift hover:bg-white/70 hover:text-charcoal transition-colors"
               >
                 <Crosshair className="w-3.5 h-3.5" aria-hidden="true" />
@@ -134,7 +133,7 @@ export function KiroInspectorSources() {
             </>
           }
         >
-          <span className="block text-xs font-semibold text-charcoal truncate" title={source.name}>
+          <span className="block text-xs font-semibold text-charcoal truncate">
             {source.name}
           </span>
           <span className="block text-[10px] text-sandrift truncate">

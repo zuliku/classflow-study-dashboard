@@ -35,7 +35,6 @@ export function ColorSwatch({
   removable = false,
   removeDisabled = false,
   removeLabel,
-  title,
   ariaLabel,
   onSelect,
   onRemove,
@@ -49,7 +48,6 @@ export function ColorSwatch({
   removable?: boolean;
   removeDisabled?: boolean;
   removeLabel?: string;
-  title?: string;
   ariaLabel?: string;
   onSelect?: () => void;
   onRemove?: () => void;
@@ -62,7 +60,6 @@ export function ColorSwatch({
         type="button"
         onClick={onSelect}
         disabled={disabled || !onSelect}
-        title={title ?? color}
         aria-label={ariaLabel ?? color}
         aria-pressed={onSelect ? selected : undefined}
         style={{
@@ -96,7 +93,6 @@ export function ColorSwatch({
             if (!removeDisabled) onRemove();
           }}
           disabled={removeDisabled}
-          title={removeDisabled ? "至少保留 1 种颜色" : (removeLabel ?? `移除颜色 ${color}`)}
           aria-label={removeLabel ?? `移除颜色 ${color}`}
           className={cn(
             "absolute -top-1 -right-1 w-4 h-4 rounded-full inline-flex items-center justify-center",

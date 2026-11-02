@@ -208,7 +208,6 @@ export function KiroNavigatorProjectDetail({
                 }}
                 disabled={transitioning}
                 aria-label={`从项目移出 ${conversation.title}`}
-                title="移出项目（不删除对话）"
                 className="p-1 rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed opacity-0 group-hover/projconv:opacity-100 group-focus-within/projconv:opacity-100"
               >
                 <X className="w-3.5 h-3.5" />

@@ -568,7 +568,6 @@ export function VisualActionProposalCard({
                         data-testid="visual-source-thumb"
                         onClick={() => openPreview(i)}
                         aria-label={`查看原图 ${s.name}`}
-                        title="查看原图"
                         className="w-7 h-7 rounded-lg border border-line-soft overflow-hidden focus:outline-none focus:ring-2 focus:ring-charcoal/20"
                       >
                         {s.thumbnail ? (

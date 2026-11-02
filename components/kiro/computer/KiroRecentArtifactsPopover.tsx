@@ -131,7 +131,6 @@ export function KiroRecentArtifactsPopover() {
         onClick={() => setOpen((v) => !v)}
         aria-label="最近文件"
         aria-expanded={open}
-        title="最近文件"
         className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
       >
         <FileClock className="w-4 h-4" />

@@ -132,7 +132,6 @@ export function KiroAttachmentChip({
             onClick={() => setPreviewFile(liveSource.file)}
             disabled={disabled}
             aria-label={`查看原图 ${attachment.name}`}
-            title="查看原图"
             className="w-7 h-7 rounded-lg overflow-hidden border border-line-soft shrink-0 focus:outline-none focus:ring-2 focus:ring-charcoal/20"
           >
             <img src={attachment.thumbnail} alt="" className="w-full h-full object-cover" />
@@ -166,7 +165,6 @@ export function KiroAttachmentChip({
           }}
           disabled={disabled}
           aria-label={`重试 ${attachment.name}`}
-          title="重试"
           className="p-1 rounded text-sandrift hover:text-charcoal transition-colors shrink-0"
         >
           <RotateCcw className="w-3 h-3" />
@@ -183,7 +181,6 @@ export function KiroAttachmentChip({
             disabled={disabled}
             aria-label={`${attachment.name} 更多操作`}
             aria-expanded={menuOpen}
-            title="保存到课程资料"
             className="p-1 rounded text-sandrift hover:text-charcoal transition-colors shrink-0"
           >
             <MoreHorizontal className="w-3 h-3" />

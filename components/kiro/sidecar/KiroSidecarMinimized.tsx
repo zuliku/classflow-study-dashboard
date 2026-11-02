@@ -268,7 +268,6 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
       aria-label="Kiro 已最小化"
       role="separator"
       aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
-      title="拖拽或方向键移动（Shift 加速）；点击恢复"
       tabIndex={visible ? 0 : -1}
       onKeyDown={handleKeyDown}
     >
@@ -291,7 +290,6 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
           type="button"
           onClick={handleClickRestore}
           aria-label="恢复 Kiro"
-          title="点击恢复 Kiro"
           className="flex-1 min-w-0 flex items-center gap-2 h-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/40 rounded-full"
         >
           <span className="shrink-0 w-7 h-7 rounded-full bg-alabaster border border-line flex items-center justify-center overflow-hidden">
@@ -315,7 +313,6 @@ export function KiroSidecarMinimized({ visible }: { visible: boolean }) {
           data-capsule-close="true"
           onClick={handleClose}
           aria-label="关闭 Kiro"
-          title="关闭"
           className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/40"
         >
           <X className="w-3.5 h-3.5" />

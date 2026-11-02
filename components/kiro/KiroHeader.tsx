@@ -50,7 +50,6 @@ export function KiroHeader({
       <h2
         className="min-w-0 text-sm md:text-base font-semibold text-charcoal truncate"
         data-testid="kiro-header-title"
-        title={conversationTitle ?? "新对话"}
       >
         {conversationTitle ?? "新对话"}
       </h2>
@@ -61,7 +60,6 @@ export function KiroHeader({
           type="button"
           onClick={onNewChat}
           aria-label="新对话"
-          title="新对话"
           data-testid="kiro-header-new-chat"
           className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
         >
@@ -75,7 +73,6 @@ export function KiroHeader({
             aria-label={inspectorOpen ? "收起输出与来源" : "打开输出与来源"}
             aria-expanded={inspectorOpen}
             aria-keyshortcuts="Control+I Meta+I"
-            title="输出与来源 · Ctrl+I"
             data-testid="kiro-inspector-toggle"
             className={cn(
               "hidden xl:flex w-8 h-8 md:w-9 md:h-9 items-center justify-center rounded-xl transition-colors",

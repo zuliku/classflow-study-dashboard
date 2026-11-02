@@ -471,7 +471,6 @@ export function CourseDetailDrawer() {
                 disabled={!entityInteractive}
                 onClick={() => setMoreOpen((v) => !v)}
                 aria-label="更多操作"
-                title="更多操作"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </IconButton>
@@ -486,7 +485,6 @@ export function CourseDetailDrawer() {
               size="sm"
               onClick={() => setSelectedCourseId(null)}
               aria-label="关闭"
-              title="关闭"
             >
               <X className="h-4 w-4" />
             </IconButton>

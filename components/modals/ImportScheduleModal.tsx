@@ -341,8 +341,8 @@ export function ImportScheduleModal() {
                             type="checkbox"
                             checked={!skipped}
                             onChange={() => toggleSkip(item.course.id)}
+                            aria-label={skipped ? `恢复导入 ${item.course.name}` : `跳过课程 ${item.course.name}`}
                             className="mt-0.5 w-4 h-4 accent-charcoal cursor-pointer shrink-0"
-                            title={skipped ? "已跳过，点击恢复导入" : "点击跳过此课程"}
                           />
                           <div className="min-w-0">
                             <div className="font-bold text-charcoal flex flex-wrap items-center gap-1.5">

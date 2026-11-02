@@ -311,7 +311,6 @@ export function CourseScheduleSection({
                       size="sm"
                       onClick={handleCancelEditSlot}
                       aria-label="取消编辑"
-                      title="取消编辑"
                       className="h-6 w-6"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -409,7 +408,6 @@ export function CourseScheduleSection({
                     type="button"
                     onClick={() => handleStartEditSlot(sched)}
                     aria-label={`编辑时段 周${["一", "二", "三", "四", "五", "六", "日"][sched.dayOfWeek - 1]} ${sched.startTime}`}
-                    title="编辑此排课时段"
                     className="rounded-lg p-1.5 text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal"
                   >
                     <PencilLine className="h-3.5 w-3.5" />
@@ -418,7 +416,6 @@ export function CourseScheduleSection({
                     type="button"
                     onClick={() => onDeleteSlot(sched)}
                     aria-label={`删除时段 周${["一", "二", "三", "四", "五", "六", "日"][sched.dayOfWeek - 1]} ${sched.startTime}`}
-                    title="删除此排课时段"
                     className="rounded-lg p-1.5 text-sandrift transition-colors hover:bg-danger-bg hover:text-danger"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -446,7 +443,6 @@ export function CourseScheduleSection({
                     onClick={() => onDeleteOverride(o.id)}
                     className="shrink-0 rounded-lg p-1 text-sandrift transition-colors hover:bg-danger-bg hover:text-danger"
                     aria-label="移除临时调整"
-                    title="移除临时调整"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

@@ -84,7 +84,6 @@ export function KiroComposerAccessControl({
         aria-label="访问"
         aria-expanded={open}
         aria-haspopup="menu"
-        title={copy.label}
         data-testid="kiro-composer-access"
         data-access-mode={state}
         className={cn(

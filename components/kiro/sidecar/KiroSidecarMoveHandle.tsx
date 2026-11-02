@@ -115,7 +115,6 @@ export function KiroSidecarMoveHandle({
       role="separator"
       aria-label="移动 Kiro 面板"
       aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
-      title="拖拽或方向键移动（Shift 加速）"
       tabIndex={0}
       className={cn(
         // 顶部中央 activation hit area（约 56×16px；视觉透明，hover/聚焦 显示 pill）

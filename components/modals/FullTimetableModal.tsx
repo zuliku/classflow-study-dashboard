@@ -82,7 +82,6 @@ export function FullTimetableModal() {
               <button
                 onClick={() => setCurrentSemesterWeek(currentSemesterWeek - 1)}
                 disabled={currentSemesterWeek <= 1}
-                title="上一周"
                 aria-label="上一周"
                 className="hover:text-black p-0.5 disabled:opacity-30 disabled:cursor-not-allowed"
               >
@@ -92,7 +91,6 @@ export function FullTimetableModal() {
               <button
                 onClick={() => setCurrentSemesterWeek(currentSemesterWeek + 1)}
                 disabled={currentSemesterWeek >= semester.totalWeeks}
-                title="下一周"
                 aria-label="下一周"
                 className="hover:text-black p-0.5 disabled:opacity-30 disabled:cursor-not-allowed"
               >

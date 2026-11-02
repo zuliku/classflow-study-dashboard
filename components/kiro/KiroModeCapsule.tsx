@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 
 export type KiroModeCapsuleMode = "chat" | "work";
 
-const SEGMENTS: { mode: KiroModeCapsuleMode; label: string; hint: string }[] = [
-  { mode: "chat", label: "聊天", hint: "纯聊天，不使用 Computer 工具" },
-  { mode: "work", label: "工作", hint: "Agent 模式，授权策略在下方聊天框调整" },
+const SEGMENTS: { mode: KiroModeCapsuleMode; label: string }[] = [
+  { mode: "chat", label: "聊天" },
+  { mode: "work", label: "工作" },
 ];
 
 /**
@@ -79,7 +79,6 @@ export function KiroModeCapsule({
             }}
             disabled={locked}
             aria-pressed={isActive}
-            title={locked ? "当前 Turn 运行中，下一条消息可改" : s.hint}
             className={cn(
               "relative z-10 h-7 px-4 rounded-full text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               isActive ? "text-white" : "text-sandrift hover:text-charcoal"

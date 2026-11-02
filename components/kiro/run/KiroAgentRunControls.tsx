@@ -14,7 +14,6 @@ export function KiroAgentRunControls({ onStop, stopLabel }: { onStop: () => void
       type="button"
       data-testid="kiro-agent-run-stop"
       onClick={onStop}
-      title={stopLabel ?? "停止本轮执行"}
       className="shrink-0 flex items-center gap-1 px-1.5 h-6 rounded-md text-[11px] font-semibold text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
     >
       <Square className="w-3 h-3" aria-hidden="true" />

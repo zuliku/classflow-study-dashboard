@@ -113,7 +113,6 @@ export function CourseMaterialSection({
                   type="button"
                   onClick={() => onDelete(mat)}
                   aria-label={`删除资料 ${mat.title}`}
-                  title="删除此资料"
                   className="rounded-lg p-1.5 text-sandrift transition-colors hover:bg-danger-bg hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -156,7 +155,6 @@ export function CourseMaterialSection({
                         type="button"
                         onClick={() => onDelete(mat)}
                         aria-label={`删除资料 ${mat.title}`}
-                        title="删除此资料"
                         className="rounded-lg p-1.5 text-sandrift transition-colors hover:bg-danger-bg hover:text-danger sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

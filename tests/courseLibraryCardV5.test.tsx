@@ -255,8 +255,10 @@ describe("CourseLibraryCard V5 copy", () => {
 describe("CourseLibraryCard V5 actions / identity", () => {
   it("Course name 打开 Course Hub；task row 打开 Assignment；添加 → onAddTask", () => {
     const h = renderCard({ taskRows: [mkRow({ id: "a1", status: "todo" })] });
-    const title = h.container.querySelector('button[title="数据结构与算法"]')!;
-    act(() => (title as HTMLButtonElement).click());
+    const title = Array.from(h.container.querySelectorAll("button")).find(
+      (b) => b.textContent === "数据结构与算法"
+    )!;
+    act(() => title.click());
     expect(h.onOpenCourse).toHaveBeenCalledTimes(1);
 
     const task = Array.from(h.container.querySelectorAll("button")).find((b) =>

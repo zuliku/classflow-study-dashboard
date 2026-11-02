@@ -226,7 +226,6 @@ function OutlookTaskRow({
       <button
         type="button"
         aria-label={`打开任务《${task.title}》`}
-        title={`打开任务《${task.title}》`}
         onClick={() => onOpenAssignment(task.assignmentId)}
         className="w-full text-left rounded-lg outline-none cursor-pointer group/row hover:bg-alabaster/60 focus-visible:bg-alabaster/60 focus-visible:outline-2 focus-visible:outline-charcoal/30 transition-colors duration-[var(--motion-fast)]"
       >

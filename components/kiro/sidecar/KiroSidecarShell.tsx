@@ -378,7 +378,6 @@ function MiniPopoutButton() {
         } catch {}
       }}
       aria-label="弹出迷你聊天窗"
-      title="弹出迷你聊天窗（系统桌面常驻）"
       className="hidden md:flex w-8 h-8 items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
       data-testid="kiro-sidecar-mini-popout"
     >
@@ -408,7 +407,6 @@ function KiroSidecarHeader({ onMinimize, onExpand, onClose }: { onMinimize: () =
         <button
           onClick={onMinimize}
           aria-label="最小化 Kiro"
-          title="最小化"
           className="hidden md:flex w-8 h-8 items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
           data-testid="kiro-sidecar-minimize"
         >
@@ -417,7 +415,6 @@ function KiroSidecarHeader({ onMinimize, onExpand, onClose }: { onMinimize: () =
         <button
           onClick={onClose}
           aria-label="关闭 Kiro"
-          title="关闭"
           className="w-8 h-8 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
         >
           <X className="w-4 h-4" />

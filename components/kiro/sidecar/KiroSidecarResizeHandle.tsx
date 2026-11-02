@@ -137,7 +137,6 @@ export function KiroSidecarResizeHandle({
       role="separator"
       aria-label={position === "left" ? "调整宽度" : position === "bottom" ? "调整高度" : "调整尺寸"}
       aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
-      title="拖拽或方向键调整（Shift 加速）"
       tabIndex={0}
       data-sidecar-resize-handle={position}
       className={cn(

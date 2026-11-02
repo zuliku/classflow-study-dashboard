@@ -81,7 +81,6 @@ export function KiroSessionActions({
           disabled={!hasMessages}
           aria-label="分享对话"
           aria-expanded={share.open}
-          title={hasMessages ? "分享对话" : "暂无对话可分享"}
           className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Share2 className="w-4 h-4" />
@@ -98,7 +97,6 @@ export function KiroSessionActions({
           onClick={more.toggle}
           aria-label="更多操作"
           aria-expanded={more.open}
-          title="更多"
           className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
         >
           <MoreHorizontal className="w-4 h-4" />

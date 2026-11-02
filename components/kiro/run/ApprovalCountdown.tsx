@@ -46,8 +46,6 @@ export function ApprovalCountdown({ testid }: { testid?: string }) {
           "text-[10px] leading-relaxed tabular-nums transition-colors duration-[var(--motion-fast)]",
           urgent ? "font-bold text-danger" : "text-sandrift"
         )}
-        // P0：说清后果（此前只倒数不说超时会怎样，用户 hasty-allow 点错）
-        title="超时按拒绝处理，任务中断，可继续对话换种方式"
       >
         {urgent
           ? `${formatApprovalCountdown(remaining)}后自动取消（按拒绝处理）`
@@ -60,7 +58,6 @@ export function ApprovalCountdown({ testid }: { testid?: string }) {
             setApprovalDeadlineAt(Date.now() + 60_000);
             setExtendedFor(deadlineAt);
           }}
-          title="延长 1 分钟，每个审批只能延长一次"
           className="shrink-0 text-[10px] font-semibold text-satin-grey underline underline-offset-2 hover:text-charcoal transition-colors"
         >
           延长 1 分钟

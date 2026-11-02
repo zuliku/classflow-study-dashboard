@@ -39,9 +39,9 @@ describe("Header Action Contract", () => {
     expect(src).toContain("新增任务");
   });
 
-  it("任务行内：高亮/hover 拆解入口（Kiro 拆解为步骤）", () => {
+  it("任务行内：高亮/hover 拆解入口（Kiro 拆解 aria-label）", () => {
     const src = read("components/dashboard/AssignmentTable.tsx");
-    expect(src).toContain("Kiro 拆解为步骤");
+    expect(src).toContain("Kiro 拆解 ${task.title}");
     expect(src).toContain("handoffAssignmentPrompt");
   });
 

@@ -100,16 +100,15 @@ export function ConflictResolutionModal() {
                 <button
                   onClick={handleResolveSkipA}
                   className="px-2 py-1 text-[10px] bg-white border border-line-strong rounded-lg text-charcoal hover:bg-alabaster font-medium"
-                  title="本周停课"
                 >
                   本周停课
                 </button>
                 <button
                   onClick={handleDeleteA}
+                  aria-label="删除该排课"
                   className="p-1.5 text-danger hover:bg-danger-bg rounded-lg"
-                  title="删除该排课"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -129,16 +128,15 @@ export function ConflictResolutionModal() {
                 <button
                   onClick={handleResolveSkipB}
                   className="px-2 py-1 text-[10px] bg-white border border-line-strong rounded-lg text-charcoal hover:bg-alabaster font-medium"
-                  title="本周停课"
                 >
                   本周停课
                 </button>
                 <button
                   onClick={handleDeleteB}
+                  aria-label="删除该排课"
                   className="p-1.5 text-danger hover:bg-danger-bg rounded-lg"
-                  title="删除该排课"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               </div>
             </div>

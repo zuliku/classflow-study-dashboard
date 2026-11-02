@@ -388,7 +388,7 @@ export function UISelect<T extends string | number>({
                       {isSelected && <Check className="w-3.5 h-3.5 text-charcoal" aria-hidden="true" />}
                     </span>
                     {/* 常规 label 单行完整显示；仅超过菜单 max-width 时才省略 */}
-                    <span className="whitespace-nowrap overflow-hidden text-ellipsis" title={opt.label}>
+                    <span className="whitespace-nowrap overflow-hidden text-ellipsis">
                       {opt.label}
                     </span>
                   </button>

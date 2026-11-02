@@ -49,7 +49,6 @@ export function CourseInvestmentCard({
                   onClick={() => {
                     if (clickable) onOpenCourse(item.courseId as string);
                   }}
-                  title={item.courseName}
                   className={cn(
                     "text-[11px] font-semibold truncate text-left",
                     clickable

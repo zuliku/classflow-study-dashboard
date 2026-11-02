@@ -135,9 +135,9 @@ export function UpcomingDDL() {
       case "high":
         return <span className="shrink-0 px-1.5 py-px rounded text-[10px] font-bold bg-warning-bg text-warning border border-warning-border leading-4">高优</span>;
       case "medium":
-        return <span aria-hidden="true" title="中优先" className="shrink-0 w-1.5 h-1.5 rounded-full bg-stone-beige self-center" />;
+        return <span aria-hidden="true" className="shrink-0 w-1.5 h-1.5 rounded-full bg-stone-beige self-center" />;
       default:
-        return <span aria-hidden="true" title="低优先" className="shrink-0 w-1.5 h-1.5 rounded-full bg-ashy-beige self-center" />;
+        return <span aria-hidden="true" className="shrink-0 w-1.5 h-1.5 rounded-full bg-ashy-beige self-center" />;
     }
   };
 
@@ -219,9 +219,9 @@ export function UpcomingDDL() {
                 >
                   <DDLDateTile date={ddlDate} taskId={task.id} density={density} />
                   <div className="min-w-0 flex-1">
-                    <h4 title={task.title} className="text-[13px] font-bold text-charcoal truncate group-hover:text-black leading-5">{task.title}</h4>
+                    <h4 className="text-[13px] font-bold text-charcoal truncate group-hover:text-black leading-5">{task.title}</h4>
                     <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
-                      <span title={course?.name || "通用课题"} className="text-[11px] text-satin-grey truncate">{course?.name || "通用课题"}</span>
+                      <span className="text-[11px] text-satin-grey truncate">{course?.name || "通用课题"}</span>
                       {getPriorityMark(task.priority)}
                     </div>
                   </div>
