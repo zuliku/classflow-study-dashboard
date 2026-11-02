@@ -1,8 +1,11 @@
 ﻿"use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { RotateCcw } from "lucide-react";
 import { PopoverPanel } from "@/components/ui/Popover";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { KiroReasoningIcon } from "@/components/kiro/KiroReasoningIcon";
 import { KiroReasoningEffort, ReasoningCapability } from "@/lib/ai/reasoning/types";
 import {
@@ -18,6 +21,8 @@ import { cn } from "@/lib/utils";
  * - 一级：`🧠 高`（default → `🧠 默认`；compact → 仅图标）
  * - 弹层：当前档位 + 模型名 + 分段轨道；**点击档位即选中（不关闭弹窗）**，不做拖拽放置
  * - 轨道为 flex 分段（无绝对定位溢出 → 不出现滚动条 / 不被裁剪）
+ * - 小窗（Sidecar / compact）：弹窗 Portal 到 body，右对齐 trigger + viewport clamp，
+ *   避免被 Sidecar 的 overflow-hidden 裁切；桌面仍使用原锚点居中。
  * - Reasoning 是 Model preference：与 Computer 开关无关；模型 fixed → 不渲染
  * - 最高档：填充层上叠加流动彩条（opacity crossfade 进出，变色不生硬；reduced-motion 静止保彩）
  */
@@ -26,6 +31,17 @@ const KiroComposerReasoningControlWIDTH = 256;
 
 /** knob 直径（w-8 = 32px）：最高档时贴右端（右边缘 = 轨道右边缘） */
 const KNOB_SIZE = 32;
+
+/** 小窗（Sidecar）Portal 定位：右对齐 trigger + viewport clamp，避免被 overflow-hidden 裁切 */
+interface CompactPanelLayout {
+  left: number;
+  top?: number;
+  bottom?: number;
+  width: number;
+  maxHeight: number;
+}
+const COMPACT_PANEL_WIDTH = 256;
+const COMPACT_PANEL_MAX_HEIGHT = 320;
 
 export function KiroComposerReasoningControl({
   capability,
@@ -59,6 +75,44 @@ export function KiroComposerReasoningControl({
     },
     [onOpenChange, openProp]
   );
+  const triggerRef = React.useRef<HTMLButtonElement | null>(null);
+  const [compactLayout, setCompactLayout] = React.useState<CompactPanelLayout | null>(null);
+  const compactPresence = usePresence(!!open && !!compact, MOTION_EXIT_MS.panel);
+
+  const measureCompact = React.useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.min(COMPACT_PANEL_WIDTH, vw - 24);
+    // 小窗靠右：面板右边缘对齐 trigger 右边缘，空间不足时 clamp 到 viewport
+    const left = Math.max(12, Math.min(rect.right - width, vw - width - 12));
+    const spaceAbove = rect.top - 12;
+    const spaceBelow = vh - rect.bottom - 12;
+    const placeAbove = spaceAbove >= 180 || spaceAbove >= spaceBelow;
+    const maxHeight = Math.max(140, Math.min(COMPACT_PANEL_MAX_HEIGHT, placeAbove ? spaceAbove : spaceBelow));
+    setCompactLayout({
+      left,
+      width,
+      maxHeight,
+      ...(placeAbove
+        ? { bottom: vh - rect.top + 6 }
+        : { top: rect.bottom + 6 }),
+    });
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!open || !compact) return;
+    measureCompact();
+  }, [open, compact, measureCompact]);
+
+  React.useEffect(() => {
+    if (!open || !compact) return;
+    const onResize = () => measureCompact();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [open, compact, measureCompact]);
 
   if (!isComposerReasoningAdjustable(capability) || !capability) return null;
 
@@ -125,6 +179,7 @@ export function KiroComposerReasoningControl({
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           if (disabled) return;
@@ -160,136 +215,171 @@ export function KiroComposerReasoningControl({
         )}
       </button>
 
-      {/* 弹窗锚点：位于「思考程度图标」中心（inline style 保证 containing block，不随 label 宽度漂移） */}
-      <span
-        aria-hidden="true"
-        data-testid="kiro-composer-reasoning-anchor"
-        className="pointer-events-none"
-        style={{ position: "absolute", left: 18, top: 0, width: 0, height: 0 }}
-      >
-        <PopoverPanel
-          open={open}
-          placement="anchor"
-          motionProfile="kiro"
-          className="pointer-events-auto w-64 max-w-[calc(100vw-24px)] overflow-hidden"
-          /* 固定宽度居中对齐到锚点（182 = w-64/2 + 图标中心偏移）：不依赖 transform，保留 enter/exit motion */
-          style={{ left: "50%", bottom: "100%", marginLeft: -(KiroComposerReasoningControlWIDTH / 2), marginBottom: 6 }}
-        >
-        <div className="p-3" data-testid="kiro-composer-reasoning-menu" role="dialog" aria-label="思考程度">
-          <div className="flex items-center gap-2">
-            <KiroReasoningIcon className="w-3.5 h-3.5 text-sandrift shrink-0" />
-            <span className="flex-1 text-center text-xs font-bold text-charcoal">
-              {reasoningEffortLabel(steps[activeIndex] ?? effort)}
-            </span>
-            <button
-              type="button"
-              onClick={() => commit("default")}
-              disabled={effort === "default"}
-              aria-label="恢复默认思考程度"
-              className="p-1 rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <p className="mt-0.5 text-center text-[10px] text-sandrift truncate">{modelName}</p>
-
-          {/* 分段轨道（Codex-style）：点击 / 拖动调整；白色 knob 指示当前档位（恒在轨道内，不溢出） */}
-          <div
-            ref={trackRef}
-            role="radiogroup"
-            aria-label="思考程度"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowLeft" && activeIndex > 0) {
-                e.preventDefault();
-                commit(steps[activeIndex - 1]);
-              }
-              if (e.key === "ArrowRight" && activeIndex < steps.length - 1) {
-                e.preventDefault();
-                commit(steps[activeIndex + 1]);
-              }
-            }}
-            onPointerDown={handleTrackPointerDown}
-            onPointerMove={handleTrackPointerMove}
-            onPointerUp={handleTrackPointerEnd}
-            onPointerCancel={handleTrackPointerEnd}
-            data-testid="kiro-composer-reasoning-track"
-            data-dragging={dragging ? "true" : undefined}
-            data-max={atMax || undefined}
-            className="relative mt-2 h-9 rounded-full bg-alabaster overflow-hidden touch-none focus:outline-none focus-visible:ring-1 focus-visible:ring-line-strong"
+      {/* 弹窗：桌面保持锚点居中；小窗（Sidecar/compact）Portal 到 body，右对齐 + viewport clamp，
+          避免被 Sidecar 的 overflow-hidden 裁切。 */}
+      {(() => {
+        const popover = (
+          <PopoverPanel
+            open={open}
+            placement="anchor"
+            motionProfile="kiro"
+            className="pointer-events-auto w-64 max-w-[calc(100vw-24px)] overflow-hidden"
+            style={
+              compact && compactLayout
+                ? {
+                    position: "fixed",
+                    zIndex: 110,
+                    left: compactLayout.left,
+                    top: compactLayout.top,
+                    bottom: compactLayout.bottom,
+                    width: compactLayout.width,
+                    maxHeight: compactLayout.maxHeight,
+                    margin: 0,
+                  }
+                : { left: "50%", bottom: "100%", marginLeft: -(KiroComposerReasoningControlWIDTH / 2), marginBottom: 6 }
+            }
           >
-            {/* 填充：到当前档位中心；最高档填满整条轨道（直边 + 轨道裁剪，窄档位不变形）；
-                拖动过程中同样保留 width 过渡（档位间平滑滑动，不瞬跳） */}
-            <span
-              aria-hidden="true"
-              data-testid="kiro-composer-reasoning-fill"
-              className="absolute inset-y-0 left-0 bg-pastel-mint transition-[width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
-              style={{ width: `${fillPercent}%` }}
-            />
-            {/* 最高档流动彩条：与底填充同宽同位，opacity 500ms 柔光晕染进出
-                （显隐比几何过渡慢半拍以上，变色不生硬）；内层 200% 宽彩带做 translateX 位移
-                （compositor 合成；位移恰为一个色带周期，首尾帧一致，无缝不断档）；
-                reduced-motion 下静止但保留彩色 */}
-            <span
-              aria-hidden="true"
-              data-testid="kiro-composer-reasoning-flow"
-              className={cn(
-                "absolute inset-y-0 left-0 overflow-hidden kiro-reasoning-flow-fade",
-                atMax ? "opacity-100" : "opacity-0"
-              )}
-              style={{ width: `${fillPercent}%` }}
+          <div className="p-3" data-testid="kiro-composer-reasoning-menu" role="dialog" aria-label="思考程度">
+            <div className="flex items-center gap-2">
+              <KiroReasoningIcon className="w-3.5 h-3.5 text-sandrift shrink-0" />
+              <span className="flex-1 text-center text-xs font-bold text-charcoal">
+                {reasoningEffortLabel(steps[activeIndex] ?? effort)}
+              </span>
+              <button
+                type="button"
+                onClick={() => commit("default")}
+                disabled={effort === "default"}
+                aria-label="恢复默认思考程度"
+                className="p-1 rounded-md text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <p className="mt-0.5 text-center text-[10px] text-sandrift truncate">{modelName}</p>
+
+            {/* 分段轨道（Codex-style）：点击 / 拖动调整；白色 knob 指示当前档位（恒在轨道内，不溢出） */}
+            <div
+              ref={trackRef}
+              role="radiogroup"
+              aria-label="思考程度"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft" && activeIndex > 0) {
+                  e.preventDefault();
+                  commit(steps[activeIndex - 1]);
+                }
+                if (e.key === "ArrowRight" && activeIndex < steps.length - 1) {
+                  e.preventDefault();
+                  commit(steps[activeIndex + 1]);
+                }
+              }}
+              onPointerDown={handleTrackPointerDown}
+              onPointerMove={handleTrackPointerMove}
+              onPointerUp={handleTrackPointerEnd}
+              onPointerCancel={handleTrackPointerEnd}
+              data-testid="kiro-composer-reasoning-track"
+              data-dragging={dragging ? "true" : undefined}
+              data-max={atMax || undefined}
+              className="relative mt-2 h-9 rounded-full bg-alabaster overflow-hidden touch-none focus:outline-none focus-visible:ring-1 focus-visible:ring-line-strong"
             >
+              {/* 填充：到当前档位中心；最高档填满整条轨道（直边 + 轨道裁剪，窄档位不变形）；
+                  拖动过程中同样保留 width 过渡（档位间平滑滑动，不瞬跳） */}
               <span
                 aria-hidden="true"
-                data-testid="kiro-composer-reasoning-flow-strip"
-                className="block h-full w-[200%] kiro-reasoning-flow"
+                data-testid="kiro-composer-reasoning-fill"
+                className="absolute inset-y-0 left-0 bg-pastel-mint transition-[width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
+                style={{ width: `${fillPercent}%` }}
               />
-            </span>
-            {/* 档位点：未选中显示小点（固定位置标记，保持原尺寸）；选中位置由 knob 表达 */}
-            {steps.map((step, index) =>
-              index === activeIndex ? null : (
+              {/* 最高档流动彩条：与底填充同宽同位，opacity 500ms 柔光晕染进出
+                  （显隐比几何过渡慢半拍以上，变色不生硬）；内层 200% 宽彩带做 translateX 位移
+                  （compositor 合成；位移恰为一个色带周期，首尾帧一致，无缝不断档）；
+                  reduced-motion 下静止但保留彩色 */}
+              <span
+                aria-hidden="true"
+                data-testid="kiro-composer-reasoning-flow"
+                className={cn(
+                  "absolute inset-y-0 left-0 overflow-hidden kiro-reasoning-flow-fade",
+                  atMax ? "opacity-100" : "opacity-0"
+                )}
+                style={{ width: `${fillPercent}%` }}
+              >
                 <span
-                  key={step}
                   aria-hidden="true"
-                  data-testid="kiro-composer-reasoning-dot"
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-sandrift/50"
-                  style={{ left: `${((index + 0.5) / steps.length) * 100}%` }}
+                  data-testid="kiro-composer-reasoning-flow-strip"
+                  className="block h-full w-[200%] kiro-reasoning-flow"
                 />
-              )
-            )}
-            {/* 白色 knob（滑块点）：位置 = 当前档位中心；最高档贴右端（静态，无 hover 位移）；
-                拖动过程中同样保留 left 过渡（平滑跟到目标档位） */}
-            <span
-              aria-hidden="true"
-              data-testid="kiro-composer-reasoning-knob"
-              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-surface border border-line shadow-subtle transition-[left] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
-              style={{ left: knobLeft }}
-            />
-            {/* 可点击段：每档一个（点击 / 键盘选中；拖动由轨道级 Pointer 处理统一负责） */}
-            <div className="absolute inset-0 flex">
-              {steps.map((step, index) => {
-                const selected = index === activeIndex;
-                return (
-                  <button
+              </span>
+              {/* 档位点：未选中显示小点（固定位置标记，保持原尺寸）；选中位置由 knob 表达 */}
+              {steps.map((step, index) =>
+                index === activeIndex ? null : (
+                  <span
                     key={step}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    aria-label={`思考程度：${reasoningEffortLabel(step)}`}
-                    // pointerdown 即生效（精确档位；不 stopPropagation → 轨道同时开始拖动）
-                    onPointerDown={() => commit(step)}
-                    onClick={() => commit(step)}
-                    className="flex flex-1 min-w-0 items-center justify-center rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-line-strong"
-                  >
-                    <span className="sr-only">{reasoningEffortLabel(step)}</span>
-                  </button>
-                );
-              })}
+                    aria-hidden="true"
+                    data-testid="kiro-composer-reasoning-dot"
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-sandrift/50"
+                    style={{ left: `${((index + 0.5) / steps.length) * 100}%` }}
+                  />
+                )
+              )}
+              {/* 白色 knob（滑块点）：位置 = 当前档位中心；最高档贴右端（静态，无 hover 位移）；
+                  拖动过程中同样保留 left 过渡（平滑跟到目标档位） */}
+              <span
+                aria-hidden="true"
+                data-testid="kiro-composer-reasoning-knob"
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-surface border border-line shadow-subtle transition-[left] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
+                style={{ left: knobLeft }}
+              />
+              {/* 可点击段：每档一个（点击 / 键盘选中；拖动由轨道级 Pointer 处理统一负责） */}
+              <div className="absolute inset-0 flex">
+                {steps.map((step, index) => {
+                  const selected = index === activeIndex;
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      aria-label={`思考程度：${reasoningEffortLabel(step)}`}
+                      // pointerdown 即生效（精确档位；不 stopPropagation → 轨道同时开始拖动）
+                      onPointerDown={() => commit(step)}
+                      onClick={() => commit(step)}
+                      className="flex flex-1 min-w-0 items-center justify-center rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-line-strong"
+                    >
+                      <span className="sr-only">{reasoningEffortLabel(step)}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-        </PopoverPanel>
-      </span>
+          </PopoverPanel>
+        );
+
+        if (compact) {
+          return compactPresence.mounted && compactLayout && typeof document !== "undefined"
+            ? createPortal(
+                <div
+                  data-kiro-composer-menu="reasoning"
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  {popover}
+                </div>,
+                document.body
+              )
+            : null;
+        }
+
+        return (
+          <span
+            aria-hidden="true"
+            data-testid="kiro-composer-reasoning-anchor"
+            className="pointer-events-none"
+            style={{ position: "absolute", left: 18, top: 0, width: 0, height: 0 }}
+          >
+            {popover}
+          </span>
+        );
+      })()}
     </div>
   );
 }

@@ -60,6 +60,18 @@ export const EASE = {
 } as const;
 
 /**
+ * EASE 的数值镜像（Framer Motion / WAAPI 需要 tuple；CSS 仍引用 EASE 字符串）。
+ * 两处必须同值，由 motionContract 测试校验。
+ */
+export const EASE_BEZIER: Record<keyof typeof EASE, [number, number, number, number]> = {
+  standard: [0.2, 0.8, 0.2, 1],
+  emphasized: [0.22, 1, 0.36, 1],
+  enter: [0, 0, 0.2, 1],
+  exit: [0.3, 0, 1, 1],
+  spring: [0.32, 0.72, 0, 1],
+};
+
+/**
  * Kiro Motion tiers（S3-1 立约，零行为变更：数值 = app/globals.css :root 默认值）。
  * - workspace scope 与 :root 同值；sidecar scope 更快（小浮层节奏），见 KIRO_MOTION_SIDECAR_MS。
  * - presence/unmount 计时引用本文件常量；CSS transition 引用同名 --kiro-motion-* 变量。

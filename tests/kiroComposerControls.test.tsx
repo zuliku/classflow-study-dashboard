@@ -450,16 +450,26 @@ describe("Kiro Composer — Reasoning / Model", () => {
     expect(model.textContent).toContain("GPT-5.6 Sol");
     expect(model.textContent).not.toContain("·");
     await click('[data-testid="kiro-composer-model"]');
-    const menu = q('[data-testid="kiro-composer-model-menu"]')!;
+    // 面板 Portal 到 body：模型菜单不在 container 内
+    const menu = document.querySelector('[data-testid="kiro-composer-model-menu"]') as HTMLElement;
+    expect(menu).toBeTruthy();
     expect(menu.textContent).toContain("Claude X");
     expect(menu.textContent).not.toContain("思考程度");
-    await clickText("Claude X");
+    const option = Array.from(menu.querySelectorAll("button")).find((b) =>
+      (b.textContent ?? "").includes("Claude X")
+    ) as HTMLButtonElement;
+    await act(async () => {
+      option.click();
+    });
+    await flush();
     expect(handlers.onSelectModel).toHaveBeenCalledWith("claude-x");
 
     rerender({ modelUnavailable: true, activeModelName: "模型不可用" });
     await flush();
     await click('[data-testid="kiro-composer-model"]');
-    expect(q('[data-testid="kiro-composer-model-menu"]')!.textContent).toContain("当前模型已不可用");
+    expect(
+      (document.querySelector('[data-testid="kiro-composer-model-menu"]') as HTMLElement).textContent
+    ).toContain("当前模型已不可用");
   });
 
   it("S-fix 模型不可用时发送前即禁用（不再白等一轮 MODEL_NOT_FOUND）", async () => {

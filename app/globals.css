@@ -1835,3 +1835,48 @@ div[data-geometry-interacting] {
     outline-offset: 1px;
   }
 }
+
+/* Kiro Model Selector — ChatGPT-style glass surface.
+   材质只作用于面板背后；文字/图标保持锐利。Dark 为面板作用域，供演示与未来全局暗色复用。 */
+.kiro-model-glass {
+  /* 与 ClassFlow 暖纸色一致：surface #F4F2EF + line/alabaster，避免冷白浮层 */
+  --kiro-glass-bg: rgba(244, 242, 239, 0.92);
+  --kiro-glass-bg-fallback: #f4f2ef;
+  --kiro-glass-border: rgba(205, 185, 171, 0.56);
+  --kiro-glass-ink: #313032;
+  --kiro-glass-muted: #676266;
+  --kiro-glass-hover: rgba(240, 235, 225, 0.78);
+  --kiro-glass-selected: rgba(227, 230, 224, 0.92);
+  --kiro-glass-field: rgba(247, 245, 245, 0.9);
+  --kiro-glass-divider: rgba(205, 185, 171, 0.34);
+  --kiro-glass-shadow:
+    0 24px 60px -28px rgba(49, 48, 50, 0.24),
+    0 8px 20px -12px rgba(49, 48, 50, 0.14);
+  background: var(--kiro-glass-bg);
+  border: 1px solid var(--kiro-glass-border);
+  box-shadow: var(--kiro-glass-shadow);
+  color: var(--kiro-glass-ink);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.kiro-model-glass[data-appearance="dark"] {
+  --kiro-glass-bg: rgba(35, 35, 35, 0.88);
+  --kiro-glass-bg-fallback: #232323;
+  --kiro-glass-border: rgba(255, 255, 255, 0.14);
+  --kiro-glass-ink: #f4f2ef;
+  --kiro-glass-muted: rgba(244, 242, 239, 0.62);
+  --kiro-glass-hover: rgba(255, 255, 255, 0.08);
+  --kiro-glass-selected: rgba(255, 255, 255, 0.14);
+  --kiro-glass-field: rgba(255, 255, 255, 0.06);
+  --kiro-glass-divider: rgba(255, 255, 255, 0.1);
+  --kiro-glass-shadow:
+    0 28px 66px -26px rgba(0, 0, 0, 0.68),
+    0 10px 26px -16px rgba(0, 0, 0, 0.5);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .kiro-model-glass {
+    background: var(--kiro-glass-bg-fallback);
+  }
+}

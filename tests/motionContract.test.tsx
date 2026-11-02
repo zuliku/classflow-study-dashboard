@@ -19,7 +19,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-import { MOTION_MS, MOTION_EXIT_MS, EASE, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
+import { MOTION_MS, MOTION_EXIT_MS, EASE, EASE_BEZIER, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
 import { usePresence } from "@/lib/usePresence";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -95,6 +95,10 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(EASE.enter).toBe("cubic-bezier(0, 0, 0.2, 1)");
     expect(EASE.exit).toBe("cubic-bezier(0.3, 0, 1, 1)");
     expect(EASE.spring).toBe("cubic-bezier(0.32, 0.72, 0, 1)");
+    // Framer Motion / WAAPI 使用数值镜像，必须与 CSS 字符串同值
+    expect(EASE_BEZIER.standard).toEqual([0.2, 0.8, 0.2, 1]);
+    expect(EASE_BEZIER.enter).toEqual([0, 0, 0.2, 1]);
+    expect(EASE_BEZIER.exit).toEqual([0.3, 0, 1, 1]);
   });
 
   it("Motion V3：退出分支统一加速离场（--ease-exit），进入保持 standard", () => {

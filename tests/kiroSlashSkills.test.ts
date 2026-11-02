@@ -81,9 +81,11 @@ describe("KiroComposer Slash 菜单契约（源码锁定）", () => {
     expect(src).toContain('<div ref={addRef} className="relative min-w-0">');
     expect(src).toContain('<div ref={accessRef} className="relative min-w-0">');
     expect(src).toContain('<div ref={modelRef} className="relative min-w-0">');
-    const model = readFileSync(join(process.cwd(), "components/kiro/composer/KiroComposerModelControl.tsx"), "utf8");
+    const model = readFileSync(join(process.cwd(), "components/kiro/composer/KiroModelSelector.tsx"), "utf8");
     const access = readFileSync(join(process.cwd(), "components/kiro/composer/KiroComposerAccessControl.tsx"), "utf8");
-    expect(model).toContain("disabled:opacity-40 disabled:cursor-not-allowed min-w-0");
+    expect(model).toContain("min-w-0");
+    expect(model).toContain("disabled:cursor-not-allowed");
+    expect(model).toContain("disabled:opacity-40");
     expect(access).toContain('text-[11px] font-semibold transition-colors min-w-0');
     // toolbar 行禁 overflow 裁剪（上弹菜单会被裁掉）
     const row = src.match(/<div className="flex items-center justify-between gap-2 pt-1\.5">/);
