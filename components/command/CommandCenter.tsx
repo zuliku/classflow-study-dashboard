@@ -231,9 +231,11 @@ export function CommandCenter() {
     setHighlighted(Math.min(kiroOffset, displayItems.length - 1));
   }, [deferredQuery, searchModalView, kiroOffset, displayItems.length]);
 
-  // 高亮行滚动跟随（nearest：只在超出可视区时滚动，不抢夺页面滚动）
+  // 高亮行滚动跟随（nearest：只在超出可视区时滚动，不抢夺页面滚动）。
+  // 只有键盘高亮才滚：鼠标 hover 半可见行时滚动会让列表硬跳。
   // 必须在 `if (!mounted) return null` 之前声明：Hook 顺序不能随 mounted 变化
   useEffect(() => {
+    if (pointerActiveRef.current) return;
     const el = rowRefs.current.get(highlighted);
     if (el && typeof el.scrollIntoView === "function") {
       try {
@@ -406,11 +408,9 @@ export function CommandCenter() {
   return (
     <div
       className={cn(
-        // blur 只在完全打开时保留：进退场透明度动画期间逐帧重模糊全屏是已知卡顿源
-        "fixed inset-0 z-50 bg-black/40 flex items-start justify-center pt-16 md:pt-20 p-3 sm:p-4",
-        visible && "backdrop-blur-sm",
-        "ux-overlay",
-        // 退出与 Dialog/Drawer 同式（此前 180ms standard 走满被 150ms 卸载截断两帧）
+        // 统一暖色磨砂遮罩；blur 静态，仅随 opacity 淡入淡出（不逐帧重模糊）
+        "fixed inset-0 z-50 ux-scrim flex items-start justify-center pt-16 md:pt-20 p-3 sm:p-4 ux-overlay",
+        // enter/exit 与 Dialog 同档（220 / 150）
         visible ? "opacity-100" : "opacity-0 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]",
         !isSearchModalOpen && "pointer-events-none"
       )}
@@ -431,7 +431,7 @@ export function CommandCenter() {
           "w-full max-w-[680px] bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col",
           "ux-modal-panel",
           visible
-            ? "opacity-100 scale-100 translate-y-0"
+            ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-standard)]"
             : "opacity-0 scale-[0.985] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
         )}
         style={exitDurationStyle}

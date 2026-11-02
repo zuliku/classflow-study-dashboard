@@ -150,11 +150,10 @@ export function KiroImagePreviewDialog({
       aria-modal="true"
       aria-label={currentSource.name ? `查看原图：${currentSource.name}` : "查看原图"}
     >
-      {/* Backdrop — minimal enter fade（exit snap acceptable for z-80 preview）；
-          纯 dim 无 blur（blur 配透明度动画是逐帧重模糊的已知卡顿源） */}
+      {/* Backdrop — 与全局灯箱同一强磨砂层；enter 一次性播放，退出由父级卸载 */}
       <div
         data-testid="kiro-image-preview-backdrop"
-        className="absolute inset-0 bg-charcoal/60 animate-enter"
+        className="absolute inset-0 ux-scrim-strong animate-enter"
         onClick={onClose}
       />
 

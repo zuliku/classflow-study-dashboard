@@ -93,7 +93,7 @@ export function MotionGallery() {
       data-testid="motion-gallery"
       role="dialog"
       aria-label="Motion Gallery（开发预览）"
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[90] flex items-center justify-center ux-scrim-strong p-4"
     >
       <div className="flex max-h-[calc(100dvh-48px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-drawer">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">

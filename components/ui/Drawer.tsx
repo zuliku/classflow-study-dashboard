@@ -70,11 +70,10 @@ export function resolveDrawerPresentation(
 ): { overlayClassName: string; panelClassName: string } {
   if (presentation === "floating") {
   return {
-    // 真模态：柔和 dim 遮罩 + 拦截指针（背景不可操作；backdrop 点击关闭，
-    // 关闭规则见 closeOnBackdrop 解析——floating 默认 backdrop 关闭）。
-    // blur 由 OverlayLayer scrimBlurClass 按 visible 挂载（进退场不逐帧重模糊）
+    // 真模态：统一暖色磨砂遮罩 + 拦截指针（背景不可操作；backdrop 点击关闭）。
+    // 磨砂由 OverlayLayer scrimTone 统一提供（静态 blur，只随 opacity 淡入淡出）。
     overlayClassName:
-      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/20 flex justify-end overflow-hidden p-3 sm:p-4",
+      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] flex justify-end overflow-hidden p-3 sm:p-4",
       panelClassName: cn(
         // 有界浮层：宽度 min(470px, 100vw-32px)；高度 max calc(100dvh-32px)；圆角 + 完整边框 + shadow
         "w-full sm:w-[470px] h-full max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)]",
@@ -89,7 +88,7 @@ export function resolveDrawerPresentation(
     };
   }
   return {
-    overlayClassName: "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/30 flex justify-end overflow-hidden",
+    overlayClassName: "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] flex justify-end overflow-hidden",
     panelClassName: cn(
       "h-full w-full bg-surface shadow-drawer border-l border-line flex flex-col overflow-hidden ux-drawer-panel",
       // 右侧来源感：enter = --motion-overlay（220ms，12px 位移）+ emphasized；exit = --motion-exit-panel（160ms 更快）+ exit，
@@ -149,8 +148,7 @@ export function Drawer({
       onEscapeKeyDown={onEscapeKeyDown}
       focusRestoreKey={focusRestoreKey}
       className={cn(resolveDrawerPresentation(presentation, false).overlayClassName, overlayClassName)}
-      // 背板模糊只在完全可见时挂载（进退场不逐帧重模糊），与 Dialog 同模式
-      scrimBlurClass="backdrop-blur-sm"
+      scrimTone="standard"
     >
       {({ visible }) => (
         <div

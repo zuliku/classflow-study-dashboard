@@ -238,19 +238,18 @@ export function TimetableImportPreviewDialog({
     <div
       ref={dialogInertRef}
       className={cn(
-        "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[90] bg-black/40 flex items-center justify-center p-3 sm:p-4 transition-opacity",
+        "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[90] ux-scrim ux-overlay flex items-center justify-center p-3 sm:p-4",
         dialogPresence.visible
-          ? "opacity-100 duration-[var(--motion-base)]"
-          : "opacity-0 pointer-events-none duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]",
-        dialogPresence.visible && "backdrop-blur-sm"
+          ? "opacity-100"
+          : "opacity-0 pointer-events-none !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
       )}
     >
       <div
         className={cn(
-          "w-full max-w-2xl max-h-full flex flex-col bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden transition-[opacity,transform]",
+          "w-full max-w-2xl max-h-full flex flex-col bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
           dialogPresence.visible
-            ? "opacity-100 scale-100 translate-y-0 duration-[var(--motion-base)]"
-            : "opacity-0 scale-[0.99] translate-y-1 pointer-events-none duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]"
+            ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-standard)]"
+            : "opacity-0 scale-[0.985] translate-y-1 pointer-events-none !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
         )}
       >
         {/* Header */}

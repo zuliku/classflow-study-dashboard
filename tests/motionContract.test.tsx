@@ -541,6 +541,21 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
     expect(navigator).toContain("duration-[var(--motion-exit-fast)]");
   });
 
+  it("统一磨砂遮罩：静态 blur + OverlayLayer scrimTone（不逐帧重模糊）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    const css = read("app/globals.css");
+    expect(css).toContain(".ux-scrim {");
+    expect(css).toContain("backdrop-filter: blur(8px) saturate(0.92);");
+    expect(css).toContain(".ux-scrim-strong {");
+    const layer = read("components/ui/OverlayLayer.tsx");
+    expect(layer).toContain('scrimTone = "standard"');
+    expect(layer).toContain('scrimTone === "standard" && "ux-scrim"');
+    expect(layer).not.toContain("visible && scrimBlurClass");
+    expect(read("components/command/CommandCenter.tsx")).toContain("ux-scrim");
+    expect(read("components/kiro/TimetableImportPreviewDialog.tsx")).toContain("ux-scrim");
+    expect(read("components/kiro/KiroMarkdown.tsx")).toContain("ux-scrim-strong");
+  });
+
   it("卡顿点：动画元素无 backdrop-blur；tray 退出期间锁 overflow-x（防滚动条闪烁）", () => {
     const composer = read("components/kiro/KiroComposer.tsx");
     // 拖拽遮罩透明度动画 + backdrop-blur = 逐帧重模糊（已知卡顿源，已下线；只查工具类，不含注释）

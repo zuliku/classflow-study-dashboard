@@ -108,12 +108,10 @@ function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
         <div
           ref={lightboxInertRef}
           className={cn(
-            "fixed inset-0 z-[80] bg-charcoal/60 flex items-center justify-center p-4 transition-opacity",
+            "fixed inset-0 z-[80] ux-scrim-strong ux-overlay flex items-center justify-center p-4",
             lightboxPresence.visible
-              ? "opacity-100 duration-[var(--motion-base)]"
-              : "opacity-0 pointer-events-none duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]",
-            // blur 只在全开时保留（进退场透明度动画期间逐帧重模糊全屏最贵）
-            lightboxPresence.visible && "backdrop-blur-sm"
+              ? "opacity-100"
+              : "opacity-0 pointer-events-none !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
           )}
           onClick={() => setOpen(false)}
           role="dialog"
@@ -121,10 +119,10 @@ function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
         >
           <div
             className={cn(
-              "relative max-w-[90vw] max-h-[86vh] bg-white rounded-2xl overflow-auto p-2 shadow-card transition-[opacity,transform]",
+              "relative max-w-[90vw] max-h-[86vh] bg-white rounded-2xl overflow-auto p-2 shadow-card ux-modal-panel",
               lightboxPresence.visible
-                ? "opacity-100 scale-100 duration-[var(--motion-base)]"
-                : "opacity-0 scale-[0.98] duration-[var(--motion-exit-base)] ease-[var(--ease-exit)]"
+                ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-standard)]"
+                : "opacity-0 scale-[0.985] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
             )}
             onClick={(e) => e.stopPropagation()}
           >

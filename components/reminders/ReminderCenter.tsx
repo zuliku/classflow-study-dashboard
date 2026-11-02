@@ -341,6 +341,7 @@ export function ReminderCenter() {
       overlayId="reminder-center"
       stackZ={80}
       exitMs={MOTION_EXIT_MS.panel}
+      scrimTone="soft"
       closeOnBackdrop
       className="fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] flex items-center"
     >

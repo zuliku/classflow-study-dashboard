@@ -422,9 +422,39 @@ button:disabled {
 
 /* 统一过渡与动效工具类 */
 @layer utilities {
-  /* 遮罩：仅透明度过渡（介于 panel enter/exit 之间，不拖尾） */
+  /* 遮罩：只过渡透明度；模糊在挂载期保持静态，避免进退场逐帧重算 backdrop-filter */
   .ux-overlay {
-    transition: opacity var(--motion-base) var(--ease-standard);
+    transition: opacity var(--motion-overlay) var(--ease-standard);
+  }
+
+  /* 统一弹窗磨砂背景（Apple/ChatGPT 风格）：暖炭色 dim + 静态环境模糊。
+     只作用于 root；面板是子元素，不受自身 backdrop-filter 影响。 */
+  .ux-scrim {
+    background-color: rgba(49, 48, 50, 0.24);
+    -webkit-backdrop-filter: blur(8px) saturate(0.92);
+    backdrop-filter: blur(8px) saturate(0.92);
+  }
+  .ux-scrim-soft {
+    background-color: rgba(49, 48, 50, 0.14);
+    -webkit-backdrop-filter: blur(4px) saturate(0.98);
+    backdrop-filter: blur(4px) saturate(0.98);
+  }
+  .ux-scrim-strong {
+    background-color: rgba(32, 31, 33, 0.54);
+    -webkit-backdrop-filter: blur(12px) saturate(0.9);
+    backdrop-filter: blur(12px) saturate(0.9);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .ux-scrim {
+      background-color: rgba(49, 48, 50, 0.32);
+    }
+    .ux-scrim-soft {
+      background-color: rgba(49, 48, 50, 0.2);
+    }
+    .ux-scrim-strong {
+      background-color: rgba(32, 31, 33, 0.66);
+    }
   }
 
   /* Drawer 面板：右侧滑入 + 透明度 */
@@ -434,11 +464,11 @@ button:disabled {
       transform var(--motion-panel) var(--ease-standard);
   }
 
-  /* Modal 面板：轻缩放 + 上移 + 透明度 */
+  /* Modal 面板：轻缩放 + 上移 + 透明度（enter 与 Dialog/Command 统一 220ms） */
   .ux-modal-panel {
     transition:
-      opacity var(--motion-base) var(--ease-standard),
-      transform var(--motion-base) var(--ease-standard);
+      opacity var(--motion-overlay) var(--ease-standard),
+      transform var(--motion-overlay) var(--ease-standard);
   }
 
   /* 内联面板 / Dropdown：轻微位移 + 透明度 */

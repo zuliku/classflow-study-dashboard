@@ -477,6 +477,16 @@ describe("UISelect lifecycle（共享 usePresence）", () => {
     expect(search.className).not.toContain("sticky");
   });
 
+  it("hover 半可见选项不抢焦点（只有键盘导航移动焦点/滚动）", () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ value: `c${i}`, label: `课程${i}` }));
+    render(<UISelect value="c0" onChange={vi.fn()} options={many} ariaLabel="课程筛选" />);
+    fireEvent.click(screen.getByRole("combobox", { name: "课程筛选" }));
+    const options = screen.getAllByRole("option");
+    expect(document.activeElement).toBe(options[0]);
+    fireEvent.mouseEnter(options[3]);
+    expect(document.activeElement).toBe(options[0]);
+  });
+
   it("searchable：无匹配时显示空态；空格在搜索框内是输入字符", () => {
     const onChange = vi.fn();
     const many = Array.from({ length: 8 }, (_, i) => ({ value: `c${i}`, label: `课程${i}` }));

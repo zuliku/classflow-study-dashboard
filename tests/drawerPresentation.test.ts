@@ -6,6 +6,7 @@ import { resolveDrawerAriaModal, resolveDrawerPresentation } from "@/components/
  * 1. edge / floating 的 class 契约：几何不变，motion duration 全部走 CSS 变量
  *    （enter = --motion-overlay，exit = --motion-exit-panel —— 与 usePresence 的
  *    MOTION_EXIT_MS.panel 同源对应，消除 CSS 160ms / JS unmount 200ms 的历史漂移）
+ *    overlay 只负责布局；dim/磨砂统一由 OverlayLayer scrimTone 提供。
  * 2. floating 是有界浮层（viewport inset + 470px + rounded + full border）
  * 3. 真模态：两种 presentation 均声明 aria-modal="true"；floating 背板柔和 dim + 拦截指针
  *   （backdrop 点击关闭），背景不可操作
@@ -13,10 +14,11 @@ import { resolveDrawerAriaModal, resolveDrawerPresentation } from "@/components/
 describe("Drawer presentation class contract", () => {
   it("edge（默认）：overlay + panel class；enter/exit 走 motion token", () => {
     const enter = resolveDrawerPresentation("edge", true);
-    // blur 改由 OverlayLayer scrimBlurClass 按可见挂载（进退场不逐帧重模糊），静态串不再含 blur
+    // 背板视觉统一由 OverlayLayer scrimTone（ux-scrim*）提供；presentation 只负责布局
     expect(enter.overlayClassName).toBe(
-      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] bg-black/30 flex justify-end overflow-hidden"
+      "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] flex justify-end overflow-hidden"
     );
+    expect(enter.overlayClassName).not.toContain("bg-black");
     expect(enter.panelClassName).toContain("h-full w-full bg-surface shadow-drawer border-l border-line");
     expect(enter.panelClassName).toContain("translate-x-0 opacity-100");
     // Motion Contract：enter = --motion-overlay（与 Dialog/floating 同档）
@@ -35,8 +37,8 @@ describe("Drawer presentation class contract", () => {
     // overlay 提供 16px(桌面)/12px(移动) inset
     expect(enter.overlayClassName).toContain("p-3");
     expect(enter.overlayClassName).toContain("sm:p-4");
-    // 真模态：柔和 dim 遮罩（浅于 edge 的 bg-black/30）
-    expect(enter.overlayClassName).toContain("bg-black/20");
+    // 真模态：dim/磨砂由 OverlayLayer 统一 scrimTone 提供；两种 presentation 不再各自写 bg
+    expect(enter.overlayClassName).not.toContain("bg-black");
     // 背板拦截指针（背景不可操作；backdrop 点击关闭，关闭走 OverlayLayer 同一规则）
     expect(enter.overlayClassName).not.toContain("pointer-events-none");
     expect(enter.panelClassName).toContain("pointer-events-auto");

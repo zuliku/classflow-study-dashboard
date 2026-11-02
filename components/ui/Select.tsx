@@ -86,6 +86,8 @@ export function UISelect<T extends string | number>({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  /** 只有键盘导航才自动滚动/移焦；鼠标 hover 只换高亮，避免下方选项 hover 时硬跳 */
+  const activeScrollRef = useRef<"keyboard" | "pointer">("keyboard");
   // Codex-style 过滤：非 searchable 时 filtered 与 options 同一引用，全部逻辑零分支
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
@@ -119,6 +121,7 @@ export function UISelect<T extends string | number>({
     setViewportMaxWidth(Math.min(320, window.innerWidth - 16));
     setSuppressRender(false);
     setQuery("");
+    activeScrollRef.current = "keyboard";
     setOpen(true);
     setActiveIndex(options.findIndex((o) => o.value === value));
   }, [disabled, options, value]);
@@ -175,22 +178,32 @@ export function UISelect<T extends string | number>({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open, closeMenu]);
 
-  // 打开时聚焦到当前选中项（preventScroll）+ 保证 active option 在可视区域。
-  // searchable 时聚焦搜索框（输入即过滤；↑↓/Enter 仍走菜单键盘语义）。
-  // mounted 门控：portal 在 mounted 翻转后的 commit 才存在（presence 先 mount hidden 再 visible）。
+  // 打开时聚焦：searchable → 搜索框；否则当前选中项。
+  // 只在 open/mounted 变化时执行一次，不跟随 hover 的 activeIndex（避免焦点被抢）。
   useEffect(() => {
     if (!open || !mounted) return;
     if (searchable) {
       searchRef.current?.focus({ preventScroll: true });
-      // 焦点留在输入框，仅把 active 行滚入可视区（Codex combobox 语义）
-      menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`)
-        ?.scrollIntoView({ block: "nearest" });
       return;
     }
     const el = menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
     el?.focus({ preventScroll: true });
-    el?.scrollIntoView({ block: "nearest" });
-  }, [open, mounted, activeIndex, searchable]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mounted, searchable]);
+
+  // active 行滚动/聚焦：仅键盘导航。鼠标 hover 不滚动列表，避免下方选项硬跳。
+  useEffect(() => {
+    if (!open || !mounted || activeScrollRef.current !== "keyboard") return;
+    const el = menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
+    if (!el) return;
+    if (!searchable) el.focus({ preventScroll: true });
+    const scroller = menuRef.current?.querySelector<HTMLElement>('[data-testid="ui-select-options"]');
+    if (!scroller) return;
+    const listRect = scroller.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    if (elRect.top < listRect.top) scroller.scrollTop -= listRect.top - elRect.top;
+    else if (elRect.bottom > listRect.bottom) scroller.scrollTop += elRect.bottom - listRect.bottom;
+  }, [activeIndex, open, mounted, searchable]);
 
   // 挂载后测量实际宽度：右侧溢出 → 右对齐修正；至少保留 8px viewport inset
   useEffect(() => {
@@ -205,9 +218,19 @@ export function UISelect<T extends string | number>({
     if (left !== menuLeft) setMenuLeft(left);
   }, [open, visible, menuLeft]);
 
+  // 搜索内容变化：active 回到首项（由列表滚动跟随，不抢搜索框焦点）
+  useEffect(() => {
+    if (!open || !query) return;
+    activeScrollRef.current = "keyboard";
+    setActiveIndex(0);
+  }, [open, query]);
+
   // 过滤收缩时 active 越界 → 回到首项（空结果时保持 0，不触发选择）
   useEffect(() => {
-    if (activeIndex >= filtered.length) setActiveIndex(0);
+    if (activeIndex >= filtered.length) {
+      activeScrollRef.current = "keyboard";
+      setActiveIndex(0);
+    }
   }, [filtered.length, activeIndex]);
 
   const selectOption = (index: number) => {
@@ -239,15 +262,19 @@ export function UISelect<T extends string | number>({
       triggerRef.current?.focus();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
+      activeScrollRef.current = "keyboard";
       setActiveIndex((i) => (filtered.length === 0 ? 0 : (i + 1) % filtered.length));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
+      activeScrollRef.current = "keyboard";
       setActiveIndex((i) => (filtered.length === 0 ? 0 : (i - 1 + filtered.length) % filtered.length));
     } else if (e.key === "Home") {
       e.preventDefault();
+      activeScrollRef.current = "keyboard";
       setActiveIndex(0);
     } else if (e.key === "End") {
       e.preventDefault();
+      activeScrollRef.current = "keyboard";
       setActiveIndex(Math.max(0, filtered.length - 1));
     } else if (e.key === "Enter" || (e.key === " " && !inSearch)) {
       e.preventDefault();
@@ -372,7 +399,10 @@ export function UISelect<T extends string | number>({
                     data-index={i}
                     tabIndex={-1}
                     onClick={() => selectOption(i)}
-                    onMouseEnter={() => setActiveIndex(i)}
+                    onMouseEnter={() => {
+                      activeScrollRef.current = "pointer";
+                      setActiveIndex(i);
+                    }}
                     className={cn(
                       "flex w-full items-center gap-1.5 px-2.5 text-xs font-semibold text-left",
                       "focus:outline-none",

@@ -86,6 +86,7 @@ test("创建：无输入焦点按 N → 打开新建任务弹窗", async ({ page
 test("输入守卫：输入框聚焦时 N / ? / / 不触发全局命令", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForAppReady(page);
   await openPalette(page);
 
   // 输入框已聚焦：按 N 只是输入字符，不弹新建任务

@@ -145,7 +145,7 @@ test("脏草稿（Profile）：X 关闭需确认；取消保留草稿；确认�
   await nameInput.fill("未保存的名字");
 
   // X → 确认对话框
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("alertdialog", { name: "放弃未保存的更改？" })).toBeVisible();
   // 取消 → 保持打开且草稿仍在
   await page.getByRole("button", { name: "取消", exact: true }).click();
@@ -153,7 +153,7 @@ test("脏草稿（Profile）：X 关闭需确认；取消保留草稿；确认�
   await expect(nameInput).toHaveValue("未保存的名字");
 
   // 再 X → 放弃更改 → 关闭
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "关闭", exact: true }).click();
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect(page.getByRole("dialog", { name: "设置" })).toHaveCount(0);
 
@@ -206,7 +206,7 @@ test("脏草稿（Semester）：X / backdrop 需确认；保存后清除脏状�
   await page.mouse.click(8, 8);
   await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
   // X → 确认 → 取消 → 仍打开
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("alertdialog", { name: "放弃未保存的更改？" })).toBeVisible();
   await page.getByRole("button", { name: "取消", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
@@ -214,7 +214,7 @@ test("脏草稿（Semester）：X / backdrop 需确认；保存后清除脏状�
   // 保存 → 脏状态清除 → X 直接关闭（无确认；编辑表单卸载后 save bar 消失）
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("button", { name: "保存", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "设置" })).toHaveCount(0);
 });
 

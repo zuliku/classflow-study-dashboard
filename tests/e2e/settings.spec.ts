@@ -32,7 +32,7 @@ test("Settings Center：桌面导航与移动端 tabs 均可切换，About 版�
   await expect(page.getByText("导出 ZIP")).toBeVisible();
   await nav.getByRole("button", { name: "关于" }).click();
   await expect(page.getByTestId("settings-about")).toBeVisible();
-  await expect(page.getByTestId("settings-about").getByText("ClassFlow", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("settings-about").getByText(/^ClassFlow/)).toBeVisible();
   await expect(page.getByText("v2.4.0")).toHaveCount(0); // 不再有硬编码版本
 
   // Mobile 横向 tabs

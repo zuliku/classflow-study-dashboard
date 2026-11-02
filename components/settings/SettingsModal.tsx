@@ -51,18 +51,25 @@ export function SettingsModal() {
   useEffect(() => {
     if (!isOpen) return;
     const focusSearch = () => {
+      // 桌面/移动各一个搜索框；ref 可能指向 display:none 的那个（父级隐藏，
+      // 但 getComputedStyle(input).display 仍是 inline-block）。逐个尝试，
+      // 只有真正获得焦点的输入才算成功。
       const stored = searchInputRef.current;
-      if (stored && isVisibleElement(stored)) {
-        stored.focus();
-        return;
+      const inputs = Array.from(
+        document.querySelectorAll<HTMLInputElement>('input[aria-label="搜索设置"]')
+      );
+      for (const input of [stored, ...inputs]) {
+        if (!input || !isVisibleElement(input)) continue;
+        input.focus();
+        if (document.activeElement === input) return;
       }
-      // 尺寸切换后 ref 可能指向隐藏输入框：回退查找当前可见的搜索框
-      const visible = document.querySelector<HTMLInputElement>('input[aria-label="搜索设置"]');
-      if (visible && isVisibleElement(visible)) visible.focus();
     };
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
+        // 立即聚焦 + rAF 兜底：Modal 入场布局/尺寸切换后再校正一次，
+        // 避免后台标签页 rAF 被节流时 Ctrl+F 完全失效。
+        focusSearch();
         requestAnimationFrame(focusSearch);
       }
     };

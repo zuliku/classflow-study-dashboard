@@ -266,7 +266,8 @@ describe("硬切深筛源码契约", () => {
     const outlook = read("components/analytics/StudyOutlookCard.tsx");
     expect(outlook).toContain("outlook-capacity-line");
     const command = read("components/command/CommandCenter.tsx");
-    expect(command).toContain("visible && \"backdrop-blur-sm\"");
+    expect(command).toContain("ux-scrim");
+    expect(command).not.toContain("visible && \"backdrop-blur-sm\"");
     const glance = read("components/dashboard/TimetableQuickGlance.tsx");
     expect(glance).toContain("transition-[opacity,transform,visibility]");
     const agent = read("components/settings/KiroAgentSettings.tsx");
