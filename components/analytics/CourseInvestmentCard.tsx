@@ -24,9 +24,9 @@ export function CourseInvestmentCard({
 }) {
   if (investment.length === 0) {
     return (
-      <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 ux-fade">
-        <h3 className="text-sm font-bold text-charcoal">课程投入</h3>
-        <div className="pt-3 pb-2 text-center">
+      <div className="w-full min-w-0 h-full flex flex-col ux-fade" data-testid="course-investment-card">
+        <AnalyticsCardHeader title="课程投入" />
+        <div className="flex flex-1 items-center justify-center py-8">
           <p className="text-[11px] text-sandrift">完成专注后显示课程投入</p>
         </div>
       </div>
@@ -34,15 +34,15 @@ export function CourseInvestmentCard({
   }
   const maxMinutes = Math.max(...investment.map((i) => i.minutes), 1);
   return (
-    <div className="bg-surface border border-line rounded-2xl p-4 ux-fade" data-testid="course-investment-card">
-      <AnalyticsCardHeader eyebrow="时间去向" title="课程投入" />
-      <div className="space-y-2.5 pt-3">
+    <div className="w-full min-w-0 h-full flex flex-col ux-fade" data-testid="course-investment-card">
+      <AnalyticsCardHeader title="课程投入" />
+      <div className="flex flex-col gap-3 pt-4">
         {investment.map((item, index) => {
           const neutral = item.isOther || item.courseName === "未关联课程";
           const clickable = onOpenCourse && item.courseId !== null && !item.isOther;
           return (
-            <div key={item.courseId ?? `other-${index}`} className="space-y-0.5">
-              <div className="flex items-center justify-between gap-2">
+            <div key={item.courseId ?? `other-${index}`} className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-3">
                 <button
                   type="button"
                   disabled={!clickable}
@@ -50,7 +50,7 @@ export function CourseInvestmentCard({
                     if (clickable) onOpenCourse(item.courseId as string);
                   }}
                   className={cn(
-                    "text-[11px] font-semibold truncate text-left",
+                    "text-xs font-medium truncate text-left",
                     clickable
                       ? "text-charcoal hover:text-black underline-offset-2 hover:underline cursor-pointer"
                       : cn("cursor-default", neutral ? "text-sandrift" : "text-charcoal")
@@ -58,11 +58,11 @@ export function CourseInvestmentCard({
                 >
                   {item.courseName}
                 </button>
-                <span className="text-[10px] text-sandrift shrink-0">
+                <span className="text-[11px] text-sandrift shrink-0 tabular-nums">
                   {formatAnalyticsDuration(item.minutes)} · {Math.round(item.share * 100)}%
                 </span>
               </div>
-              <div className="h-1.5 rounded-full bg-alabaster overflow-hidden">
+              <div className="h-1 rounded-full bg-alabaster overflow-hidden">
                 <div
                   className="h-full rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-standard)]"
                   style={{

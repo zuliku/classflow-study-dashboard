@@ -40,19 +40,18 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
   const headline = review.headline;
 
   return (
-    <div className="bg-surface border border-line rounded-2xl shadow-subtle overflow-hidden" data-testid="weekly-review-card">
+    <div className="bg-surface/70 border border-line-soft rounded-xl overflow-hidden" data-testid="weekly-review-card">
       <div className="px-4 pt-4 pb-3 border-b border-line-soft">
         <AnalyticsCardHeader
-          eyebrow="每周复盘"
           title="本周回顾"
           action={
-            <span className="text-[10px] font-semibold text-sandrift shrink-0">
+            <span className="text-[10px] font-medium text-sandrift shrink-0">
               {formatMD(review.range.from)} – {formatMD(review.range.to)}
             </span>
           }
         />
         {coverageNote && (
-          <div className="flex items-start gap-1.5 mt-2 px-2.5 py-1.5 bg-alabaster/60 border border-line rounded-lg text-[10px] text-sandrift">
+          <div className="flex items-start gap-1.5 mt-2 text-[10px] text-sandrift">
             <Info className="w-3 h-3 shrink-0 mt-0.5" />
             <p>{coverageNote}</p>
           </div>
@@ -61,7 +60,7 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
 
       {isEmpty ? (
         <div className="px-4 py-6 flex flex-col items-center justify-center text-center gap-1.5">
-          <p className="text-xs font-bold text-charcoal">本周还没有足够的学习记录</p>
+          <p className="text-[13px] font-semibold text-charcoal">本周还没有足够的学习记录</p>
           <p className="text-[11px] text-sandrift">完成任务或专注后即可生成回顾</p>
           <KiroFlowButton
             icon={KiroLogoIcon}
@@ -75,20 +74,20 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-line-soft">
             <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold text-sandrift">专注</p>
-              <p className="text-lg font-extrabold text-charcoal mt-0.5">{headline.focusLabel}</p>
+              <p className="text-[11px] font-medium text-sandrift">专注</p>
+              <p className="text-[18px] font-semibold tracking-[-0.01em] text-charcoal mt-0.5">{headline.focusLabel}</p>
             </div>
             <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold text-sandrift">完成任务</p>
-              <p className="text-lg font-extrabold text-charcoal mt-0.5">{headline.completedAssignments} 项</p>
+              <p className="text-[11px] font-medium text-sandrift">完成任务</p>
+              <p className="text-[18px] font-semibold tracking-[-0.01em] text-charcoal mt-0.5">{headline.completedAssignments} 项</p>
             </div>
             <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold text-sandrift">活跃天数</p>
-              <p className="text-lg font-extrabold text-charcoal mt-0.5">{headline.activeDays} 天</p>
+              <p className="text-[11px] font-medium text-sandrift">活跃天数</p>
+              <p className="text-[18px] font-semibold tracking-[-0.01em] text-charcoal mt-0.5">{headline.activeDays} 天</p>
             </div>
             <div className="px-4 py-3">
-              <p className="text-[10px] font-semibold text-sandrift">按时完成</p>
-              <p className="text-lg font-extrabold text-charcoal mt-0.5">
+              <p className="text-[11px] font-medium text-sandrift">按时完成</p>
+              <p className="text-[18px] font-semibold tracking-[-0.01em] text-charcoal mt-0.5">
                 {headline.onTimeRate !== null ? `${headline.onTimeRate}%` : "—"}
               </p>
             </div>
@@ -113,7 +112,7 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
 
           {(copy.highlightLines.length > 0 || copy.attentionLines.length > 0) && (
             <div className="px-4 py-3 border-t border-line-soft space-y-1">
-              <p className="text-[10px] font-bold text-charcoal">本周值得注意</p>
+              <p className="text-[11px] font-semibold text-charcoal">本周值得注意</p>
               {[...copy.highlightLines, ...copy.attentionLines].map((line, i) => (
                 <p key={i} className="text-[11px] text-satin-grey leading-relaxed flex items-start gap-1.5">
                   <span className="text-sandrift mt-0.5">·</span>
@@ -133,7 +132,7 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
             <button
               type="button"
               onClick={() => handoffPrompt(PLAN_NEXT_WEEK_PROMPT)}
-              className="ux-press inline-flex items-center gap-1.5 px-3 py-1.5 bg-charcoal hover:bg-black text-white text-[11px] font-bold rounded-xl transition-colors shadow-subtle"
+              className="ux-press inline-flex items-center gap-1.5 px-3 py-1.5 bg-transparent border border-line text-charcoal hover:bg-alabaster text-[11px] font-semibold rounded-lg transition-colors"
             >
               <CalendarPlus className="w-3.5 h-3.5" />
               规划下周

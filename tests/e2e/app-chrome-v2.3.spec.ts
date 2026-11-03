@@ -27,9 +27,8 @@ async function openGroup(page: Page) {
 test("Analytics：WorkspaceHeader + ViewBar + Global Search + 三档 Range", async ({ page }) => {
   await openAnalytics(page);
 
-  // Header：标题 + context（WorkspaceHeader 语义）+ Global Search
+  // Header：标题 + Global Search（不再使用解释性副标题）
   await expect(page.getByRole("heading", { name: "学习洞察" })).toBeVisible();
-  await expect(page.getByText("从学习历史中理解你的投入与节奏")).toBeVisible();
   await expect(page.getByRole("button", { name: "全局搜索" })).toBeVisible();
 
   // ViewBar：Range Selector（三档，非第四种 selection）+ Weekly Review 独立 action
@@ -88,7 +87,7 @@ test("Analytics：reduced motion 下周回顾仍可展开（behavior 不依赖 s
   await expect(page.getByTestId("weekly-review-action")).toHaveAttribute("aria-pressed", "true");
 });
 
-test("Analytics：超宽屏 Header / ViewBar / Body 同一版心（1500px 对齐，左右 ≤2px）", async ({ page }) => {
+test("Analytics：超宽屏 Header / ViewBar / Body 同一版心（流式布局，左右 ≤2px）", async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1000 });
   await page.goto("/");
   await page.getByRole("button", { name: "学习洞察" }).first().click();
@@ -114,7 +113,7 @@ test("Analytics：超宽屏 Header / ViewBar / Body 同一版心（1500px 对齐
     expect(Math.abs(boxes[key]!.left - boxes.header!.left), `${key} left`).toBeLessThanOrEqual(2);
     expect(Math.abs(boxes[key]!.right - boxes.header!.right), `${key} right`).toBeLessThanOrEqual(2);
   }
-  expect(boxes.body!.right - boxes.body!.left).toBeLessThanOrEqual(1502);
+  expect(boxes.body!.right - boxes.body!.left).toBeGreaterThan(1500);
 });
 
 test("Analytics：Loading / Empty 下 Chrome 持续存在（空历史 → 空态，Header/ViewBar 仍在）", async ({ page }) => {
@@ -168,11 +167,10 @@ test("Group：Header + 本地 Create 降权 + Empty CTA 保留（demoFixtures �
   await expect(page.getByRole("button", { name: "新建项目" }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Ask Kiro" })).toHaveCount(0);
 
-  // 项目列表本地 create：icon-only（aria-label 新建项目，无文字内容）；空态 CTA 保留文字按钮
-  const asideCreates = page.locator("aside").getByRole("button", { name: "新建项目" });
-  await expect(asideCreates).toHaveCount(2); // icon-only（列表头）+ empty CTA
-  expect((await asideCreates.first().textContent())!.trim()).toBe("");
-  await expect(asideCreates.last()).toContainText("新建项目");
+  // 空项目：Header Primary + 空态 CTA（无项目列表 rail）
+  const creates = page.getByRole("button", { name: "新建项目" });
+  await expect(creates).toHaveCount(2);
+  await expect(creates.last()).toContainText("新建项目");
 });
 
 test("Group：创建项目后 Ask Kiro 出现；列表本地 create 为 icon-only；CRUD 与搜索正常", async ({ page }) => {
@@ -204,9 +202,9 @@ test("Group：创建项目后 Ask Kiro 出现；列表本地 create 为 icon-onl
 
   await expect(page.getByText(/1 个项目/)).toBeVisible();
   // 首个项目自动激活 → Ask Kiro 出现（仅 activeProject 时显示；空态无 Ask Kiro 已由上一用例覆盖）
-  await expect(page.getByRole("button", { name: "Ask Kiro" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "问 Kiro" })).toBeVisible();
   await page.getByRole("button", { name: /微观小组课题/ }).first().click();
-  await expect(page.getByRole("button", { name: "Ask Kiro" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "问 Kiro" })).toBeVisible();
 
   // 本地 create：icon-only（Header Primary 之外无文字按钮）
   const localCreate = page.locator("aside").getByRole("button", { name: "新建项目" });

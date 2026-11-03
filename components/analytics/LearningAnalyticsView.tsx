@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
@@ -62,24 +62,24 @@ function EmptyState({ onNewTask, onPlan }: { onNewTask: () => void; onPlan: () =
         ? `已建 ${courseCount} 门课程，新建任务并完成 1 个即可生成`
         : "先添加课程与任务";
   return (
-    <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex flex-col items-center justify-center text-center gap-1.5">
-      <p className="text-xs font-bold text-charcoal">学习洞察会随着使用逐渐形成</p>
-      <p className="text-[11px] text-sandrift leading-relaxed">
+    <div className="flex flex-col items-center justify-center text-center gap-2 border-y border-line-soft py-16 md:py-20">
+      <p className="text-[16px] font-semibold tracking-[-0.01em] text-charcoal">学习洞察会随着使用逐渐形成</p>
+      <p className="text-xs text-sandrift leading-relaxed">
         完成 1 个任务或专注 1 次即可生成趋势。
       </p>
-      <p className="text-[11px] font-semibold text-charcoal/80 leading-relaxed">{progressLine}</p>
-      <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+      <p className="text-xs font-medium text-satin-grey leading-relaxed">{progressLine}</p>
+      <div className="flex flex-wrap items-center justify-center gap-3 mt-3">
         <button
           type="button"
           onClick={onNewTask}
-          className="h-8 px-4 rounded-lg bg-charcoal text-white text-xs font-bold hover:bg-black transition-colors"
+          className="h-8 px-4 rounded-lg bg-charcoal text-white text-xs font-semibold hover:bg-black transition-colors"
         >
           新建任务
         </button>
         <button
           type="button"
           onClick={onPlan}
-          className="h-8 px-4 rounded-lg border border-line text-xs font-bold text-satin-grey hover:bg-alabaster hover:text-charcoal transition-colors"
+          className="h-8 px-4 rounded-lg border border-line text-xs font-semibold text-charcoal hover:bg-alabaster transition-colors"
         >
           安排学习计划
         </button>
@@ -140,12 +140,12 @@ export function LearningAnalyticsView() {
   const renderOutlookSection = () => (
     <>
       {outlook.error ? (
-        <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-semibold text-danger">学习前瞻加载失败，请稍后重试。</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-danger/70 pl-4">
+          <p className="text-xs font-medium text-danger">学习前瞻加载失败，请稍后重试。</p>
           <button
             type="button"
             onClick={() => outlook.refresh()}
-            className="h-7 px-3 rounded-lg bg-surface border border-line text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors"
+            className="text-[11px] font-semibold text-charcoal underline underline-offset-2 hover:text-black transition-colors"
           >
             重试
           </button>
@@ -153,14 +153,14 @@ export function LearningAnalyticsView() {
       ) : outlook.loading && !outlook.data ? (
         <ChartSkeleton />
       ) : outlook.data ? (
-        <section>
+        <section className="border-t border-line-soft pt-6">
           <button
             type="button"
             onClick={() => setNextOpen((v) => !v)}
             aria-expanded={nextOpen}
             className="w-full flex items-center justify-between mb-3 text-left group"
           >
-            <h2 className="text-[13px] font-bold text-charcoal">下一步</h2>
+            <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">下一步</h2>
             <ChevronDown
               className={cn(
                 "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
@@ -170,14 +170,16 @@ export function LearningAnalyticsView() {
             />
           </button>
           <DisclosureRegion open={nextOpen}>
-            <div className={ANALYTICS_PAIRED_GRID}>
+            <div className={outlook.data.estimateCalibration.status === "ready" ? ANALYTICS_PAIRED_GRID : "grid grid-cols-1"}>
               <StudyOutlookCard
                 outlook={outlook.data}
                 horizonDays={outlookHorizon}
                 onHorizonChange={setOutlookHorizon}
                 onOpenAssignment={handleOpenOutlookAssignment}
               />
-              <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
+              {outlook.data.estimateCalibration.status === "ready" && (
+                <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
+              )}
             </div>
           </DisclosureRegion>
         </section>
@@ -252,7 +254,6 @@ export function LearningAnalyticsView() {
       <div className="sticky top-0 z-20 shrink-0" data-testid="analytics-header-inner">
         <WorkspaceHeader
           title="学习洞察"
-          context="从学习历史中理解你的投入与节奏"
           innerClassName="w-full max-w-none xl:px-8"
         />
         <AnalyticsWorkspaceViewBar
@@ -290,12 +291,12 @@ export function LearningAnalyticsView() {
               </div>
             </>
           ) : error ? (
-            <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-semibold text-danger">学习洞察加载失败，请稍后重试。</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-danger/70 pl-4">
+              <p className="text-xs font-medium text-danger">学习洞察加载失败，请稍后重试。</p>
               <button
                 type="button"
                 onClick={() => refresh()}
-                className="h-7 px-3 rounded-lg bg-surface border border-line text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors"
+                className="text-[11px] font-semibold text-charcoal underline underline-offset-2 hover:text-black transition-colors"
               >
                 重试
               </button>
@@ -335,7 +336,7 @@ export function LearningAnalyticsView() {
                       onAction={navigate}
                     />
                   </div>
-                  {/* Summary Strip（一个共同 surface，替代四张独立卡） */}
+                  {/* Summary Strip（扁平四列 KPI，上下细线分隔） */}
                   <div style={staggerStyle(1)} className="ux-settle">
                     <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
                   </div>
@@ -351,13 +352,13 @@ export function LearningAnalyticsView() {
                   </DisclosureRegion>
 
                   {/* 学习趋势（唯一主视觉）+ 值得注意 —— 统一 Paired Grid（50/50；层级由标题/图表/顺序表达） */}
-                  <div className={ANALYTICS_PAIRED_GRID}>
+                  <div className={cn(ANALYTICS_PAIRED_GRID, "border-t border-line-soft pt-5")}>
                     <div
-                      className="bg-surface border border-line rounded-2xl p-4 shadow-subtle ux-settle"
+                      className="h-full ux-settle"
                       style={staggerStyle(3)}
                       data-testid="learning-trend-card"
                     >
-                      <AnalyticsCardHeader eyebrow="走势总览" title="学习趋势" />
+                      <AnalyticsCardHeader title="学习趋势" />
                       <div className="pt-3">
                         <LearningTrendChart points={data.trend} period={data.period} animate={trendAnimated} />
                       </div>
@@ -369,14 +370,14 @@ export function LearningAnalyticsView() {
                   {renderOutlookSection()}
 
                   {/* 投入与节奏（Distribution；Course/Rhythm 各自 content-fit，不强制等高） */}
-                  <section style={staggerStyle(4)} className="ux-settle">
+                  <section style={staggerStyle(4)} className="ux-settle border-t border-line-soft pt-6">
                     <button
                       type="button"
                       onClick={() => setDistOpen((v) => !v)}
                       aria-expanded={distOpen}
                       className="w-full flex items-center justify-between mb-3 text-left group"
                     >
-                      <h2 className="text-[13px] font-bold text-charcoal">投入与节奏</h2>
+                      <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">投入与节奏</h2>
                       <ChevronDown
                         className={cn(
                           "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
@@ -404,14 +405,14 @@ export function LearningAnalyticsView() {
                   </section>
 
                   {/* 执行情况（reliability-aware：partial 只显示已记录，不显示伪精确按时率） */}
-                  <section style={staggerStyle(5)} className="ux-settle">
+                  <section style={staggerStyle(5)} className="ux-settle border-t border-line-soft pt-6">
                     <button
                       type="button"
                       onClick={() => setExecOpen((v) => !v)}
                       aria-expanded={execOpen}
                       className="w-full flex items-center justify-between mb-3 text-left group"
                     >
-                      <h2 className="text-[13px] font-bold text-charcoal">执行情况</h2>
+                      <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">执行情况</h2>
                       <ChevronDown
                         className={cn(
                           "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
@@ -440,3 +441,4 @@ export function LearningAnalyticsView() {
     </div>
   );
 }
+

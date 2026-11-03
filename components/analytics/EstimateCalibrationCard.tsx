@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { Scale } from "lucide-react";
 import { EstimateCalibration } from "@/lib/analytics/estimateCalibration";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
@@ -26,12 +25,8 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
 
   if (calibration.status !== "ready" || calibration.medianRatio === null) {
     return (
-    <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 ux-fade" data-testid="estimate-calibration-card">
-        <AnalyticsCardHeader
-          eyebrow="估时校准"
-          title="估时参考"
-          icon={<Scale className="w-4 h-4 text-[#A48F82]" aria-hidden="true" />}
-        />
+    <div className="w-full min-w-0 h-full bg-surface/70 border border-line-soft rounded-xl p-4 ux-fade" data-testid="estimate-calibration-card">
+        <AnalyticsCardHeader title="估时参考" />
         <p className="py-3 text-[11px] text-sandrift leading-relaxed">
           积累更多估时与专注记录后，将生成个人估时参考。
         </p>
@@ -44,12 +39,8 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
   const interpretation = INTERPRETATION_COPY[calibration.interpretation ?? ""] ?? "";
 
   return (
-    <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 ux-fade" data-testid="estimate-calibration-card">
-        <AnalyticsCardHeader
-          eyebrow="估时校准"
-          title="估时参考"
-          icon={<Scale className="w-4 h-4 text-[#A48F82]" aria-hidden="true" />}
-        />
+    <div className="w-full min-w-0 h-full bg-surface/70 border border-line-soft rounded-xl p-4 ux-fade" data-testid="estimate-calibration-card">
+        <AnalyticsCardHeader title="估时参考" />
       <div className="pt-2 space-y-1">
         <p className="text-[11px] text-satin-grey leading-relaxed">
           过去 {calibration.sampleCount} 个有完整记录的任务中，专注时长中位数约为预计耗时的{" "}
@@ -57,7 +48,7 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
         </p>
         {interpretation && <p className="text-[11px] text-satin-grey">{interpretation}</p>}
         {calibration.excludedOutliers > 0 && (
-          <p className="text-[10px] text-sandrift">
+          <p className="text-[11px] text-sandrift">
             另有 {calibration.excludedOutliers} 个极端样本未纳入参考。
           </p>
         )}

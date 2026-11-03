@@ -36,40 +36,42 @@ export function LearningSignalsCard({
   const { handoffPrompt } = useKiroSessionActions();
 
   if (signals.length === 0) {
-    // V3.1：紧凑 Level 3 contextual state；等高配对下内容垂直/水平居中（不制造空洞感）
+    // V3.1：无信号时保持等高，但不额外套卡片；标题与其它 section 对齐，留白表达“状态正常”
     return (
       <div
-        className="w-full min-w-0 bg-alabaster/50 border border-line rounded-2xl px-3.5 py-4 h-full flex flex-col items-center justify-center text-center ux-fade"
+        className="w-full min-w-0 h-full flex flex-col ux-fade"
         data-testid="learning-signals-card"
       >
-        <h3 className="text-[11px] font-bold text-charcoal">值得注意</h3>
-        <p className="text-[10px] text-sandrift mt-0.5">目前没有明显需要调整的信号</p>
+        <AnalyticsCardHeader title="值得注意" />
+        <div className="flex flex-1 items-center justify-center py-8">
+          <p className="text-[11px] text-sandrift">目前没有明显需要调整的信号</p>
+        </div>
       </div>
     );
   }
   return (
     <div
-      className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 flex flex-col ux-fade"
+      className="w-full min-w-0 h-full flex flex-col ux-fade"
       data-testid="learning-signals-card"
     >
-      <AnalyticsCardHeader eyebrow="行动信号" title="值得注意" />
-      <div className="divide-y divide-line-soft pt-2">
+      <AnalyticsCardHeader title="值得注意" />
+      <div className="divide-y divide-line-soft mt-2">
         {signals.map((signal) => {
           const Icon = TONE_STYLE[signal.tone].icon;
           const kiroPrompt = SIGNAL_KIRO_PROMPTS[signal.id] ?? undefined;
           return (
-            <div key={signal.id} className="py-2.5 space-y-1.5">
-              <p className="flex items-center gap-1.5 text-xs font-bold text-charcoal">
+            <div key={signal.id} className="py-3 space-y-1.5">
+              <p className="flex items-center gap-1.5 text-[13px] font-semibold text-charcoal">
                 <Icon className={cn("w-3.5 h-3.5 shrink-0", TONE_STYLE[signal.tone].cls)} />
                 {signal.title}
               </p>
-              <p className="text-[11px] text-satin-grey leading-relaxed">{signal.description}</p>
-              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              <p className="text-[11px] leading-relaxed text-satin-grey">{signal.description}</p>
+              <div className="flex flex-wrap items-center gap-3 pt-0.5">
                 {signal.action && onNavigate && (
                   <button
                     type="button"
                     onClick={() => onNavigate(signal.action!.targetTab)}
-                    className="inline-flex items-center gap-0.5 text-[11px] font-bold text-charcoal hover:text-black transition-colors"
+                    className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-charcoal underline-offset-2 hover:underline transition-colors"
                   >
                     {signal.action.label}
                     <ChevronRight className="w-3 h-3" />

@@ -60,13 +60,13 @@ describe("AnalyticsMomentum 三态（N1）", () => {
   it("全零空态显示弱引导（84 天全 0 不再只有沉默数字）", () => {
     hookState.data = { days: [], streakDays: 0, activeToday: false, totalMinutes: 0, activeDays: 0, bestDay: null };
     const el = renderNode(<AnalyticsMomentum />);
-    expect(el.textContent).toContain("完成 1 个任务或一次专注");
+    expect(el.textContent).toContain("完成 1 个任务或专注 1 次");
   });
 
   it("有数据时不显示空态引导", () => {
     hookState.data = { days: [], streakDays: 3, activeToday: true, totalMinutes: 90, activeDays: 2, bestDay: null };
     const el = renderNode(<AnalyticsMomentum />);
-    expect(el.textContent).not.toContain("完成 1 个任务或一次专注");
+    expect(el.textContent).not.toContain("完成 1 个任务或专注 1 次");
     expect(el.textContent).toContain("3 天");
   });
 });

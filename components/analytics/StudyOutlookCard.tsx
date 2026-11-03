@@ -1,7 +1,6 @@
-"use client";
+﻿"use client";
 
 import React from "react";
-import { CalendarClock } from "lucide-react";
 import { OutlookHealth, OutlookTask, StudyOutlook, StudyOutlookHorizon } from "@/lib/outlook/types";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
@@ -70,13 +69,9 @@ export function StudyOutlookCard({
     tasks.some((t) => t.reasons.includes("scheduled_after_deadline"));
 
   return (
-    <div className="w-full min-w-0 bg-surface border border-line rounded-2xl shadow-subtle" data-testid="study-outlook-card">
+    <div className="w-full min-w-0 bg-surface/70 border border-line-soft rounded-xl" data-testid="study-outlook-card">
       <div className="px-4 pt-4 pb-3 border-b border-line-soft">
-        <AnalyticsCardHeader
-          eyebrow="未来安排"
-          title="学习前瞻"
-          icon={<CalendarClock className="w-4 h-4 text-[#A48F82]" aria-hidden="true" />}
-          action={
+        <AnalyticsCardHeader title="学习前瞻" action={
             <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong">
               {/* Workflow UX Motion M3：horizon 切换收敛为 SegmentedControl（compact xs）——
                   single moving plate（--motion-base / emphasized），替代静态 bg-white 瞬切 */}
@@ -128,7 +123,7 @@ export function StudyOutlookCard({
 
       {firstCapacityShortfall && summary.workload.preferredShortfallMinutes > 0 && (
         <div key={`shortfall-${horizonDays}`} className="ux-fade px-4 py-2 bg-[#9B5B57]/5 border-b border-line-soft">
-          <p className="text-[10px] text-[#9B5B57] leading-relaxed" data-testid="outlook-shortfall-strip">
+          <p className="text-[11px] text-[#9B5B57] leading-relaxed" data-testid="outlook-shortfall-strip">
             最早容量缺口：{formatDeadline(firstCapacityShortfall.deadline)} 前约缺{" "}
             {fmt(firstCapacityShortfall.shortfallMinutes)}
             {affectedTitles.length > 0 &&
@@ -159,8 +154,7 @@ export function StudyOutlookCard({
 
       {bottleneckDays.length > 0 && (
         <div className="px-4 py-2 border-t border-line-soft ux-fade">
-          <p className="text-[10px] text-sandrift">
-            较忙的日子：
+          <p className="text-[11px] text-sandrift">较忙的日子：
             {bottleneckDays.slice(0, 3).map((d, i) => {
               const [y, m, day] = d.date.split("-").map(Number);
               return (
@@ -230,13 +224,13 @@ function OutlookTaskRow({
         className="w-full text-left rounded-lg outline-none cursor-pointer group/row hover:bg-alabaster/60 focus-visible:bg-alabaster/60 focus-visible:outline-2 focus-visible:outline-charcoal/30 transition-colors duration-[var(--motion-fast)]"
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] font-semibold text-charcoal truncate">{task.title}</p>
-          <span className={cn("shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md border", health.cls)}>
+          <p className="text-[12px] font-medium text-charcoal truncate">{task.title}</p>
+          <span className={cn("shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded border", health.cls)}>
             {health.label}
           </span>
         </div>
         {/* facts 文本属于 main surface（只读信息；估算 control 在外层 sibling） */}
-        <p className="text-[10px] text-satin-grey pointer-events-none">
+        <p className="text-[11px] text-satin-grey pointer-events-none">
           {missingEstimate ? (
             <>缺少预计耗时，无法判断容量。</>
           ) : task.health === "overdue" ? (
@@ -274,7 +268,7 @@ function OutlookTaskRow({
             type="button"
             onClick={onEstimate}
             aria-label={`让 Kiro 估算任务《${task.title}》预计耗时`}
-            className="text-[10px] font-bold text-sandrift bg-transparent border border-line rounded px-1.5 py-0.5 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-0.5 focus-visible:outline-2 focus-visible:outline-charcoal/30"
+            className="text-[11px] font-semibold text-sandrift bg-transparent border border-line rounded-md px-1.5 py-0.5 hover:text-charcoal hover:border-line-strong transition-colors inline-flex items-center gap-0.5 focus-visible:outline-2 focus-visible:outline-charcoal/30"
           >
             <KiroLogoIcon className="w-2.5 h-2.5" />
             估算任务
@@ -284,3 +278,4 @@ function OutlookTaskRow({
     </div>
   );
 }
+

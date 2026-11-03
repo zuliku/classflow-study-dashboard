@@ -60,7 +60,7 @@ function MemberAvatar({ member, size = "w-7 h-7", ring = false }: { member: Grou
   }
   return (
     <div
-      className={`${size} rounded-full bg-pastel-mint text-charcoal flex items-center justify-center text-[10px] font-bold ${
+      className={`${size} rounded-full bg-alabaster text-charcoal flex items-center justify-center text-[10px] font-semibold ${
         ring ? "border border-stone-beige" : "border border-white"
       } shrink-0`}
     >
@@ -503,7 +503,7 @@ export function GroupCollaborationView() {
           <WorkspaceEmptyState
             icon={<Users className="w-8 h-8" strokeWidth={1.5} />}
             title="还没有小组项目"
-            description="创建项目，管理成员、任务与分工。"
+            description="创建项目，开始分工。"
             actions={
               <Button variant="primary" size="sm" onClick={openCreateProject}>
                 <Plus className="w-3.5 h-3.5" />
@@ -514,10 +514,10 @@ export function GroupCollaborationView() {
         </div>
       ) : (
       <div key="list" className="ux-settle workspace-gutter flex flex-1 min-h-0 flex-col lg:flex-row gap-4 pt-4 pb-24 md:pt-6 md:pb-6">
-        {/* Left: Project List（一个 Surface 内 grouped rows；无独立 Card grid） */}
-        <aside className="w-full lg:w-[300px] lg:shrink-0 min-h-0 flex flex-col">
+        {/* Left: Project List（扁平 rail：无外层卡片；selected 用中性底色 + 左侧标记） */}
+        <aside className="w-full lg:w-[268px] lg:shrink-0 min-h-0 flex flex-col lg:pr-5 lg:border-r lg:border-line-soft">
           <div className="flex items-center justify-between px-1 pb-2">
-            <h3 className="text-xs font-bold text-sandrift">项目</h3>
+            <h3 className="text-[11px] font-medium text-sandrift">项目 · {groupProjects.length}</h3>
             {/* 本地便捷入口（App Chrome V2.3）：Header Primary「新建项目」为权威入口，此处降为 icon-only */}
             <button
               type="button"
@@ -530,16 +530,16 @@ export function GroupCollaborationView() {
           </div>
 
           {groupProjects.length === 0 ? (
-            <div className="bg-surface border border-line rounded-xl px-4 py-8 flex flex-col items-center gap-2 text-center">
+            <div className="px-2 py-8 flex flex-col items-center gap-2 text-center">
               <p className="text-xs font-semibold text-charcoal">还没有小组项目</p>
-              <p className="text-[11px] text-sandrift">创建项目，管理成员、任务与分工。</p>
+              <p className="text-[11px] text-sandrift">创建项目，开始分工。</p>
               <Button variant="primary" size="sm" onClick={openCreateProject}>
                 <Plus className="w-3 h-3" />
                 <span>新建项目</span>
               </Button>
             </div>
           ) : (
-            <div className="bg-surface border border-line rounded-xl divide-y divide-line-soft overflow-y-auto">
+            <div className="flex flex-col gap-0.5 overflow-y-auto">
               {retainedProjects.map((entry) => {
                 const p = entry.item;
                 const isSelected = selectedProject?.id === p.id;
@@ -552,23 +552,29 @@ export function GroupCollaborationView() {
                       onClick={() => setSelectedGroupProjectId(p.id)}
                       aria-current={isSelected ? "true" : undefined}
                       className={cn(
-                        "relative w-full px-3.5 py-2.5 text-left transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                        "relative w-full rounded-lg px-3 py-2.5 text-left transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                         isSelected
-                          ? "bg-pastel-mint/50 hover:bg-pastel-mint/60"
-                          : "hover:bg-alabaster",
+                          ? "bg-alabaster"
+                          : "hover:bg-alabaster/60",
                         newProjectIds.has(p.id) && "animate-enter"
                       )}
                     >
                       {isSelected && (
                         <span
                           aria-hidden="true"
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-charcoal"
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 rounded-full bg-charcoal"
                         />
                       )}
-                      <p className="truncate text-xs font-bold text-charcoal">{p.title}</p>
-                      <p className="mt-0.5 truncate text-[10px] text-sandrift">
-                        {course?.name || "通用课题"} · {completedCount} / {p.tasks.length} · {p.progress}%
+                      <p className="truncate text-[13px] font-semibold text-charcoal">{p.title}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-sandrift">
+                        {course?.name || "通用课题"} · {completedCount}/{p.tasks.length} 任务
                       </p>
+                      <div className="mt-2 h-[2px] w-full overflow-hidden rounded-full bg-line-soft">
+                        <div
+                          className="h-full rounded-full bg-charcoal/50 transition-[width] duration-[var(--motion-data)] ease-[var(--ease-standard)]"
+                          style={{ width: `${p.progress}%` }}
+                        />
+                      </div>
                     </button>
                   </ExitCollapse>
                 );
@@ -578,24 +584,21 @@ export function GroupCollaborationView() {
         </aside>
 
         {/* Right: Project Detail */}
-        <div key={selectedProject?.id ?? "none"} className="ux-detail-swap-in flex-1 min-w-0 flex flex-col space-y-4">
+        <div key={selectedProject?.id ?? "none"} className="ux-detail-swap-in flex-1 min-w-0 max-w-[900px] flex flex-col space-y-4">
           {selectedProject ? (
             <>
-              {/* Detail：单 Surface（header / progress / description / members） */}
-              <div className="bg-surface border border-line rounded-xl p-4 space-y-3.5">
+              {/* Detail：无卡片壳；标题 / 进度 / 说明 / 成员用留白与分隔线组织 */}
+              <div className="pb-5 border-b border-line-soft space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-[11px] font-semibold text-sandrift">
+                    <p className="truncate text-[11px] font-medium text-sandrift">
                       {courses.find((c) => c.id === selectedProject.courseId)?.name || "通用课题"}
                     </p>
-                    <h3 className="mt-0.5 truncate text-lg font-bold text-charcoal">
+                    <h3 className="mt-1 truncate text-[22px] font-semibold leading-tight tracking-[-0.02em] text-charcoal">
                       {selectedProject.title}
                     </h3>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-sm font-extrabold text-charcoal tabular-nums">
-                      {selectedProject.progress}%
-                    </span>
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -621,22 +624,32 @@ export function GroupCollaborationView() {
                   </div>
                 </div>
 
-                <div className="w-full bg-alabaster rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-success h-1.5 rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
-                    style={{ width: `${selectedProject.progress}%` }}
-                  />
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 bg-line-soft rounded-full h-[3px] overflow-hidden">
+                    <div
+                      className="bg-charcoal h-[3px] rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
+                      style={{ width: `${selectedProject.progress}%` }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-[11px] font-semibold text-charcoal tabular-nums">
+                    {selectedProject.progress}%
+                  </span>
+                  <span className="shrink-0 text-[11px] text-sandrift">
+                    {selectedProject.tasks.filter((t) => t.completed).length}/{selectedProject.tasks.length} 任务
+                  </span>
                 </div>
 
-                <p className="text-xs leading-relaxed text-satin-grey">
-                  {selectedProject.description || "暂无项目说明"}
-                </p>
+                {selectedProject.description && (
+                  <p className="max-w-[720px] text-[13px] leading-relaxed text-satin-grey">
+                    {selectedProject.description}
+                  </p>
+                )}
 
-                {/* Members：grouped rows（非 mini-card grid） */}
-                <div className="pt-1.5">
+                {/* Members：roster（非 mini-card grid） */}
+                <div className="pt-4 border-t border-line-soft">
                   <div className="flex items-center justify-between px-1 pb-1">
-                    <h4 className="text-[11px] font-bold text-sandrift">
-                      成员 {selectedProject.members.length}
+                    <h4 className="text-[12px] font-semibold text-charcoal">
+                      成员 <span className="text-sandrift font-normal">{selectedProject.members.length}</span>
                     </h4>
                     <button
                       type="button"
@@ -661,21 +674,21 @@ export function GroupCollaborationView() {
                       </span>
                     </button>
                   ) : (
-                    <div className="divide-y divide-line-soft">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                       {retainedMembers.map((entry) => {
                         const m = entry.item;
                         return (
                           <ExitCollapse key={m.id} exiting={entry.exiting}>
                             <div
                               className={cn(
-                                "group flex items-center gap-2.5 px-2 py-2",
+                                "group flex items-center gap-2.5 px-2 py-2 rounded-lg transition-colors hover:bg-alabaster/50",
                                 newMemberIds.has(m.id) && "animate-enter"
                               )}
                             >
                               <MemberAvatar member={m} size="w-7 h-7" ring />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-bold text-charcoal">{m.name}</p>
-                                <p className="truncate text-[10px] text-sandrift">
+                                <p className="truncate text-[13px] font-medium text-charcoal">{m.name}</p>
+                                <p className="truncate text-[11px] text-sandrift">
                                   {m.role === "leader" ? "组长" : "组员"}
                                   {m.major ? ` · ${m.major}` : ""}
                                 </p>
@@ -709,11 +722,13 @@ export function GroupCollaborationView() {
                 </div>
               </div>
 
-              {/* Tasks：grouped rows + toolbar（无 Card grid） */}
-              <div className="bg-surface border border-line rounded-xl p-4 space-y-3">
+              {/* Tasks：扁平任务区 + toolbar（无 Card grid） */}
+              <div className="pt-2 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-bold text-charcoal">
-                    任务 {selectedProject.tasks.filter((t) => t.completed).length} / {selectedProject.tasks.length}
+                  <h4 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">
+                    任务 <span className="text-sandrift font-normal">
+                      {selectedProject.tasks.filter((t) => t.completed).length}/{selectedProject.tasks.length}
+                    </span>
                   </h4>
                   <div className="flex items-center gap-2">
                     <SearchField
@@ -769,7 +784,7 @@ export function GroupCollaborationView() {
                             data-testid={`group-task-row-${task.id}`}
                             tabIndex={-1}
                             className={cn(
-                              "group flex items-center gap-2.5 px-2 py-2.5 rounded-lg outline-none",
+                              "group flex items-center gap-2.5 px-2 py-2.5 rounded-lg outline-none transition-colors hover:bg-alabaster/50",
                               "focus-visible:outline-2 focus-visible:outline-charcoal/30",
                               "focus:bg-alabaster/60",
                               newTaskIds.has(task.id) && "animate-enter"
@@ -783,13 +798,13 @@ export function GroupCollaborationView() {
                             <div className="min-w-0 flex-1">
                               <p
                                 className={cn(
-                                  "truncate text-xs font-semibold",
+                                  "truncate text-[13px] font-medium",
                                   task.completed ? "text-sandrift line-through" : "text-charcoal"
                                 )}
                               >
                                 {task.title}
                               </p>
-                              <p className="mt-0.5 truncate text-[10px] text-sandrift">
+                              <p className="mt-0.5 truncate text-[11px] text-sandrift">
                                 {assignee?.name ?? "未分配"}
                                 {ddlDate && (
                                   <>

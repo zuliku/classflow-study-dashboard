@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Flame, ChevronDown } from "lucide-react";
-import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader";
+import { ChevronDown } from "lucide-react";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { useStudyMomentum } from "@/hooks/useStudyMomentum";
 import { MOMENTUM_WEEKS, type MomentumDay } from "@/lib/analytics/momentum";
@@ -91,12 +90,12 @@ export function AnalyticsMomentum() {
           />
         </button>
         <DisclosureRegion open={open}>
-          <div className="bg-danger-bg border border-danger-border rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-danger">学习动量加载失败，请稍后重试。</p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-danger/70 pl-4">
+            <p className="text-xs font-medium text-danger">学习动量加载失败，请稍后重试。</p>
             <button
               type="button"
               onClick={() => refresh()}
-              className="h-7 px-3 rounded-lg bg-surface border border-line text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors"
+              className="text-[11px] font-semibold text-charcoal underline underline-offset-2 hover:text-black transition-colors"
             >
               重试
             </button>
@@ -107,14 +106,14 @@ export function AnalyticsMomentum() {
   }
 
   return (
-    <section>
+    <section className="border-t border-line-soft pt-6">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="w-full flex items-center justify-between mb-3 text-left group"
       >
-        <h2 className="text-[13px] font-bold text-charcoal">学习动量</h2>
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">学习动量</h2>
         <ChevronDown
           className={cn(
             "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
@@ -124,15 +123,11 @@ export function AnalyticsMomentum() {
         />
       </button>
       <DisclosureRegion open={open}>
-        <div
-          data-testid="analytics-momentum"
-          className="bg-surface border border-line rounded-2xl p-4 shadow-subtle"
-        >
-          <AnalyticsCardHeader eyebrow="坚持与热度" title="12 周投入热力" />
+        <div data-testid="analytics-momentum">
           {loading || !data ? (
-            <div className="ux-skeleton h-[220px] mt-3 w-full rounded-xl bg-alabaster animate-pulse" aria-label="动量加载中" />
+            <div className="ux-skeleton h-[220px] w-full rounded-lg bg-alabaster animate-pulse" aria-label="动量加载中" />
           ) : (
-            <div className="pt-3 flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               {/* 热力整块置顶（GitHub 式通栏） */}
               <div>
                 <div
@@ -184,39 +179,34 @@ export function AnalyticsMomentum() {
                 </div>
               </div>
               {/* 12 周专属四统计：连续 / 总专注 / 活跃天数 / 单日最佳（与本周 Strip 不重复） */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex items-center gap-2.5 min-w-0">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-warning">
-                    <Flame className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
-                      <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
-                    </span>
-                    <span className="mt-1 block text-[10px] text-sandrift">
-                      连续学习 · {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
-                    </span>
-                  </span>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line-soft pt-4 sm:grid-cols-4">
+                <div className="min-w-0">
+                  <p className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
+                    <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-snug text-sandrift">
+                    连续学习 · {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
+                  </p>
                 </div>
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex flex-col justify-center min-w-0">
-                  <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                <div className="min-w-0">
+                  <p className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
                     {formatHours(data.totalMinutes)}
-                  </span>
-                  <span className="mt-1 block text-[10px] text-sandrift">近 {MOMENTUM_WEEKS} 周总专注</span>
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-snug text-sandrift">近 {MOMENTUM_WEEKS} 周总专注</p>
                 </div>
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex flex-col justify-center min-w-0">
-                  <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                <div className="min-w-0">
+                  <p className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
                     {data.activeDays} 天
-                  </span>
-                  <span className="mt-1 block text-[10px] text-sandrift">活跃天数</span>
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-snug text-sandrift">活跃天数</p>
                 </div>
-                <div className="rounded-xl bg-alabaster/50 border border-line-soft px-3 py-2.5 flex flex-col justify-center min-w-0">
-                  <span className="block text-lg font-extrabold text-charcoal tabular-nums leading-none">
+                <div className="min-w-0">
+                  <p className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
                     {data.bestDay ? formatHours(data.bestDay.minutes) : "—"}
-                  </span>
-                  <span className="mt-1 block text-[10px] text-sandrift">
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-snug text-sandrift">
                     单日最佳{data.bestDay ? ` · ${formatMonthDay(data.bestDay.date)}` : ""}
-                  </span>
+                  </p>
                 </div>
               </div>
               {/* 全零空态弱提示（84 天全 0 时热力空白，给一个开始入口而非沉默数字） */}
