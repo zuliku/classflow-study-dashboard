@@ -41,7 +41,6 @@ export function ProviderLogo({
         <img
           src={meta.logo}
           alt=""
-          loading="lazy"
           onError={() => setFailed(true)}
           className={cn(icon, "object-contain")}
         />
