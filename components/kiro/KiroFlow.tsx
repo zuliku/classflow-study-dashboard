@@ -18,6 +18,9 @@ export function KiroFlowButton({
   size = "md",
   className,
   labelClassName,
+  active = false,
+  ariaExpanded,
+  ariaControls,
   "data-testid": dataTestId,
 }: {
   icon: React.ComponentType<{ className?: string }>;
@@ -28,6 +31,10 @@ export function KiroFlowButton({
   className?: string;
   /** label 响应式控制（如窄屏隐藏文字只留图标；aria 名称仍来自 label） */
   labelClassName?: string;
+  /** 折叠面板的展开态（内层转炭色，表示当前已打开） */
+  active?: boolean;
+  ariaExpanded?: boolean;
+  ariaControls?: string;
   "data-testid"?: string;
 }) {
   return (
@@ -35,7 +42,10 @@ export function KiroFlowButton({
       type="button"
       onClick={onClick}
       aria-label={label}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
       data-testid={dataTestId}
+      data-active={active ? "true" : undefined}
       className={cn(
         "relative rounded-lg overflow-hidden group text-left transition-colors duration-[var(--motion-base)]",
         className
@@ -51,8 +61,9 @@ export function KiroFlowButton({
       />
       <span
         className={cn(
-          "relative m-[1.5px] w-[calc(100%-3px)] bg-[#F7F5F5]",
-          "flex items-center justify-center gap-1.5 text-[11px] font-bold text-charcoal",
+          "relative m-[1.5px] w-[calc(100%-3px)]",
+          active ? "bg-charcoal text-white" : "bg-[#F7F5F5] text-charcoal",
+          "flex items-center justify-center gap-1.5 text-[11px] font-bold transition-colors",
           size === "sm" ? "h-[calc(100%-3px)] px-2.5 rounded-[7px]" : "h-[calc(100%-3px)] px-3 rounded-[10px]"
         )}
       >

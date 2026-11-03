@@ -164,8 +164,8 @@ describe("Group zero-project composition", () => {
   it("有项目时：master-detail split 完整保留", () => {
     render(<GroupCollaborationView />);
     expect(screen.queryByTestId("workspace-empty-state")).toBeNull();
-    // rail 存在（项目列表 Surface）
-    expect(screen.getByText("项目")).toBeTruthy();
+    // rail 存在（扁平项目列表；标题带项目计数）
+    expect(screen.getByText(/^项目 · /)).toBeTruthy();
   });
 });
 

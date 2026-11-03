@@ -39,8 +39,11 @@ import { formatLocalDate } from "@/lib/groupProject";
 
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { KIRO_ICON } from "@/components/layout/navItems";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
+import { useOptionalKiroSession } from "@/components/kiro/KiroSessionProvider";
+import { GroupKiroPanel } from "@/components/group/GroupKiroPanel";
 import { cn } from "@/lib/utils";
 import { Dialog } from "@/components/ui/Dialog";
 import { Popover } from "@/components/ui/Popover";
@@ -157,6 +160,7 @@ export function GroupCollaborationView() {
   const pushToast = useToastStore((s) => s.pushToast);
   const confirmRequest = useConfirmStore((s) => s.confirm);
   const handoff = useKiroHandoff();
+  const kiroSession = useOptionalKiroSession();
 
   // Workflow UX V4：selection ownership 上移至 store（transient，不持久化）。
   // Global Search Deep Link 在本组件 mount 前写入目标 id → 首帧即精确直达。
@@ -197,6 +201,61 @@ export function GroupCollaborationView() {
     groupProjects[0] ??
     null;
   const selectedProjectId = selectedProject?.id ?? "";
+
+  // ---- 宽屏项目内嵌 Kiro（2xl+）：Dock 与浮动 Sidecar 共用同一 Session ----
+  const isWideWorkspace = useMediaQuery("(min-width: 1536px)");
+  const [kiroDockOpen, setKiroDockOpen] = useState(false);
+  const dockContextProjectRef = useRef<string | null>(null);
+  const floatingSidecarMode = kiroSession?.sidecarMode ?? "closed";
+
+  // 视口变窄 → 关闭 Dock（回落到 Header「问 Kiro」的既有 Sidecar 语义）
+  useEffect(() => {
+    if (!isWideWorkspace && kiroDockOpen) {
+      setKiroDockOpen(false);
+      dockContextProjectRef.current = null;
+    }
+  }, [isWideWorkspace, kiroDockOpen]);
+
+  // 项目清零（删除最后一个项目）→ Dock 一并关闭，避免下次新建项目时意外重新出现
+  useEffect(() => {
+    if (groupProjects.length === 0 && kiroDockOpen) {
+      setKiroDockOpen(false);
+      dockContextProjectRef.current = null;
+    }
+  }, [groupProjects.length, kiroDockOpen]);
+
+  // Dock 打开 / 切换项目：把当前小组项目作为 entry context 附加到会话（仅一次）
+  useEffect(() => {
+    if (!kiroDockOpen || !selectedProjectId) return;
+    if (dockContextProjectRef.current === selectedProjectId) return;
+    dockContextProjectRef.current = selectedProjectId;
+    handoff.openForGroupProject(selectedProjectId);
+    kiroSession?.closeSidecar();
+    // handoff / kiroSession 每次 render identity 可能变化；这里只按 Dock 与项目变化应用一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kiroDockOpen, selectedProjectId]);
+
+  // 单实例可见性：Dock 打开时，任何浮动 Sidecar / Capsule 都收起，避免同一会话双面
+  useEffect(() => {
+    if (!kiroDockOpen) return;
+    if (floatingSidecarMode !== "closed") kiroSession?.closeSidecar();
+  }, [kiroDockOpen, floatingSidecarMode, kiroSession]);
+
+  const toggleGroupKiro = () => {
+    if (!selectedProject) return;
+    if (!isWideWorkspace) {
+      handoff.openForGroupProject(selectedProject.id);
+      return;
+    }
+    const nextOpen = !kiroDockOpen;
+    if (!nextOpen) dockContextProjectRef.current = null;
+    setKiroDockOpen(nextOpen);
+  };
+
+  const closeKiroDock = () => {
+    setKiroDockOpen(false);
+    dockContextProjectRef.current = null;
+  };
   const newTaskIds = useEnterOnAdd(selectedProject?.tasks.map((t) => t.id) ?? [], selectedProjectId);
 
   const newProjectIds = useEnterOnAdd(groupProjects.map((p) => p.id));
@@ -482,7 +541,10 @@ export function GroupCollaborationView() {
               label="问 Kiro"
               size="sm"
               className="h-8"
-              onClick={() => handoff.openForGroupProject(selectedProject.id)}
+              active={isWideWorkspace && kiroDockOpen}
+              ariaExpanded={isWideWorkspace ? kiroDockOpen : undefined}
+              ariaControls={isWideWorkspace && kiroDockOpen ? "group-kiro-panel" : undefined}
+              onClick={toggleGroupKiro}
             />
           ) : undefined
         }
@@ -847,6 +909,10 @@ export function GroupCollaborationView() {
              </>
            ) : null}
         </div>
+
+        {kiroDockOpen && isWideWorkspace && selectedProject && (
+          <GroupKiroPanel project={selectedProject} onClose={closeKiroDock} />
+        )}
       </div>
       )}
 
