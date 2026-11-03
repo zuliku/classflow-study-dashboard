@@ -509,12 +509,19 @@ export class FakeDesktopWorld {
       element?.onClick?.(this);
     } else if (input.action === "focus") {
       this.focusedField = element ? { windowId: window.windowId, elementId: element.elementId } : null;
+      // 与真实 UI Automation 一致：焦点切换会反映在控件状态上
+      for (const el of window.elements) el.focused = element ? el.elementId === element.elementId : false;
     } else if (input.action === "type") {
       this.ensureSession(input.sessionId ?? "cs-fake");
       this.emitSession("acting", `type ${element?.elementId ?? ""}`);
       this.session!.actions += 1;
       if (!element) throw { code: "ACTION_FAILED", message: "没有可输入的目标" };
       this.typedText = input.text ?? null;
+      // 真实 Edit 控件写入后 Name/Value 会更新，观察结果应能看到文本
+      element.name = this.typedText ?? element.name;
+      element.focused = true;
+      for (const el of window.elements) if (el.elementId !== element.elementId) el.focused = false;
+      this.focusedField = { windowId: window.windowId, elementId: element.elementId };
     } else if (input.action === "key") {
       this.ensureSession(input.sessionId ?? "cs-fake");
       this.emitSession("acting", `key ${input.key ?? ""}`);

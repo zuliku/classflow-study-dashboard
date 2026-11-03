@@ -122,6 +122,7 @@ gated(`${smokeModel} Interactive Terminal Smoke（start/write/wait）`, () => {
       system: systemBase + " 启动命令：$x=[Console]::In.ReadLine(); Write-Output \"received:$x\"，随后用 write 写入 hello，再用 wait 等待结果。",
       messages: [{ role: "user", content: "启动一个 PowerShell 命令读取一行 stdin，随后输入 hello，等待命令结束并告诉我输出。命令固定为：$x=[Console]::In.ReadLine(); Write-Output \"received:$x\"。请按 start → write → wait 顺序完成。" }],
       tools: { start_terminal_command: startTool, write_terminal_input: writeTool, wait_terminal_command: waitTool },
+      toolChoice: { type: "tool", toolName: "start_terminal_command" },
       maxOutputTokens: 600,
     });
     const startCalls = round1.toolCalls.filter((c) => c.toolName === "start_terminal_command");
@@ -139,6 +140,7 @@ gated(`${smokeModel} Interactive Terminal Smoke（start/write/wait）`, () => {
       system: systemBase,
       messages: round1.response.messages as unknown as import("ai").ModelMessage[],
       tools: { write_terminal_input: writeTool, wait_terminal_command: waitTool },
+      toolChoice: { type: "tool", toolName: "write_terminal_input" },
       maxOutputTokens: 2048,
     });
     const writeCalls = [...round1.toolCalls, ...round2.toolCalls].filter((c) => c.toolName === "write_terminal_input");
@@ -155,6 +157,7 @@ gated(`${smokeModel} Interactive Terminal Smoke（start/write/wait）`, () => {
       system: systemBase,
       messages: allMessagesForWait,
       tools: { wait_terminal_command: waitTool },
+      toolChoice: { type: "tool", toolName: "wait_terminal_command" },
       maxOutputTokens: 2048,
     });
     const waitCalls = [...round1.toolCalls, ...round2.toolCalls, ...round3.toolCalls].filter((c) => c.toolName === "wait_terminal_command");

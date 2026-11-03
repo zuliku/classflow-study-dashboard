@@ -23,6 +23,7 @@
     "pack:win": "electron-vite build && electron-builder --win nsis",
     "security:secrets": "node scripts/check-secrets.mjs",
     "smoke:opencode": "node scripts/smoke-opencode.mjs",
+    "smoke:agent": "vitest run tests/aiOpenCodeGoAgentFileSmoke.test.ts tests/aiOpenCodeGoTerminalSmoke.test.ts tests/aiOpenCodeGoTerminalInteractiveSmoke.test.ts tests/aiOpenCodeGoDesktopAgentSmoke.test.ts",
     "lint:motion": "node scripts/check-motion.mjs"
   },
   "engines": {

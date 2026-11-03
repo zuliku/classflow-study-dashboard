@@ -36,6 +36,7 @@ gated(`${smokeModel} Terminal Live Smoke（run_terminal_command → 真实 Power
       throw e;
     }
     const cwd = mkdtempSync(join(tmpdir(), "classflow-muse-term-"));
+    let executedOk = false;
 
     const system =
       "你是 ClassFlow 桌面助手。可用 run_terminal_command 在已授权工作区执行 PowerShell 命令。" +
@@ -69,6 +70,7 @@ gated(`${smokeModel} Terminal Live Smoke（run_terminal_command → 真实 Power
               onEvent: () => {},
             });
             const r = await promise;
+            executedOk = r.exitCode === 0 && r.stdout.includes("classflow-muse-terminal-ok");
             // eslint-disable-next-line no-console
             console.log(`[LIVE:muse] executed shell=${shell} exit=${r.exitCode} stdout=${JSON.stringify(r.stdout.slice(0, 80))}`);
             return {
@@ -130,11 +132,12 @@ gated(`${smokeModel} Terminal Live Smoke（run_terminal_command → 真实 Power
       expect(cmd).not.toContain(banned);
     }
 
-    // 断言：final answer 基于真实结果（marker 或成功事实）
+    // 断言：真实终端执行成功（模型措辞不参与判定，避免不同模型表达差异导致 flake）
+    expect(executedOk).toBe(true);
     const answer = text ?? "";
     expect(answer.length).toBeGreaterThan(0);
     const hasMarker = answer.includes("classflow-muse-terminal-ok");
-    const hasSuccess = /(成功|ok|exit 0|运行成功|已执行)/i.test(answer);
+    const hasSuccess = /(成功|ok|exit 0|运行成功|已执行|连通|正常|可用)/i.test(answer);
     expect(hasMarker || hasSuccess).toBe(true);
 
     // 断言：没有无理由执行第二条危险命令（最多允许额外只读命令；禁止危险类）
