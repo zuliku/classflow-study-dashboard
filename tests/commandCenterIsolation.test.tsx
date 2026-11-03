@@ -77,7 +77,7 @@ describe("全局搜索（CommandCenter）隔离：Kiro Provider 缺失也不白�
     const kiroRow = screen.getByText("交给 Kiro").closest("button");
     expect(kiroRow).toBeTruthy();
     fireEvent.click(kiroRow!);
-    expect(useToastStore.getState().toasts.some((t) => t.message.includes("Kiro 尚未就绪"))).toBe(true);
+    expect(useToastStore.getState().toasts.some((t) => t.message.includes("请先打开 Kiro"))).toBe(true);
   });
 
   it("点击顶部「搜索」按钮 → 命令面板真实打开（全局搜索入口可用）", async () => {
@@ -162,17 +162,21 @@ describe("OverlayBoundary：单个面板崩溃不影响应用", () => {
 });
 
 describe("Settings Registry ↔ 新增桌面开关对齐（防搜索死链）", () => {
-  it("终端 / 桌面查看 / 桌面操作 三个开关均已登记", () => {
+  it("终端 / 桌面查看 / 桌面操作 / 剪贴板 / 后台操作 开关均已登记", () => {
     const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
     expect(ids.has(SETTING_IDS["kiro-agent"].terminal)).toBe(true);
     expect(ids.has(SETTING_IDS["kiro-agent"].desktopObserve)).toBe(true);
     expect(ids.has(SETTING_IDS["kiro-agent"].desktopAction)).toBe(true);
+    expect(ids.has(SETTING_IDS["kiro-agent"].desktopClipboard)).toBe(true);
+    expect(ids.has(SETTING_IDS["kiro-agent"].desktopBackground)).toBe(true);
   });
 
   it("桌面开关为 conditional（仅桌面版渲染，不产生 Registry 漂移告警）", () => {
     const byId = new Map(SETTINGS_REGISTRY.map((s) => [s.id, s]));
     expect(byId.get(SETTING_IDS["kiro-agent"].desktopObserve)?.conditional).toBe(true);
     expect(byId.get(SETTING_IDS["kiro-agent"].desktopAction)?.conditional).toBe(true);
+    expect(byId.get(SETTING_IDS["kiro-agent"].desktopClipboard)?.conditional).toBe(true);
+    expect(byId.get(SETTING_IDS["kiro-agent"].desktopBackground)?.conditional).toBe(true);
     expect(byId.get(SETTING_IDS["kiro-agent"].terminal)?.conditional).toBeUndefined();
   });
 

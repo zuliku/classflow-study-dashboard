@@ -123,6 +123,7 @@ export const SETTING_IDS = {
     desktopObserve: "kiro-desktop-observe-enabled",
     desktopAction: "kiro-desktop-action-enabled",
     desktopClipboard: "kiro-desktop-clipboard-enabled",
+    desktopBackground: "kiro-background-enabled",
   },
   extensions: {
     overview: "extensions-overview",
@@ -686,6 +687,18 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     title: "允许 Kiro 读写剪贴板",
     description: "默认关闭；开启后读取 / 写入剪贴板仍需逐次确认（写入会覆盖剪贴板）",
     keywords: ["剪贴板", "复制", "粘贴", "clipboard", "desktop", "权限"],
+    conditional: true, // 仅桌面版渲染（且需先开启电脑操作）
+    gate: [
+      { control: SETTING_IDS["kiro-agent"].desktopObserve, requiresValue: true },
+      { control: SETTING_IDS["kiro-agent"].desktopAction, requiresValue: true },
+    ],
+  },
+  {
+    id: SETTING_IDS["kiro-agent"].desktopBackground,
+    section: "kiro-agent",
+    title: "允许 Kiro 后台操作电脑",
+    description: "窗口未置顶时操作控件，不抢焦点；过程仅见执行记录",
+    keywords: ["后台", "电脑", "操作", "焦点", "background", "desktop", "权限"],
     conditional: true, // 仅桌面版渲染（且需先开启电脑操作）
     gate: [
       { control: SETTING_IDS["kiro-agent"].desktopObserve, requiresValue: true },
