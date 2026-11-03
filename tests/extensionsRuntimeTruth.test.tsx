@@ -126,6 +126,32 @@ describe("Extensions Runtime Truth V1", () => {
     await waitFor(() => expect(getSummaryExact("Skills 已启用")).toBe("0 个 Skills 已启用"));
   });
 
+  it("CASE 3b Skills 与 MCP 并发首载：先回包的一路不会被另一路判为过期", async () => {
+    useExtensionsStore.setState({ extensions: [] });
+    let resolveSkills: (v: unknown) => void = () => {};
+    const pendingSkills = new Promise<{ skills: unknown[] }>((res) => {
+      resolveSkills = res as never;
+    });
+    const skillsBridge = {
+      list: vi.fn(() => pendingSkills),
+      get: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(), setEnabled: vi.fn(),
+      import: vi.fn(), export: vi.fn(), test: vi.fn(), activate: vi.fn(),
+    };
+    setWindowBridges({
+      skills: skillsBridge,
+      mcp: { list: vi.fn(async () => ({ connections: [] })), add: vi.fn(), test: vi.fn(), connect: vi.fn(), disconnect: vi.fn(), remove: vi.fn(), setEnabled: vi.fn() },
+      channels: { list: vi.fn(async () => ({ channels: [] })) },
+    });
+    render(<ExtensionsSettings />);
+    // MCP 先回包也会推进自己的世代；Skills 仍未完成
+    await waitFor(() => expect(getSummaryExact("MCP 已连接")).toBe("0 个 MCP 已连接"));
+    expect(screen.getByTestId("skills-loading")).toBeTruthy();
+    resolveSkills({ skills: [] });
+    // 关键：Skills 不能被 MCP 的世代推进判为过期而永久 loading
+    await waitFor(() => expect(getSummaryExact("Skills 已启用")).toBe("0 个 Skills 已启用"));
+    expect(screen.queryByTestId("skills-loading")).toBeNull();
+  });
+
   it("CASE 4 Skills bridge error => — + 暂时无法读取 Skills + retry not empty", async () => {
     useExtensionsStore.setState({ extensions: [] });
     const skillsBridge = { list: vi.fn(async () => { throw new Error("bridge error"); }), get: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn(), setEnabled: vi.fn(), import: vi.fn(), export: vi.fn(), test: vi.fn(), activate: vi.fn() };

@@ -90,14 +90,17 @@ export function ExtensionsSettings() {
   const [mcpConnections, setMcpConnections] = useState<McpConnectionItem[]>([]);
   const [mcpState, setMcpState] = useState<RuntimeLoadState>("loading");
   const mcpBridge = useMemo(() => getMcpBridge(), []);
-  // 世代守卫：慢旧 list 回包不覆盖新态（删 skill 后闪回已删项）；连点重试只认最后一次
-  const refreshGenRef = React.useRef(0);
+  // 世代守卫：慢旧 list 回包不覆盖新态（删 skill 后闪回已删项）；连点重试只认最后一次。
+  // 注意：Skills / MCP 各自独立计数——共用 ref 会让先发出的请求被另一路 ++ 判为过期，
+  // 结果永久停在 loading（Skills 与 MCP 同时首载即可复现）。
+  const skillsRefreshGenRef = React.useRef(0);
+  const mcpRefreshGenRef = React.useRef(0);
 
   const refreshMcp = async () => {
-    const gen = ++refreshGenRef.current;
+    const gen = ++mcpRefreshGenRef.current;
     const bridge = getMcpBridge();
     if (!bridge) {
-      if (refreshGenRef.current !== gen) return;
+      if (mcpRefreshGenRef.current !== gen) return;
       setMcpConnections([]);
       setMcpState("unavailable");
       return;
@@ -105,21 +108,21 @@ export function ExtensionsSettings() {
     setMcpState("loading");
     try {
       const res = (await bridge.list()) as { connections: McpConnectionItem[] };
-      if (refreshGenRef.current !== gen) return;
+      if (mcpRefreshGenRef.current !== gen) return;
       setMcpConnections(Array.isArray(res.connections) ? res.connections : []);
       setMcpState("ready");
     } catch {
-      if (refreshGenRef.current !== gen) return;
+      if (mcpRefreshGenRef.current !== gen) return;
       setMcpConnections([]);
       setMcpState("error");
     }
   };
 
   const refreshSkills = async () => {
-    const gen = ++refreshGenRef.current;
+    const gen = ++skillsRefreshGenRef.current;
     const bridge = getSkillBridge();
     if (!bridge) {
-      if (refreshGenRef.current !== gen) return;
+      if (skillsRefreshGenRef.current !== gen) return;
       setSkills([]);
       setSkillsState("unavailable");
       return;
@@ -127,11 +130,11 @@ export function ExtensionsSettings() {
     setSkillsState("loading");
     try {
       const res = (await bridge.list()) as { skills: SkillListItem[] };
-      if (refreshGenRef.current !== gen) return;
+      if (skillsRefreshGenRef.current !== gen) return;
       setSkills(Array.isArray(res.skills) ? res.skills : []);
       setSkillsState("ready");
     } catch {
-      if (refreshGenRef.current !== gen) return;
+      if (skillsRefreshGenRef.current !== gen) return;
       setSkills([]);
       setSkillsState("error");
     }
