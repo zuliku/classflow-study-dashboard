@@ -180,7 +180,8 @@ test("脏草稿（Profile）：Esc 关闭需确认；backdrop 关闭被禁用", 
   await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
   await expect(nameInput).toHaveValue("Esc 草稿");
 
-  // Esc → 确认对话框（脏）
+  // Esc → 确认对话框（脏）；先回到输入框，避免 backdrop 点击后焦点落在页面外
+  await nameInput.focus();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("alertdialog", { name: "放弃未保存的更改？" })).toBeVisible();
   await page.getByRole("button", { name: "取消", exact: true }).click();
