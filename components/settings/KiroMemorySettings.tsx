@@ -40,12 +40,13 @@ export function KiroMemorySettings() {
 
   return (
     <>
-      <SettingsRow settingId="kiro-memory-enabled" title="Kiro 记忆" description="记住学习偏好并在后续对话中运用。">
+      <SettingsRow settingId="kiro-memory-enabled" title="Kiro 记忆">
         <SettingsToggle checked={memoryEnabled} onChange={setMemoryEnabled} label="启用 Kiro 记忆" />
       </SettingsRow>
 
-      <SettingsRow settingId="kiro-memory-manager" title="记忆条目" description={`Kiro 已记住 ${memory.memories.length} 条偏好。`}>
+      <SettingsRow settingId="kiro-memory-manager" title="记忆条目">
         <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-sandrift">{memory.memories.length} 条</span>
           <SettingsButton variant="accent" onClick={() => setManagerOpen(true)}>
             <Brain className="w-3.5 h-3.5" />
             管理

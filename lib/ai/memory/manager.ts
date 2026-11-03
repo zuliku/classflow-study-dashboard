@@ -54,6 +54,17 @@ export async function buildMemoryIndex(state: Pick<AppState, "semester" | "cours
     .slice(0, 20);
 }
 
+/** 将 UI 表单范围转换为持久化 scopeId（semester 始终绑定当前学期，避免保存后立即 stale） */
+export function resolveMemoryScopeId(
+  scope: MemoryScope,
+  scopeId: string | undefined,
+  semesterId: string | undefined
+): string | undefined {
+  if (scope === "global") return undefined;
+  if (scope === "semester") return semesterId || undefined;
+  return scopeId?.trim() || undefined;
+}
+
 /** 关键词搜索（title/content/tags 简单包含匹配） */
 export function searchMemoriesByKeyword(memories: KiroMemory[], opts: { query?: string; category?: MemoryCategory; scope?: MemoryScope; limit?: number }): KiroMemory[] {
   const q = (opts.query ?? "").trim().toLowerCase();

@@ -10,7 +10,7 @@ import { expect, test, Page } from "@playwright/test";
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   custom: { providerName: "", baseURL: "", model: "" },
 };
 
@@ -81,6 +81,22 @@ async function openMemoryManagerFromSettings(page: Page) {
   await expect(page.getByTestId("kiro-memory-manager")).toBeVisible();
 }
 
+/** 纯 Chromium 无 Electron preload：注入最小 invocation bridge + AI 设置 */
+async function installMemoryEnv(page: Page, memoryEnabled?: boolean) {
+  await page.addInitScript(({ settings, key, enabled }) => {
+    localStorage.setItem(
+      "classflow-ai-settings-v1",
+      JSON.stringify({ version: 0, state: { ...settings, ...(enabled === undefined ? {} : { memoryEnabled: enabled }) } })
+    );
+    sessionStorage.setItem("classflow-ai-key:deepseek", key);
+    (window as unknown as { classflowDesktop?: unknown }).classflowDesktop = {
+      invocation: {
+        beginLocal: async () => ({ invocationId: "inv_e2e_memory_00000000-0000-4000-8000-000000000001" }),
+      },
+    };
+  }, { settings: AI_SETTINGS, key: "sk-test-key", enabled: memoryEnabled });
+}
+
 test("记忆开关关闭：save_memory 被拒绝（错误回传模型）且不写入", async ({ page }) => {
   let rejectedCode = "";
   let rejectedMessage = "";
@@ -101,10 +117,7 @@ test("记忆开关关闭：save_memory 被拒绝（错误回传模型）且不�
     await route.fulfill({ status: 200, contentType: "text/event-stream", body: finalTextTurn("好的。") });
   });
 
-  await page.addInitScript(({ settings, key }) => {
-    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: { ...settings, memoryEnabled: false } }));
-    sessionStorage.setItem("classflow-ai-key:deepseek", key);
-  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await installMemoryEnv(page, false);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await openKiro(page);
@@ -137,10 +150,7 @@ test("保存记忆 → Settings 管理：编辑 / 删除 / 重新保存 / 清空
     await route.fulfill({ status: 200, contentType: "text/event-stream", body: finalTextTurn(turns === 1 ? "好的，以后我都会记得你一般晚上学习。" : "好的，以后周末都提醒你写作业。") });
   });
 
-  await page.addInitScript(({ settings, key }) => {
-    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
-    sessionStorage.setItem("classflow-ai-key:deepseek", key);
-  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await installMemoryEnv(page);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await openKiro(page);
@@ -158,6 +168,15 @@ test("保存记忆 → Settings 管理：编辑 / 删除 / 重新保存 / 清空
   await expect(manager).toContainText("我一般晚上学习");
   await expect(manager).toContainText("学习习惯 · 全局");
 
+  // 2b. 手动添加记忆
+  await manager.getByTestId("kiro-memory-add").click();
+  await manager.getByLabel("记忆内容").fill("考试周优先复习高数");
+  await manager.getByRole("button", { name: "保存" }).click();
+  await expect(manager).toContainText("考试周优先复习高数");
+  await manager.getByRole("button", { name: "删除记忆 考试周优先复习高数" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "删除" }).click();
+  await expect(manager).not.toContainText("考试周优先复习高数");
+
   // 3. 编辑标题并保存
   await manager.getByRole("button", { name: "编辑记忆 我一般晚上学习" }).click();
   const titleInput = manager.getByLabel("记忆标题");
@@ -167,6 +186,7 @@ test("保存记忆 → Settings 管理：编辑 / 删除 / 重新保存 / 清空
 
   // 4. 删除
   await manager.getByRole("button", { name: "删除记忆 晚间高效学习" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "删除" }).click();
   await expect(manager).toContainText("暂无记忆");
   await manager.getByRole("button", { name: "关闭记忆" }).click();
   await expect(manager).not.toBeVisible();
@@ -181,7 +201,7 @@ test("保存记忆 → Settings 管理：编辑 / 删除 / 重新保存 / 清空
   await openMemoryManagerFromSettings(page);
   const manager2 = page.getByTestId("kiro-memory-manager");
   await expect(manager2).toContainText("周末写作业");
-  await manager2.getByRole("button", { name: "清空全部" }).click();
+  await manager2.getByRole("button", { name: "清空", exact: true }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "清空" }).click();
   await expect(manager2).toContainText("暂无记忆");
 });
@@ -198,10 +218,7 @@ test("More 菜单 → Kiro 记忆入口打开 Manager", async ({ page }) => {
     await route.fulfill({ status: 200, contentType: "text/event-stream", body: finalTextTurn("已记住。") });
   });
 
-  await page.addInitScript(({ settings, key }) => {
-    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
-    sessionStorage.setItem("classflow-ai-key:deepseek", key);
-  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await installMemoryEnv(page);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await openKiro(page);
@@ -234,10 +251,7 @@ test("Task 2C3B：编辑态 Esc 只退出编辑，再 Esc 关闭 Manager", async
     await route.fulfill({ status: 200, contentType: "text/event-stream", body: finalTextTurn("已记住。") });
   });
 
-  await page.addInitScript(({ settings, key }) => {
-    localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
-    sessionStorage.setItem("classflow-ai-key:deepseek", key);
-  }, { settings: AI_SETTINGS, key: "sk-test-key" });
+  await installMemoryEnv(page);
 
   await page.setViewportSize({ width: 1440, height: 900 });
   await openKiro(page);

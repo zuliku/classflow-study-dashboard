@@ -10,7 +10,7 @@ import {
   deleteMemory,
   clearMemories,
 } from "@/lib/ai/memory/db";
-import { hasExplicitMemoryIntent, isMemoryEligible, isMemoryStale, buildMemoryIndex, searchMemoriesByKeyword } from "@/lib/ai/memory/manager";
+import { hasExplicitMemoryIntent, isMemoryEligible, isMemoryStale, buildMemoryIndex, searchMemoriesByKeyword, resolveMemoryScopeId } from "@/lib/ai/memory/manager";
 import { MAX_MEMORIES } from "@/lib/ai/memory/types";
 import { KiroMemory } from "@/lib/ai/memory/types";
 
@@ -173,6 +173,16 @@ describe("isMemoryEligible / isMemoryStale / buildMemoryIndex", () => {
     expect(index).toHaveLength(20);
     expect(index.every((e) => !("content" in e))).toBe(true);
     expect(index.some((e) => e.title.includes("已删课程"))).toBe(false);
+  });
+});
+
+describe("resolveMemoryScopeId", () => {
+  it("global → undefined；semester → 当前学期；course → 表单课程", () => {
+    expect(resolveMemoryScopeId("global", "c1", "2026S1")).toBeUndefined();
+    expect(resolveMemoryScopeId("semester", "", "2026S1")).toBe("2026S1");
+    expect(resolveMemoryScopeId("semester", "2025S2", "2026S1")).toBe("2026S1");
+    expect(resolveMemoryScopeId("course", " c1 ", "2026S1")).toBe("c1");
+    expect(resolveMemoryScopeId("course", "", "2026S1")).toBeUndefined();
   });
 });
 
