@@ -33,7 +33,7 @@ run("DeepSeek → propose_study_rebalance Tool Call → Tool Result → final（
     baseURL: AI.DEEPSEEK_BASE_URL,
     apiKey: KEY,
     transformRequestBody: deepSeekTransformRequestBody,
-  })("deepseek-v4-flash");
+  })("deepseek-flash");
 
   const userMsg = "请调整已有学习计划。必须先调用 propose_study_rebalance。";
   const system = "你是 ClassFlow Kiro；必须使用提供的工具获取真实数据，回答简短。";

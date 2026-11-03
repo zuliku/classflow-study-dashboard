@@ -105,10 +105,10 @@ async function captureRealStream(opts: {
 }): Promise<CapturedPart[]> {
   const { model } = await resolveLanguageModel({
     provider: "deepseek",
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     apiKey: KEY,
   });
-  const v4FlashDef = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-v4-flash")!;
+  const v4FlashDef = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-flash")!;
   const providerOptions = resolveReasoningProviderOptions({
     definition: v4FlashDef,
     effort: opts.reasoningEffort ?? "default",
@@ -351,8 +351,8 @@ describeDeepSeek("DeepSeek Real Streaming Perf（DEEPSEEK_TEST_API_KEY 存在时
       get_current_time: tool({ description: "获取当前本地时间", inputSchema: z.object({}) }),
     };
     const prompt = "现在是几点？必须调用 get_current_time 工具获取时间后再回答";
-    const { model } = await resolveLanguageModel({ provider: "deepseek", model: "deepseek-v4-flash", apiKey: KEY });
-    const v4FlashDef = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-v4-flash")!;
+    const { model } = await resolveLanguageModel({ provider: "deepseek", model: "deepseek-flash", apiKey: KEY });
+    const v4FlashDef = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-flash")!;
     const options = resolveReasoningProviderOptions({ definition: v4FlashDef, effort: "high" });
     const t0 = performance.now();
     const events: { at: number; type: string; chars?: number; toolName?: string }[] = [];
@@ -438,7 +438,7 @@ describeDeepSeek("DeepSeek Real Streaming Perf（DEEPSEEK_TEST_API_KEY 存在时
   it("真实 Route 级 phase assertion：UI Message Stream 出现 begin_final_answer 且 Final Answer 在其后", async () => {
     const body = {
       provider: "deepseek",
-      model: "deepseek-v4-flash",
+      model: "deepseek-flash",
       apiKey: KEY,
       custom: { providerName: "", baseURL: "", model: "" },
       reasoningEffort: "default",
@@ -498,7 +498,7 @@ describeDeepSeek("DeepSeek Real Streaming Perf（DEEPSEEK_TEST_API_KEY 存在时
       "写一篇三百字的学习计划，包含一个 Markdown 表格。",
       "列出五个学习习惯并逐条解释。",
     ];
-    const { model } = await resolveLanguageModel({ provider: "deepseek", model: "deepseek-v4-flash", apiKey: KEY });
+    const { model } = await resolveLanguageModel({ provider: "deepseek", model: "deepseek-flash", apiKey: KEY });
     let fallbacks = 0;
     let samples = 0;
     const reasonCounts: Record<string, number> = {};

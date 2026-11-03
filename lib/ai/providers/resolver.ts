@@ -13,7 +13,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { LanguageModel } from "ai";
 import { AIError } from "@/lib/ai/errors";
 import { AIProviderId, AICustomConfig, AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
-import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
+import { DEEPSEEK_MODELS, DEEPSEEK_LEGACY_MODEL_ALIASES, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
 import { OPENCODE_MODELS, fetchOpenCodeGoModels, openCodeGoTransformRequestBody, OPENCODE_SESSION_HEADER, resolveOpenCodeGoSessionId, getOpenCodeGoBaseURL, OPENCODE_USER_AGENT } from "@/lib/ai/providers/openCodeGo";
 import { getProviderConfig } from "@/lib/ai/providers/registry";
 
@@ -39,7 +39,8 @@ export async function resolveModelDefinition(input: Pick<ResolveModelInput, "pro
   if (!model) return null;
 
   if (input.provider === "deepseek") {
-    return DEEPSEEK_MODELS.find((m) => m.id === model) ?? null;
+    const canonical = DEEPSEEK_LEGACY_MODEL_ALIASES[model] ?? model;
+    return DEEPSEEK_MODELS.find((m) => m.id === canonical) ?? null;
   }
 
   if (input.provider === "custom-openai") {

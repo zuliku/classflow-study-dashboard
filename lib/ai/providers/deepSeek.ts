@@ -1,19 +1,23 @@
 import { AI } from "@/lib/ai/config";
 import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 
-/** DeepSeek 官方模型（Task 1 正式支持；默认 V4 Flash：速度/价格更适合日常 Kiro Chat） */
+/** DeepSeek 官方模型（2026-11 官方 Models & Pricing；默认 V4.1 Flash） */
 export const DEEPSEEK_MODELS: AIModelDefinition[] = [
   {
-    id: "deepseek-v4-flash",
-    name: "V4 Flash",
+    // 官方模型名：deepseek-flash（DeepSeek-V4.1-Flash-1017）
+    // 旧名 deepseek-v4-flash / deepseek-v4-flash-vision-exp 仍被官方接受，见 LEGACY aliases
+    id: "deepseek-flash",
+    name: "V4.1 Flash",
     provider: "deepseek",
     vendor: "deepseek",
     transport: "openai-chat",
     capabilities: {
       streaming: true,
       tools: true,
-      vision: false,
+      // 官方 Vision：JPEG / PNG / GIF / WebP（本项目附件管线只声明已验证格式）
+      vision: true,
       fileParts: false,
+      visionMimeTypes: ["image/jpeg", "image/png", "image/webp"],
       // DeepSeek V4 Thinking Mode（Reasoning Phase 2）：
       // 有效档位只有 high / max（low / medium 会被官方映射为 high，不制造假档位）。
       // default 保持历史稳定行为（thinking disabled，见 deepSeekTransformRequestBody）。
@@ -48,7 +52,13 @@ export const DEEPSEEK_MODELS: AIModelDefinition[] = [
   },
 ];
 
-export const DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash";
+/** 已下线 / 改名的官方模型 → 当前 canonical id（历史选择与旧会话仍可解析） */
+export const DEEPSEEK_LEGACY_MODEL_ALIASES: Record<string, string> = {
+  "deepseek-v4-flash": "deepseek-flash",
+  "deepseek-v4-flash-vision-exp": "deepseek-flash",
+};
+
+export const DEEPSEEK_DEFAULT_MODEL = "deepseek-flash";
 
 export function getDeepSeekConfig(apiKey: string): AIProviderConfig {
   return { baseURL: AI.DEEPSEEK_BASE_URL, apiKey };

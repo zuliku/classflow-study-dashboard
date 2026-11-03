@@ -33,7 +33,7 @@ run("DeepSeek → get_learning_outlook Tool Call → Tool Result → final（2 �
     baseURL: AI.DEEPSEEK_BASE_URL,
     apiKey: KEY,
     transformRequestBody: deepSeekTransformRequestBody,
-  })("deepseek-v4-flash");
+  })("deepseek-flash");
 
   const userMsg = "查看我未来7天的学习安排。必须先调用 get_learning_outlook；得到结果后只回复一句简短结论。";
   const system = "你是 ClassFlow Kiro；必须使用提供的工具获取真实数据，回答简短。";

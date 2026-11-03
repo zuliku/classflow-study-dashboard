@@ -30,9 +30,9 @@ describe("Kiro Web PDF Vision — model whitelist", () => {
     // grok-4.5 已转入 Responses-unsupported（Phase 3.0）→ 不再进入 Vision whitelist
     expect(ids).not.toContain("grok-4.5");
   });
-  it("A1b. vision:false 模型（deepseek-v4-flash）不在 whitelist", () => {
-    expect(isWebPdfVisionModel("deepseek-v4-flash")).toBe(false);
-    expect(getWebPdfVisionModelOptions().some((m) => m.id === "deepseek-v4-flash")).toBe(false);
+  it("A1b. DeepSeek 模型不在 Web PDF Vision whitelist（固定 OpenCode Go）", () => {
+    expect(isWebPdfVisionModel("deepseek-flash")).toBe(false);
+    expect(getWebPdfVisionModelOptions().some((m) => m.id === "deepseek-flash")).toBe(false);
   });
   it("A1c. anthropic-messages 模型（minimax-m3）不在 whitelist", () => {
     expect(isWebPdfVisionModel("minimax-m3")).toBe(false);
@@ -41,7 +41,7 @@ describe("Kiro Web PDF Vision — model whitelist", () => {
 
   it("A2. normalize：合法保留；非法一律 → mimo-v2.5（统一 invalid→default 语义）", () => {
     expect(normalizeWebPdfVisionModel("mimo-v2.5")).toBe("mimo-v2.5");
-    expect(normalizeWebPdfVisionModel("deepseek-v4-flash")).toBe("mimo-v2.5");
+    expect(normalizeWebPdfVisionModel("deepseek-flash")).toBe("mimo-v2.5");
     expect(normalizeWebPdfVisionModel("random-model")).toBe("mimo-v2.5");
     expect(normalizeWebPdfVisionModel("")).toBe(DEFAULT_WEB_PDF_VISION_MODEL);
     expect(normalizeWebPdfVisionModel(null)).toBe(DEFAULT_WEB_PDF_VISION_MODEL);

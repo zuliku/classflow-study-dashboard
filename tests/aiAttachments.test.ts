@@ -143,11 +143,12 @@ describe("Vision Capability（真实约束）", () => {
     expect(getModelCapabilities({ provider: "opencode-go", model: "step-5-preview" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "deepseek-v4-pro" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "glm-5.2" }).vision).toBe(false);
-    // 无 vision 声明：混元 Hy3 / LongCat-2.0（纯语言）/ DeepSeek-V4-Flash（vision 属独立 -vision-exp 模型）
+    // 无 vision 声明：混元 Hy3 / LongCat-2.0（纯语言）
     expect(getModelCapabilities({ provider: "opencode-go", model: "hy3" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "hy4-preview" }).vision).toBe(false);
     expect(getModelCapabilities({ provider: "opencode-go", model: "longcat-2.0" }).vision).toBe(false);
-    expect(getModelCapabilities({ provider: "deepseek", model: "deepseek-v4-flash" }).vision).toBe(false);
+    // DeepSeek 官方 V4.1 Flash 已支持图片输入
+    expect(getModelCapabilities({ provider: "deepseek", model: "deepseek-flash" }).vision).toBe(true);
   });
 
   it("Custom Provider：默认保守（全 false），除非用户显式开启", () => {

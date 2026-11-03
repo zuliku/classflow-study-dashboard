@@ -29,7 +29,7 @@ const describeDeepSeek = KEY ? describe : describe.skip;
 const TEST_TIMEOUT = 60_000;
 
 describeDeepSeek("DeepSeek 真实回归（DEEPSEEK_TEST_API_KEY 存在时运行）", () => {
-  const opts = { provider: "deepseek" as const, model: "deepseek-v4-flash", apiKey: KEY };
+  const opts = { provider: "deepseek" as const, model: "deepseek-flash", apiKey: KEY };
 
   it("Connection Test：generateText 无 tools → success", async () => {
     const { model } = await resolveLanguageModel(opts);
@@ -39,7 +39,7 @@ describeDeepSeek("DeepSeek 真实回归（DEEPSEEK_TEST_API_KEY 存在时运行�
 
   it("request body 明确包含 thinking.type=disabled（纯函数断言，不依赖网络）", () => {
     const body = deepSeekTransformRequestBody({
-      model: "deepseek-v4-flash",
+      model: "deepseek-flash",
       messages: [{ role: "user", content: "hi" }],
       tools: [{ type: "function", function: { name: "search_assignments" } }],
     });
@@ -51,7 +51,7 @@ describeDeepSeek("DeepSeek 真实回归（DEEPSEEK_TEST_API_KEY 存在时运行�
     // 与 create_reminder 相同结构：discriminatedUnion → 根节点无 type
     const badRoot = { anyOf: [{ type: "object", properties: { timingMode: { const: "relative" } } }] };
     const body = deepSeekTransformRequestBody({
-      model: "deepseek-v4-flash",
+      model: "deepseek-flash",
       messages: [],
       tools: [{ type: "function", function: { name: "create_reminder", parameters: badRoot } }],
     });

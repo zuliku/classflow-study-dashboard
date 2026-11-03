@@ -127,7 +127,7 @@ describe("生产 resolver 会话头透出（stub fetch）", () => {
   it("deepseek：绝不发送该头（原样）", async () => {
     const capture = captureHeadersWithFakeResponses();
     try {
-      const { model } = await resolveLanguageModel({ provider: "deepseek", model: "deepseek-v4-flash", apiKey: KEY_A });
+      const { model } = await resolveLanguageModel({ provider: "deepseek", model: "deepseek-flash", apiKey: KEY_A });
       await generateText({ model, prompt: "hi", maxOutputTokens: 8 });
     } finally {
       capture.restore();

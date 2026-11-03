@@ -77,7 +77,7 @@ import { handleModels as modelsGET } from "@/app/api/ai/models/route";
 describe("/api/ai/chat（流式）", () => {
   const baseBody = {
     provider: "deepseek",
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     apiKey: "sk-test-secret",
     messages: [{ role: "user", content: "什么是工具变量？" }],
   };
@@ -309,7 +309,7 @@ describe("/api/ai/chat（流式）", () => {
 describe("/api/ai/test（连接测试）", () => {
   const baseBody = {
     provider: "deepseek",
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     apiKey: "sk-test-secret",
   };
 
@@ -380,8 +380,8 @@ describe("/api/ai/models", () => {
   it("deepseek：返回 registry 固定列表", async () => {
     const res = await modelsGET(new Request("http://localhost/api/ai/models?provider=deepseek") as never);
     const data = (await res.json()) as { models: { id: string }[]; defaultModel: string };
-    expect(data.models.map((m) => m.id)).toEqual(["deepseek-v4-flash", "deepseek-v4-pro"]);
-    expect(data.defaultModel).toBe("deepseek-v4-flash");
+    expect(data.models.map((m) => m.id)).toEqual(["deepseek-flash", "deepseek-v4-pro"]);
+    expect(data.defaultModel).toBe("deepseek-flash");
   });
 
   it("opencode-go：远端 /models 失败 → 回落 registry fallback", async () => {

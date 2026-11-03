@@ -11,12 +11,13 @@ import { OPENCODE_MODELS, filterRemoteGoModels } from "@/lib/ai/providers/openCo
 import type { AIModelVendor } from "@/lib/ai/providers/types";
 
 describe("Provider Registry", () => {
-  it("DeepSeek：V4 Flash（默认）/ V4 Pro，openai-chat transport", () => {
+  it("DeepSeek：V4.1 Flash（默认）/ V4 Pro，openai-chat transport", () => {
     const models = getModelsForProvider("deepseek");
-    expect(models.map((m) => m.id)).toEqual(["deepseek-v4-flash", "deepseek-v4-pro"]);
-    expect(getDefaultModel("deepseek")).toBe("deepseek-v4-flash");
+    expect(models.map((m) => m.id)).toEqual(["deepseek-flash", "deepseek-v4-pro"]);
+    expect(getDefaultModel("deepseek")).toBe("deepseek-flash");
     expect(models.every((m) => m.transport === "openai-chat")).toBe(true);
-    expect(DEEPSEEK_MODELS[0].name).toBe("V4 Flash");
+    expect(DEEPSEEK_MODELS[0].name).toBe("V4.1 Flash");
+    expect(DEEPSEEK_MODELS[0].capabilities.vision).toBe(true);
   });
 
   it("OpenCode Go：官方三 transport 注册表（2026-10-29 官方目录 28 款非免费模型）", () => {
@@ -103,7 +104,7 @@ describe("Provider Registry", () => {
   });
 
   it("展示名：DeepSeek 显示短名而非完整 id", () => {
-    expect(getActiveModelName({ provider: "deepseek", model: "deepseek-v4-flash", customModel: "" })).toBe("V4 Flash");
+    expect(getActiveModelName({ provider: "deepseek", model: "deepseek-flash", customModel: "" })).toBe("V4.1 Flash");
     expect(getActiveModelName({ provider: "deepseek", model: "deepseek-v4-pro", customModel: "" })).toBe("V4 Pro");
   });
 

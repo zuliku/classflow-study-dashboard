@@ -39,10 +39,15 @@ const providerOf = (m: unknown) => (m as { provider?: string }).provider ?? "";
 const modelIdOf = (m: unknown) => (m as { modelId?: string }).modelId ?? "";
 
 describe("resolveModelDefinition", () => {
-  it("A. DeepSeek：deepseek-v4-flash → openai-chat", async () => {
-    const def = await resolveModelDefinition({ provider: "deepseek", model: "deepseek-v4-flash" });
+  it("A. DeepSeek：deepseek-flash → openai-chat", async () => {
+    const def = await resolveModelDefinition({ provider: "deepseek", model: "deepseek-flash" });
     expect(def?.transport).toBe("openai-chat");
     expect(def?.provider).toBe("deepseek");
+  });
+
+  it("A2. DeepSeek 旧名 deepseek-v4-flash 归一为 deepseek-flash", async () => {
+    const def = await resolveModelDefinition({ provider: "deepseek", model: "deepseek-v4-flash" });
+    expect(def?.id).toBe("deepseek-flash");
   });
 
   it("B. OpenCode Messages：minimax-m3 → anthropic-messages", async () => {

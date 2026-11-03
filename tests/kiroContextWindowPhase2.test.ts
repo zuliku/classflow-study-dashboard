@@ -78,7 +78,7 @@ describe("官方可核实 contextWindowTokens", () => {
 
   it("getModelContextWindowTokens：provider 映射正确；custom / 未知 → undefined", () => {
     expect(getModelContextWindowTokens({ provider: "opencode-go", model: "kimi-k3" })).toBe(1_000_000);
-    expect(getModelContextWindowTokens({ provider: "deepseek", model: "deepseek-v4-flash" })).toBe(1_000_000);
+    expect(getModelContextWindowTokens({ provider: "deepseek", model: "deepseek-flash" })).toBe(1_000_000);
     expect(getModelContextWindowTokens({ provider: "opencode-go", model: "not-a-model" })).toBeUndefined();
     expect(getModelContextWindowTokens({ provider: "custom-openai", model: "kimi-k3" })).toBeUndefined();
   });
