@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { usePresence } from "@/lib/usePresence";
@@ -131,6 +131,14 @@ export function UISelect<T extends string | number>({
     setOpen(false);
   }, []);
 
+  /** Esc / 选择后归还焦点：立即 + 下一帧各一次，避免退出期间卸载焦点元素导致焦点落回 body */
+  const restoreTriggerFocus = useCallback(() => {
+    triggerRef.current?.focus();
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  }, []);
+
   // outside click / scroll / resize 关闭
   useEffect(() => {
     if (!open) return;
@@ -171,16 +179,17 @@ export function UISelect<T extends string | number>({
         e.stopPropagation();
         e.preventDefault();
         closeMenu();
-        triggerRef.current?.focus();
+        restoreTriggerFocus();
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, closeMenu]);
+  }, [open, closeMenu, restoreTriggerFocus]);
 
   // 打开时聚焦：searchable → 搜索框；否则当前选中项。
   // 只在 open/mounted 变化时执行一次，不跟随 hover 的 activeIndex（避免焦点被抢）。
-  useEffect(() => {
+  // useLayoutEffect：在 listbox 可见前完成聚焦，避免「Open 后立刻按方向键」被 trigger 吞掉。
+  useLayoutEffect(() => {
     if (!open || !mounted) return;
     if (searchable) {
       searchRef.current?.focus({ preventScroll: true });
@@ -240,7 +249,7 @@ export function UISelect<T extends string | number>({
     // 选择完成：立即卸载（不经退出窗口，避免拦截紧随其后的 Escape / 上层交互）——保留既有语义
     setSuppressRender(true);
     setOpen(false);
-    triggerRef.current?.focus();
+    restoreTriggerFocus();
   };
 
   const onTriggerKeyDown = (e: React.KeyboardEvent) => {
@@ -259,7 +268,7 @@ export function UISelect<T extends string | number>({
       e.preventDefault();
       e.stopPropagation();
       closeMenu();
-      triggerRef.current?.focus();
+      restoreTriggerFocus();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
       activeScrollRef.current = "keyboard";
