@@ -327,15 +327,15 @@ export const KiroComposer = React.memo(function KiroComposer({
     text.trim().length === 0
       ? null
       : !configured
-        ? "尚未配置 AI 服务，点击下方「配置 AI 服务」"
+        ? "尚未配置 AI 服务"
         : modelUnavailable
           ? "当前模型已下线，请切换模型后再发送"
           : hasProcessing
             ? "附件正在读取，完成后即可发送"
             : imagesBlocked
-              ? "当前模型不支持图片，请切换支持图片的模型或移除图片"
+              ? "请切换支持图片的模型或移除图片"
               : scannedBlocked
-                ? "扫描版 PDF 需要支持图片理解的模型，请切换模型"
+                ? "扫描版 PDF 需要视觉模型，请切换模型"
                 : turnInFlight
                   ? "Kiro 正在回复，稍候再发送"
                   : preparingSend || submitting || preparingVision
@@ -763,7 +763,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                         : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
                     )}
                   >
-                    {scannedBlocked ? "扫描型 PDF 需要支持图片理解的模型" : "当前模型不支持图片理解"}
+                    {scannedBlocked ? "扫描型 PDF 需要视觉模型" : "当前模型不支持图片理解"}
                     <button
                       onClick={() => setOpenMenu("model")}
                       className="underline underline-offset-2 decoration-line-strong hover:text-charcoal"
@@ -846,10 +846,10 @@ export const KiroComposer = React.memo(function KiroComposer({
                 {slashSkills.length === 0 && (
                   <p className="px-3 py-2 text-[11px] text-sandrift">
                     {slashEmptyReason === "no-skills"
-                      ? "暂无已启用的 Workflow Skill，去设置启用"
+                      ? "暂无已启用的 Skill"
                       : slashEmptyReason === "no-bridge"
                         ? "技能列表暂不可用，稍后再试"
-                        : "无匹配的 Skill，换个关键词试试"}
+                        : "无匹配 Skill"}
                   </p>
                 )}
                 {slashSkills.map((s, index) => {
@@ -902,7 +902,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                 className="max-h-44 overflow-y-auto overscroll-contain py-1"
               >
                 {mentionOptions.length === 0 && (
-                  <p className="px-3 py-2 text-[11px] text-sandrift">无匹配，换个关键词试试（如课程名/任务名）</p>
+                  <p className="px-3 py-2 text-[11px] text-sandrift">无匹配结果</p>
                 )}
                 {mentionOptions.map((option, index) => {
                   const active = index === mentionActive;
@@ -1178,7 +1178,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                       : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
                   )}
                 >
-                <span>图片仅用于当前 Kiro 对话，不会自动保存到课程资料。</span>
+                <span>图片仅用于当前对话，不会保存到课程资料。</span>
                 <button
                   type="button"
                   data-testid="visual-privacy-dismiss"

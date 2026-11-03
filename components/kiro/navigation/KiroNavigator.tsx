@@ -252,7 +252,7 @@ export function KiroNavigator() {
     (project: KiroProjectRecord) => {
       confirmRequest({
         title: "删除项目？",
-        description: "项目中的对话不会被删除，它们将回到未归类对话。",
+        description: "对话不会被删除，会回到未归类。",
         confirmLabel: "删除",
         danger: true,
         onConfirm: () => {
@@ -304,7 +304,7 @@ export function KiroNavigator() {
     setMoreOpen(false);
     confirmRequest({
       title: "清空当前对话？",
-      description: "仅清除当前会话中的消息，不影响你的 ClassFlow 数据。",
+      description: "仅清除当前会话消息，不影响其他数据。",
       confirmLabel: "清空",
       danger: true,
       onConfirm: () => actions.newChat(),

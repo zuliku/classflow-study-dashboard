@@ -29,7 +29,7 @@ export function KiroMemorySettings() {
   const clearAll = () => {
     confirmRequest({
       title: "清空 Kiro 的全部记忆？",
-      description: "不会删除聊天记录、课程、任务或资料。",
+      description: "不会删除聊天记录、课程、任务与资料。",
       confirmLabel: "清空",
       danger: true,
       onConfirm: () => {

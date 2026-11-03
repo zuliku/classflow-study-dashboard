@@ -130,7 +130,7 @@ export function KiroComputerSessionSurface({
                 >
                   复制错误详情
                 </button>
-                <span className="text-[10px] text-sandrift">换种说法再试一次，或去 Composer 调整后重发</span>
+                <span className="text-[10px] text-sandrift">换种说法，或调整后重发</span>
               </div>
             </div>
             ))}

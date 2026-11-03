@@ -58,7 +58,7 @@ export function KiroShareSheet({ onClose }: { onClose: () => void }) {
         <h3 className="text-xs font-bold text-charcoal">分享对话</h3>
         {/* P1：边界声明（此前被压缩的较早内容缺席却不声明，对方拿到断裂依据） */}
         <p className="text-[10px] text-sandrift mt-1 leading-relaxed">
-          仅含当前可见对话；已压缩的较早内容与工具细节不包含在内
+          仅含当前可见对话，不含已压缩内容与工具细节。
         </p>
       </div>
       <div className="space-y-0.5">

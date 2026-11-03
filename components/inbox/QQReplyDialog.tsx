@@ -144,11 +144,11 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
       } else if (code === "QQ_SEND_UNCERTAIN") {
         // 结果不确定即锁定同 approval 二次发送，只允许关闭去检查（防重复外发）
         setConfirmLocked(true);
-        setError("发送结果不确定，请先去 QQ 检查是否已发送，确认未发送后再重新发起（不要重复点击发送）。");
+        setError("结果不确定，请先去 QQ 确认后再重试。");
       } else if (code === "TIMEOUT") {
         // 渲染侧超时只结束等待，Main 侧发送可能继续：按不确定锁定，防重复外发
         setConfirmLocked(true);
-        setError("发送超时，结果不确定，请先去 QQ 检查是否已发送，确认未发送后再重新发起（不要重复点击发送）。");
+        setError("发送超时，请先去 QQ 确认后再重试。");
       } else if (code === "QQ_RATE_LIMITED") {
         setError("发送过于频繁，请稍后重试");
       } else {
@@ -222,7 +222,7 @@ export function QQReplyDialog({ open, onOpenChange, item, onSent }: QQReplyDialo
             </div>
           </div>
           <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="输入回复内容..." rows={4} maxLength={2000} data-testid="qq-reply-text" className="mt-1 w-full p-3 bg-white border border-line rounded-lg text-sm resize-none focus:outline-none focus:border-charcoal" />
-          <p className="text-[11px] text-sandrift mt-1">{text.length}/2000 · 单次发送，不会自动拆分 {draftLoading ? "· 生成中..." : draftGenerated ? "· AI 草稿，可继续编辑" : ""}</p>
+          <p className="text-[11px] text-sandrift mt-1">{text.length}/2000 · 单次发送，不自动拆分 {draftLoading ? "· 生成中..." : draftGenerated ? "· AI 草稿，可继续编辑" : ""}</p>
           {draftError && <p className="text-[11px] text-danger mt-1">{draftError}</p>}
         </div>
 

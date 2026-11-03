@@ -213,7 +213,7 @@ export function ChannelSettings() {
           </div>
           <div>
             <p className="text-sm font-bold text-charcoal">还没有消息渠道</p>
-            <p className="text-xs text-sandrift mt-1">收到的消息会进入统一收件箱；是否交给 Kiro 处理由你决定。</p>
+            <p className="text-xs text-sandrift mt-1">消息进入统一收件箱，由你决定是否交给 Kiro。</p>
           </div>
           <div className="flex gap-2 mt-2">
             <span data-setting-id="extensions-qq-bot" className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ Bot</span>
@@ -421,7 +421,7 @@ function AddQQPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyChan
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="qq-bot" size={16} />QQ Bot 配置</div>
       <div><Field label="名称" required><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 机器人" data-testid="qq-add-name" /></Field></div>
       <div><Field label="App ID" required><Input value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456789" data-testid="qq-add-appid" mono /></Field></div>
-      <div><Field label="App Secret" required description="凭据会安全保存在当前设备。"><Input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} placeholder="••••••••" data-testid="qq-add-secret" mono /></Field></div>
+      <div><Field label="App Secret" required description="凭据保存在本机。"><Input type="password" value={appSecret} onChange={(e) => setAppSecret(e.target.value)} placeholder="••••••••" data-testid="qq-add-secret" mono /></Field></div>
       <div className="flex items-center gap-4">
         <Checkbox checked={receiveDirectMessages} onChange={setReceiveDirectMessages} label="接收私聊" />
         <Checkbox checked={receiveGroupMessages} onChange={setReceiveGroupMessages} label="接收群聊" />
@@ -480,12 +480,12 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="gmail" size={16} />Gmail 账号</div>
       <div className="bg-surface-soft border border-line rounded-xl p-4 space-y-2">
         <p className="text-xs font-bold text-charcoal">连接 Gmail</p>
-        <p className="text-[11px] text-sandrift">将打开浏览器完成 Google 授权，仅请求读取和发送邮件权限。</p>
+        <p className="text-[11px] text-sandrift">打开浏览器完成 Google 授权，仅请求邮件读取与发送权限。</p>
         <ul className="text-[11px] text-sandrift list-disc ml-4 space-y-1">
-          <li>首次同步最近 7 天邮件，最多 50 封</li>
+          <li>首次同步最近 7 天邮件（最多 50 封）</li>
           <li>之后每分钟自动同步</li>
-          <li>附件仅显示基本信息，不会自动下载</li>
-          <li>回复仅回复发件人，保持原线程</li>
+          <li>附件仅显示信息，不自动下载</li>
+          <li>回复发件人并保持原线程</li>
         </ul>
       </div>
       {error && <InlineErrorState testid="gmail-add-error">{error}</InlineErrorState>}
@@ -548,9 +548,9 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
       <div className="flex items-center gap-2 text-xs font-bold text-charcoal"><ChannelBrandIcon source="qq-mail" size={16} />QQ 邮箱配置</div>
       <div><Field label="名称" required><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="我的 QQ 邮箱" data-testid="qqmail-add-name" /></Field></div>
       <div><Field label="QQ 邮箱地址" required><Input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="example@qq.com" data-testid="qqmail-add-email" /></Field></div>
-      <div><Field label="授权码" required description="请输入 QQ 邮箱授权码，不是 QQ 登录密码。凭据会安全保存在当前设备。"><Input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码，不是 QQ 登录密码" data-testid="qqmail-add-authcode" mono /></Field></div>
+      <div><Field label="授权码" required description="请输入 QQ 邮箱授权码（不是登录密码），凭据保存在本机。"><Input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码" data-testid="qqmail-add-authcode" mono /></Field></div>
       <div className="bg-surface-soft border border-line rounded-xl p-3 space-y-1">
-        <p className="text-[11px] text-sandrift">仅读取收件箱 · 首次同步最近 7 天最多 50 封 · 之后每分钟自动同步 · 附件仅显示基本信息，不会自动下载</p>
+        <p className="text-[11px] text-sandrift">仅读取收件箱 · 首次同步最近 7 天（最多 50 封）· 每分钟自动同步</p>
         <p className="text-[11px] text-sandrift">获取授权码：QQ 邮箱 → 设置 → 账户 → 生成授权码</p>
       </div>
       {error && <InlineErrorState testid="qqmail-add-error">{error}</InlineErrorState>}

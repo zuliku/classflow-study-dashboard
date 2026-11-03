@@ -178,17 +178,17 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
         <div>
           <h4 className="text-sm font-bold text-charcoal">将工作流保存为 Skill</h4>
           <p className="text-[11px] text-sandrift">
-            {prebuiltDraft ? "来自桌面成功轨迹 · 预览 · 测试 · 安装" : "Kiro 自动抽象 · 预览 · 测试 · 安装"}
+            {prebuiltDraft ? "来自桌面轨迹 · 预览 · 测试 · 安装" : "自动整理 · 预览 · 测试 · 安装"}
           </p>
         </div>
       </div>
 
       {!trace && !prebuiltDraft ? (
-        <p className="text-xs text-sandrift">请先在 Kiro 中完成一套可执行流程。</p>
+        <p className="text-xs text-sandrift">先完成一套可执行流程。</p>
       ) : loading ? (
         <div className="flex items-center gap-2 text-xs text-sandrift">
           <Loader2 className="w-4 h-4 animate-spin" />
-          Kiro 正在抽象工作流...
+          正在整理流程…
         </div>
       ) : error ? (
         <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>
@@ -203,7 +203,7 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
                 data-testid="skill-distill-name"
                 className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm"
               />
-              <p className="text-[11px] text-sandrift">小写 hyphen，如 course-notification-to-task，非 2026-08-19-高数群第三次作业</p>
+              <p className="text-[11px] text-sandrift">小写字母与连字符，例如 course-notification-to-task</p>
             </div>
             <div>
               <label className="text-xs font-bold text-charcoal">描述</label>
@@ -214,7 +214,7 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
                 className="mt-1 w-full h-9 px-3 bg-white border border-line rounded-lg text-sm"
               />
               <p className="text-[11px] text-sandrift mt-1">
-                描述同时用于帮助 Kiro 判断何时使用此 Skill，请说明它能做什么，以及适用场景。
+                说明 Skill 的用途与适用场景。
               </p>
             </div>
             <div>
@@ -230,7 +230,7 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-[#F7F5F5] border border-line rounded-lg p-3">
-                <p className="text-xs font-bold text-charcoal">需要的 ClassFlow 能力</p>
+                <p className="text-xs font-bold text-charcoal">需要的能力</p>
                 <p className="text-[11px] text-sandrift mt-1">{draft.requiredTools.join(", ") || "无"}</p>
               </div>
               <div className="bg-[#F7F5F5] border border-line rounded-lg p-3">

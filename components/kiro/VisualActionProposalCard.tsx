@@ -357,7 +357,7 @@ export function VisualActionProposalCard({
               <div className="mt-1 flex flex-wrap items-center gap-2 bg-alabaster/60 border border-line-soft rounded-lg px-2 py-1.5">
                 <p className="text-[10px] text-satin-grey leading-snug">“{a.evidence.text}”</p>
                 {/* V1.5.1：来源唯一（1 张截图）时才显示行级「查看原图」——
-                    多来源时 ClassFlow 不知道这条 Action 来自第几张图，
+                    多来源时无法确定 Action 来自哪张图，
                     禁止默认打开 source[0]（错误归因）；改由顶部 Source Strip 浏览全部来源 */}
                 {previewableCount === 1 && (
                   <button
@@ -393,7 +393,7 @@ export function VisualActionProposalCard({
     if (runtimeState?.status === "stale") {
       return (
         <span className="mr-auto text-[10px] font-semibold text-danger">
-          方案已过期：ClassFlow 中的课程或任务已经发生变化。
+          方案已过期，课程或任务已变化。
           {clarificationCount > 0 && <span className="text-sandrift">· {clarificationCount} 项仍待确认</span>}
         </span>
       );

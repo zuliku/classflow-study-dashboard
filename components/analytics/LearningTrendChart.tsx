@@ -59,7 +59,7 @@ export function LearningTrendChart({
             计划学习
           </span>
         ) : (
-          <span className="text-[10px] text-satin-grey">计划记录不足，暂不显示完整计划序列</span>
+          <span className="text-[10px] text-satin-grey">计划记录不足，暂不显示</span>
         )}
         <span className="ml-auto text-[10px] text-satin-grey">单位：分钟</span>
       </div>

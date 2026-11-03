@@ -65,7 +65,7 @@ function EmptyState({ onNewTask, onPlan }: { onNewTask: () => void; onPlan: () =
     <div className="bg-surface border border-line rounded-2xl p-10 shadow-subtle flex flex-col items-center justify-center text-center gap-1.5">
       <p className="text-xs font-bold text-charcoal">学习洞察会随着使用逐渐形成</p>
       <p className="text-[11px] text-sandrift leading-relaxed">
-        完成 1 个任务或记 1 次专注，这里就会生成趋势图。
+        完成 1 个任务或专注 1 次即可生成趋势。
       </p>
       <p className="text-[11px] font-semibold text-charcoal/80 leading-relaxed">{progressLine}</p>
       <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
@@ -387,7 +387,7 @@ export function LearningAnalyticsView() {
                     </button>
                     {data.coverage.focusReliability === "partial" && (
                       <p className="text-[10px] text-satin-grey mb-3 -mt-1">
-                        专注记录在该区间不完整，以下为已记录部分
+                        该区间记录不完整，以下为已记录部分
                       </p>
                     )}
                     <DisclosureRegion open={distOpen}>

@@ -96,7 +96,7 @@ export function ReminderRuntime() {
           try {
             useToastStore.getState().pushToast({
               type: "warning",
-              message: "系统已阻止通知权限，请在系统设置中允许后才能收到系统提醒（站内提醒不受影响）",
+              message: "系统通知被阻止，请在系统设置中允许；站内提醒不受影响。",
             });
           } catch {
             /* toast 失败不影响主流程 */

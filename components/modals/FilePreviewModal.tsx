@@ -188,7 +188,7 @@ export function FilePreviewModal() {
                   文件读取失败
                 </h4>
                 <p className="text-xs text-sandrift">
-                  文件找不到了，重新上传即可预览；偶发读取失败可先重试。
+                  文件不存在，请重新上传或重试。
                 </p>
               </div>
               <button
@@ -237,7 +237,7 @@ export function FilePreviewModal() {
                 </a>
               ) : (
                 <div className="text-xs text-sandrift p-3 bg-background rounded-xl border border-line">
-                  该资料尚未上传文件内容，上传后可预览与下载
+                  尚未上传文件内容，上传后可预览。
                 </div>
               )}
             </div>

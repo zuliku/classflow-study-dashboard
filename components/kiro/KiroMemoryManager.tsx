@@ -95,7 +95,7 @@ export function KiroMemoryManager({
   const clearAll = () => {
     confirmRequest({
       title: "清空 Kiro 的全部记忆？",
-      description: "不会删除聊天记录、课程、任务或资料。",
+      description: "不会删除聊天记录、课程、任务与资料。",
       confirmLabel: "清空",
       danger: true,
       onConfirm: () => {
@@ -266,14 +266,14 @@ export function KiroMemoryManager({
             })
           )}
           {staleMemo.length > 0 && (
-            <p className="text-[10px] text-sandrift pt-1">有 {staleMemo.length} 条记忆的关联课程/学期已不存在，不进入当前上下文。</p>
+            <p className="text-[10px] text-sandrift pt-1">有 {staleMemo.length} 条记忆关联的课程或学期已不存在。</p>
           )}
         </div>
 
         {/* Footer */}
         <div className="shrink-0 px-4 py-2.5 border-t border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <p className="text-[10px] text-sandrift leading-relaxed max-w-[420px]">
-            记忆仅保存在本机，按需发送给当前 AI 服务。
+            记忆保存在本机，按需发送给当前 AI 服务。
           </p>
           {memory.memories.length > 0 && (
             <Button

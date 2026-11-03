@@ -43,7 +43,7 @@ test("其他页面空态：课程/课表/分析均为真实空状态", async ({ 
   // 课程页
   await page.getByRole("button", { name: "课程资料" }).first().click();
   await expect(page.getByText("暂无课程").first()).toBeVisible();
-  await expect(page.getByText("添加第一门课程或导入课表")).toBeVisible();
+  await expect(page.getByText("添加课程或导入课表")).toBeVisible();
 
   // 分析页
   await page.getByRole("button", { name: "学习洞察" }).first().click();

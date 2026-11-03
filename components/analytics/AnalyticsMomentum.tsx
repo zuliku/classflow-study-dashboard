@@ -222,7 +222,7 @@ export function AnalyticsMomentum() {
               {/* 全零空态弱提示（84 天全 0 时热力空白，给一个开始入口而非沉默数字） */}
               {data.activeDays === 0 && data.totalMinutes === 0 && (
                 <p className="text-[11px] text-sandrift">
-                  完成 1 个任务或一次专注，热力图即开始点亮。
+                  完成 1 个任务或专注 1 次即可点亮。
                 </p>
               )}
             </div>

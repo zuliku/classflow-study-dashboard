@@ -98,7 +98,7 @@ export function KiroHistoryPanel({
   const clearAll = () => {
     confirmRequest({
       title: "清空全部历史？",
-      description: "仅删除 Kiro 对话，不影响课程、任务或课程资料。",
+      description: "仅删除对话，不影响课程、任务与资料。",
       confirmLabel: "清空",
       danger: true,
       onConfirm: () => {

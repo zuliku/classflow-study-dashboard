@@ -151,7 +151,7 @@ describe("Phase1 - Demo leakage cleanup RED tests", () => {
     expect(src).toContain("继续");
     expect(src).toContain("确认发送");
     expect(src).toContain("原主题");
-    expect(src).toContain("将在原邮件会话中回复");
+    expect(src).toContain("在原邮件会话中回复");
   });
 
   it("8. MCP copy should be user-friendly, no Remote MCP (Streamable HTTP) in main description", () => {
@@ -161,7 +161,7 @@ describe("Phase1 - Demo leakage cleanup RED tests", () => {
     expect(src).not.toContain("MCP Tools");
     expect(src).not.toContain("Streamable HTTP");
     // Check that at least main description uses simplified wording
-    expect(src).toContain("支持远程 MCP 服务");
+    expect(src).toContain("支持远程 MCP");
   });
 
   it("9. Channel technical copy should be simplified, no PKCE/loopback in user UI", () => {

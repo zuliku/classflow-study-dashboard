@@ -215,7 +215,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 使用终端？",
       description:
-        "终端命令可能修改文件、安装依赖或访问工作区外资源。普通命令在「授权范围内自动」模式下可能直接执行；删除与高风险命令仍需确认。",
+        "终端可修改文件、安装依赖或访问工作区外资源；高风险命令仍需确认。",
       confirmLabel: "允许",
       onConfirm: () => setTerminalEnabled(true),
     });
@@ -236,7 +236,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 查看桌面？",
       description:
-        "Kiro 可只读查看当前屏幕与界面控件，不会点击或输入；截图仅本次使用，不保存到磁盘。如需操作界面，可单独开启「允许 Kiro 操作电脑」。",
+        "只读查看屏幕与界面控件，不会点击或输入；截图不保存到磁盘。",
       confirmLabel: "允许查看",
       onConfirm: () => setDesktopControlEnabled(true),
     });
@@ -255,7 +255,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 操作电脑？",
       description:
-        "Kiro 可在当前窗口点击、输入与按键，并自动重新观察确认结果。发送、提交、删除等高风险动作逐次确认；敏感信息不会由 Kiro 输入，可随时停止。",
+        "可在当前窗口点击、输入与按键；高风险动作逐次确认，敏感信息不由 Kiro 输入，可随时停止。",
       confirmLabel: "允许操作",
       onConfirm: () => {
         // 操作的前提是观察能力；一并开启（两者仍各自独立持久化）
@@ -277,7 +277,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 读写剪贴板？",
       description:
-        "Kiro 可在你确认后读取剪贴板（可能含敏感信息）或写入文本（覆盖当前内容）；每次读写都需确认。",
+        "读取或写入剪贴板（可能含敏感信息），每次操作都需确认。",
       confirmLabel: "允许剪贴板",
       onConfirm: () => setDesktopClipboardEnabled(true),
     });
@@ -295,7 +295,7 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: "允许 Kiro 后台操作电脑？",
       description:
-        "Kiro 可在窗口未置顶时直接操作界面控件，不抢夺鼠标与焦点；你只能从执行记录与审计里看到它做了什么，看不到实时过程。坐标类操作仍需前台，最小化窗口无法后台操作。",
+        "允许在窗口未置顶时操作控件，不抢焦点；过程仅见执行记录。",
       confirmLabel: "允许后台操作",
       onConfirm: () => setBackgroundEnabled(true),
     });
@@ -351,10 +351,10 @@ export function KiroAgentSettings() {
     confirmRequest({
       title: isSandboxWs ? "删除 Kiro 内置工作区？" : "移除本地文件夹授权？",
       description: isSandboxWs
-        ? "此操作会删除该内置工作区在当前应用中保存的文件和工作区记录，无法撤销。"
+        ? "删除此工作区的文件与记录，无法撤销。"
         : isNativeWs
-          ? "ClassFlow 将忘记这个文件夹的授权，但不会删除电脑上的任何文件。"
-          : "ClassFlow 将忘记这个文件夹的授权记录，但不会删除电脑上的任何文件。",
+          ? "将忘记此文件夹的授权，不删除电脑上的文件。"
+          : "将忘记此文件夹的授权记录，不删除电脑上的文件。",
       confirmLabel: isSandboxWs ? "删除" : "移除",
       danger: true,
       onConfirm: () => void deleteWorkspace(ws),
@@ -364,7 +364,7 @@ export function KiroAgentSettings() {
   return (
     <SettingsSection
       title="Agent 与权限"
-      description="可操作的文件范围、自动执行程度与可访问位置。"
+      description="文件范围、执行权限与访问位置。"
     >
       <div className="text-xs space-y-4" data-testid="settings-kiro-agent">
         <SettingsGroup title="文件操作">
@@ -453,7 +453,7 @@ export function KiroAgentSettings() {
               description={
                 desktopControlEnabled
                   ? "只读 · 不会点击或输入"
-                  : "只读查看当前屏幕与界面控件。"
+                  : "只读查看屏幕与界面控件。"
               }
             >
               <SettingsToggle
@@ -510,7 +510,7 @@ export function KiroAgentSettings() {
               description={
                 backgroundEnabled
                   ? "未置顶窗口直接操作，不抢焦点；仅执行记录可见"
-                  : "窗口未置顶时操作控件，不抢夺鼠标与焦点。"
+                  : "未置顶窗口操作控件，不抢焦点。"
               }
             >
               <SettingsToggle
@@ -643,7 +643,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-permissions"
             title="安全边界"
-            description="文件仅限授权工作区；终端与电脑操作单独开启；高风险动作逐次确认。"
+            description="文件仅限授权工作区；终端与电脑操作需单独开启，高风险动作逐次确认。"
           >
             <span className="text-[11px] text-satin-grey shrink-0">
               <ShieldAlert className="w-3.5 h-3.5 inline mr-1 text-sandrift" />

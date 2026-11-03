@@ -122,7 +122,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   return (
     <SettingsSection
       title="任务与提醒"
-      description="任务默认值、临近截止提示与提醒通知偏好。"
+      description="任务默认值、截止提醒与通知偏好。"
     >
       <div className="text-xs space-y-4" data-testid="settings-tasks">
         <SettingsGroup title="任务">
@@ -146,7 +146,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-ddl-time"
           title="默认截止时间"
-            description="新建任务预填的截止时刻（HH:mm）；不影响已有任务。"
+            description="新建任务的默认截止时间（HH:mm）。"
           modified={modified.has("defaultDDLTime")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultDDLTime"))}
           resetAriaLabel="将默认截止时间恢复默认"
@@ -164,7 +164,6 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-task-priority"
           title="默认优先级"
-            description="新建任务预填的优先级。"
           modified={modified.has("defaultTaskPriority")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultTaskPriority"))}
           resetAriaLabel="将默认优先级恢复默认"
@@ -181,7 +180,6 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-task-status"
           title="默认状态"
-            description="新建任务预填的状态。"
           modified={modified.has("defaultTaskStatus")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultTaskStatus"))}
           resetAriaLabel="将默认状态恢复默认"
@@ -198,7 +196,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-task-workspace-view"
           title="默认任务视图"
-            description="打开时任务工作区默认显示的视图。"
+            description="打开任务工作区时的默认视图。"
           modified={modified.has("defaultTaskWorkspaceView")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultTaskWorkspaceView"))}
           resetAriaLabel="将默认任务视图恢复默认"
@@ -219,7 +217,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="deadline-default-reminder"
             title="任务与 DDL 默认提醒"
-            description="为截止事项自动创建提醒；修改后同步更新默认提醒，自定义提醒不受影响。"
+            description="为截止事项自动创建提醒；自定义提醒不受影响。"
             modified={modified.has("defaultDeadlineReminderMinutes")}
             onReset={() => setDefaultDeadlineReminderMinutes(DEFAULT_DEADLINE_REMINDER_MINUTES)}
             resetAriaLabel="将任务与 DDL 默认提醒恢复默认"
@@ -240,7 +238,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="in-app-reminders"
             title="应用内提醒"
-            description="提醒到期时展示提醒中心与角标。"
+            description="在提醒中心与角标中显示。"
           >
             <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
               始终开启
@@ -250,7 +248,6 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="browser-notifications"
             title="系统通知"
-            description="提醒到期时同时发送系统通知。"
             modified={reminderModified.has("browserNotificationsEnabled")}
             onReset={() => resetReminderPreference("browserNotificationsEnabled")}
             resetAriaLabel="将系统通知恢复默认"
@@ -282,7 +279,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="missed-reminder-policy"
             title="错过提醒处理"
-            description="未打开期间错过提醒时的处理方式。"
+            description="未打开应用时错过提醒的处理方式。"
             modified={reminderModified.has("missedReminderPolicy")}
             onReset={() => resetReminderPreference("missedReminderPolicy")}
             resetAriaLabel="将错过提醒处理恢复默认"
@@ -300,7 +297,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             <SettingsRow
               settingId="missed-reminder-window"
               title="补发时间范围"
-              description="仅补发指定范围内的错过提醒。"
+              description="仅补发此时间范围内的提醒。"
               modified={reminderModified.has("missedReminderWindowHours")}
               onReset={() => resetReminderPreference("missedReminderWindowHours")}
               resetAriaLabel="将补发时间范围恢复默认"
@@ -319,14 +316,14 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             </SettingsRow>
           )}
 
-          <SettingsRow settingId="reminder-sound" title="提醒声音" description="提醒到期时播放提示音；关闭后仅保留视觉提醒。" modified={reminderModified.has("reminderSoundEnabled")} onReset={() => resetReminderPreference("reminderSoundEnabled")} resetAriaLabel="将提醒声音恢复默认" highlighted={highlightedId === "reminder-sound"}>
+          <SettingsRow settingId="reminder-sound" title="提醒声音" modified={reminderModified.has("reminderSoundEnabled")} onReset={() => resetReminderPreference("reminderSoundEnabled")} resetAriaLabel="将提醒声音恢复默认" highlighted={highlightedId === "reminder-sound"}>
             <SettingsToggle checked={reminderSoundEnabled} onChange={setReminderSoundEnabled} label="提醒声音" />
           </SettingsRow>
 
           <SettingsRow
             settingId="do-not-disturb"
             title="免打扰时段"
-            description="暂停系统通知和提醒声音；应用内提醒不受影响。"
+            description="暂停系统通知与提醒声音；站内提醒不受影响。"
             modified={isDoNotDisturbModified(reminderPrefs)}
             onReset={() => resetDoNotDisturb()}
             resetAriaLabel="将免打扰时段恢复默认"

@@ -168,7 +168,7 @@ export function CoursesWorkspace() {
             className="ux-fade"
             icon={<BookOpen className="w-8 h-8" strokeWidth={1.5} />}
             title="暂无课程"
-            description="添加第一门课程或导入课表，开始建立课程资料库"
+            description="添加课程或导入课表，开始建立资料库。"
             actions={
               <>
                 <Button variant="primary" size="sm" onClick={() => setAddCourseModalOpen(true)}>

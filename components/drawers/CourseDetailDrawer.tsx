@@ -256,7 +256,7 @@ export function CourseDetailDrawer() {
       return "星期必须为 1-7";
     }
     if (!isValidTimeRange(form.startTime, form.endTime)) {
-      return "时间格式非法或结束时间需晚于开始时间";
+      return "时间格式错误，结束时间需晚于开始时间";
     }
     if (!form.weeks.trim()) {
       return "周次不能为空";

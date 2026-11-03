@@ -9,7 +9,7 @@ import { FONT_REGISTRY } from "@/lib/typography/fonts";
 export function AboutSettings() {
   return (
     <>
-      <SettingsSection title="关于" description="ClassFlow 的版本与数据说明。">
+      <SettingsSection title="关于" description="版本与数据说明。">
         <div className="p-4 bg-[#F7F5F5] border border-line rounded-xl space-y-3 text-xs" data-testid="settings-about">
           <div>
             <p className="text-sm font-bold text-charcoal flex items-center gap-2">
@@ -19,7 +19,7 @@ export function AboutSettings() {
               </span>
             </p>
             <p className="text-[11px] text-satin-grey mt-0.5">
-              在一个地方看课表、管任务、排学习计划。
+              课表、任务与学习计划。
             </p>
           </div>
           <div className="pt-2 border-t border-line-soft space-y-1.5">
@@ -32,7 +32,7 @@ export function AboutSettings() {
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <span className="text-sandrift shrink-0">数据</span>
               <span className="font-semibold text-charcoal text-right break-words min-w-0">
-                你的 ClassFlow 数据主要保存在当前设备
+                数据保存在当前设备
               </span>
             </div>
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -43,18 +43,18 @@ export function AboutSettings() {
             </div>
           </div>
           <p className="pt-2 border-t border-line-soft text-[10px] text-sandrift leading-relaxed">
-            测试期间建议定期备份重要数据。
+            建议定期备份重要数据。
           </p>
         </div>
       </SettingsSection>
 
-      <SettingsSection title="字体与许可" description="ClassFlow 使用的界面字体及授权说明。">
+      <SettingsSection title="字体与许可" description="界面字体与授权。">
         <div
           className="p-4 bg-[#F7F5F5] border border-line rounded-xl space-y-3 text-xs"
           data-testid="settings-font-licenses"
         >
           <p className="text-[11px] leading-relaxed text-satin-grey">
-            界面字体可在「设置 → 通用 → 界面 → 界面字体」中切换，切换立即生效，无需重启。以下字体不影响代码、终端与数学公式的专业字体。
+            可在「通用 → 界面字体」切换，立即生效；代码、终端与数学公式使用专用字体。
           </p>
           <div className="space-y-2.5">
             {(Object.values(FONT_REGISTRY) as Array<(typeof FONT_REGISTRY)[keyof typeof FONT_REGISTRY]>).map(
@@ -97,8 +97,7 @@ export function AboutSettings() {
             )}
           </div>
           <p className="pt-2 border-t border-line-soft text-[10px] leading-relaxed text-sandrift">
-            字体文件遵循各自许可；ClassFlow 不引入在线字体 CDN，启动时不联网下载字体。
-            MiSans 需用户自行从小米官方渠道安装本机字体后方可生效。
+            字体遵循各自许可；ClassFlow 不从在线 CDN 加载字体。MiSans 需自行安装本机字体。
           </p>
         </div>
       </SettingsSection>

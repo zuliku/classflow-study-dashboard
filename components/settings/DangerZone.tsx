@@ -21,7 +21,7 @@ export function DangerZone() {
   const handleResetPreferences = () => {
     confirmRequest({
       title: "恢复默认设置？",
-      description: "仅恢复主工作区偏好（通用、任务、专注、学期显示等），不影响课程、任务和个人资料；Kiro、AI 服务、提醒、Agent 与侧边栏状态需在各自设置页单独恢复。",
+      description: "恢复主工作区偏好，不影响课程、任务和个人资料；其他设置需单独恢复。",
       confirmLabel: "恢复默认设置",
       onConfirm: () => {
         resetPreferences();
@@ -34,7 +34,7 @@ export function DangerZone() {
     confirmRequest({
       title: "清空学习数据？",
       description:
-        "删除课程、排课、任务、小组项目、课程资料、作息表、提醒与专注记录。个人资料、当前学期和主工作区偏好将保留；Kiro 对话、AI 设置与账号凭据不受影响。",
+        "删除课程、任务、资料、小组项目、作息表、提醒与专注记录；个人资料、学期、偏好与 Kiro 对话保留。",
       confirmLabel: "清空学习数据",
       danger: true,
       onConfirm: () => {
@@ -50,7 +50,7 @@ export function DangerZone() {
       confirmRequest({
         title: "清除所有本地数据？",
         description:
-          "删除主工作区数据、全部偏好设置、收件箱与本会话凭据并回到首次使用状态。此操作无法撤销；账号凭据（vault）与 Kiro 对话历史不在此列，需单独清理。",
+          "删除主工作区数据、偏好、收件箱与本会话凭据，回到首次使用；无法撤销。账号凭据与 Kiro 对话历史需单独清理。",
         confirmLabel: "继续",
         danger: true,
         onConfirm: () => {
@@ -61,7 +61,7 @@ export function DangerZone() {
     }
     confirmRequest({
       title: "确认清除？",
-      description: "最后确认：这将删除全部本地数据并回到首次使用状态。",
+      description: "最后确认：删除全部本地数据并回到首次使用。",
       confirmLabel: "确认清除",
       danger: true,
       onConfirm: () => {
@@ -79,7 +79,7 @@ export function DangerZone() {
       key: "preferences",
       icon: <RotateCcw className="w-3.5 h-3.5" />,
       title: "恢复默认设置",
-      description: "仅恢复主工作区偏好，不影响课程、任务和个人资料。",
+      description: "恢复主工作区偏好，不影响学习数据。",
       action: handleResetPreferences,
       label: "恢复默认设置",
       danger: false,
@@ -88,7 +88,7 @@ export function DangerZone() {
       key: "learning",
       icon: <Trash2 className="w-3.5 h-3.5" />,
       title: "清空学习数据",
-      description: "删除课程、任务、作息表等学习数据。个人资料、学期和偏好将保留。",
+      description: "删除课程、任务、作息表等学习数据；资料与偏好保留。",
       action: handleClearLearningData,
       label: "清空学习数据",
       danger: true,
@@ -97,7 +97,7 @@ export function DangerZone() {
       key: "entire",
       icon: <XCircle className="w-3.5 h-3.5" />,
       title: "清除所有本地数据",
-      description: "清除主工作区、偏好与收件箱并回到首次使用（凭据与对话历史除外）。",
+      description: "清除工作区、偏好与收件箱，回到首次使用；凭据与对话历史除外。",
       action: handleResetEntireApp,
       label: confirmPhase === 1 ? "再次点击确认清除" : "清除所有本地数据",
       danger: true,

@@ -205,7 +205,7 @@ export function MiniChatApp() {
   if (!miniAvailable) {
     return (
       <div className="h-screen flex items-center justify-center bg-surface p-6 text-center">
-        <p className="text-xs text-sandrift">迷你窗仅在 ClassFlow 桌面端可用。</p>
+        <p className="text-xs text-sandrift">迷你窗仅在桌面端可用。</p>
       </div>
     );
   }

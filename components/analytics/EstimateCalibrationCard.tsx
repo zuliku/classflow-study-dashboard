@@ -12,9 +12,9 @@ const ESTIMATE_KIRO_PROMPT =
   "结合我的估时记录和未来任务，帮我判断哪些任务的预计耗时值得重新检查。先给建议，不要直接修改任务。";
 
 const INTERPRETATION_COPY: Record<string, string> = {
-  "tracked-below-estimate": "你的 ClassFlow 专注记录通常低于任务估时。",
-  "roughly-aligned": "你的 ClassFlow 专注记录与任务估时大致相符。",
-  "tracked-above-estimate": "你的 ClassFlow 专注记录通常高于任务估时。",
+  "tracked-below-estimate": "专注记录通常低于任务估时。",
+  "roughly-aligned": "专注记录与任务估时大致相符。",
+  "tracked-above-estimate": "专注记录通常高于任务估时。",
 };
 
 /**
@@ -33,7 +33,7 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
           icon={<Scale className="w-4 h-4 text-[#A48F82]" aria-hidden="true" />}
         />
         <p className="py-3 text-[11px] text-sandrift leading-relaxed">
-          继续积累任务估时与关联专注记录后，这里会提供个人估时参考。
+          积累更多估时与专注记录后，将生成个人估时参考。
         </p>
       </div>
     );
@@ -52,7 +52,7 @@ export function EstimateCalibrationCard({ calibration }: { calibration: Estimate
         />
       <div className="pt-2 space-y-1">
         <p className="text-[11px] text-satin-grey leading-relaxed">
-          过去 {calibration.sampleCount} 个有完整记录的任务中，已记录专注时长中位数约为预计耗时的{" "}
+          过去 {calibration.sampleCount} 个有完整记录的任务中，专注时长中位数约为预计耗时的{" "}
           <span className="font-bold text-charcoal">{ratioLabel}</span>。
         </p>
         {interpretation && <p className="text-[11px] text-satin-grey">{interpretation}</p>}

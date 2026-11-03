@@ -113,7 +113,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   const RESPONSE_PREFERENCE_DESCRIPTIONS: Record<KiroResponsePreference, string> = {
     dense: "结论、关键事实与行动优先",
     balanced: "在结论之外补充必要原因",
-    deep: "更完整解释；必要时附一段直接相关的学习建议",
+    deep: "更完整的解释，必要时补充学习建议",
   };
 
   const [apiKeyInput, setApiKeyInput] = useState(getSessionApiKey(provider));
@@ -343,7 +343,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                 <SettingsRow
                   settingId="kiro-show-all-models"
                   title="显示更多模型"
-                  description="模型选择器显示全部已验证模型（默认只显示精选）。"
+                  description="在模型选择器中显示全部已验证模型。"
                   modified={kiroSettingsModified.has("showAllModels")}
                   onReset={() => resetKiroSettingsPreference("showAllModels")}
                   resetAriaLabel="将模型范围恢复默认"
@@ -424,7 +424,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           </SettingsRow>
 
           {/* 连接状态 / 测试连接：只发送极小测试请求，不发送任何 ClassFlow 数据 */}
-          <SettingsRow settingId="ai-connection-status" title="连接状态" description="向当前服务发送最小测试请求，验证 API Key 与模型可用性。">
+          <SettingsRow settingId="ai-connection-status" title="连接状态" description="发送最小测试请求，验证 API Key 与模型。">
             <div className="flex items-center gap-2.5">
               <SettingsButton
                 variant="accent"
@@ -456,7 +456,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="ai-reasoning-effort"
             title="思考程度"
-            description="支持该能力的模型在回答前投入的推理计算量。"
+            description="模型在回答前投入的推理计算量。"
           >
             {reasoningCapability.adjustable ? (
               <SettingsSegmentedControl<KiroReasoningEffort>
@@ -524,7 +524,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-auto-context"
             title="自动环境上下文"
-            description="按当前页面与选中对象自动带入；关闭后可用 @ 手动添加。"
+            description="自动带入当前页面与选中对象；关闭后可用 @ 添加。"
             modified={kiroSettingsModified.has("autoContextEnabled")}
             onReset={() => resetKiroSettingsPreference("autoContextEnabled")}
             resetAriaLabel="将自动环境上下文恢复默认"
@@ -652,7 +652,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-search-test"
                     title="测试搜索连接"
-                     description="仅发送最小搜索请求验证凭据；不发送对话与业务数据。"
+                     description="仅发送最小搜索请求，不发送对话与业务数据。"
                   >
                     <div className="flex items-center gap-2.5">
                       <SettingsButton variant="accent" onClick={runWebSearchTest} disabled={webSearchTest.status === "testing" || !webSearchEnabled}>
@@ -714,7 +714,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                 <SettingsRow
                   settingId="ai-custom-capabilities"
                   title="模型能力"
-                   description="仅当兼容服务实际支持时开启；默认关闭。"
+                   description="仅在兼容服务支持时开启。"
                 >
                   <div className="flex items-center gap-4 text-[11px] font-semibold text-satin-grey">
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -753,7 +753,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   <SettingsRow
                     settingId="kiro-web-pdf-vision-enabled"
                     title="扫描 PDF 识别"
-                    description="仅用于读取联网搜索发现的扫描型 PDF（无文本层页面）。"
+                    description="用于读取联网搜索中的扫描型 PDF。"
                     modified={kiroSettingsModified.has("webPdfVisionEnabled")}
                     onReset={() => resetKiroSettingsPreference("webPdfVisionEnabled")}
                     resetAriaLabel="将扫描 PDF 识别恢复默认"

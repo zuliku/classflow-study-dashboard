@@ -260,12 +260,12 @@ export function ProfileSettings({
           </div>
 
           <p className="text-[10px] text-sandrift leading-relaxed">
-            这些资料保存在当前设备，用于 ClassFlow 内的学习信息展示。
+            资料保存在本机，用于学习信息展示。
           </p>
         </div>
       </SettingsSection>
 
-      <SettingsSection title="学业信息" description="总览与侧栏据此展示学分进度。">
+      <SettingsSection title="学业信息" description="用于展示学分进度。">
         <div className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1" data-setting-id="profile-credits">

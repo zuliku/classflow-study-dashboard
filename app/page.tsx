@@ -62,7 +62,7 @@ function WorkspaceCrashFallback({ onRetry }: { onRetry: () => void }) {
     >
       <p className="text-sm font-medium text-charcoal">这个页面暂时无法显示</p>
       <p className="max-w-sm text-xs leading-relaxed text-sandrift">
-        故障已被隔离，侧边栏与其它页面仍可正常使用。可以切换页面后再回来，或直接重试。
+        此页面出错，其他页面仍可正常使用。可切换页面后回来，或重试。
       </p>
       <Button variant="secondary" size="sm" onClick={onRetry}>
         重试

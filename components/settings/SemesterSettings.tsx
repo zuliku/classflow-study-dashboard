@@ -111,7 +111,7 @@ export function SemesterSettings({
   return (
     <div className="space-y-6" data-testid="settings-semester">
       {/* 当前学期概览：实时推导；默认只显示状态，点击「编辑」才展开表单 */}
-      <SettingsSection title="当前学期" description="结束日期由开学日期与教学周数推导，不单独保存。">
+      <SettingsSection title="当前学期" description="结束日期由开学日期与教学周数计算。">
         <div
           className="p-4 bg-[#F7F5F5] border border-line rounded-xl space-y-3"
           data-setting-id="semester-overview"
@@ -216,7 +216,7 @@ export function SemesterSettings({
       {editing && <SettingsSaveBar dirty={dirty} onSave={save} onDiscard={discard} />}
 
       {/* 课表显示偏好：显示周末（属于学期与课表范围） */}
-      <SettingsSection title="课表显示" description="课表显示哪些天。">
+      <SettingsSection title="课表显示" description="设置课表显示的日期。">
         <SettingsRow
           settingId="show-weekends"
           title="显示周末"
@@ -239,7 +239,7 @@ export function SemesterSettings({
         data-setting-id="bell-schedule"
         className={highlightedId === "bell-schedule" ? "bg-pastel-mint/60 rounded-xl" : ""}
       >
-          <SettingsSection title="作息方案" description="管理节次时间模板；导入的“第3节”按此表解析。">
+          <SettingsSection title="作息方案" description="管理节次时间；导入课表按此表解析。">
           <BellScheduleSettings highlightedId={highlightedId} />
         </SettingsSection>
       </div>
@@ -280,7 +280,7 @@ function BellScheduleSettings({ highlightedId }: { highlightedId?: string }) {
   return (
     <div className="space-y-3">
       {bellSchedules.length === 0 ? (
-        <p className="text-[11px] text-sandrift">暂无作息方案，导入的节次将使用系统默认 08:00-21:00</p>
+        <p className="text-[11px] text-sandrift">暂无作息方案；导入的节次将使用默认时间 08:00–21:00。</p>
       ) : (
         <div className="space-y-2">
           {bellSchedules.map((b) => (

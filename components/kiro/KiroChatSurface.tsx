@@ -228,7 +228,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
       void chat.approveExecutionPlan(planId).then((ok) => {
         if (!ok) return;
         setAgentMode("workspace-auto");
-        pushToast({ message: "已批准，发下一条消息时就按这个计划执行。" });
+        pushToast({ message: "已批准；下一条消息将按此计划执行。" });
       });
     },
     [chat.approveExecutionPlan, setAgentMode, pushToast]

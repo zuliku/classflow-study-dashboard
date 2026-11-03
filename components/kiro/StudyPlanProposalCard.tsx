@@ -216,7 +216,7 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
   /** 重新生成：走 Kiro → Tool Flow（handoffPrompt），UI 不自行调用 Planner */
   const handleRegenerate = () => {
     setDismissed(true);
-    handoffPrompt("当前课表或学习计划已变化，请根据最新数据重新生成刚才的学习计划。");
+    handoffPrompt("数据已变化，请重新生成学习计划。");
   };
 
   const renderActions = () => {
@@ -304,14 +304,14 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
     if (applyState === "stale") {
       return (
         <span className="mr-auto text-[10px] font-semibold text-danger">
-          计划已过期：当前课表或学习安排发生了变化，需要重新生成计划。
+          计划已过期，请重新生成。
         </span>
       );
     }
     if (applyState === "revoked") {
       return (
         <span className="mr-auto text-[10px] font-semibold text-sandrift">
-          计划已撤销，未保留任何新建时段。
+          计划已撤销，未新建时段。
         </span>
       );
     }
@@ -347,7 +347,7 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
             <p className="text-[11px] font-semibold text-charcoal leading-snug">{p.title}</p>
             {p.reasons.includes("missing_estimate") ? (
               <div className="flex flex-wrap items-center gap-1.5">
-                <p className="text-[10px] text-sandrift">缺少预计耗时，暂无法自动安排。</p>
+                <p className="text-[10px] text-sandrift">缺少预计耗时，无法自动安排。</p>
                 <button
                   type="button"
                   onClick={() => handoffPrompt("帮我根据任务内容估算预计耗时，并先给出建议，不要直接修改。")}
@@ -358,7 +358,7 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
                 </button>
               </div>
             ) : p.proposedBlocks.length === 0 ? (
-              <p className="text-[10px] text-sandrift">已按现有学习计划排满，无需新增。</p>
+              <p className="text-[10px] text-sandrift">现有计划已排满。</p>
             ) : (
               <>
                 {p.proposedBlocks.map((b, i) => (
@@ -397,12 +397,10 @@ export function StudyPlanProposalCard({ proposals }: { proposals: StudyPlanPropo
           <div className="p-5 space-y-3">
             <h3 className="text-base font-bold text-charcoal">任务与课程时间重叠</h3>
             <p className="text-xs leading-relaxed text-satin-grey">
-              Kiro 的这次安排中有 {(shownApproval?.overlaps.length ?? 0)} 项会占用上课时间。请确认是否继续。
+              Kiro 的这次安排中有 {(shownApproval?.overlaps.length ?? 0)} 项会占用上课时间，是否继续？
             </p>
             <p className="text-[11px] leading-relaxed text-sandrift">
-              选择「仍然安排」后，ClassFlow 会将当前课程重叠视为你已确认的例外。
-              <br />
-              如果之后课程时间发生变化，会重新检查。
+              选择后视为已确认本次重叠；课程时间变化后会重新检查。
             </p>
             <CourseOverlapApprovalList
               items={(shownApproval?.overlaps ?? []).map(

@@ -445,7 +445,7 @@ export function AddAssignmentModal() {
                   ) : null}
                 </DisclosureRegion>
                 {!ddlEnabled && (
-                  <p className="text-[11px] text-sandrift ux-fade">不设截止日期也能保存，之后随时补上。</p>
+                  <p className="text-[11px] text-sandrift ux-fade">截止时间可稍后设置。</p>
                 )}
               </div>
 

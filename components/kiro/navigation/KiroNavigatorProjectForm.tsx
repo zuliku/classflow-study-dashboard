@@ -73,7 +73,7 @@ export function KiroNavigatorProjectForm({
           rows={4}
           className="w-full px-2 py-1.5 rounded-lg text-[11px] text-charcoal placeholder-sandrift bg-[#F7F5F5] border border-line focus:outline-none resize-none leading-relaxed"
         />
-        <p className="text-[9px] text-sandrift mt-0.5">项目内生效；不授予额外权限。</p>
+        <p className="text-[9px] text-sandrift mt-0.5">仅在项目内生效。</p>
       </div>
       <div className="flex items-center justify-end gap-1.5 pt-0.5">
         <button

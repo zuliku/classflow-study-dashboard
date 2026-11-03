@@ -345,7 +345,7 @@ export function AddCourseModal() {
             <FormSection title="外观">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-charcoal">课程颜色</label>
-                <p className="text-[11px] text-sandrift">用于课表、课程标记等位置区分课程。</p>
+                <p className="text-[11px] text-sandrift">用于课表与课程标记。</p>
                 <div
                   role="radiogroup"
                   aria-label="课程颜色"

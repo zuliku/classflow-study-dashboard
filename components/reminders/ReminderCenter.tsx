@@ -533,7 +533,7 @@ export function ReminderCenter() {
                   <CalendarClock className="w-7 h-7 text-sandrift" />
                   <p className="text-xs font-bold text-charcoal">暂时没有即将提醒</p>
                   <p className="text-[10px] text-sandrift leading-relaxed">
-                    任务、DDL 和你创建的提醒
+                    任务、DDL 与提醒
                     <br />
                     会出现在这里
                   </p>

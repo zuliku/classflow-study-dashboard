@@ -61,8 +61,8 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
 
       {isEmpty ? (
         <div className="px-4 py-6 flex flex-col items-center justify-center text-center gap-1.5">
-          <p className="text-xs font-bold text-charcoal">本周还没有足够的学习记录形成回顾</p>
-          <p className="text-[11px] text-sandrift">完成任务、安排学习计划或进行专注后即可生成</p>
+          <p className="text-xs font-bold text-charcoal">本周还没有足够的学习记录</p>
+          <p className="text-[11px] text-sandrift">完成任务或专注后即可生成回顾</p>
           <KiroFlowButton
             icon={KiroLogoIcon}
             label="让 Kiro 帮我规划本周"

@@ -238,7 +238,7 @@ function OutlookTaskRow({
         {/* facts 文本属于 main surface（只读信息；估算 control 在外层 sibling） */}
         <p className="text-[10px] text-satin-grey pointer-events-none">
           {missingEstimate ? (
-            <>缺少预计耗时，暂无法判断安排是否充足。</>
+            <>缺少预计耗时，无法判断容量。</>
           ) : task.health === "overdue" ? (
             <>{formatDeadline(task.deadline)} · 已逾期，不占用未来容量</>
           ) : task.capacityComplete === null ? (

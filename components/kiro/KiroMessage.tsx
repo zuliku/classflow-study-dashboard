@@ -433,9 +433,9 @@ export function KiroUserMessage({
 
   const editDisabledTitle = editDisabledReason
     ? {
-        "write-suffix": "该消息之后包含已执行操作，无法直接编辑；请发送新的修改指令。",
+        "write-suffix": "之后已有执行操作，无法直接编辑。",
         attachments: "含附件的消息不能编辑，请重新发送。",
-        "turn-in-flight": "Kiro 正在处理当前消息，请稍后再编辑。",
+        "turn-in-flight": "正在处理，稍后可编辑。",
         "message-not-found": "该消息已不可编辑。",
       }[editDisabledReason]
     : undefined;

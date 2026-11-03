@@ -828,7 +828,7 @@ export function AssignmentTable({
               >
                 <ClipboardList className="w-8 h-8 mx-auto text-sandrift" strokeWidth={1.5} />
                 <p className="font-bold text-charcoal">还没有任务</p>
-                <p className="text-[11px] text-sandrift">新建任务，写上截止日期就能开始</p>
+                <p className="text-[11px] text-sandrift">新建任务，设置截止时间即可开始。</p>
               </div>
             ) : (
               <div className="py-10 text-center text-xs text-sandrift space-y-1">
@@ -1057,7 +1057,7 @@ export function AssignmentTable({
                     应用
                   </button>
                 </div>
-                <p className="text-[10px] text-sandrift">各任务相对日期差保持不变，HH:mm 时间均保留；无截止时间的任务会跳过</p>
+                <p className="text-[10px] text-sandrift">保持相对日期差与 HH:mm 时间；无截止时间的任务跳过。</p>
               </div>
             </span>
           )}

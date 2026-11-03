@@ -87,7 +87,7 @@ export function KiroNavigatorProjectFiles({
       for (const file of Array.from(input)) {
         const routed = routeAttachment(file);
         if (!routed.ok) {
-          pushToast({ message: "项目资料暂支持 PDF、DOCX、TXT、Markdown 和 PNG/JPEG/WEBP 图片。", type: "error" });
+          pushToast({ message: "支持 PDF、DOCX、TXT、Markdown 与常见图片格式。", type: "error" });
           continue;
         }
         if (accepted.length >= quotaLeft) break;
@@ -146,7 +146,7 @@ export function KiroNavigatorProjectFiles({
   const requestDeleteFile = (file: KiroProjectFileRecord) => {
     confirmRequest({
       title: "删除项目资料？",
-      description: "这不会删除你的聊天记录，但 Kiro 将无法再读取该资料。",
+      description: "不会删除聊天记录；Kiro 将不再读取该资料。",
       confirmLabel: "删除",
       danger: true,
       onConfirm: () => {

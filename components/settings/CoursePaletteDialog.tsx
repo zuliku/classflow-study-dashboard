@@ -125,7 +125,7 @@ export function CoursePaletteDialog({
           <p className="text-[10px] font-bold text-sandrift uppercase tracking-wider">当前颜色</p>
           {value.length === 0 ? (
             <p role="alert" className="text-[11px] font-semibold text-danger">
-              调色板为空时新课程将使用默认灰色，请至少添加 1 种颜色。
+              调色板为空，新课程将使用灰色；请至少添加 1 种颜色。
             </p>
           ) : (
             <div className="flex flex-wrap gap-2.5">

@@ -58,7 +58,7 @@ function BellScheduleEditor({
   return (
     <div className="space-y-2.5">
       <p className="text-[11px] text-sandrift leading-relaxed">
-        课表只标注节次（如第1-2节），需要你的学校作息时间才能转换为具体时间。请填写各节次的起止时间。
+        课表使用节次（如第1-2节）；请设置作息时间以转换为具体时间。
       </p>
       <div className="flex items-center gap-2">
         <span className="text-[11px] font-semibold text-satin-grey shrink-0">名称</span>
@@ -299,7 +299,7 @@ export function TimetableImportPreviewDialog({
             ) : (
               <p className="text-[11px] font-semibold text-warning flex items-center gap-1.5">
                 <TriangleAlert className="w-3.5 h-3.5 shrink-0" />
-                尚未设置学校作息时间，节次无法转换为具体时间。
+                未设置作息时间，节次无法转换。
                 <button type="button" onClick={() => setBellEditorOpen(true)} className="text-[10px] font-bold underline ml-1">
                   立即设置
                 </button>

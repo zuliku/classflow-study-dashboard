@@ -53,7 +53,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="startup-view"
             title="默认打开位置"
-            description="下次打开时进入的位置。"
             modified={modified.has("startupView")}
             onReset={() => updatePreferences(resetPreferencePatch("startupView"))}
             resetAriaLabel="将默认打开位置恢复默认"
@@ -73,7 +72,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="content-density"
             title="界面密度"
-            description="任务工作区、课程列表与命令中心的行高与间距。"
+            description="调整列表与命令中心的行高。"
             modified={modified.has("contentDensity")}
             onReset={() => updatePreferences(resetPreferencePatch("contentDensity"))}
             resetAriaLabel="将界面密度恢复默认"
@@ -93,7 +92,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="motion-preference"
             title="动效偏好"
-            description="界面动画强度；跟随系统时尊重系统减弱动效设置。"
+            description="界面动画强度；跟随系统时使用系统设置。"
             modified={modified.has("motionPreference")}
             onReset={() => updatePreferences(resetPreferencePatch("motionPreference"))}
             resetAriaLabel="将动效偏好恢复默认"
@@ -115,7 +114,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="ui-font"
             title="界面字体"
-            description="调整界面字体；不影响代码、终端与数学公式。"
+            description="界面字体；代码、终端与数学公式使用专用字体。"
             modified={modified.has("uiFont")}
             onReset={() => updatePreferences(resetPreferencePatch("uiFont"))}
             resetAriaLabel="将界面字体恢复默认"
@@ -141,7 +140,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="ui-font-scale"
             title="界面字号缩放"
-            description="90% - 120%。"
             modified={modified.has("uiFontScale")}
             onReset={() => updatePreferences(resetPreferencePatch("uiFontScale"))}
             resetAriaLabel="将界面字号缩放恢复默认"
@@ -161,7 +159,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="sidebar-default-collapsed"
             title="侧栏收起状态"
-            description="切换侧栏展开或收起；下次打开时保持。"
             modified={sidebarCollapsed}
             onReset={() => setSidebarCollapsed(false)}
             resetAriaLabel="将侧栏收起状态恢复默认"
@@ -177,7 +174,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="course-auto-palette"
             title="课程自动配色"
-            description="新建课程时自动从调色板轮换柔和配色，关闭则使用默认灰色。"
+            description="新建课程时自动分配调色板颜色；关闭则使用灰色。"
             modified={modified.has("courseAutoPalette")}
             onReset={() => updatePreferences(resetPreferencePatch("courseAutoPalette"))}
             resetAriaLabel="将课程自动配色恢复默认"
@@ -193,7 +190,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="course-palette"
             title="课程调色板"
-            description="新课程按此顺序轮换；点击「管理」增删颜色。"
+            description="课程按顺序取色；可在「管理」中增删颜色。"
             modified={modified.has("coursePalette")}
             onReset={() => updatePreferences(resetPreferencePatch("coursePalette"))}
             resetAriaLabel="将课程调色板恢复默认"
@@ -211,7 +208,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="schedule-direct-manipulation"
             title="课表直接操作"
-            description="在时间表中直接拖动调整课程、学习计划与待安排任务。"
+            description="允许在时间表中拖动课程、学习计划与待安排任务。"
             modified={modified.has("enableScheduleDirectManipulation")}
             onReset={() =>
               updatePreferences(resetPreferencePatch("enableScheduleDirectManipulation"))
@@ -245,7 +242,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="single-key-shortcuts"
             title="启用单键快捷键"
-            description="未编辑文本时可用 N、J/K、X 等单键操作；方向键、Enter、Tab 与 Cmd/Ctrl 组合始终可用。"
+            description="未在输入状态时启用 N、J/K、X 等单键操作；组合键始终可用。"
             modified={modified.has("enableSingleKeyShortcuts")}
             onReset={() => updatePreferences(resetPreferencePatch("enableSingleKeyShortcuts"))}
             resetAriaLabel="将单键快捷键恢复默认"
@@ -261,7 +258,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="shortcuts-overview"
             title="快捷键说明"
-            description="常用单键与任务列表操作（只读）。"
             highlighted={highlightedId === "shortcuts-overview"}
           >
             <ShortcutOverviewField />

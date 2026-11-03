@@ -154,7 +154,7 @@ describe("LearningTrendChart", () => {
     );
     const text = h.container.textContent ?? "";
     // 计划无任何可靠 bucket → 提示代替计划 legend
-    expect(text).toContain("计划记录不足，暂不显示完整计划序列");
+    expect(text).toContain("计划记录不足，暂不显示");
     expect(text).toContain("单位：分钟");
     expect(text).toContain("实际专注");
     expect(text).not.toContain("计划学习"); // 无可靠计划值时不显示计划 legend

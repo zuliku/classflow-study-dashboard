@@ -145,7 +145,7 @@ export function TimetableImportProposalCard({ proposal }: { proposal: TimetableI
         {blockerCount > 0 && (
           <p className="flex items-center gap-1 text-[10px] font-semibold text-warning">
             <TriangleAlert className="w-3 h-3 shrink-0" />
-            {blockerCount > 0 && snapshotCounts.blockers > 0 ? "存在待处理问题（如缺少作息时间设置），请先打开预览处理。" : ""}
+            {blockerCount > 0 && snapshotCounts.blockers > 0 ? "存在待处理问题，请先打开预览处理。" : ""}
           </p>
         )}
 
@@ -184,7 +184,7 @@ export function TimetableImportProposalCard({ proposal }: { proposal: TimetableI
         {!canQuickApply && !applied && (
           <p className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
             <TriangleAlert className="w-3 h-3 shrink-0" />
-            请先打开预览查看待确认、重复或冲突项后导入。
+            请先在预览中处理待确认、重复或冲突项。
           </p>
         )}
       </div>

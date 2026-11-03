@@ -54,7 +54,7 @@ export function LearningHistorySettings() {
     confirmRequest({
       title: "清除学习历史？",
       description:
-        "这会删除任务变化、专注、学习计划和课表变化的历史记录。当前课程、任务、课表和 Focus Session 不会被删除。清除后，历史趋势将从现在重新开始。",
+        "删除任务、专注、计划与课表变化的历史；当前数据保留，趋势从头开始。",
       confirmLabel: "清除历史",
       danger: true,
       onConfirm: () => {
@@ -83,10 +83,10 @@ export function LearningHistorySettings() {
           : loadFailed
             ? "历史记录加载失败，请重试。"
             : count === null
-              ? "用于学习洞察（工作区与 Kiro）。"
+              ? "用于学习洞察。"
               : count === 0
-                ? "0 条历史事件 · 从今天起重新记录"
-                : `${formatDate(coverage?.historyStartedAt ?? Date.now())} 起记录 · ${count.toLocaleString()} 条历史事件 · 用于学习洞察（工作区与 Kiro）。`
+                ? "0 条历史事件 · 从今天起记录"
+                : `${formatDate(coverage?.historyStartedAt ?? Date.now())} 起记录 · ${count.toLocaleString()} 条历史事件 · 用于学习洞察。`
       }
       icon={<History className="w-3.5 h-3.5 text-[#A48F82]" />}
       actionLabel={clearing ? "清除中…" : loadFailed ? "重新加载" : "清除学习历史"}

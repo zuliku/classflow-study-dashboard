@@ -7,7 +7,8 @@ interface SettingsRowProps {
   /** 稳定 id（搜索跳转 / 已修改定位用），对应 Settings Registry 的 id */
   settingId?: string;
   title: string;
-  description: string;
+  /** 可选；标题已足够清楚时省略，避免冗余解释 */
+  description?: string;
   /** 该偏好是否非默认（显示 ↶ 恢复默认） */
   modified?: boolean;
   onReset?: () => void;
@@ -40,7 +41,9 @@ export function SettingsRow({
     >
       <div className="min-w-[180px] flex-1 basis-[200px]">
         <h4 className="text-xs font-bold text-charcoal break-words">{title}</h4>
-        <p className="text-[11px] leading-[1.5] text-sandrift mt-1 break-words">{description}</p>
+        {description && (
+          <p className="text-[11px] leading-[1.5] text-sandrift mt-1 break-words">{description}</p>
+        )}
       </div>
       <div className="flex max-w-full shrink-0 items-center gap-2 ml-auto">
         {modified && onReset && (

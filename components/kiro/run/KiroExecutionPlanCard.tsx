@@ -54,7 +54,7 @@ export function KiroExecutionPlanCard({
       {plan.status === "deviated" && (
         <p className="text-[11px] font-semibold text-warning flex items-center gap-1.5 animate-enter">
           <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-          有 {plan.deviationCount} 次超计划操作经你放行，其余步骤仍按计划约束
+          有 {plan.deviationCount} 次超计划操作已放行，其余步骤仍受约束
         </p>
       )}
       {plan.status === "completed" && (
@@ -101,7 +101,7 @@ export function KiroExecutionPlanCard({
         </div>
       )}
       {plan.status === "proposed" && (
-        <p className="text-[10px] text-sandrift">批准后将切换到工作区自动，你发送下一条消息时 Kiro 将按计划执行；计划外操作会被拦截确认</p>
+        <p className="text-[10px] text-sandrift">批准后切换到工作区自动；下一条消息按计划执行，计划外操作需确认。</p>
       )}
     </div>
   );

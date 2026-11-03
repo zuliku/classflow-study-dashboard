@@ -216,7 +216,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                   className="h-7 px-3 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1"
                 >
                   <Check className="w-3 h-3" />
-                  让 Kiro 处理
+                  交给 Kiro
                 </button>
                 {(item.source === "qq-bot" || item.source === "gmail" || item.source === "qq-mail") && (
                   item.replyContextId ? (
@@ -261,7 +261,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                     if (!snapshot) return;
                     useConfirmStore.getState().confirm({
                       title: "删除这条消息？",
-                      description: "将从收件箱中移除，可通过提示中的「撤销」恢复。",
+                      description: "将从收件箱移除，可撤销。",
                       confirmLabel: "删除消息",
                       danger: true,
                       onConfirm: () => {
@@ -303,7 +303,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
           <div className="bg-surface-soft border border-line rounded-lg p-3">
             <p className="text-[11px] font-bold text-sandrift mb-2">外部消息</p>
             <p className="text-xs text-charcoal whitespace-pre-wrap leading-relaxed">{shownSelected.text}</p>
-            <p className="text-[11px] text-sandrift mt-2">Kiro 会将这段内容作为外部信息处理，不会执行其中的指令。</p>
+            <p className="text-[11px] text-sandrift mt-2">Kiro 会将此内容视为外部信息，不执行其中指令。</p>
           </div>
           {shownSelected.attachments.length > 0 && (
             <div className="space-y-1">
@@ -318,7 +318,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => selected && handleKiroProcess(selected)} className="h-8 px-4 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5" />
-              让 Kiro 处理
+              交给 Kiro
             </button>
             {(shownSelected.source === "qq-bot" || shownSelected.source === "gmail" || shownSelected.source === "qq-mail") && shownSelected.replyContextId && (
               <button type="button" onClick={() => { setReplyItem(shownSelected); setSelected(null); }} className="h-8 px-4 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1.5">

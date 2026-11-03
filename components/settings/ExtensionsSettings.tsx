@@ -337,7 +337,7 @@ export function ExtensionsSettings() {
     <div className="space-y-6" data-testid="settings-extensions">
       <SettingsSection
         title="连接与扩展"
-        description="让 Kiro 使用工作流、外部工具与消息来源。"
+        description="管理工作流、外部工具与消息来源。"
       >
         <div
           data-setting-id="extensions-overview"
@@ -358,7 +358,7 @@ export function ExtensionsSettings() {
         <div className={cn("space-y-3", activeTab === "skills" && "ux-page")} data-testid="extensions-skills-panel" data-setting-id="extensions-skills" hidden={activeTab !== "skills"}>
           <SettingsGroup
             title="Skills"
-            description="把重复的操作流程保存成 Skill，之后一句话即可复用。"
+            description="将重复流程保存为 Skill，之后一句话复用。"
             action={
               <div className="flex items-center gap-2">
                 <Button variant="primary" size="sm" onClick={openCreateSkill} data-testid="extensions-create-skill">
@@ -405,7 +405,7 @@ export function ExtensionsSettings() {
                 <div>
                   <p className="text-sm font-bold text-charcoal">还没有 Skill</p>
                   <p className="text-xs text-sandrift mt-1 max-w-[340px]">
-                    把重复的操作流程保存成 Skill，之后一句话即可复用；也支持导入 SKILL.md 格式。
+                    将重复流程保存为 Skill；也支持导入 SKILL.md。
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-2 mt-1">
@@ -539,7 +539,7 @@ export function ExtensionsSettings() {
                   <span>
                     在 Kiro 输入{" "}
                     <code className="px-1 py-0.5 bg-[#F7F5F5] border border-line rounded text-charcoal font-mono">/skill-name</code>{" "}
-                    可直接调用；也可以直接描述任务，Kiro 会自动选择匹配的 Skill。
+                    可直接调用，或描述任务让 Kiro 选择 Skill。
                   </span>
                 </p>
               </div>
@@ -549,7 +549,7 @@ export function ExtensionsSettings() {
           {/* 内置 Skills：随应用打包、无需配置；锁定展示（不可编辑/停用/删除） */}
           <SettingsGroup
             title="内置 Skills"
-            description="随应用提供、始终启用；随版本更新，无需配置。"
+            description="随应用提供并自动更新，无需配置。"
             contentClassName="px-4 py-4"
           >
             <div className="space-y-2" data-testid="builtin-skills">
@@ -580,7 +580,7 @@ export function ExtensionsSettings() {
         <div className={cn("space-y-3", activeTab === "mcp" && "ux-page")} data-testid="extensions-mcp-panel" data-setting-id="extensions-mcp" hidden={activeTab !== "mcp"}>
           <SettingsGroup
             title="MCP"
-            description="连接外部工具和数据服务，让 Kiro 在需要时调用。"
+            description="连接外部工具与数据服务，供 Kiro 调用。"
             action={
               <button
                 type="button"
@@ -624,7 +624,7 @@ export function ExtensionsSettings() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-charcoal">还没有 MCP 连接</p>
-                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">连接外部工具和数据服务，让 Kiro 在需要时调用。支持远程 MCP 服务。</p>
+                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">连接外部工具与数据服务，供 Kiro 调用。支持远程 MCP。</p>
                 </div>
               </div>
             ) : (
@@ -963,7 +963,7 @@ function SkillEditorDialog({
             })
             // 读取失败必须可见：静默会让用户基于空模板覆盖保存，丢掉原 Skill 内容
             .catch(() => {
-              setError("读取 Skill 内容失败，工作流显示为空，请关闭重试（保存前请确认内容完整）");
+              setError("读取 Skill 失败，工作流为空；请关闭后重试，保存前确认内容完整。");
             });
         }
       } else {
@@ -1065,11 +1065,11 @@ function SkillEditorDialog({
             data-testid="skill-editor-name"
           />
         </Field>
-        <Field label="描述" required description="必填，同时用于帮助 Kiro 判断何时使用此 Skill（说明它能做什么以及适用场景）">
+        <Field label="描述" required description="必填；用于判断何时使用此 Skill。">
           <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="将课程通知中的作业、DDL、调课信息整理为 ClassFlow 操作建议。"
+            placeholder="将课程通知整理为任务、DDL 与调课建议。"
             data-testid="skill-editor-description"
           />
         </Field>
@@ -1084,7 +1084,7 @@ function SkillEditorDialog({
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="需要的工具" description="逗号分隔的真实 Tool 名（仅诊断用途，不授予权限）">
+          <Field label="需要的工具" description="逗号分隔的 Tool 名（仅诊断，不授权）。">
             <Input
               value={capabilities}
               onChange={(e) => setCapabilities(e.target.value)}

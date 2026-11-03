@@ -149,11 +149,11 @@ useEffect(() => {
         setError("邮件发送被拒绝，请检查发件人地址与线程。");
       } else if (code === "EMAIL_SEND_UNCERTAIN") {
         setConfirmLocked(true);
-        setError("发送结果不确定，请先去“已发送”检查是否已发出，确认未发送后再重新发起（不要重复点击发送）。");
+        setError("结果不确定，请先去「已发送」确认后再重试。");
       } else if (code === "TIMEOUT") {
         // 渲染侧超时只结束等待，Main 侧发送可能继续：按不确定锁定，防重复外发
         setConfirmLocked(true);
-        setError("发送超时，结果不确定，请先去“已发送”检查是否已发出，确认未发送后再重新发起（不要重复点击发送）。");
+        setError("发送超时，请先去「已发送」确认后再重试。");
       } else if (code === "EMAIL_REPLY_CONTEXT_INVALID") {
         setError("邮件回复上下文无效，请重新同步后重试。");
       } else if (code === "GMAIL_AUTH_FAILED") {
@@ -198,7 +198,7 @@ useEffect(() => {
         <div className="space-y-2">
           <div className="bg-surface-soft border border-line rounded-lg p-3">
             <p className="text-[11px] font-bold text-sandrift mb-1">回复至</p>
-            <p className="text-xs text-charcoal flex items-center gap-1.5"><Mail className="w-3 h-3" /> {item.senderDisplay ?? "发件人"} · 仅回复发件人（不支持抄送/群发）</p>
+            <p className="text-xs text-charcoal flex items-center gap-1.5"><Mail className="w-3 h-3" /> {item.senderDisplay ?? "发件人"} · 仅回复发件人</p>
           </div>
           {item.subject && (
             <div className="bg-surface-soft border border-line rounded-lg p-3">
@@ -243,7 +243,7 @@ useEffect(() => {
             </div>
           </div>
           <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="输入回复内容（纯文本）..." rows={6} maxLength={2000} data-testid="email-reply-text" className="mt-1 w-full p-3 bg-white border border-line rounded-lg text-sm resize-none focus:outline-none focus:border-charcoal" />
-          <p className="text-[11px] text-sandrift mt-1">{text.length}/2000 · 纯文本回复，自动保持原线程 {draftLoading ? "· 生成中..." : draftGenerated ? "· AI 草稿，可继续编辑" : ""}</p>
+          <p className="text-[11px] text-sandrift mt-1">{text.length}/2000 · 纯文本，保持原线程 {draftLoading ? "· 生成中..." : draftGenerated ? "· AI 草稿，可继续编辑" : ""}</p>
           {draftError && <p className="text-[11px] text-danger mt-1">{draftError}</p>}
         </div>
 
@@ -260,11 +260,11 @@ useEffect(() => {
         <h4 className="text-sm font-bold text-charcoal">确认发送到 {label}？</h4>
         {approval && (
           <div className="space-y-2">
-            <p className="text-xs text-sandrift">发送至：{item.senderDisplay ?? "发件人"} · 仅回复发件人 · 将在原邮件会话中回复。</p>
+            <p className="text-xs text-sandrift">发送至：{item.senderDisplay ?? "发件人"} · 在原邮件会话中回复。</p>
             <div className="bg-surface-soft border border-line rounded-lg p-3">
               <p className="text-xs text-charcoal whitespace-pre-wrap">{approval.preview.text}</p>
             </div>
-            <p className="text-[11px] text-sandrift">一次审批对应一次发送，不会自动重试。如果发送结果不确定，请先检查“已发送”，避免重复发送。</p>
+            <p className="text-[11px] text-sandrift">一次审批对应一次发送，不会自动重试；结果不确定时请先检查「已发送」。</p>
           </div>
         )}
         {error && <p className="text-xs font-bold text-danger bg-danger/5 border border-danger/20 rounded-lg px-3 py-2">{error}</p>}

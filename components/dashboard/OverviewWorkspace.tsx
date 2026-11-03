@@ -59,7 +59,7 @@ export function OverviewWorkspace() {
           >
             <div>
               <h2 className="text-lg font-bold text-charcoal">搭建你的学习工作区</h2>
-              <p className="text-xs text-sandrift mt-1">先导入课表，任务和日程会自动归位</p>
+              <p className="text-xs text-sandrift mt-1">导入课表后，课程与任务会自动排好。</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2.5">
               <button
@@ -85,7 +85,7 @@ export function OverviewWorkspace() {
               </button>
             </div>
             <p className="text-[11px] text-sandrift">
-              已有任务安排，直接新建任务即可开始
+              新建任务即可开始安排。
             </p>
           </div>
         </div>

@@ -503,7 +503,7 @@ export function GroupCollaborationView() {
           <WorkspaceEmptyState
             icon={<Users className="w-8 h-8" strokeWidth={1.5} />}
             title="还没有小组项目"
-            description="创建项目来管理成员、任务与分工。"
+            description="创建项目，管理成员、任务与分工。"
             actions={
               <Button variant="primary" size="sm" onClick={openCreateProject}>
                 <Plus className="w-3.5 h-3.5" />
@@ -532,7 +532,7 @@ export function GroupCollaborationView() {
           {groupProjects.length === 0 ? (
             <div className="bg-surface border border-line rounded-xl px-4 py-8 flex flex-col items-center gap-2 text-center">
               <p className="text-xs font-semibold text-charcoal">还没有小组项目</p>
-              <p className="text-[11px] text-sandrift">创建项目来管理成员、任务与分工。</p>
+              <p className="text-[11px] text-sandrift">创建项目，管理成员、任务与分工。</p>
               <Button variant="primary" size="sm" onClick={openCreateProject}>
                 <Plus className="w-3 h-3" />
                 <span>新建项目</span>

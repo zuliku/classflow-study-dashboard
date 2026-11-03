@@ -142,7 +142,7 @@ export function RestorePreviewDialog({
           <p className="text-[10px] text-sandrift">
             {blocked
               ? "请关闭并检查备份文件"
-              : "恢复会替换 ClassFlow 当前数据。备份内容已在预览中确认。"}
+              : "恢复会替换当前数据，备份内容已在预览中确认。"}
           </p>
           <div className="flex items-center gap-2 shrink-0">
             <Button

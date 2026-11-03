@@ -132,7 +132,7 @@ export function StudyRebalanceProposalCard({
         <p>
           将移动 {moves.length} 个已有 Kiro 学习时段。
           <br />
-          不会修改任务、截止时间或你手动安排的学习计划。
+          不修改任务、截止时间或手动计划。
         </p>
       ),
       confirmLabel: "应用调整",
@@ -151,7 +151,7 @@ export function StudyRebalanceProposalCard({
       afterApprovalsRef.current ?? undefined
     );
     if (!result.ok) {
-      pushToast({ message: "学习计划之后又发生了变化，无法安全撤销本次调整。", type: "error" });
+      pushToast({ message: "学习计划已变化，无法撤销本次调整。", type: "error" });
       return;
     }
     appliedMovesRef.current = null;
@@ -182,7 +182,7 @@ export function StudyRebalanceProposalCard({
   const handleRegenerate = () => {
     setDismissed(true);
     setStudyRebalancePreview(null);
-    handoffPrompt("当前学习安排已变化，请根据最新学习前瞻重新生成刚才的学习计划调整建议。");
+    handoffPrompt("学习安排已变化，请重新生成调整建议。");
   };
 
   const renderActions = () => {
@@ -243,7 +243,7 @@ export function StudyRebalanceProposalCard({
     if (applyState === "stale") {
       return (
         <span className="mr-auto text-[10px] font-semibold text-danger">
-          调整建议已过期，当前课表或学习计划已经变化。
+          调整建议已过期，请重新生成。
         </span>
       );
     }
@@ -320,13 +320,10 @@ export function StudyRebalanceProposalCard({
           <div className="p-5 space-y-3">
             <h3 className="text-base font-bold text-charcoal">学习计划调整与课程时间重叠</h3>
             <p className="text-xs leading-relaxed text-satin-grey">
-              Kiro 的这次调整中有 {(shownApproval?.length ?? 0)} 个学习时段会与课程时间重叠。
-              确认后将一次性应用全部调整。
+              Kiro 的这次调整中有 {(shownApproval?.length ?? 0)} 个学习时段会与课程时间重叠，确认后一次性应用。
             </p>
             <p className="text-[11px] leading-relaxed text-sandrift">
-              选择「仍然调整」后，ClassFlow 会将当前课程重叠视为你已确认的例外。
-              <br />
-              如果之后课程时间发生变化，会重新检查。
+              选择后视为已确认本次重叠；课程时间变化后会重新检查。
             </p>
             <CourseOverlapApprovalList
               items={(shownApproval ?? []).map(

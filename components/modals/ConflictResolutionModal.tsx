@@ -143,7 +143,7 @@ export function ConflictResolutionModal() {
           </div>
 
           <div className="p-3 bg-[#F7F5F5] border border-line rounded-xl text-[11px] text-sandrift space-y-1">
-            <p>「本周停课」仅跳过本周；删除将移除该排课。</p>
+            <p>「本周停课」仅跳过本周；删除会移除排课。</p>
           </div>
 
           {/* Footer */}

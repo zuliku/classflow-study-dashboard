@@ -206,7 +206,7 @@ export function KiroImagePreviewDialog({
           {loadError || urlFailed ? (
             <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
               <p className="text-xs font-bold text-charcoal">原图加载失败</p>
-              <p className="text-[11px] text-sandrift">文件可能已损坏或过大，可原地重试（画廊位置保留）</p>
+              <p className="text-[11px] text-sandrift">文件可能已损坏或过大，可重试。</p>
               <div className="mt-1 flex items-center gap-2">
                 <button
                   type="button"

@@ -156,7 +156,7 @@ export function KiroInspectorOutputs() {
   const requestDelete = (entry: KiroRecentArtifactEntry) => {
     confirm({
       title: `删除「${entry.artifact.displayName}」？`,
-      description: "此操作会从当前 Kiro 工作区删除该文件，删除后无法通过 Kiro 撤销。",
+      description: "将从工作区删除该文件，且无法撤销。",
       confirmLabel: "删除文件",
       danger: true,
       onConfirm: () => {

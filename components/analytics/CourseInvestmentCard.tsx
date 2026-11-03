@@ -27,7 +27,7 @@ export function CourseInvestmentCard({
       <div className="w-full min-w-0 bg-surface border border-line rounded-2xl p-4 ux-fade">
         <h3 className="text-sm font-bold text-charcoal">课程投入</h3>
         <div className="pt-3 pb-2 text-center">
-          <p className="text-[11px] text-sandrift">完成专注后这里会展示各课程投入</p>
+          <p className="text-[11px] text-sandrift">完成专注后显示课程投入</p>
         </div>
       </div>
     );

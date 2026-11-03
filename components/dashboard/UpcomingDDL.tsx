@@ -168,7 +168,7 @@ export function UpcomingDDL() {
           <div className="ux-fade flex-1 flex flex-col items-center justify-center text-xs text-sandrift space-y-2 min-h-24 px-4 text-center">
             <CheckCircle2 className="w-6 h-6 text-success" />
             <p className="font-semibold text-satin-grey">暂无临近 DDL</p>
-            <p className="text-[11px]">新建任务后会在这里按时间归位</p>
+            <p className="text-[11px]">新建任务后会按截止时间显示在这里。</p>
             <div className="flex items-center gap-2 pt-0.5">
               <button
                 type="button"

@@ -830,7 +830,7 @@ export function AssignmentDrawer() {
                             }}
                           />
                           <p className="px-2.5 pt-1 pb-1.5 text-[9px] text-sandrift">
-                            上传后自动关联本任务（同时出现在课程资料）
+                            上传后自动关联本任务，并加入课程资料。
                           </p>
                         </DropdownMenuPanel>
                         <input

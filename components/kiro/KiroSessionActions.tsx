@@ -63,7 +63,7 @@ export function KiroSessionActions({
     more.close();
     confirmRequest({
       title: "清空当前对话？",
-      description: "仅清除当前会话中的消息，不影响你的 ClassFlow 数据。",
+      description: "仅清除当前会话消息，不影响其他数据。",
       confirmLabel: "清空",
       danger: true,
       onConfirm: () => {

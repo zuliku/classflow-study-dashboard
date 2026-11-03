@@ -205,11 +205,11 @@ export function CommandCenter() {
             kind: "command",
             group: "search",
             label: "交给 Kiro",
-            sub: "使用当前 ClassFlow 上下文",
+            sub: "使用当前上下文",
             icon: KIRO_ICON,
             run: () => {
               if (!handoff) {
-                pushToast({ message: "Kiro 尚未就绪，请打开 Kiro 后再试。", type: "info" });
+                pushToast({ message: "请先打开 Kiro。", type: "info" });
                 return;
               }
               handoff.handoffPrompt(query.trim());
@@ -476,7 +476,7 @@ export function CommandCenter() {
                           {it.label}
                           {disabled && (
                             <span className="block text-[9px] text-sandrift mt-0.5">
-                              可在 设置 → 通用 中开启
+                              可在设置中开启
                             </span>
                           )}
                         </span>
@@ -574,7 +574,7 @@ export function CommandCenter() {
                             交给 Kiro
                           </span>
                           <span className="block text-[10px] text-sandrift truncate">
-                            使用当前 ClassFlow 上下文
+                            使用当前上下文
                           </span>
                         </span>
                         <kbd className="hidden sm:inline-block bg-white text-charcoal text-[10px] font-mono px-1.5 py-0.5 rounded border border-line-strong">
