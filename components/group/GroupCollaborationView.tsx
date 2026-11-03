@@ -206,6 +206,7 @@ export function GroupCollaborationView() {
   const isWideWorkspace = useMediaQuery("(min-width: 1536px)");
   const [kiroDockOpen, setKiroDockOpen] = useState(false);
   const dockContextProjectRef = useRef<string | null>(null);
+  const kiroToggleRef = useRef<HTMLButtonElement>(null);
   const floatingSidecarMode = kiroSession?.sidecarMode ?? "closed";
 
   // 视口变窄 → 关闭 Dock（回落到 Header「问 Kiro」的既有 Sidecar 语义）
@@ -255,6 +256,8 @@ export function GroupCollaborationView() {
   const closeKiroDock = () => {
     setKiroDockOpen(false);
     dockContextProjectRef.current = null;
+    // 面板内「收起」后焦点回到 Header 开关，避免焦点随退出动画落在 body
+    kiroToggleRef.current?.focus();
   };
   const newTaskIds = useEnterOnAdd(selectedProject?.tasks.map((t) => t.id) ?? [], selectedProjectId);
 
@@ -544,6 +547,7 @@ export function GroupCollaborationView() {
               active={isWideWorkspace && kiroDockOpen}
               ariaExpanded={isWideWorkspace ? kiroDockOpen : undefined}
               ariaControls={isWideWorkspace && kiroDockOpen ? "group-kiro-panel" : undefined}
+              buttonRef={kiroToggleRef}
               onClick={toggleGroupKiro}
             />
           ) : undefined
@@ -910,8 +914,12 @@ export function GroupCollaborationView() {
            ) : null}
         </div>
 
-        {kiroDockOpen && isWideWorkspace && selectedProject && (
-          <GroupKiroPanel project={selectedProject} onClose={closeKiroDock} />
+        {selectedProject && (
+          <GroupKiroPanel
+            open={isWideWorkspace && kiroDockOpen}
+            project={selectedProject}
+            onClose={closeKiroDock}
+          />
         )}
       </div>
       )}

@@ -21,6 +21,7 @@ export function KiroFlowButton({
   active = false,
   ariaExpanded,
   ariaControls,
+  buttonRef,
   "data-testid": dataTestId,
 }: {
   icon: React.ComponentType<{ className?: string }>;
@@ -35,10 +36,13 @@ export function KiroFlowButton({
   active?: boolean;
   ariaExpanded?: boolean;
   ariaControls?: string;
+  /** 供调用方在面板收起后恢复焦点 */
+  buttonRef?: React.Ref<HTMLButtonElement>;
   "data-testid"?: string;
 }) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onClick}
       aria-label={label}
