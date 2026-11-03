@@ -170,6 +170,15 @@ describe("硬切深筛源码契约", () => {
     expect(memory).toContain("rounded-xl bg-[#F7F5F5] border border-line p-3 animate-enter");
   });
 
+  it("模型选择器：进场只过渡 opacity，不逐帧动画 blur/scale（防文字抖动）", () => {
+    const src = read("components/kiro/composer/KiroModelSelector.tsx");
+    expect(src).not.toContain("backdropFilter:");
+    expect(src).not.toContain("WebkitBackdropFilter:");
+    expect(src).not.toMatch(/scale:\s*0\.9/);
+    expect(src).not.toContain("active:scale-[0.99]");
+    expect(src).toContain("initial={reducedMotion ? false : { opacity: 0 }}");
+  });
+
   it("Settings 搜索态：静态 key + 进入淡入（不随 query 逐字重播）", () => {
     const src = read("components/settings/SettingsView.tsx");
     expect(src).toMatch(/key="search-results"[\s\S]*?ux-fade/);

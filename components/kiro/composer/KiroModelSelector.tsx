@@ -19,7 +19,9 @@ import { cn } from "@/lib/utils";
  * - 不触发全局背景磨砂：没有 full-screen scrim / backdrop blur；面板自身保留 18px 玻璃模糊。
  * - 面板 Portal 到 body，避免 Composer / Sidecar 的 overflow 裁切；fixed + viewport clamp。
  * - 动效 180ms 进入 / 110ms 退出（比 220/160 略快），全部使用 Motion Contract token。
- * - reduced motion：无位移/缩放/模糊过渡，直接落最终态。
+ * - 只动画 opacity：backdrop-filter / scale / translate 逐帧变化会让玻璃面板背后的文字与
+ *   面板内图标持续重新采样，Windows Chromium 上会出现可见抖动；模糊由 CSS 静态提供。
+ * - reduced motion：无过渡，直接落最终态。
  * - 兼容 Composer 既有 outside-click：面板带 data-kiro-composer-menu。
  */
 
@@ -61,7 +63,6 @@ interface PanelLayout {
   bottom?: number;
   width: number;
   maxHeight: number;
-  placement: "top" | "bottom";
 }
 
 export function KiroModelSelector({
@@ -134,7 +135,6 @@ export function KiroModelSelector({
       left,
       width,
       maxHeight,
-      placement: wantsAbove ? "top" : "bottom",
       ...(wantsAbove
         ? { bottom: vh - rect.top + PANEL_GAP }
         : { top: rect.bottom + PANEL_GAP }),
@@ -274,33 +274,14 @@ export function KiroModelSelector({
                   bottom: layout.bottom,
                   width: layout.width,
                   maxHeight: layout.maxHeight,
-                  transformOrigin: layout.placement === "top" ? "bottom right" : "top right",
                 }}
-                initial={
-                  reducedMotion
-                    ? false
-                    : {
-                        opacity: 0,
-                        scale: 0.97,
-                        y: -8,
-                        backdropFilter: "blur(0px) saturate(1)",
-                        WebkitBackdropFilter: "blur(0px) saturate(1)",
-                      }
-                }
-                animate={{
-                  opacity: 1,
-                  scale: 1,
-                  y: 0,
-                  backdropFilter: "blur(18px) saturate(1.2)",
-                  WebkitBackdropFilter: "blur(18px) saturate(1.2)",
-                }}
+                initial={reducedMotion ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
                 exit={
                   reducedMotion
                     ? { opacity: 0, transition: { duration: 0 } }
                     : {
                         opacity: 0,
-                        scale: 0.98,
-                        y: -6,
                         transition: { duration: PANEL_EXIT_S, ease: EASE_BEZIER.exit },
                       }
                 }
@@ -433,8 +414,7 @@ export function KiroModelSelector({
         data-testid="kiro-composer-model"
         data-model-open={open}
         className={cn(
-          "flex items-center h-9 rounded-xl transition-[background-color,border-color,color,transform] duration-[var(--motion-fast)] disabled:opacity-40 disabled:cursor-not-allowed min-w-0",
-          "active:scale-[0.99]",
+          "flex items-center h-9 rounded-xl transition-[background-color,border-color,color] duration-[var(--motion-fast)] disabled:opacity-40 disabled:cursor-not-allowed min-w-0",
           compact
             ? cn(
                 "w-9 justify-center",

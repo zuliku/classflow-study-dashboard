@@ -459,6 +459,7 @@ button:disabled {
 
   /* Drawer 面板：右侧滑入 + 透明度 */
   .ux-drawer-panel {
+    will-change: opacity, transform;
     transition:
       opacity var(--motion-panel) var(--ease-standard),
       transform var(--motion-panel) var(--ease-standard);
@@ -466,6 +467,7 @@ button:disabled {
 
   /* Modal 面板：轻缩放 + 上移 + 透明度（enter 与 Dialog/Command 统一 220ms） */
   .ux-modal-panel {
+    will-change: opacity, transform;
     transition:
       opacity var(--motion-overlay) var(--ease-standard),
       transform var(--motion-overlay) var(--ease-standard);
@@ -473,6 +475,7 @@ button:disabled {
 
   /* 内联面板 / Dropdown：轻微位移 + 透明度 */
   .ux-inline {
+    will-change: opacity, transform;
     transition:
       opacity var(--motion-fast) var(--ease-standard),
       transform var(--motion-fast) var(--ease-standard);
@@ -1888,6 +1891,8 @@ div[data-geometry-interacting] {
   color: var(--kiro-glass-ink);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
   backdrop-filter: blur(18px) saturate(1.2);
+  /* 仅 opacity 进出场：提前提升合成层，避免文字/图标在淡入时逐帧重新栅格化 */
+  will-change: opacity;
 }
 
 .kiro-model-glass[data-appearance="dark"] {

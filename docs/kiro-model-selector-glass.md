@@ -62,14 +62,17 @@ Closed ── click trigger ──▶ Opening ── 180ms ──▶ Open
 
 | 元素 | 进入 | 退出 |
 | --- | --- | --- |
-| 玻璃面板 | opacity 0→1；scale 0.97→1；y −8→0；backdrop blur 0→18px；180ms | opacity/scale/y 反向；110ms |
+| 玻璃面板 | opacity 0→1；180ms（模糊由 CSS 静态提供，不逐帧动画） | opacity →0；110ms |
 | 全局背景 | **不做**全屏模糊/遮罩（产品反馈：不适合模型选择器） | — |
 | 选项 hover | 背景 120ms；文字/图标不位移 | — |
 | Active 指示 | 键盘/鼠标 active 行使用暖色背景（不引入 layoutId，避免退出 presence 卡住） | — |
 | 列表进入 | 首屏轻微 fade（≤80ms），不做逐项大幅 stagger | — |
 
 - 缓动：进入 `cubic-bezier(0.2, 0.8, 0.2, 1)`；退出 `cubic-bezier(0.3, 0, 1, 1)`。
-- `prefers-reduced-motion` / 应用内 reduced：所有位移/缩放/模糊时长归零，直接落最终态。
+- **不逐帧动画 backdrop-filter / transform**：任何 blur radius、scale 或 translate 变化都会让
+  面板背后与面板内文字/图标在 Windows Chromium 上重新采样，产生抖动。玻璃模糊只声明一次
+  （CSS `.kiro-model-glass`），进出场仅过渡 opacity。
+- `prefers-reduced-motion` / 应用内 reduced：opacity 过渡时长归零，直接落最终态。
 - 玻璃模糊只作用于面板背后（`backdrop-filter`）；内部文字/图标保持锐利。
 - `@supports not (backdrop-filter)` 时面板回退为不透明暖白/深灰。
 - **滚动**：面板为 flex column，列表 `min-h-0 flex-1 overflow-y-auto`，支持鼠标滚轮 /
