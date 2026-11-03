@@ -102,7 +102,7 @@ describe("/api/ai/chat（流式）", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).toContain('"type":"text-delta"');
-    expect(lastFetch?.url).toBe("https://opencode.ai/zen/go/v1/chat/completions");
+    expect(lastFetch?.url).toBe("https://opencode.ai/inference/go/openai/v1/chat/completions");
     expect(text).not.toContain("sk-test-secret");
   });
 
@@ -232,7 +232,7 @@ describe("/api/ai/chat（流式）", () => {
     expect(text).toContain('"type":"text-delta"');
     expect(text).toContain('"delta":"你"');
     // Bearer 鉴权（Authorization header），URL 为 /v1/messages（不重复拼接）
-    expect(lastFetch?.url).toBe("https://opencode.ai/zen/go/v1/messages");
+    expect(lastFetch?.url).toBe("https://opencode.ai/inference/go/anthropic/v1/messages");
     const hdrs = (lastFetch?.init?.headers as Record<string, string> | undefined) ?? {};
     const auth = String(hdrs["authorization"] ?? "");
     expect(auth).toContain("Bearer sk-test-secret");
@@ -357,7 +357,7 @@ describe("/api/ai/test（连接测试）", () => {
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(lastFetch?.url).toBe("https://opencode.ai/zen/go/v1/messages");
+    expect(lastFetch?.url).toBe("https://opencode.ai/inference/go/anthropic/v1/messages");
     expect(String(((lastFetch?.init?.headers as Record<string, string> | undefined) ?? {})["authorization"] ?? "")).toContain("Bearer sk-test-secret");
   });
 

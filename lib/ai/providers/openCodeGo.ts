@@ -1,5 +1,6 @@
 ﻿import { AI } from "@/lib/ai/config";
-import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
+import { AIModelDefinition, AIProviderConfig, AITransport } from "@/lib/ai/providers/types";
+import { APP_VERSION } from "@/lib/version";
 
 /**
  * OpenCode Go 官方模型注册表（Task 10 + Phase 3.0/3.1）。
@@ -16,6 +17,9 @@ import { AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
  * - 官方 endpoint 表 + 本 verified registry = transport / vendor / capabilities / 展示名 source
  * 本列表是 /models 无法获取时的 fallback，也是远端模型 transport 的唯一来源
  * （远端 /models 只返回 id，不返回 transport；未知模型一律跳过，绝不猜测协议）。
+ *
+ * 2026-11 官方接入地址迁移：Base → https://opencode.ai/inference/go，
+ * OpenAI 兼容 /anthropic 分路径（见 config.ts）；x-opencode-session 与自有 UA 仍必需。
  *
  * transport 来自官方 endpoint 表：
  * - openai-responses：Grok 4.7 / GPT 6 Luna / GPT 5.6 Luna / Muse Spark 1.2 / 1.3
@@ -338,9 +342,22 @@ export function getOpenCodeGoConfig(apiKey: string): AIProviderConfig {
 }
 
 /**
- * OpenCode Go 路由会话头（2026-09-05 起强制；缺失 → 400 MissingSessionID）。
+ * 官方 Base URL（按 transport）：
+ * - openai-chat / openai-responses：/inference/go/openai/v1
+ * - anthropic-messages：/inference/go/anthropic/v1
+ * SDK 各自拼接 /chat/completions、/responses、/messages。
+ */
+export function getOpenCodeGoBaseURL(transport: AITransport): string {
+  return transport === "anthropic-messages" ? AI.OPENCODE_ANTHROPIC_BASE_URL : AI.OPENCODE_BASE_URL;
+}
+
+/** 官方要求客户端用自己的 UA（而非通用 SDK / HTTP 库默认值），便于流量识别与排障 */
+export const OPENCODE_USER_AGENT = `ClassFlow/${APP_VERSION}`;
+
+/**
+ * OpenCode Go 路由会话头（官方文档要求；缺失 → 400 MissingSessionID）。
  * 用途是同一会话请求的 provider 亲和与 prompt 缓存：同会话稳定、跨会话/用户隔离、
- * 不透明（任意字符串均可）。凡是发往 OPENCODE_BASE_URL 的模型调用都必须携带，
+ * 不透明（任意字符串均可）。凡是发往 OpenCode Go 的模型调用都必须携带，
  * 与 transport（chat / responses / messages）无关。
  */
 export const OPENCODE_SESSION_HEADER = "x-opencode-session";
@@ -428,7 +445,7 @@ export async function fetchOpenCodeGoModels(options: { refresh?: boolean } = {})
   }
   try {
     const res = await fetch(AI.OPENCODE_MODELS_URL, {
-      headers: { accept: "application/json" },
+      headers: { accept: "application/json", "user-agent": OPENCODE_USER_AGENT },
       signal: AbortSignal.timeout(5_000),
       cache: "no-store",
     });

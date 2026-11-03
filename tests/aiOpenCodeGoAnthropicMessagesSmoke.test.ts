@@ -14,9 +14,7 @@
 import { describe, it, expect } from "vitest";
 import { streamText, convertToModelMessages, tool } from "ai";
 import { z } from "zod";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { resolveLanguageModel } from "@/lib/ai/providers/resolver";
-import { AI } from "@/lib/ai/config";
 
 const KEY = process.env.OPENCODE_GO_TEST_API_KEY ?? "";
 const describeGo = KEY ? describe : describe.skip;
@@ -25,27 +23,7 @@ const SMOKE_TIMEOUT = 120_000;
 describeGo("OpenCode Go Anthropic Messages 真实 smoke（OPENCODE_GO_TEST_API_KEY 存在时运行）", () => {
   const opts = { provider: "opencode-go" as const, model: "minimax-m3", apiKey: KEY };
 
-  it("Smoke A：minimax-m3 basic stream → text output，无 400（Bearer authToken vs x-api-key 探针）", async () => {
-    // 先探针：同一模型/URL，x-api-key 认证是否被接受（Bearer 已被 resolver 验证为 401）
-    let xapiOk = false;
-    {
-      const probe = createAnthropic({
-        name: "classflow-kiro-probe",
-        baseURL: AI.OPENCODE_BASE_URL,
-        apiKey: KEY,
-      })("minimax-m3");
-      try {
-        const r = streamText({ model: probe, messages: [{ role: "user", content: "OK" }], maxOutputTokens: 16 });
-        let t = "";
-        for await (const p of r.fullStream) {
-          if (p.type === "text-delta") t += p.text;
-        }
-        xapiOk = t.trim().length > 0;
-      } catch {
-        xapiOk = false;
-      }
-    }
-    console.log(`[ANTH][x-api-key-probe] ${xapiOk ? "OK" : "FAIL"}`);
+  it("Smoke A：minimax-m3 basic stream → text output，无 400（Bearer authToken）", async () => {
     const { model } = await resolveLanguageModel(opts);
     const result = streamText({
       model,

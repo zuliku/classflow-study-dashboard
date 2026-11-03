@@ -3,7 +3,7 @@
  * provider/model → AIModelDefinition（transport 唯一来源）→ AI SDK LanguageModel。
  * - openai-chat        → @ai-sdk/openai-compatible
  * - openai-responses   → @ai-sdk/openai（显式 .responses(modelId)，不依赖自动推断）
- * - anthropic-messages → @ai-sdk/anthropic（OpenCode Go Messages：apiKey → x-api-key，baseURL 不带 /messages）
+ * - anthropic-messages → @ai-sdk/anthropic（OpenCode Go Messages：Bearer authToken，baseURL 不带 /messages）
  * 三种 transport 均有 Runtime adapter；Tool 语义与 transport 完全解耦。
  */
 
@@ -14,7 +14,7 @@ import { LanguageModel } from "ai";
 import { AIError } from "@/lib/ai/errors";
 import { AIProviderId, AICustomConfig, AIModelDefinition, AIProviderConfig } from "@/lib/ai/providers/types";
 import { DEEPSEEK_MODELS, deepSeekTransformRequestBody } from "@/lib/ai/providers/deepSeek";
-import { OPENCODE_MODELS, fetchOpenCodeGoModels, openCodeGoTransformRequestBody, OPENCODE_SESSION_HEADER, resolveOpenCodeGoSessionId } from "@/lib/ai/providers/openCodeGo";
+import { OPENCODE_MODELS, fetchOpenCodeGoModels, openCodeGoTransformRequestBody, OPENCODE_SESSION_HEADER, resolveOpenCodeGoSessionId, getOpenCodeGoBaseURL, OPENCODE_USER_AGENT } from "@/lib/ai/providers/openCodeGo";
 import { getProviderConfig } from "@/lib/ai/providers/registry";
 
 export interface ResolveModelInput {
@@ -71,26 +71,30 @@ export async function resolveModelDefinition(input: Pick<ResolveModelInput, "pro
 /**
  * AIModelDefinition → AI SDK LanguageModel。
  * Custom noRedirect（SSRF 防护）只存在于 openai-chat 分支。
- * OpenCode Go：全部 transport 统一携带 x-opencode-session（2026-09 起强制，
- * 缺失 → 400 MissingSessionID；与 transport 无关）。
+ * OpenCode Go：官方 Base URL 按 transport 选择（OpenAI 兼容 / Anthropic 分开），
+ * 全部 transport 统一携带 x-opencode-session 与自有 User-Agent。
  */
 export function createLanguageModelFromDefinition(
   definition: AIModelDefinition,
   cfg: AIProviderConfig,
   opts?: { sessionId?: string }
 ): LanguageModel {
-  // 非 OpenCode Go provider 不发送会话头（DeepSeek / Custom 原样）
-  const openCodeGoHeaders =
-    definition.provider === "opencode-go"
-      ? { [OPENCODE_SESSION_HEADER]: resolveOpenCodeGoSessionId({ sessionId: opts?.sessionId, apiKey: cfg.apiKey ?? "" }) }
-      : undefined;
+  const isOpenCodeGo = definition.provider === "opencode-go";
+  // 非 OpenCode Go provider 不发送会话头 / 自有 UA（DeepSeek / Custom 原样）
+  const openCodeGoHeaders = isOpenCodeGo
+    ? {
+        [OPENCODE_SESSION_HEADER]: resolveOpenCodeGoSessionId({ sessionId: opts?.sessionId, apiKey: cfg.apiKey ?? "" }),
+        "user-agent": OPENCODE_USER_AGENT,
+      }
+    : undefined;
+  // 官方文档：OpenAI 兼容与 Anthropic Messages 使用不同 Base 路径
+  const baseURL = isOpenCodeGo ? getOpenCodeGoBaseURL(definition.transport) : cfg.baseURL;
   if (definition.transport === "anthropic-messages") {
-    // OpenCode Go Messages：真实验证（V4.7.2 real smoke）确认 /v1/messages 接受 x-api-key；
-    // Bearer authToken 会返回 401 Missing API key。baseURL 由 Provider 自行拼接 /messages。
+    // OpenCode Go Messages：官方文档 Bearer 鉴权；baseURL 由 Provider 自行拼接 /messages。
     return createAnthropic({
       name: "classflow-kiro",
-      baseURL: cfg.baseURL,
-      apiKey: cfg.apiKey ?? "",
+      baseURL,
+      authToken: cfg.apiKey ?? "",
       headers: openCodeGoHeaders,
     })(definition.id);
   }
@@ -101,7 +105,7 @@ export function createLanguageModelFromDefinition(
     const openCodeGoCompat = definition.provider === "opencode-go";
     return createOpenAICompatible({
       name: "classflow-kiro",
-      baseURL: cfg.baseURL,
+      baseURL,
       apiKey: cfg.apiKey ?? "",
       headers: openCodeGoHeaders,
       ...(deepSeekCompat ? { transformRequestBody: deepSeekTransformRequestBody } : {}),
@@ -117,11 +121,11 @@ export function createLanguageModelFromDefinition(
     })(definition.id);
   }
   if (definition.transport === "openai-responses") {
-    // OpenCode Go Responses（Grok 4.5 / GPT 5.6 Luna）：官方 endpoint /v1/responses。
+    // OpenCode Go Responses：官方 endpoint /openai/v1/responses。
     // 显式 .responses(modelId) —— transport 由 registry 声明，Runtime 不自动推断 API。
     const provider = createOpenAI({
       name: "classflow-kiro",
-      baseURL: cfg.baseURL,
+      baseURL,
       apiKey: cfg.apiKey ?? "",
       headers: openCodeGoHeaders,
     });

@@ -416,7 +416,7 @@ describe("SSRF 防护（validateCustomBaseURL）", () => {
   const allowCases = [
     "https://api.example.com/v1",
     "https://api.deepseek.com",
-    "https://opencode.ai/zen/go/v1",
+    "https://opencode.ai/inference/go/openai/v1",
     "https://172.32.0.1/v1", // 公网段
     "https://sub.example.com:8443/v1",
   ];

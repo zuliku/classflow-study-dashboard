@@ -406,7 +406,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                 type={showKey ? "text" : "password"}
                 value={apiKeyInput}
                 onChange={handleApiKeyChange}
-                placeholder="sk-..."
+                placeholder="oc_sk_..."
                 ariaLabel="API Key"
                 autoComplete="off"
                 spellCheck={false}
@@ -795,7 +795,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                           setWebPdfVisionApiKeyInput(v);
                           setSessionWebPdfVisionApiKey(v);
                         }}
-                        placeholder="sk-..."
+                        placeholder="oc_sk_..."
                         ariaLabel="OpenCode Go Vision API Key"
                         autoComplete="off"
                         spellCheck={false}

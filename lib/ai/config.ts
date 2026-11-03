@@ -1,10 +1,21 @@
 import { AIProviderId, AIProviderConfig, AITransport } from "@/lib/ai/providers/types";
 
-/** 全局 AI 常量（唯一来源） */
+/**
+ * 全局 AI 常量（唯一来源）。
+ *
+ * OpenCode Go 官方接入（2026-11 文档 https://opencode.ai/v2/docs/console/go）：
+ * - 根地址 https://opencode.ai/inference/go
+ * - OpenAI 兼容（chat / responses）→ /openai/v1
+ * - Anthropic Messages → /anthropic/v1
+ * - 模型目录 → /v1/models
+ * 旧 https://opencode.ai/zen/go/v1 已迁移，不再使用。
+ */
 export const AI = {
-  /** OpenCode Go 统一 endpoint（openai-chat → /chat/completions；anthropic-messages → /messages） */
-  OPENCODE_BASE_URL: "https://opencode.ai/zen/go/v1",
-  OPENCODE_MODELS_URL: "https://opencode.ai/zen/go/v1/models",
+  /** OpenAI 兼容 Base（chat/completions 与 responses 共用；SDK 自行拼接路径） */
+  OPENCODE_BASE_URL: "https://opencode.ai/inference/go/openai/v1",
+  /** Anthropic Messages Base（SDK 自行拼接 /messages） */
+  OPENCODE_ANTHROPIC_BASE_URL: "https://opencode.ai/inference/go/anthropic/v1",
+  OPENCODE_MODELS_URL: "https://opencode.ai/inference/go/v1/models",
   DEEPSEEK_BASE_URL: "https://api.deepseek.com",
   /**
    * Chat 流式 turn 总预算（毫秒）。

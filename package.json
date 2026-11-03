@@ -22,6 +22,7 @@
     "verify:preload-artifact": "node scripts/verify-preload-artifact.mjs",
     "pack:win": "electron-vite build && electron-builder --win nsis",
     "security:secrets": "node scripts/check-secrets.mjs",
+    "smoke:opencode": "node scripts/smoke-opencode.mjs",
     "lint:motion": "node scripts/check-motion.mjs"
   },
   "engines": {

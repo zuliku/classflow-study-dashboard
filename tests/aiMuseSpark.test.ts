@@ -219,6 +219,6 @@ describe("Muse Spark 1.3 — resolver / transport", () => {
 
   it("createLanguageModelFromDefinition：responses → @ai-sdk/openai .responses（不走 openai-compatible/anthropic）", () => {
     const defLocal = OPENCODE_MODELS.find((m) => m.id === "muse-spark-1.3-contributor")!;
-    expect(() => createLanguageModelFromDefinition(defLocal, { baseURL: "https://opencode.ai/zen/go/v1", apiKey: "sk-test" })).not.toThrow();
+    expect(() => createLanguageModelFromDefinition(defLocal, { baseURL: "https://opencode.ai/inference/go/openai/v1", apiKey: "sk-test" })).not.toThrow();
   });
 });
