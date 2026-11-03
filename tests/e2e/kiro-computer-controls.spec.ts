@@ -78,7 +78,7 @@ test("Computer controls：Sandbox 引导 → 状态同步（Composer ↔ Setting
   await expect(authActions.getByRole("button", { name: "添加本地位置" })).toBeVisible();
   await expect(workspaceRows.first().getByRole("button", { name: "添加本地位置" })).toHaveCount(0);
 
-  // 7. Settings → Kiro：思考程度可调（deepseek-v4-flash 支持 thinking；与 Composer 同一 store）
+  // 7. Settings → Kiro：思考程度可调（deepseek-flash 支持 thinking；与 Composer 同一 store）
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro" }).click();
   await expect(page.getByTestId("settings-kiro").getByText("思考程度", { exact: true })).toBeVisible();
   await expect(page.getByTestId("settings-kiro").getByText("当前模型不可调")).toHaveCount(0);

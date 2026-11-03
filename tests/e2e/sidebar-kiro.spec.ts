@@ -47,7 +47,7 @@ test("Icon Rail (md–xl)：Kiro 显示正式 Logo，tooltip 正常", async ({ p
   const kiroImg = await kiroRail.locator('img[src="/kiro/kiro-mark.png"]').boundingBox();
   expect(Math.abs(kiroImg!.x + kiroImg!.width / 2 - (railBox!.x + railBox!.width / 2))).toBeLessThanOrEqual(4);
 
-  const tooltip = kiroRail.locator('[role="tooltip"]');
+  const tooltip = kiroRail.getByTestId("nav-tooltip");
   await expect(tooltip).toHaveCSS("opacity", "0");
   await kiroRail.hover();
   await expect(tooltip).toHaveCSS("opacity", "1");

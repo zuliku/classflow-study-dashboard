@@ -43,7 +43,10 @@ export function useKiroAttachments() {
     (err instanceof DOMException && err.name === "AbortError") ||
     (err instanceof Error && err.name === "AbortError");
   const isAlive = (id: string, signal?: AbortSignal) =>
-    !signal?.aborted && attachmentsRef.current.some((a) => a.id === id);
+    !signal?.aborted &&
+    // 初次 addFiles 的 setState 可能尚未 commit（快速缩略图/缓存命中）：
+    // 在途 controller 是同一附件仍存活的同步事实，避免误判为“已移除”而永久停在 processing。
+    (controllersRef.current.has(id) || attachmentsRef.current.some((a) => a.id === id));
 
   const toView = useCallback((a: KiroAttachment): KiroAttachmentView => {
     if (a.source === "local") {

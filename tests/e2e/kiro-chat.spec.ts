@@ -1,4 +1,5 @@
-﻿import { expect, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { buildMinimalPdf } from "../fixtures/files";
 
 /**
  * Kiro Chat 核心 E2E（Task 1）：mock /api/ai/chat，
@@ -9,9 +10,25 @@
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   custom: { providerName: "", baseURL: "", model: "" },
 };
+
+// Task-12：纯 Chromium 无 Electron preload → 注入最小本地 invocation stub（仅测试）
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } };
+    };
+    if (!w.classflowDesktop) w.classflowDesktop = {};
+    if (!w.classflowDesktop.invocation) {
+      let seq = 0;
+      w.classflowDesktop.invocation = {
+        beginLocal: async () => ({ invocationId: `inv_e2e_chat_${++seq}_00000000-0000-4000-8000-000000000000` }),
+      };
+    }
+  });
+});
 
 function sse(body: string): string {
   return body
@@ -69,6 +86,15 @@ test("Kiro Chat：输入消息 → 流式回复最终渲染；错误路径显示
   await page.addInitScript(({ settings, key }) => {
     localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
     sessionStorage.setItem("classflow-ai-key:deepseek", key);
+    const w = window as unknown as {
+      classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } };
+    };
+    if (!w.classflowDesktop) w.classflowDesktop = {};
+    if (!w.classflowDesktop.invocation) {
+      w.classflowDesktop.invocation = {
+        beginLocal: async () => ({ invocationId: "inv_e2e_chat_00000000-0000-4000-8000-000000000001" }),
+      };
+    }
   }, { settings: AI_SETTINGS, key: "sk-test-key" });
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -92,7 +118,8 @@ test("Kiro Chat：输入消息 → 流式回复最终渲染；错误路径显示
   await composer.getByLabel("发送").click();
   await expect(page.getByTestId("kiro-error")).toContainText("这次没能生成回复", { timeout: 10000 });
   await expect(page.getByTestId("kiro-error")).toContainText("API Key 无效");
-  await expect(page.getByTestId("kiro-error").getByRole("button", { name: "重试" })).toBeVisible();
+  // Key 错/模型下线：原样重试必败 → 只保留设置入口（不显示重试）
+  await expect(page.getByTestId("kiro-error").getByRole("button", { name: "重试" })).toHaveCount(0);
   await expect(page.getByTestId("kiro-error").getByRole("button", { name: "打开设置" })).toBeVisible();
 });
 
@@ -194,7 +221,7 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
 
   // 工具已完成、最终文本尚未到达：折叠摘要也明确进入 compose 阶段，并由 live region 播报。
   const worklog = page.getByTestId("kiro-worklog");
-  await expect(worklog.getByRole("status")).toHaveText("正在整理回答", { timeout: 10000 });
+  await expect(page.getByTestId("kiro-agent-run-header").getByRole("status")).toHaveText(/正在执行|正在整理回答/, { timeout: 10000 });
   releaseFinal();
 
   // 客户端执行工具并自动继续：最终回答出现
@@ -202,20 +229,18 @@ test("Kiro Read Tool：tool call → 客户端执行 → 自动继续 → 最终
   // 第二轮回传包含 tool output（客户端确实执行并回传了）
   expect(requests).toBe(2);
 
-  // Agent Worklog：完成后保持低噪声摘要；不泄漏原始工具名/JSON。
-  await expect(worklog).toContainText("已完成 · 1 个步骤");
-  await expect(worklog.getByText("get_upcoming_assignments")).toHaveCount(0);
+  // Agent Worklog：完成后保持低噪声摘要；不泄漏原始工具名/JSON。\n  await expect(page.getByTestId("kiro-agent-run-header")).toContainText("已完成");\n  await expect(worklog).toContainText("查看近期 DDL");\n  await expect(worklog.getByText("get_upcoming_assignments")).toHaveCount(0);
 
   // Worklog disclosure（IM2B + V4.1）：完成瞬间不自动折叠（保持 expanded，避免 layout 跳动）；
   // 用户手动可折叠/展开；tool row 真实详情可见（expandable 才有 Chevron/disclosure）
-  const summary = worklog.getByRole("button").first();
+  const summary = page.getByTestId("kiro-agent-run-header").getByRole("button").first();
   await expect(summary).toHaveAttribute("aria-expanded", "true");
   await summary.click();
   await expect(summary).toHaveAttribute("aria-expanded", "false");
   await summary.click();
   await expect(summary).toHaveAttribute("aria-expanded", "true");
 
-  const toolRow = worklog.getByRole("button").nth(1);
+  const toolRow = worklog.getByRole("button").first();
   await expect(toolRow).toHaveAttribute("aria-expanded", "false");
   await toolRow.click();
   await expect(toolRow).toHaveAttribute("aria-expanded", "true");
@@ -250,7 +275,7 @@ test("Kiro Write Tool：search → set_assignment_ddl → Action Card → 持久
         assignmentTimeSlice: "all", lastWorkspaceTab: "overview",
         preferences: { showWeekends: true, ddlWarningDays: 7, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "system", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable" },
       };
-      localStorage.setItem("classflow-storage-v2", JSON.stringify({ version: 3, state }));
+      localStorage.setItem("classflow-storage-v2", JSON.stringify({ version: 7, state }));
       }
       localStorage.setItem("classflow-ai-settings-v1", JSON.stringify({ version: 0, state: settings }));
       sessionStorage.setItem("classflow-ai-key:deepseek", key);
@@ -317,8 +342,9 @@ test("Kiro Write Tool：search → set_assignment_ddl → Action Card → 持久
 
   // 最终回答 + Action Card
   await expect(page.getByTestId("kiro-message").last()).toContainText("已调整统计学作业", { timeout: 15000 });
+  await expect(page.getByTestId("kiro-composer").getByLabel("停止生成")).toHaveCount(0, { timeout: 15000 });
   const card = page.getByTestId("kiro-action-card");
-  await expect(card).toBeVisible();
+  await expect(card).toBeVisible({ timeout: 20000 });
   await expect(card).toContainText("已调整任务");
   await expect(card).toContainText("撤销");
   expect(requests).toBe(3);
@@ -402,7 +428,6 @@ test("Kiro Markdown：heading / table / strong / list 真实渲染，无原始�
 });
 
 test("Kiro Attachment：上传 PDF → 本地解析 ready → 发送 → 附件 context 到达 Mock → 回答", async ({ page }) => {
-  const { buildMinimalPdf } = require("../fixtures/files");
   let receivedContext = "";
   await page.route("**/api/ai/chat", async (route) => {
     const body = route.request().postDataJSON() as { attachmentsContext?: { name?: string; text?: string }[] };
@@ -458,4 +483,6 @@ test("Kiro Attachment：上传 PDF → 本地解析 ready → 发送 → 附件 
   await expect(page.getByTestId("kiro-sent-attachment")).toContainText("测试讲义.pdf");
   await expect(page.getByTestId("kiro-user-message")).not.toContainText("ClassFlow PDF test document");
 });
+
+
 

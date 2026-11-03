@@ -11,7 +11,7 @@ import { test as demoTest } from "./demoFixtures";
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   custom: { providerName: "", baseURL: "", model: "" },
 };
 

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import { Plus, Settings, Loader2 } from "lucide-react";
@@ -1030,7 +1030,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                   <button
                     type="button"
                     onClick={() => setOpenMenu((v) => (v === "add" ? null : "add"))}
-                    aria-label="添加"
+                    aria-label="添加附件"
                     aria-expanded={openMenu === "add"}
                     aria-haspopup="menu"
                     data-testid="kiro-composer-add"
@@ -1134,6 +1134,7 @@ export const KiroComposer = React.memo(function KiroComposer({
         {/* Composer 下方只保留真正需要用户注意的状态 */}
         {/* 模型下线 CTA：常驻挂载 + 高度过渡（模型切换时只伸缩不跳变，下方内容零位移） */}
         <div
+          aria-hidden={!(configured && modelUnavailable)}
           className={cn(
             "grid transition-[grid-template-rows,opacity] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
             configured && modelUnavailable ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"

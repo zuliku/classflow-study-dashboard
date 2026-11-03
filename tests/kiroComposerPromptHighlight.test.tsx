@@ -188,6 +188,7 @@ describe("KiroComposer 输入高亮镜像", () => {
     );
     expect(slash?.textContent).toBe("/d");
     await pumpEnterFrames();
+    await new Promise((r) => setTimeout(r, 250));
     expect(container!.querySelector('[data-testid="skill-slash-menu"]')?.className).toContain(
       "kiro-slash-enter"
     );
@@ -227,3 +228,5 @@ describe("KiroComposer / 与 @ 展开动画契约（源码锁定）", () => {
     expect(css).toContain(".kiro-prompt-token-mention");
   });
 });
+
+

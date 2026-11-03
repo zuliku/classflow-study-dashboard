@@ -163,7 +163,7 @@ describe("SkillDistillDialog：不再维护第二份 Tool 事实来源", () => {
   it("移除「触发条件」输入；description 辅助文案说明 routing 用途", () => {
     expect(dialog).not.toContain("触发条件");
     expect(dialog).not.toContain("draft.triggers");
-    expect(dialog).toContain("描述同时用于帮助 Kiro 判断何时使用此 Skill");
+    expect(dialog).toContain("说明 Skill 的用途与适用场景。");
   });
 
   it("保存走 agents/kiro.json（kiroManifest），不再写 SKILL.md metadata", () => {
@@ -255,3 +255,4 @@ describe("S1 安全边界", () => {
     expect(isKnownKiroSkillTool("totally_made_up_tool")).toBe(false);
   });
 });
+

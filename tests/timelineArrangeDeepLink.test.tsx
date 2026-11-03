@@ -283,7 +283,7 @@ describe("AssignmentDrawer schedule routing", () => {
       ddl: weekDate(12, 4) + "T23:59:00",
       studyBlocks: [{ ...outOfSemester, date: "2027-03-01" }],
     });
-    const viewBtn = screen.getByRole("button", { name: /在时间表查看/ }) as HTMLButtonElement;
+    const viewBtn = screen.getByRole("button", { name: "学习安排不在当前学期范围内" }) as HTMLButtonElement;
     expect(viewBtn.disabled).toBe(true);
 
     fireEvent.click(viewBtn);

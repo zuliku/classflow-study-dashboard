@@ -56,8 +56,8 @@ describe("P5 Subscription ownership 接线", () => {
 describe("P5 Shared Surface 接线", () => {
   it("KiroChatSurface 统一渲染 Surface（Workspace + Sidecar 同一组件）", () => {
     const surface = read("components/kiro/KiroChatSurface.tsx");
-    expect(surface).toContain("<KiroComputerSessionSurface variant={variant} />");
-    expect(surface).toContain('variant: "workspace" | "sidecar"');
+    expect(surface).toContain('<KiroComputerSessionSurface variant={variant === "workspace" ? "workspace" : "sidecar"} />');
+    expect(surface).toContain('variant: "workspace" | "sidecar" | "dock"');
   });
 
   it("Surface 不做 Approval 决策 / 不复制 Worklog", () => {

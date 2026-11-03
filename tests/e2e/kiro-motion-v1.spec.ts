@@ -1,4 +1,4 @@
-﻿import { test as base, expect, Page } from "@playwright/test";
+import { test as base, expect, Page } from "@playwright/test";
 
 /**
  * Kiro Motion System V1 —— focused choreography E2E。
@@ -10,7 +10,7 @@
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   apiKey: "sk-test",
   custom: { providerName: "", baseURL: "", model: "" },
 };

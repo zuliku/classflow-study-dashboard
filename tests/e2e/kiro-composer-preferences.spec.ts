@@ -1,4 +1,4 @@
-﻿import { expect, Page } from "@playwright/test";
+import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 import http from "node:http";
 
@@ -12,7 +12,7 @@ import http from "node:http";
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   custom: { providerName: "", baseURL: "", model: "" },
   memoryEnabled: true,
   reasoningEffort: "medium",
@@ -223,7 +223,7 @@ test("回复期间可改 Model/Reasoning/AgentMode/WebSearch；continuation 用�
   const continuation = captured[1];
   // 冻结：第一条消息的 snapshot 不变（初始 model / reasoning effective / workspace-auto / webSearch 初始值）。
   // 注意：V4 Flash 的 supportedEfforts 只有 default/high/max——requested "medium" 归一为 effective "default"。
-  expect(continuation.model).toBe("deepseek-v4-flash");
+  expect(continuation.model).toBe("deepseek-flash");
   expect(continuation.reasoningEffort).toBe("default");
   expect(continuation.agentMode).toBe("workspace-auto");
   expect(continuation.webSearchEnabled).toBe(initialWebSearch);
@@ -245,7 +245,7 @@ test("回复期间可改 Model/Reasoning/AgentMode/WebSearch；continuation 用�
     // 只有按钮文本真正变化才断言 model 切换
     const labelAfter = (await modelButton.textContent()) ?? "";
     if (labelAfter !== currentModelLabel) {
-      expect(nextTurn.model).not.toBe("deepseek-v4-flash");
+      expect(nextTurn.model).not.toBe("deepseek-flash");
     }
   }
 

@@ -10,7 +10,7 @@ import { test } from "./demoFixtures";
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   custom: { providerName: "", baseURL: "", model: "" },
 };
 
@@ -139,7 +139,7 @@ test("长历史恢复：Summary + 旧消息完整 + 继续对话", async ({ page
           createdAt: "2026-08-01T00:00:00.000Z",
           updatedAt: "2026-08-09T10:00:00.000Z",
           provider: "deepseek",
-          model: "deepseek-v4-flash",
+          model: "deepseek-flash",
           messages,
           manualRefs: [],
           entryRefs: [],

@@ -105,12 +105,12 @@ describe("internal vision extract route", () => {
     expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 
-  it("总字节 >10MiB → VISION_BUDGET_EXHAUSTED", async () => {
+  it("6×2MiB（12MiB）在总预算内 → 允许并调用 Provider", async () => {
     const files = Array.from({ length: 6 }, (_, i) => ({ name: `f${i}.png`, type: "image/png" as const, size: 2 * MIB }));
     const res = await post(makeForm({ files }));
     const json = await res.json();
-    expect(json.code).toBe("VISION_BUDGET_EXHAUSTED");
-    expect(fetchMock).toHaveBeenCalledTimes(0);
+    expect(json.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it("unknown provider → INVALID_PROVIDER", async () => {

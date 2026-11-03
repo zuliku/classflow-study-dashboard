@@ -94,6 +94,20 @@ async function seedDemoStorage(page: Page) {
 
 export const test = base.extend({
   page: async ({ page }, use) => {
+    // Task-12：本地发送需要 Electron preload 的 invocation capability；
+    // Chromium E2E 无 preload，注入最小本地 stub（不改变生产鉴权）。
+    await page.addInitScript(() => {
+      const w = window as unknown as {
+        classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } };
+      };
+      if (!w.classflowDesktop) w.classflowDesktop = {};
+      if (!w.classflowDesktop.invocation) {
+        let seq = 0;
+        w.classflowDesktop.invocation = {
+          beginLocal: async () => ({ invocationId: `inv_e2e_${++seq}_00000000-0000-4000-8000-000000000000` }),
+        };
+      }
+    });
     await seedDemoStorage(page);
     await use(page);
   },

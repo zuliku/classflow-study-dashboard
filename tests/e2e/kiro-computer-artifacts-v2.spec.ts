@@ -1,4 +1,4 @@
-﻿import { expect } from "@playwright/test";
+import { expect } from "@playwright/test";
 import { test } from "./demoFixtures";
 import { createHash } from "node:crypto";
 import { promises as fsp } from "node:fs";
@@ -17,7 +17,7 @@ import * as path from "node:path";
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   custom: { providerName: "", baseURL: "", model: "" },
 };
 

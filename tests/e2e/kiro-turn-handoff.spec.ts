@@ -20,7 +20,7 @@ import http from "node:http";
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   custom: { providerName: "", baseURL: "", model: "" },
 };
 
@@ -236,7 +236,7 @@ test("TURN-2: preflight 中切换 Model → 本轮请求仍用冻结的 Model A"
   await expect.poll(() => captured.length, { timeout: 15000 }).toBeGreaterThanOrEqual(1);
   // 本轮请求体必须使用冻结的 model A（Send click 瞬间的配置）
   console.log(`[TURN-2] requestModels=${JSON.stringify(captured)}`);
-  expect(captured[0].model).toBe("deepseek-v4-flash");
+  expect(captured[0].model).toBe("deepseek-flash");
   await sse.close();
 });
 

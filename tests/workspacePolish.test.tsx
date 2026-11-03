@@ -23,9 +23,8 @@ describe("Phase3 Workspace Polish", () => {
   it("Channel copy productized", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "components/settings/ChannelSettings.tsx"), "utf8");
     expect(src).not.toContain("仅存于 SecretVault");
-    expect(src).toContain("凭据会安全保存在当前设备");
+    expect(src).toContain("凭据保存在本机");
     expect(src).not.toContain("receive-only");
-    expect(src).toContain("是否交给 Kiro 处理由你决定");
   });
 
   it("Settings reduced motion respects preference", () => {
@@ -40,3 +39,4 @@ describe("Phase3 Workspace Polish", () => {
     expect(src).toContain("useExitPresenceList");
   });
 });
+

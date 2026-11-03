@@ -110,7 +110,7 @@ describe("TimetableImportPreviewDialog — Bell Schedule 保存后实时更新�
     fireEvent.click(screen.getByText("查看导入预览"));
 
     // 无 Bell：blocker + disabled
-    expect(screen.getByText(/尚未设置学校作息时间/)).toBeTruthy();
+    expect(screen.getAllByText(/需要先设置学校作息时间/).length).toBeGreaterThan(0);
     const applyBtn = screen.getByText(/导入所选课程/) as HTMLButtonElement;
     expect(applyBtn.disabled).toBe(true);
 
@@ -123,7 +123,7 @@ describe("TimetableImportPreviewDialog — Bell Schedule 保存后实时更新�
     // currentPreflight 重算：blocker 消失、具体时间出现、Apply enabled
     await waitFor(() => {
       expect(screen.getByText(/学校作息时间：测试作息/)).toBeTruthy();
-      expect(screen.queryByText(/尚未设置学校作息时间/)).toBeNull();
+      expect(screen.queryAllByText(/需要先设置学校作息时间/)).toHaveLength(0);
     });
     expect(screen.getAllByText(/08:00–09:40/).length).toBeGreaterThanOrEqual(1); // 第1-2节解析
     const applyBtn2 = screen.getByText(/导入所选课程/) as HTMLButtonElement;
@@ -166,3 +166,5 @@ describe("TimetableImportPreviewDialog — Pending Apply gate（P0-3）", () => 
     expect(applyBtn2.disabled).toBe(false);
   });
 });
+
+

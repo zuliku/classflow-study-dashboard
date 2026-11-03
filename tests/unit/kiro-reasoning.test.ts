@@ -34,7 +34,7 @@ const adjustableDef: AIModelDefinition = {
   },
 };
 
-const deepseekFlash = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-v4-flash")!;
+const deepseekFlash = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-flash")!;
 const deepseekPro = DEEPSEEK_MODELS.find((m) => m.id === "deepseek-v4-pro")!;
 
 describe("reasoning capability", () => {
@@ -277,13 +277,13 @@ describe("resolveEffectiveReasoningEffort（requested → effective，UI/Turn Sn
   const customEnabled = { providerName: "x", baseURL: "https://x.example", model: "my-model", reasoningEffort: true };
 
   it("1. DeepSeek requested=max → max", () => {
-    expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-v4-flash", requested: "max" })).toBe("max");
+    expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-flash", requested: "max" })).toBe("max");
     expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-v4-pro", requested: "high" })).toBe("high");
   });
 
   it("2. DeepSeek requested=low → default（不制造假档位）", () => {
     expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-v4-pro", requested: "low" })).toBe("default");
-    expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-v4-flash", requested: "medium" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "deepseek", model: "deepseek-flash", requested: "medium" })).toBe("default");
   });
 
   it("3. OpenCode Go fixed requested=high → default", () => {
@@ -486,3 +486,4 @@ describe("2026-10 官方目录：新增 / 扩展模型 → Composer 档位", () 
     });
   }
 });
+

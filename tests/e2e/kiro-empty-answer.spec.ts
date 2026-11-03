@@ -11,7 +11,7 @@ import { expect, test } from "@playwright/test";
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   custom: { providerName: "", baseURL: "", model: "" },
 };
 
@@ -44,7 +44,7 @@ function emptyAnswerSSE(): string {
     version: 1,
     at: "2026-09-30T00:00:00.000Z",
     provider: "deepseek",
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     totalEstimatedTokens: 100,
     breakdown: { systemPromptTokens: 10, toolSchemaTokens: 80, conversationTokens: 10, attachmentTokens: 0, summaryTokens: 0 },
     conversationBudget: { max: 100000, used: 10, compactAt: 75000, compacted: false },

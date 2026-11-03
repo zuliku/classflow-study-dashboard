@@ -83,7 +83,7 @@ describe("Kimi K3 reasoning capability（Phase 3.5A）", () => {
 
   it("切换行为：requested max 切到固定模型 → default；切回 Kimi → max 恢复", () => {
     expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "kimi-k3", requested: "max" })).toBe("max");
-    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "glm-5.3-flash", requested: "max" })).toBe("default");
+    expect(resolveEffectiveReasoningEffort({ provider: "opencode-go", model: "kimi-k2.7-code", requested: "max" })).toBe("default");
   });
 });
 

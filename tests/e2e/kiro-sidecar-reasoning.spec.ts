@@ -18,7 +18,7 @@ async function seedAI(page: Page) {
       settings: {
         enabled: true,
         provider: "deepseek",
-        model: "deepseek-v4-flash",
+        model: "deepseek-flash",
         custom: { providerName: "", baseURL: "", model: "" },
       },
       key: "sk-test-key",

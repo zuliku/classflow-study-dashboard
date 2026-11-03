@@ -1,4 +1,4 @@
-﻿// @vitest-environment node
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import {
   DesktopControlSessionStore,
@@ -85,7 +85,7 @@ describe("V2.3 DesktopControlSessionStore — 目标 / 计划 / 步骤", () => {
     expect(store.reflectionSnapshot(SESSION).noProgress).toBe(1);
   });
 
-  it("status 与 session 事件都携带 goal/plan/stepIndex/reflectionRequired", () => {
+  it("status 与 session 事件都携带 goal/plan/stepIndex/reflectionRequired", async () => {
     const events: Array<{ plan: string[]; stepIndex: number; goal: string | null; reflectionRequired: boolean }> = [];
     const store = new DesktopControlSessionStore();
     store.setEmitter((event) => {
@@ -102,6 +102,7 @@ describe("V2.3 DesktopControlSessionStore — 目标 / 计划 / 步骤", () => {
     expect(status.plan).toEqual(["A", "B"]);
     expect(status.stepIndex).toBe(0);
     expect(status.reflectionRequired).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 30));
     expect(events.at(-1)).toMatchObject({ goal: "目标", plan: ["A", "B"], stepIndex: 0 });
   });
 });

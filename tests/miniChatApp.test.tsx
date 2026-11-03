@@ -172,6 +172,7 @@ describe("MiniChatApp", () => {
   it("无 bridge 时 fallback（不白屏）", async () => {
     delete (window as unknown as { classflowDesktop?: unknown }).classflowDesktop;
     await renderApp();
-    expect(container!.textContent).toContain("仅在 ClassFlow 桌面端可用");
+    expect(container!.textContent).toContain("迷你窗仅在桌面端可用");
   });
 });
+
