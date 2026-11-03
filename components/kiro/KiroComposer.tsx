@@ -1178,7 +1178,7 @@ export const KiroComposer = React.memo(function KiroComposer({
                       : "opacity-0 translate-y-[2px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
                   )}
                 >
-                <span>图片仅用于当前对话，不会保存到课程资料。</span>
+                <span>图片不会保存到课程资料。</span>
                 <button
                   type="button"
                   data-testid="visual-privacy-dismiss"

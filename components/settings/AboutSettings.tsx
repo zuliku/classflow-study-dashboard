@@ -9,7 +9,7 @@ import { FONT_REGISTRY } from "@/lib/typography/fonts";
 export function AboutSettings() {
   return (
     <>
-      <SettingsSection title="关于" description="版本与数据说明。">
+      <SettingsSection title="关于">
         <div className="p-4 bg-[#F7F5F5] border border-line rounded-xl space-y-3 text-xs" data-testid="settings-about">
           <div>
             <p className="text-sm font-bold text-charcoal flex items-center gap-2">
@@ -48,13 +48,13 @@ export function AboutSettings() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="字体与许可" description="界面字体与授权。">
+      <SettingsSection title="字体与许可">
         <div
           className="p-4 bg-[#F7F5F5] border border-line rounded-xl space-y-3 text-xs"
           data-testid="settings-font-licenses"
         >
           <p className="text-[11px] leading-relaxed text-satin-grey">
-            可在「通用 → 界面字体」切换，立即生效；代码、终端与数学公式使用专用字体。
+            在「通用 → 界面字体」切换。
           </p>
           <div className="space-y-2.5">
             {(Object.values(FONT_REGISTRY) as Array<(typeof FONT_REGISTRY)[keyof typeof FONT_REGISTRY]>).map(
@@ -97,7 +97,7 @@ export function AboutSettings() {
             )}
           </div>
           <p className="pt-2 border-t border-line-soft text-[10px] leading-relaxed text-sandrift">
-            字体遵循各自许可；ClassFlow 不从在线 CDN 加载字体。MiSans 需自行安装本机字体。
+            字体遵循各自许可。MiSans 需单独安装。
           </p>
         </div>
       </SettingsSection>

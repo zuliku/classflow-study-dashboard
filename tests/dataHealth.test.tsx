@@ -37,7 +37,7 @@ describe("DataHealth 存储诊断", () => {
   it("展示 IndexedDB 可用性与 Artifact registry 记录数（只 count）", async () => {
     render(<DataHealth />);
     await waitFor(() => expect(screen.getByText("数据状态正常")).toBeTruthy());
-    expect(screen.getByText("IndexedDB 可用")).toBeTruthy();
+    expect(screen.getByText("本地存储可用")).toBeTruthy();
     expect(screen.getByText("3 条记录")).toBeTruthy();
     expect(statsMock).toHaveBeenCalled();
   });

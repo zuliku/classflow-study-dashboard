@@ -15,13 +15,12 @@ export function FocusSettings({ highlightedId }: { highlightedId?: string }) {
   const modified = new Set(getModifiedPreferenceKeys(preferences));
 
   return (
-    <SettingsSection title="专注与学习" description="专注时长与完成提示。">
+    <SettingsSection title="专注与学习">
       <div className="text-xs space-y-4" data-testid="settings-focus">
         <SettingsGroup title="专注会话">
           <SettingsRow
             settingId="focus-default-minutes"
             title="默认专注时长"
-            description="Kiro 未指定时长时使用，也是快捷选项。"
             modified={modified.has("focusDefaultMinutes")}
             onReset={() => updatePreferences(resetPreferencePatch("focusDefaultMinutes"))}
             resetAriaLabel="将默认专注时长恢复默认"
@@ -75,7 +74,7 @@ export function FocusSettings({ highlightedId }: { highlightedId?: string }) {
             />
           </SettingsRow>
 
-          <SettingsRow settingId="focus-tracking" title="实时专注计时" description="仅统计实际专注时长。">
+          <SettingsRow settingId="focus-tracking" title="实时专注计时">
             <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">已启用</span>
           </SettingsRow>
         </SettingsGroup>

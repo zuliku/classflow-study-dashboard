@@ -141,13 +141,13 @@ export function KiroArtifactPreviewDialogHost() {
           {state?.status === "missing" && (
             <div className="space-y-3">
               <p className="text-xs text-satin-grey">
-                Artifact 记录存在，但工作区中找不到该文件。
+                文件已不在工作区，记录仍保留。
               </p>
               <Button variant="danger" size="sm" onClick={() => void handleRemoveStale()} disabled={removing}>
                 <Trash2 className="w-3 h-3" />
                 {removing ? "移除中…" : "移除失效记录"}
               </Button>
-              <p className="text-[10px] text-sandrift">仅删除 Artifact 元数据与文档源，不删除文件。</p>
+              <p className="text-[10px] text-sandrift">仅删除记录，不删除文件。</p>
             </div>
           )}
 

@@ -1882,7 +1882,6 @@ export function MarkSheet({
             <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label="结束时间（可选）" disabled={!open} className="h-8 px-1.5 text-[11px]" />
           </Field>
         </div>
-        <p className="text-[10px] text-sandrift">不填开始 / 结束时间时显示为「全天」事件。</p>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={!open}>取消</Button>
           <Button

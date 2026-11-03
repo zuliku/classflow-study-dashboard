@@ -111,7 +111,7 @@ export function SemesterSettings({
   return (
     <div className="space-y-6" data-testid="settings-semester">
       {/* 当前学期概览：实时推导；默认只显示状态，点击「编辑」才展开表单 */}
-      <SettingsSection title="当前学期" description="结束日期由开学日期与教学周数计算。">
+      <SettingsSection title="当前学期">
         <div
           className="p-4 bg-[#F7F5F5] border border-line rounded-xl space-y-3"
           data-setting-id="semester-overview"
@@ -152,7 +152,7 @@ export function SemesterSettings({
       </SettingsSection>
 
       {editing && (
-        <SettingsSection title="编辑学期" description="修改后先预览，确认后再保存。">
+        <SettingsSection title="编辑学期">
           <div className="space-y-4 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1">
@@ -216,7 +216,7 @@ export function SemesterSettings({
       {editing && <SettingsSaveBar dirty={dirty} onSave={save} onDiscard={discard} />}
 
       {/* 课表显示偏好：显示周末（属于学期与课表范围） */}
-      <SettingsSection title="课表显示" description="设置课表显示的日期。">
+      <SettingsSection title="课表显示">
         <SettingsRow
           settingId="show-weekends"
           title="显示周末"
@@ -239,7 +239,7 @@ export function SemesterSettings({
         data-setting-id="bell-schedule"
         className={highlightedId === "bell-schedule" ? "bg-pastel-mint/60 rounded-xl" : ""}
       >
-          <SettingsSection title="作息方案" description="管理节次时间；导入课表按此表解析。">
+          <SettingsSection title="作息方案" description="课表导入按此解析。">
           <BellScheduleSettings highlightedId={highlightedId} />
         </SettingsSection>
       </div>

@@ -426,11 +426,13 @@ test("头像健壮性：重复选择时旧预览 Object URL 被回收", async ({
     buffer: Buffer.from(jpegB64, "base64"),
   });
 
-  // 旧预览 URL 已被回收
-  const revoked = await page.evaluate(
-    () => ((window as unknown as Record<string, unknown>).__revokedUrls as string[]).slice()
-  );
-  expect(revoked).toContain(createdAfterFirst[0]);
+  // 旧预览 URL 已被回收（解码/压缩是异步的，轮询等待撤销发生）
+  await expect
+    .poll(
+      async () => page.evaluate(() => ((window as unknown as Record<string, unknown>).__revokedUrls as string[]).slice()),
+      { timeout: 5000 }
+    )
+    .toContain(createdAfterFirst[0]);
 });
 
 // ==================== 6. 桌面 / 移动 smoke ====================

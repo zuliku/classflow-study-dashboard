@@ -58,7 +58,7 @@ function BellScheduleEditor({
   return (
     <div className="space-y-2.5">
       <p className="text-[11px] text-sandrift leading-relaxed">
-        课表使用节次（如第1-2节）；请设置作息时间以转换为具体时间。
+        课表使用节次；请设置作息时间。
       </p>
       <div className="flex items-center gap-2">
         <span className="text-[11px] font-semibold text-satin-grey shrink-0">名称</span>

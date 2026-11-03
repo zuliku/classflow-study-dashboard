@@ -213,7 +213,6 @@ export function ChannelSettings() {
           </div>
           <div>
             <p className="text-sm font-bold text-charcoal">还没有消息渠道</p>
-            <p className="text-xs text-sandrift mt-1">消息进入统一收件箱，由你决定是否交给 Kiro。</p>
           </div>
           <div className="flex gap-2 mt-2">
             <span data-setting-id="extensions-qq-bot" className="px-2 py-1 bg-white border border-line rounded-lg text-[11px] font-bold">QQ Bot</span>
@@ -460,7 +459,7 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
       onAdded();
     } catch (e) {
       const code = (e as { code?: string })?.code ?? "";
-      if (code === "GMAIL_OAUTH_CONFIG_MISSING") setError(process.env.NODE_ENV === "development" ? "Gmail OAuth 未配置（开发环境需设置 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID）" : "Gmail 授权服务暂不可用，请稍后重试。");
+      if (code === "GMAIL_OAUTH_CONFIG_MISSING") setError("Gmail 授权暂不可用，请稍后重试。");
       else if (code === "GMAIL_OAUTH_DENIED") setError("已拒绝授权");
       else if (code === "GMAIL_OAUTH_TIMEOUT") setError("授权超时，请重试");
       else if (code === "GMAIL_OAUTH_CANCELLED") setError(null);
@@ -496,9 +495,6 @@ function AddGmailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusyC
         <button type="button" onClick={handleCancelOAuth} data-testid="gmail-cancel-oauth" className="w-full h-9 bg-white border border-line text-charcoal text-xs font-bold rounded-xl hover:bg-alabaster transition-colors">
           取消授权
         </button>
-      )}
-      {process.env.NODE_ENV === "development" && (
-        <p className="text-[11px] text-sandrift text-center">开发环境可通过 CLASSFLOW_GOOGLE_OAUTH_CLIENT_ID 覆盖内置授权配置。</p>
       )}
     </div>
   );
@@ -550,7 +546,7 @@ function AddQQMailPanel({ onAdded, onBusyChange }: { onAdded: () => void; onBusy
       <div><Field label="QQ 邮箱地址" required><Input value={emailAddress} onChange={(e) => setEmailAddress(e.target.value)} placeholder="example@qq.com" data-testid="qqmail-add-email" /></Field></div>
       <div><Field label="授权码" required description="请输入 QQ 邮箱授权码（不是登录密码），凭据保存在本机。"><Input type="password" value={authCode} onChange={(e) => setAuthCode(e.target.value)} placeholder="请输入 QQ 邮箱授权码" data-testid="qqmail-add-authcode" mono /></Field></div>
       <div className="bg-surface-soft border border-line rounded-xl p-3 space-y-1">
-        <p className="text-[11px] text-sandrift">仅读取收件箱 · 首次同步最近 7 天（最多 50 封）· 每分钟自动同步</p>
+        <p className="text-[11px] text-sandrift">仅读取收件箱 · 最近 7 天 · 每分钟同步</p>
         <p className="text-[11px] text-sandrift">获取授权码：QQ 邮箱 → 设置 → 账户 → 生成授权码</p>
       </div>
       {error && <InlineErrorState testid="qqmail-add-error">{error}</InlineErrorState>}
@@ -640,7 +636,7 @@ function EditQQDialog({ open, target, onOpenChange, onSaved }: { open: boolean; 
       </div>
       <div className="space-y-3">
         <div><Field label="名称"><Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} data-testid="qq-edit-name" /></Field></div>
-        <div><Field label="App Secret" description="输入新 Secret 将替换旧凭据"><Input type="password" value={newSecret} onChange={(e) => setNewSecret(e.target.value)} placeholder="已安全保存（留空则不修改）" data-testid="qq-edit-secret" mono /></Field></div>
+        <div><Field label="App Secret" description="留空则不修改"><Input type="password" value={newSecret} onChange={(e) => setNewSecret(e.target.value)} placeholder="已安全保存（留空则不修改）" data-testid="qq-edit-secret" mono /></Field></div>
         <div className="flex items-center gap-4">
           <Checkbox checked={receiveDirectMessages} onChange={setReceiveDirectMessages} label="接收私聊" />
           <Checkbox checked={receiveGroupMessages} onChange={setReceiveGroupMessages} label="接收群聊" />

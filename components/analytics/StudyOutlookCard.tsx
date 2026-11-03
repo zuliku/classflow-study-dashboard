@@ -254,7 +254,7 @@ function OutlookTaskRow({
             </>
           ) : task.combinedCapacityComplete === true ? (
             <>
-              {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 非课程时间不足 · 可通过课程重叠方案覆盖
+              {formatDeadline(task.deadline)} · 尚需安排 {Math.round(unscheduled)}min · 非课程时间不足
             </>
           ) : (
             <>

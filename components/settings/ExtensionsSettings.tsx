@@ -337,7 +337,6 @@ export function ExtensionsSettings() {
     <div className="space-y-6" data-testid="settings-extensions">
       <SettingsSection
         title="连接与扩展"
-        description="管理工作流、外部工具与消息来源。"
       >
         <div
           data-setting-id="extensions-overview"
@@ -358,7 +357,6 @@ export function ExtensionsSettings() {
         <div className={cn("space-y-3", activeTab === "skills" && "ux-page")} data-testid="extensions-skills-panel" data-setting-id="extensions-skills" hidden={activeTab !== "skills"}>
           <SettingsGroup
             title="Skills"
-            description="将重复流程保存为 Skill，之后一句话复用。"
             action={
               <div className="flex items-center gap-2">
                 <Button variant="primary" size="sm" onClick={openCreateSkill} data-testid="extensions-create-skill">
@@ -549,7 +547,6 @@ export function ExtensionsSettings() {
           {/* 内置 Skills：随应用打包、无需配置；锁定展示（不可编辑/停用/删除） */}
           <SettingsGroup
             title="内置 Skills"
-            description="随应用提供并自动更新，无需配置。"
             contentClassName="px-4 py-4"
           >
             <div className="space-y-2" data-testid="builtin-skills">
@@ -580,7 +577,7 @@ export function ExtensionsSettings() {
         <div className={cn("space-y-3", activeTab === "mcp" && "ux-page")} data-testid="extensions-mcp-panel" data-setting-id="extensions-mcp" hidden={activeTab !== "mcp"}>
           <SettingsGroup
             title="MCP"
-            description="连接外部工具与数据服务，供 Kiro 调用。"
+            description="连接外部工具与数据服务。"
             action={
               <button
                 type="button"
@@ -624,7 +621,6 @@ export function ExtensionsSettings() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-charcoal">还没有 MCP 连接</p>
-                  <p className="text-xs text-sandrift mt-1 max-w-[320px]">连接外部工具与数据服务，供 Kiro 调用。支持远程 MCP。</p>
                 </div>
               </div>
             ) : (
@@ -764,10 +760,6 @@ function McpAddDialog({ open, onOpenChange, onAdded }: { open: boolean; onOpenCh
         <Field label="Endpoint" required description="默认使用 https">
           <Input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://mcp.example.com/mcp" data-testid="mcp-add-endpoint" mono />
         </Field>
-        <details className="mt-1">
-          <summary className="text-[11px] text-sandrift cursor-pointer">高级说明</summary>
-          <p className="text-[11px] text-sandrift mt-1">http 仅允许 127.0.0.1 / localhost（开发模式），endpoint 需为完整 URL。</p>
-        </details>
         <Field label="凭据" description="如需认证，请先在凭据管理中创建后填入引用">
           <Input value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} placeholder="cred_xxx（可选）" data-testid="mcp-add-credential" mono />
         </Field>
@@ -1051,7 +1043,6 @@ function SkillEditorDialog({
         </div>
         <div>
           <h4 className="text-sm font-bold text-charcoal">{isEdit ? "编辑 Skill" : "创建 Skill"}</h4>
-          <p className="text-[11px] text-sandrift">定义 Skill 的触发时机与执行步骤</p>
         </div>
       </div>
 
@@ -1065,7 +1056,7 @@ function SkillEditorDialog({
             data-testid="skill-editor-name"
           />
         </Field>
-        <Field label="描述" required description="必填；用于判断何时使用此 Skill。">
+        <Field label="描述" required>
           <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -1073,7 +1064,7 @@ function SkillEditorDialog({
             data-testid="skill-editor-description"
           />
         </Field>
-        <Field label="工作流程" required description="Markdown 格式，描述 Skill 的执行步骤">
+        <Field label="工作流程" required description="Markdown">
           <Textarea
             value={workflow}
             onChange={(e) => setWorkflow(e.target.value)}

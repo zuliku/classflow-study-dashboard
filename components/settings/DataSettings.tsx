@@ -99,7 +99,7 @@ export function DataSettings() {
   };
 
   return (
-    <SettingsSection title="数据与隐私" description="备份、恢复与本地数据。">
+    <SettingsSection title="数据与隐私">
       <div className="space-y-4" data-testid="settings-data">
         {/* 数据管理：日常真实动作优先 */}
         <SettingsGroup title="数据管理">
@@ -169,17 +169,17 @@ export function DataSettings() {
 
         {/* 隐私：本地优先的数据边界（真实行为说明，非虚构承诺） */}
         <SettingsGroup title="隐私">
-          <SettingsRow settingId="kiro-privacy-local" title="本地优先" description="课程、任务、记忆与聊天记录保存在本机。">
+          <SettingsRow settingId="kiro-privacy-local" title="本地优先">
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               本地存储
             </span>
           </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-api-key" title="API Key" description="仅存于当前会话，不写入本地存储、备份或日志。">
+          <SettingsRow settingId="kiro-privacy-api-key" title="API Key">
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               会话级
             </span>
           </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-context" title="上下文发送" description="仅发送当前对话、必要上下文与所选资料。">
+          <SettingsRow settingId="kiro-privacy-context" title="上下文发送">
             <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
               按需发送
             </span>

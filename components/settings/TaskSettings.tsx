@@ -122,14 +122,12 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   return (
     <SettingsSection
       title="任务与提醒"
-      description="任务默认值、截止提醒与通知偏好。"
     >
       <div className="text-xs space-y-4" data-testid="settings-tasks">
         <SettingsGroup title="任务">
         <SettingsRow
           settingId="ddl-warning-days"
           title="临近截止提醒"
-          description="未来多少天内显示截止任务。"
           modified={modified.has("ddlWarningDays")}
           onReset={() => updatePreferences(resetPreferencePatch("ddlWarningDays"))}
           resetAriaLabel="将临近截止提醒恢复默认"
@@ -146,7 +144,6 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-ddl-time"
           title="默认截止时间"
-            description="新建任务的默认截止时间（HH:mm）。"
           modified={modified.has("defaultDDLTime")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultDDLTime"))}
           resetAriaLabel="将默认截止时间恢复默认"
@@ -196,7 +193,6 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsRow
           settingId="default-task-workspace-view"
           title="默认任务视图"
-            description="打开任务工作区时的默认视图。"
           modified={modified.has("defaultTaskWorkspaceView")}
           onReset={() => updatePreferences(resetPreferencePatch("defaultTaskWorkspaceView"))}
           resetAriaLabel="将默认任务视图恢复默认"
@@ -238,7 +234,6 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="in-app-reminders"
             title="应用内提醒"
-            description="在提醒中心与角标中显示。"
           >
             <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
               始终开启

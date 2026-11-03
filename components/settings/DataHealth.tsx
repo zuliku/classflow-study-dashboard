@@ -225,8 +225,8 @@ export function DataHealth() {
               {!health.storage
                 ? "检查中…"
                 : health.storage.indexedDbAvailable
-                  ? "IndexedDB 可用"
-                  : "IndexedDB 不可用"}
+                  ? "本地存储可用"
+                  : "本地存储不可用"}
             </span>
           </div>
           <div className="flex items-center justify-between">

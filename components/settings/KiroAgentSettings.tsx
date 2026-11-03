@@ -364,14 +364,12 @@ export function KiroAgentSettings() {
   return (
     <SettingsSection
       title="Agent 与权限"
-      description="文件范围、执行权限与访问位置。"
     >
       <div className="text-xs space-y-4" data-testid="settings-kiro-agent">
         <SettingsGroup title="文件操作">
           <SettingsRow
             settingId="kiro-computer-enabled"
             title="允许 Kiro 操作文件"
-            description="在授权工作区内读写文件。"
           >
             <SettingsToggle
               checked={computerEnabled}
@@ -385,7 +383,7 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-mode"
             title="自动执行级别"
-            description="创建 / 修改 / 移动自动执行；删除与高风险命令仍需确认。"
+            description="删除与高风险命令仍需确认。"
           >
             <SettingsSegmentedControl<KiroAgentMode>
               value={agentMode}
@@ -409,7 +407,6 @@ export function KiroAgentSettings() {
         {/* 终端与电脑控制：与文件操作分开，逐项授权（互不绑定） */}
         <SettingsGroup
           title="终端与电脑控制"
-          description="各项独立开启；高风险动作逐次确认。"
         >
           {/* Desktop Terminal V1：仅 Desktop runtime + terminal bridge 可用时显示（网页版完全不出现） */}
           {desktopTerminalAvailable ? (
@@ -643,7 +640,6 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-permissions"
             title="安全边界"
-            description="文件仅限授权工作区；终端与电脑操作需单独开启，高风险动作逐次确认。"
           >
             <span className="text-[11px] text-satin-grey shrink-0">
               <ShieldAlert className="w-3.5 h-3.5 inline mr-1 text-sandrift" />

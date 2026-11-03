@@ -314,7 +314,7 @@ export function ImportScheduleModal() {
 
               {conflictCount > 0 && (
                 <p className="text-[10px] text-danger bg-danger-bg border border-danger-border rounded-lg px-2.5 py-1.5">
-                  {conflictCount} 门课程与现有课表时间冲突，取消勾选可跳过后再导入
+                  {conflictCount} 门课程时间冲突，取消勾选可跳过。
                 </p>
               )}
 

@@ -52,9 +52,6 @@ export function KiroComputerAuditPanel() {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="text-xs font-bold text-charcoal">最近活动</h4>
-          <p className="text-[10px] text-sandrift mt-0.5">
-            文件操作与权限决策记录（仅元数据）。
-          </p>
         </div>
         {loaded && entries.length > 0 && (
           <button

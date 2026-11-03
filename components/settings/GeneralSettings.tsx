@@ -46,7 +46,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
     <div className="space-y-6" data-testid="settings-general">
       <SettingsSection
         title="通用"
-        description="启动位置、界面表现与直接操作偏好。"
       >
         {/* 1. 启动 */}
         <SettingsGroup title="启动">
@@ -72,7 +71,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="content-density"
             title="界面密度"
-            description="调整列表与命令中心的行高。"
             modified={modified.has("contentDensity")}
             onReset={() => updatePreferences(resetPreferencePatch("contentDensity"))}
             resetAriaLabel="将界面密度恢复默认"
@@ -92,7 +90,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="motion-preference"
             title="动效偏好"
-            description="界面动画强度；跟随系统时使用系统设置。"
             modified={modified.has("motionPreference")}
             onReset={() => updatePreferences(resetPreferencePatch("motionPreference"))}
             resetAriaLabel="将动效偏好恢复默认"
@@ -114,7 +111,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="ui-font"
             title="界面字体"
-            description="界面字体；代码、终端与数学公式使用专用字体。"
+            description="代码、终端与公式使用专用字体。"
             modified={modified.has("uiFont")}
             onReset={() => updatePreferences(resetPreferencePatch("uiFont"))}
             resetAriaLabel="将界面字体恢复默认"
@@ -174,7 +171,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="course-auto-palette"
             title="课程自动配色"
-            description="新建课程时自动分配调色板颜色；关闭则使用灰色。"
+            description="关闭时使用灰色。"
             modified={modified.has("courseAutoPalette")}
             onReset={() => updatePreferences(resetPreferencePatch("courseAutoPalette"))}
             resetAriaLabel="将课程自动配色恢复默认"
@@ -190,7 +187,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="course-palette"
             title="课程调色板"
-            description="课程按顺序取色；可在「管理」中增删颜色。"
+            description="按顺序取色。"
             modified={modified.has("coursePalette")}
             onReset={() => updatePreferences(resetPreferencePatch("coursePalette"))}
             resetAriaLabel="将课程调色板恢复默认"
@@ -226,7 +223,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="ddl-direct-manipulation"
             title="DDL 直接操作"
-            description="在日历中拖动调整截止日期。"
             modified={modified.has("enableDDLDirectManipulation")}
             onReset={() => updatePreferences(resetPreferencePatch("enableDDLDirectManipulation"))}
             resetAriaLabel="将 DDL 直接操作恢复默认"
@@ -242,7 +238,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="single-key-shortcuts"
             title="启用单键快捷键"
-            description="未在输入状态时启用 N、J/K、X 等单键操作；组合键始终可用。"
+            description="输入时自动停用。"
             modified={modified.has("enableSingleKeyShortcuts")}
             onReset={() => updatePreferences(resetPreferencePatch("enableSingleKeyShortcuts"))}
             resetAriaLabel="将单键快捷键恢复默认"
