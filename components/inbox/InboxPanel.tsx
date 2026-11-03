@@ -183,7 +183,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
           <div key={filter} className="space-y-2 ux-page">
             {retained.map(({ item, exiting }) => (
               <ExitCollapse key={item.id} exiting={exiting}>
-                <div data-testid={`inbox-item-${item.id}`} className="cv-list-item bg-surface-soft border border-line rounded-xl p-3 flex flex-col gap-2">
+                <div data-testid={`inbox-item-${item.id}`} className="cv-list-item bg-surface-soft border border-line rounded-xl p-3 flex flex-col gap-2 transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-standard)] hover:border-line-strong hover:shadow-subtle">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -204,7 +204,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                   type="button"
                   onClick={() => openDetail(item)}
                   data-testid={`inbox-view-${item.id}`}
-                  className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
+                  className="ux-press h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1"
                 >
                   <Eye className="w-3 h-3" />
                   查看
@@ -213,7 +213,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                   type="button"
                   onClick={() => handleKiroProcess(item)}
                   data-testid={`inbox-process-${item.id}`}
-                  className="h-7 px-3 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black flex items-center gap-1"
+                  className="ux-press h-7 px-3 bg-charcoal text-white text-xs font-bold rounded-lg hover:bg-black transition-colors flex items-center gap-1"
                 >
                   <Check className="w-3 h-3" />
                   交给 Kiro
@@ -224,7 +224,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                       type="button"
                       onClick={() => setReplyItem(item)}
                       data-testid={`inbox-reply-${item.id}`}
-                      className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
+                      className="ux-press h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1"
                     >
                       <Reply className="w-3 h-3" />
                       {item.source === "gmail" ? "回复到 Gmail" : item.source === "qq-mail" ? "回复到 QQ 邮箱" : "回复到 QQ"}
@@ -238,7 +238,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                     type="button"
                     onClick={() => updateStatus(item.id, "reviewed")}
                     data-testid={`inbox-unarchive-${item.id}`}
-                    className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
+                    className="ux-press h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1"
                   >
                     <Archive className="w-3 h-3" />
                     取消归档
@@ -248,7 +248,7 @@ export function InboxPanel({ open, onOpenChange }: { open: boolean; onOpenChange
                     type="button"
                     onClick={() => handleArchive(item)}
                     data-testid={`inbox-archive-${item.id}`}
-                    className="h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster flex items-center gap-1"
+                    className="ux-press h-7 px-3 bg-white border border-line text-charcoal text-xs font-bold rounded-lg hover:bg-alabaster transition-colors flex items-center gap-1"
                   >
                     <Archive className="w-3 h-3" />
                     归档

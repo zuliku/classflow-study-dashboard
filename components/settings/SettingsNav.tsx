@@ -40,7 +40,7 @@ export function SettingsNav({ active, onSelect }: SettingsNavProps) {
         onClick={() => onSelect(item.id)}
         aria-current={isActive ? "page" : undefined}
         className={cn(
-          "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+          "w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-[background-color,color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
           isActive
             ? "bg-pastel-mint text-charcoal font-semibold shadow-subtle"
             : "text-satin-grey hover:bg-alabaster hover:text-charcoal"

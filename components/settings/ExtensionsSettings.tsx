@@ -441,7 +441,7 @@ export function ExtensionsSettings() {
                   <div
                     key={skill.name}
                     data-testid={`skill-card-${skill.name}`}
-                    className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3"
+                    className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 animate-enter"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -626,7 +626,7 @@ export function ExtensionsSettings() {
             ) : (
               <div className="space-y-3">
                 {mcpConnections.map((conn) => (
-                  <div key={conn.config.id} data-testid={`mcp-card-${conn.config.id}`} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3">
+                  <div key={conn.config.id} data-testid={`mcp-card-${conn.config.id}`} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-standard)] hover:border-line-strong hover:shadow-subtle animate-enter">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

@@ -369,7 +369,7 @@ export function KiroMemoryManager({
           memory.memories.map((m) => {
             const stale = m.scope === "course" && !courses.some((c) => c.id === m.scopeId);
             return (
-              <div key={m.id} className={cn("rounded-xl bg-[#F7F5F5] border border-line p-3", editing?.id === m.id && "ring-1 ring-line-strong")}>
+              <div key={m.id} className={cn("rounded-xl bg-[#F7F5F5] border border-line p-3 animate-enter", editing?.id === m.id && "ring-1 ring-line-strong")}>
                 {formMode === "edit" && editing?.id === m.id ? (
                   formCard
                 ) : (

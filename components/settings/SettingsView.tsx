@@ -306,7 +306,7 @@ export function SettingsView({
                 onClick={() => setSection(item.id)}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-[var(--motion-fast)]",
                   isActive
                     ? "bg-pastel-mint text-charcoal font-semibold"
                     : "text-satin-grey hover:bg-alabaster"

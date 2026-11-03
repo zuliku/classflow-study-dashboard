@@ -142,6 +142,34 @@ describe("硬切深筛源码契约", () => {
     expect(src).toMatch(/key=\{pickerMode\}[\s\S]*?ux-fade/);
   });
 
+  it("卡片交互：course / inbox hover elevation；行与按钮有 press/transition 反馈", () => {
+    const course = read("components/course/CourseLibraryCard.tsx");
+    expect(course).toContain("hover:shadow-subtle");
+    expect(course).toContain("transition-[border-color,box-shadow]");
+    expect(course).toMatch(/group\/task[\s\S]*?transition-colors/);
+    expect(course).toMatch(/group\/mat[\s\S]*?transition-colors/);
+
+    const inbox = read("components/inbox/InboxPanel.tsx");
+    expect(inbox).toContain("hover:border-line-strong hover:shadow-subtle");
+    expect(inbox).toContain("ux-press h-7 px-3 bg-white border border-line");
+
+    const sidebar = read("components/layout/Sidebar.tsx");
+    expect(sidebar).toContain("sidebar-logo relative h-10 w-full overflow-hidden cursor-pointer");
+    expect(sidebar).toContain("transition-opacity duration-[var(--motion-fast)]");
+    expect(sidebar).toContain("active:opacity-80");
+
+    const settingsNav = read("components/settings/SettingsNav.tsx");
+    expect(settingsNav).toContain("transition-[background-color,color,box-shadow]");
+
+    const extensions = read("components/settings/ExtensionsSettings.tsx");
+    expect(extensions).toContain("rounded-xl p-4 flex flex-col gap-3 animate-enter");
+    expect(extensions).toContain("mcp-card-${conn.config.id}");
+    expect(extensions).toContain("hover:border-line-strong hover:shadow-subtle animate-enter");
+
+    const memory = read("components/kiro/KiroMemoryManager.tsx");
+    expect(memory).toContain("rounded-xl bg-[#F7F5F5] border border-line p-3 animate-enter");
+  });
+
   it("Settings 搜索态：静态 key + 进入淡入（不随 query 逐字重播）", () => {
     const src = read("components/settings/SettingsView.tsx");
     expect(src).toMatch(/key="search-results"[\s\S]*?ux-fade/);

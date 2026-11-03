@@ -242,7 +242,7 @@ export function Sidebar() {
           type="button"
           aria-label="返回总览"
           data-testid="sidebar-logo"
-          className="sidebar-logo relative h-10 w-full overflow-hidden cursor-pointer rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-charcoal/30"
+          className="sidebar-logo relative h-10 w-full overflow-hidden cursor-pointer rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-charcoal/30 transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-standard)] hover:opacity-90 active:opacity-80"
           onClick={() => {
             interactedRef.current = true;
             setActiveTab("overview");

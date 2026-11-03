@@ -96,8 +96,8 @@ export function CourseLibraryCard({
       data-testid={`course-library-card-${course.id}`}
       className={cn(
         "flex h-full flex-col bg-surface border border-line rounded-xl",
-        "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
-        "hover:border-line-strong"
+        "transition-[border-color,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+        "hover:border-line-strong hover:shadow-subtle"
       )}
     >
       {/* Course Identity Header：bgHex tint + borderHex accent rail（身份集中在 Header） */}
@@ -232,6 +232,7 @@ export function CourseLibraryCard({
                 onClick={() => onOpenAssignment(row.id)}
                 className={cn(
                   "group/task flex w-full items-center justify-between gap-2 text-left",
+                  "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                   PREVIEW_ROW_HEIGHT
                 )}
               >
@@ -309,6 +310,7 @@ export function CourseLibraryCard({
                 onClick={() => onPreviewMaterial(m)}
                 className={cn(
                   "group/mat flex w-full items-center gap-2 text-left",
+                  "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                   PREVIEW_ROW_HEIGHT,
                   newMaterialIds.has(m.id) && "animate-enter"
                 )}
