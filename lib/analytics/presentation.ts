@@ -212,9 +212,9 @@ export function presentExecutionQuality(
  * - mobile/tablet 2×2：第 2、4 格左侧分隔；第 3、4 格顶部
  * - desktop 4 列：除首格外全左侧分隔，去掉顶部
  */
-export function summaryCellDividerClasses(index: number): string {
+export function summaryCellDividerClasses(index: number, padding = "px-4 py-3.5"): string {
   return [
-    "min-w-0 px-4 py-3.5 flex flex-col justify-center gap-0.5",
+    `min-w-0 ${padding} flex flex-col justify-center gap-0.5`,
     (index === 1 || index === 3) && "border-l border-line-soft",
     index >= 2 && "border-t border-line-soft",
     index > 0 && "lg:border-l lg:border-line-soft",
@@ -375,3 +375,4 @@ function fmtRange(from: number, to: number): string {
   const p = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`;
   return `${p(f)}–${p(t)}`;
 }
+

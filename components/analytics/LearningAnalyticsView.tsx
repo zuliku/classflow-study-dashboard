@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { Activity } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { AnalyticsRangePreset, LearningAnalyticsSnapshot } from "@/lib/analytics/types";
 import { useLearningAnalytics } from "@/hooks/useLearningAnalytics";
@@ -20,11 +21,11 @@ import { FocusRhythmCard } from "@/components/analytics/FocusRhythmCard";
 import { ExecutionQualityCard } from "@/components/analytics/ExecutionQualityCard";
 import { AnalyticsCoverageNotice } from "@/components/analytics/AnalyticsCoverageNotice";
 import { WeeklyReviewCard } from "@/components/analytics/WeeklyReviewCard";
-import { EstimateCalibrationCard } from "@/components/analytics/EstimateCalibrationCard";
 import { StudyOutlookCard } from "@/components/analytics/StudyOutlookCard";
 import { useStudyOutlook } from "@/hooks/useStudyOutlook";
 import { StudyOutlookHorizon } from "@/lib/outlook/types";
 import {
+  formatAnalyticsDuration,
   presentCompletedMetric,
   presentCourseInvestment,
   presentExecutionQuality,
@@ -34,22 +35,20 @@ import {
   presentPlanMetric,
 } from "@/lib/analytics/presentation";
 import { cn } from "@/lib/utils";
-import { ChevronDown } from "lucide-react";
 import { handleOpenOutlookAssignment } from "@/lib/analytics/outlookAssignmentAction";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { AnalyticsWorkspaceViewBar } from "@/components/analytics/AnalyticsWorkspaceViewBar";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 
-function ChartSkeleton() {
-  // 趋势卡终态 ≈ 头(36) + pt-3(12) + 图(h-60/240, md:h-72/288) + 卡片 p-4(32) ≈ 320/368；
-  // 骨架同高避免加载完推挤下文
-  // Motion V3 P1：ux-skeleton 扫光（保留 pulse 占位，reduced-motion 下静态）
-  return <div className="ux-skeleton h-[320px] md:h-[368px] w-full rounded-xl bg-alabaster animate-pulse" />;
-}
+const ANALYTICS_CARD = "rounded-2xl border border-line-soft bg-surface/45 p-4";
+const ANALYTICS_CARD_STRONG = "rounded-2xl border border-line bg-surface/70 p-4";
 
-/** B2/B9：双并列信息 Card 的统一列几何（Desktop 50/50；Tablet/Mobile 单列）。
- *  Loading Skeleton 与 Loaded 共用同一常量（避免横向 layout shift）。 */
-export const ANALYTICS_PAIRED_GRID = "grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch";
+const ANALYTICS_TOP_GRID =
+  "grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.95fr)_minmax(0,1fr)] items-stretch";
+
+/** 主分析行：趋势（宽） / 值得注意（窄） */
+export const ANALYTICS_MAIN_GRID =
+  "grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.92fr)_minmax(0,1fr)] items-stretch";
 
 function EmptyState({ onNewTask, onPlan }: { onNewTask: () => void; onPlan: () => void }) {
   // 数据感知的进度行：store 里已有课程/任务时告诉用户差什么（均为真实计数，不编造）
@@ -57,29 +56,32 @@ function EmptyState({ onNewTask, onPlan }: { onNewTask: () => void; onPlan: () =
   const assignmentCount = useAppStore((s) => s.assignments.length);
   const progressLine =
     assignmentCount > 0
-      ? `你已有 ${assignmentCount} 个任务，完成 1 个就会生成首份趋势`
+      ? `你已有 ${assignmentCount} 个任务，完成 1 个即可开始。`
       : courseCount > 0
-        ? `已建 ${courseCount} 门课程，新建任务并完成 1 个即可生成`
-        : "先添加课程与任务";
+        ? `已建 ${courseCount} 门课程，新建任务并完成 1 个即可开始。`
+        : "先添加课程与任务。";
   return (
-    <div className="flex flex-col items-center justify-center text-center gap-2 border-y border-line-soft py-16 md:py-20">
-      <p className="text-[16px] font-semibold tracking-[-0.01em] text-charcoal">学习洞察会随着使用逐渐形成</p>
-      <p className="text-xs text-sandrift leading-relaxed">
-        完成 1 个任务或专注 1 次即可生成趋势。
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-line-soft bg-surface/45 px-6 py-14 text-center md:py-16">
+      <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-alabaster text-sandrift">
+        <Activity className="h-5 w-5" strokeWidth={1.6} aria-hidden="true" />
+      </span>
+      <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-charcoal">还没有学习记录</h2>
+      <p className="mt-1 max-w-[360px] text-xs leading-relaxed text-satin-grey">
+        完成 1 个任务或专注 1 次，趋势与动量会开始积累。
       </p>
-      <p className="text-xs font-medium text-satin-grey leading-relaxed">{progressLine}</p>
-      <div className="flex flex-wrap items-center justify-center gap-3 mt-3">
+      <p className="mt-1 text-[11px] leading-relaxed text-sandrift">{progressLine}</p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         <button
           type="button"
           onClick={onNewTask}
-          className="h-8 px-4 rounded-lg bg-charcoal text-white text-xs font-semibold hover:bg-black transition-colors"
+          className="h-8 rounded-lg bg-charcoal px-4 text-xs font-semibold text-white transition-colors hover:bg-black"
         >
           新建任务
         </button>
         <button
           type="button"
           onClick={onPlan}
-          className="h-8 px-4 rounded-lg border border-line text-xs font-semibold text-charcoal hover:bg-alabaster transition-colors"
+          className="h-8 rounded-lg border border-line px-4 text-xs font-semibold text-charcoal transition-colors hover:bg-alabaster"
         >
           安排学习计划
         </button>
@@ -88,15 +90,11 @@ function EmptyState({ onNewTask, onPlan }: { onNewTask: () => void; onPlan: () =
   );
 }
 
-/** 学习洞察（Analytics V3）：Truth → Summary → Trend → Insight → Distribution → Execution/Outlook */
+/** 学习洞察（Analytics V5）：圆角卡片分组总览；趋势、动量、信号、分布、下一步在一屏内可读。 */
 export function LearningAnalyticsView() {
   const [preset, setPreset] = useState<AnalyticsRangePreset>("week");
   /** 周回顾展开状态：只属于 component UI state，不持久化 */
   const [reviewExpanded, setReviewExpanded] = useState(false);
-  // 渐进披露：下方三个明细分区默认展开、允许收起（E2E 层级契约要求默认齐全可见）
-  const [distOpen, setDistOpen] = useState(true);
-  const [execOpen, setExecOpen] = useState(true);
-  const [nextOpen, setNextOpen] = useState(true);
   const reviewRef = useRef<HTMLDivElement | null>(null);
   const reducedMotion = useEffectiveReducedMotion();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
@@ -135,54 +133,30 @@ export function LearningAnalyticsView() {
     setActiveTab(tab);
   };
 
-  /** 下一步（学习前瞻 + 估时参考）：独立于历史 Snapshot，空历史用户同样可见
-   *（基于任务数据而非历史事件）。data/empty 两分支共用同一渲染，避免重复。 */
-  const renderOutlookSection = () => (
+  /** 下一步（学习前瞻）：独立于历史 Snapshot，空历史用户同样可见。 */
+  const renderOutlookBlock = () => (
     <>
       {outlook.error ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-danger/70 pl-4">
-          <p className="text-xs font-medium text-danger">学习前瞻加载失败，请稍后重试。</p>
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6 text-center">
+          <p className="text-[11px] font-medium text-danger">学习前瞻加载失败</p>
           <button
             type="button"
             onClick={() => outlook.refresh()}
-            className="text-[11px] font-semibold text-charcoal underline underline-offset-2 hover:text-black transition-colors"
+            className="text-[11px] font-semibold text-charcoal underline underline-offset-2 transition-colors hover:text-black"
           >
             重试
           </button>
         </div>
       ) : outlook.loading && !outlook.data ? (
-        <ChartSkeleton />
+        <div className="ux-skeleton h-40 w-full rounded-xl bg-alabaster animate-pulse" aria-label="学习前瞻加载中" />
       ) : outlook.data ? (
-        <section className="border-t border-line-soft pt-6">
-          <button
-            type="button"
-            onClick={() => setNextOpen((v) => !v)}
-            aria-expanded={nextOpen}
-            className="w-full flex items-center justify-between mb-3 text-left group"
-          >
-            <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">下一步</h2>
-            <ChevronDown
-              className={cn(
-                "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
-                !nextOpen && "-rotate-90"
-              )}
-              aria-hidden="true"
-            />
-          </button>
-          <DisclosureRegion open={nextOpen}>
-            <div className={outlook.data.estimateCalibration.status === "ready" ? ANALYTICS_PAIRED_GRID : "grid grid-cols-1"}>
-              <StudyOutlookCard
-                outlook={outlook.data}
-                horizonDays={outlookHorizon}
-                onHorizonChange={setOutlookHorizon}
-                onOpenAssignment={handleOpenOutlookAssignment}
-              />
-              {outlook.data.estimateCalibration.status === "ready" && (
-                <EstimateCalibrationCard calibration={outlook.data.estimateCalibration} />
-              )}
-            </div>
-          </DisclosureRegion>
-        </section>
+        <StudyOutlookCard
+          outlook={outlook.data}
+          horizonDays={outlookHorizon}
+          onHorizonChange={setOutlookHorizon}
+          onOpenAssignment={handleOpenOutlookAssignment}
+          compact
+        />
       ) : null}
     </>
   );
@@ -247,6 +221,13 @@ export function LearningAnalyticsView() {
     ];
   };
 
+  const trendDays = data ? data.trend.filter((p) => p.focusMinutes !== null).length : 0;
+  const dailyFocus = data && trendDays > 0 ? Math.round(data.overview.actualFocusMinutes / trendDays) : null;
+  const planRatio =
+    data && data.coverage.planReliability === "complete" && data.overview.plannedMinutes > 0
+      ? Math.min(100, Math.round((data.overview.actualFocusMinutes / data.overview.plannedMinutes) * 100))
+      : null;
+
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       {/* App Chrome V2.3：WorkspaceHeader + AnalyticsWorkspaceViewBar（与 Body 同步拉伸，大屏充分利用宽度，保留 24–32px 安全边距）
@@ -271,52 +252,60 @@ export function LearningAnalyticsView() {
           data-testid="analytics-body"
           // 水平 gutter 单一来源（workspace-gutter 16/24）+ intentional xl:px-8 大屏档；
           // S4-1：gutter 已入 components 层，utilities 的 xl:px-8 自然覆盖，不再需要 !important
-          className="w-full max-w-none flex flex-col gap-6 workspace-gutter py-4 pb-24 md:py-6 md:pb-6 xl:px-8 xl:py-8 xl:pb-8"
+          className="w-full max-w-none flex flex-col gap-4 workspace-gutter py-4 pb-24 md:py-5 md:pb-6 xl:px-8 xl:py-5 xl:pb-6"
         >
-          {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle）——
-              StudyOutlookCard 在其下方独立存在，不随 preset 重播 */}
-          <div key={analyticsStageKey} className="ux-settle flex flex-col gap-6">
+          {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle） */}
+          <div key={analyticsStageKey} className="ux-settle flex flex-col gap-4">
           {loading ? (
             <>
-              <AnalyticsSummaryStripSkeleton />
-              {/* Loading Skeleton 与 Loaded 使用同一 Paired Grid（避免横向 layout shift）；
-                  四块统一 ux-skeleton 扫光（此前三块裸 pulse 节奏分裂） */}
-              <div className={ANALYTICS_PAIRED_GRID}>
-                <ChartSkeleton />
-                <div className="h-40 w-full rounded-xl bg-alabaster ux-skeleton" />
+              <div className={ANALYTICS_TOP_GRID}>
+                <div className="rounded-2xl border border-line-soft bg-surface/45 p-4">
+                  <div className="ux-skeleton h-10 w-2/3 rounded bg-alabaster" />
+                  <div className="mt-3">
+                    <AnalyticsSummaryStripSkeleton />
+                  </div>
+                </div>
+                <div className="ux-skeleton h-[250px] w-full rounded-2xl border border-line-soft bg-alabaster" />
               </div>
-              <div className={ANALYTICS_PAIRED_GRID}>
-                <div className="h-52 w-full rounded-xl bg-alabaster ux-skeleton" />
-                <div className="h-40 w-full rounded-xl bg-alabaster ux-skeleton" />
+              <div className={ANALYTICS_MAIN_GRID}>
+                <div className="ux-skeleton h-[250px] w-full rounded-2xl border border-line-soft bg-alabaster" />
+                <div className="ux-skeleton h-[250px] w-full rounded-2xl border border-line-soft bg-alabaster" />
               </div>
+              <div className="ux-skeleton h-[200px] w-full rounded-2xl border border-line-soft bg-alabaster" />
             </>
           ) : error ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 border-l-2 border-danger/70 pl-4">
-              <p className="text-xs font-medium text-danger">学习洞察加载失败，请稍后重试。</p>
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-line-soft bg-surface/45 px-6 py-14 text-center">
+              <p className="text-[14px] font-semibold text-charcoal">学习洞察加载失败</p>
+              <p className="mt-1 text-xs text-sandrift">请稍后重试，已记录的数据不会丢失。</p>
               <button
                 type="button"
                 onClick={() => refresh()}
-                className="text-[11px] font-semibold text-charcoal underline underline-offset-2 hover:text-black transition-colors"
+                className="mt-4 h-8 rounded-lg border border-line px-4 text-xs font-semibold text-charcoal transition-colors hover:bg-alabaster"
               >
                 重试
               </button>
             </div>
           ) : data ? (
             <>
-              <AnalyticsCoverageNotice
-                facts={{
-                  assignmentReliability: data.coverage.assignmentReliability,
-                  planReliability: data.coverage.planReliability,
-                  focusReliability: data.coverage.focusReliability,
-                  focusBackfilled: data.coverage.focusBackfilled,
-                  historyStartedAt: data.coverage.historyStartedAt,
-                  planCoverageStartedAt: data.coverage.planCoverageStartedAt,
-                }}
-              />
+              {!data.isEmpty && (
+                <AnalyticsCoverageNotice
+                  facts={{
+                    assignmentReliability: data.coverage.assignmentReliability,
+                    planReliability: data.coverage.planReliability,
+                    focusReliability: data.coverage.focusReliability,
+                    focusBackfilled: data.coverage.focusBackfilled,
+                    historyStartedAt: data.coverage.historyStartedAt,
+                    planCoverageStartedAt: data.coverage.planCoverageStartedAt,
+                  }}
+                />
+              )}
               {data.isEmpty ? (
                 <>
                   <EmptyState onNewTask={() => navigate("assignments")} onPlan={() => navigate("timetable")} />
-                  {renderOutlookSection()}
+                  <section className={cn(ANALYTICS_CARD, "ux-settle")}>
+                    <AnalyticsCardHeader title="下一步" />
+                    <div className="mt-3">{renderOutlookBlock()}</div>
+                  </section>
                   <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
                       <WeeklyReviewCard snapshot={data} />
@@ -325,24 +314,44 @@ export function LearningAnalyticsView() {
                 </>
               ) : (
                 <>
-                  {/* 结论横幅：一句话判断 + 一步行动（新增表达层，不碰既有标题/数据口径） */}
-                  <div style={staggerStyle(0)} className="ux-settle">
-                    <AnalyticsVerdict
-                      verdict={buildAnalyticsVerdict({
-                        signals: data.signals,
-                        overview: data.overview,
-                        comparisonAvailable: data.coverage.comparisonAvailable,
-                      })}
-                      onAction={navigate}
-                    />
-                  </div>
-                  {/* Summary Strip（扁平四列 KPI，上下细线分隔） */}
-                  <div style={staggerStyle(1)} className="ux-settle">
-                    <AnalyticsSummaryStrip metrics={summaryMetrics(data)} />
-                  </div>
-                  {/* 学习动量（12 周热力 + 12 周专属统计；独立查询，与 range preset 无关） */}
-                  <div style={staggerStyle(2)} className="ux-settle">
-                    <AnalyticsMomentum />
+                  {/* 1. 摘要与动量：结论/KPI/执行 + 独立动量大块 */}
+                  <div className={ANALYTICS_TOP_GRID}>
+                    <section
+                      data-testid="analytics-summary-card"
+                      style={staggerStyle(0)}
+                      className={cn(ANALYTICS_CARD, "ux-settle flex h-full flex-col")}
+                    >
+                      <AnalyticsVerdict
+                        verdict={buildAnalyticsVerdict({
+                          signals: data.signals,
+                          overview: data.overview,
+                          comparisonAvailable: data.coverage.comparisonAvailable,
+                        })}
+                        onAction={navigate}
+                      />
+                      <div className="mt-3 flex-1">
+                        <AnalyticsSummaryStrip metrics={summaryMetrics(data)} embedded className="h-full" />
+                      </div>
+                      <div className="mt-3 border-t border-line-soft pt-2.5">
+                        <div className="flex items-center justify-between text-[10.5px] text-sandrift">
+                          <span>计划执行</span>
+                          <span>{planRatio !== null ? `${planRatio}%` : "记录不足"}</span>
+                        </div>
+                        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-alabaster">
+                          <div
+                            className="h-full rounded-full bg-charcoal/60 transition-[width] duration-[var(--motion-data)] ease-[var(--ease-standard)]"
+                            style={{ width: `${planRatio ?? 0}%` }}
+                          />
+                        </div>
+                      </div>
+                    </section>
+                    <section style={staggerStyle(0)} className={cn(ANALYTICS_CARD_STRONG, "ux-settle")}>
+                      <div className="flex items-center justify-between gap-3 pb-2">
+                        <AnalyticsCardHeader title="学习动量" />
+                        <span className="text-[10.5px] text-sandrift">近 12 周</span>
+                      </div>
+                      <AnalyticsMomentum card />
+                    </section>
                   </div>
 
                   <DisclosureRegion open={reviewExpanded}>
@@ -351,85 +360,72 @@ export function LearningAnalyticsView() {
                     </div>
                   </DisclosureRegion>
 
-                  {/* 学习趋势（唯一主视觉）+ 值得注意 —— 统一 Paired Grid（50/50；层级由标题/图表/顺序表达） */}
-                  <div className={cn(ANALYTICS_PAIRED_GRID, "border-t border-line-soft pt-5")}>
-                    <div
-                      className="h-full ux-settle"
-                      style={staggerStyle(3)}
+                  {/* 2. 主分析：趋势（宽） / 值得注意（窄） */}
+                  <div className={ANALYTICS_MAIN_GRID}>
+                    <section
+                      style={staggerStyle(1)}
+                      className={cn(ANALYTICS_CARD, "flex h-full flex-col ux-settle")}
                       data-testid="learning-trend-card"
                     >
-                      <AnalyticsCardHeader title="学习趋势" />
-                      <div className="pt-3">
-                        <LearningTrendChart points={data.trend} period={data.period} animate={trendAnimated} />
+                      <AnalyticsCardHeader
+                        title="学习趋势"
+                        action={<span className="text-[10.5px] text-sandrift">实际专注 · 计划学习</span>}
+                      />
+                      <div className="flex-1 pt-2">
+                        <LearningTrendChart points={data.trend} period={data.period} animate={trendAnimated} compact />
                       </div>
-                    </div>
-                    <LearningSignalsCard signals={data.signals} onNavigate={navigate} />
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft pt-2 text-[10.5px] text-sandrift">
+                        <span>本周期完成 {data.overview.completedAssignments} 个任务</span>
+                        <span>{dailyFocus !== null ? `日均专注 ${formatAnalyticsDuration(dailyFocus)}` : "暂无专注记录"}</span>
+                      </div>
+                    </section>
+                    <section
+                      style={staggerStyle(1)}
+                      className={cn(ANALYTICS_CARD, "flex h-full flex-col ux-settle")}
+                      data-testid="analytics-signals-column"
+                    >
+                      <div className="min-h-0 flex-1">
+                        <LearningSignalsCard signals={data.signals} onNavigate={navigate} />
+                      </div>
+                      <div className="mt-3 border-t border-line-soft pt-2.5">
+                        <ExecutionQualityCard
+                          inline
+                          view={presentExecutionQuality(
+                            data.execution,
+                            data.coverage.assignmentReliability,
+                            data.coverage.focusReliability
+                          )}
+                        />
+                      </div>
+                    </section>
                   </div>
 
-                  {/* 下一步：看完过去看未来（与空历史分支共用同一渲染） */}
-                  {renderOutlookSection()}
-
-                  {/* 投入与节奏（Distribution；Course/Rhythm 各自 content-fit，不强制等高） */}
-                  <section style={staggerStyle(4)} className="ux-settle border-t border-line-soft pt-6">
-                    <button
-                      type="button"
-                      onClick={() => setDistOpen((v) => !v)}
-                      aria-expanded={distOpen}
-                      className="w-full flex items-center justify-between mb-3 text-left group"
-                    >
-                      <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">投入与节奏</h2>
-                      <ChevronDown
-                        className={cn(
-                          "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
-                          !distOpen && "-rotate-90"
+                  {/* 3. 分布与下一步：一个圆角块，内部左右分栏 */}
+                  <section style={staggerStyle(2)} className={cn(ANALYTICS_CARD, "ux-settle")}>
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:divide-x xl:divide-line-soft">
+                      <div className="min-w-0">
+                        <AnalyticsCardHeader title="投入与节奏" />
+                        {data.coverage.focusReliability === "partial" && (
+                          <p className="mt-1 text-[10.5px] text-satin-grey">该区间记录不完整，以下为已记录部分</p>
                         )}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    {data.coverage.focusReliability === "partial" && (
-                      <p className="text-[10px] text-satin-grey mb-3 -mt-1">
-                        该区间记录不完整，以下为已记录部分
-                      </p>
-                    )}
-                    <DisclosureRegion open={distOpen}>
-                      <div className={ANALYTICS_PAIRED_GRID}>
-                        <CourseInvestmentCard
-                          investment={presentCourseInvestment(data.courseInvestment, courseNameById)}
-                          onOpenCourse={(courseId) => {
-                            if (courseNameById[courseId]) setSelectedCourseId(courseId);
-                          }}
-                        />
-                        <FocusRhythmCard rhythm={data.focusRhythm} />
+                        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <CourseInvestmentCard
+                            investment={presentCourseInvestment(data.courseInvestment, courseNameById)}
+                            onOpenCourse={(courseId) => {
+                              if (courseNameById[courseId]) setSelectedCourseId(courseId);
+                            }}
+                            nested
+                          />
+                          <div className="min-w-0 sm:border-l sm:border-line-soft sm:pl-4">
+                            <FocusRhythmCard rhythm={data.focusRhythm} nested />
+                          </div>
+                        </div>
                       </div>
-                    </DisclosureRegion>
-                  </section>
-
-                  {/* 执行情况（reliability-aware：partial 只显示已记录，不显示伪精确按时率） */}
-                  <section style={staggerStyle(5)} className="ux-settle border-t border-line-soft pt-6">
-                    <button
-                      type="button"
-                      onClick={() => setExecOpen((v) => !v)}
-                      aria-expanded={execOpen}
-                      className="w-full flex items-center justify-between mb-3 text-left group"
-                    >
-                      <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">执行情况</h2>
-                      <ChevronDown
-                        className={cn(
-                          "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)] group-hover:text-charcoal",
-                          !execOpen && "-rotate-90"
-                        )}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    <DisclosureRegion open={execOpen}>
-                      <ExecutionQualityCard
-                        view={presentExecutionQuality(
-                          data.execution,
-                          data.coverage.assignmentReliability,
-                          data.coverage.focusReliability
-                        )}
-                      />
-                    </DisclosureRegion>
+                      <div className="min-w-0 border-t border-line-soft pt-4 xl:border-t-0 xl:pl-4 xl:pt-0">
+                        <AnalyticsCardHeader title="下一步" />
+                        <div className="mt-3">{renderOutlookBlock()}</div>
+                      </div>
+                    </div>
                   </section>
                 </>
               )}
@@ -441,4 +437,3 @@ export function LearningAnalyticsView() {
     </div>
   );
 }
-

@@ -18,14 +18,17 @@ const NEUTRAL_COLOR = "#C7BCB2";
 export function CourseInvestmentCard({
   investment,
   onOpenCourse,
+  nested = false,
 }: {
   investment: CourseInvestmentView[];
   onOpenCourse?: (courseId: string) => void;
+  /** 嵌套在其他卡片内时使用 13px 子标题 */
+  nested?: boolean;
 }) {
   if (investment.length === 0) {
     return (
       <div className="w-full min-w-0 h-full flex flex-col ux-fade" data-testid="course-investment-card">
-        <AnalyticsCardHeader title="课程投入" />
+        <AnalyticsCardHeader title="课程投入" size={nested ? "sm" : "md"} />
         <div className="flex flex-1 items-center justify-center py-8">
           <p className="text-[11px] text-sandrift">完成专注后显示课程投入</p>
         </div>
@@ -35,7 +38,7 @@ export function CourseInvestmentCard({
   const maxMinutes = Math.max(...investment.map((i) => i.minutes), 1);
   return (
     <div className="w-full min-w-0 h-full flex flex-col ux-fade" data-testid="course-investment-card">
-      <AnalyticsCardHeader title="课程投入" />
+      <AnalyticsCardHeader title="课程投入" size={nested ? "sm" : "md"} />
       <div className="flex flex-col gap-3 pt-4">
         {investment.map((item, index) => {
           const neutral = item.isOther || item.courseName === "未关联课程";
@@ -78,3 +81,4 @@ export function CourseInvestmentCard({
     </div>
   );
 }
+

@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { useStudyMomentum } from "@/hooks/useStudyMomentum";
-import { MOMENTUM_WEEKS, type MomentumDay } from "@/lib/analytics/momentum";
+import { MOMENTUM_WEEKS, type MomentumDay, type StudyMomentum } from "@/lib/analytics/momentum";
 import { cn } from "@/lib/utils";
 
 /** 热力等级 → 底色（charcoal 系阶梯；未知日同底 + 虚线框 + 降透明区分） */
@@ -42,14 +42,204 @@ function cellTitle(day: MomentumDay): string {
   return parts.join(" · ");
 }
 
+function MomentumHeatmap({
+  columns,
+  shownMonths,
+  compact = false,
+}: {
+  columns: ({ day: MomentumDay | null })[][];
+  shownMonths: (string | null)[];
+  compact?: boolean;
+}) {
+  return (
+    <div
+      data-testid="momentum-heatmap"
+      role="img"
+      aria-label={`近 ${MOMENTUM_WEEKS} 周学习热力`}
+      className={cn("flex overflow-x-auto pb-1", compact ? "gap-0.5" : "gap-1")}
+    >
+      {columns.map((col, ci) => (
+        <div key={ci} className={cn("flex shrink-0 flex-col", compact ? "gap-0.5" : "gap-1")}>
+          <span
+            className={cn(
+              "whitespace-nowrap text-sandrift",
+              compact ? "h-3 text-[9px] font-medium" : "h-4 text-[10px] font-semibold"
+            )}
+            aria-hidden="true"
+          >
+            {shownMonths[ci] ?? ""}
+          </span>
+          {col.map(({ day }, ri) =>
+            day === null ? (
+              <span key={ri} className={compact ? "h-3 w-3" : "h-5 w-5"} aria-hidden="true" />
+            ) : (
+              <span
+                key={day.date}
+                aria-hidden="true"
+                data-level={day.level}
+                data-unknown={day.unknown || undefined}
+                className={cn(
+                  compact ? "h-3 w-3 rounded-[2px]" : "h-5 w-5 rounded-[5px]",
+                  day.unknown && "border border-dashed border-line-strong"
+                )}
+                style={{
+                  backgroundColor: LEVEL_FILL[day.level],
+                  opacity: day.unknown ? 0.45 : 1,
+                }}
+              />
+            )
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MomentumLegend({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      className={cn("flex items-center gap-1 text-sandrift", compact ? "text-[9px]" : "text-[10px]")}
+      aria-hidden="true"
+    >
+      少
+      {[0, 1, 2, 3, 4].map((l) => (
+        <span
+          key={l}
+          className={cn("inline-block rounded-[2px]", compact ? "h-2 w-2" : "h-2.5 w-2.5")}
+          style={{ backgroundColor: LEVEL_FILL[l] }}
+        />
+      ))}
+      多
+    </span>
+  );
+}
+
+function MomentumStats({ data, compact = false }: { data: StudyMomentum; compact?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-2",
+        compact
+          ? "shrink-0 gap-x-5 gap-y-2 sm:grid-cols-4"
+          : "gap-x-6 gap-y-4 border-t border-line-soft pt-4 sm:grid-cols-4"
+      )}
+    >
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums",
+            compact ? "text-[15px]" : "text-[20px]"
+          )}
+        >
+          <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
+        </p>
+        <p className={cn("leading-snug text-sandrift", compact ? "mt-1 text-[10px]" : "mt-1.5 text-[11px]")}>
+          连续学习 · {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
+        </p>
+      </div>
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums",
+            compact ? "text-[15px]" : "text-[20px]"
+          )}
+        >
+          {formatHours(data.totalMinutes)}
+        </p>
+        <p className={cn("leading-snug text-sandrift", compact ? "mt-1 text-[10px]" : "mt-1.5 text-[11px]")}>
+          近 {MOMENTUM_WEEKS} 周总专注
+        </p>
+      </div>
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums",
+            compact ? "text-[15px]" : "text-[20px]"
+          )}
+        >
+          {data.activeDays} 天
+        </p>
+        <p className={cn("leading-snug text-sandrift", compact ? "mt-1 text-[10px]" : "mt-1.5 text-[11px]")}>
+          活跃天数
+        </p>
+      </div>
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums",
+            compact ? "text-[15px]" : "text-[20px]"
+          )}
+        >
+          {data.bestDay ? formatHours(data.bestDay.minutes) : "—"}
+        </p>
+        <p className={cn("leading-snug text-sandrift", compact ? "mt-1 text-[10px]" : "mt-1.5 text-[11px]")}>
+          单日最佳{data.bestDay ? ` · ${formatMonthDay(data.bestDay.date)}` : ""}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** 卡片模式：12 周 × 7 天，横向铺满卡片宽度（grid-flow-col 保持周列语义） */
+function MomentumCardHeatmap({
+  columns,
+  shownMonths,
+}: {
+  columns: ({ day: MomentumDay | null })[][];
+  shownMonths: (string | null)[];
+}) {
+  const cells = columns.flatMap((col) => col);
+  return (
+    <div className="w-full">
+      <div className="grid grid-cols-12 gap-1 pb-1">
+        {shownMonths.map((m, i) => (
+          <span key={i} className="truncate text-[9px] font-medium text-sandrift" aria-hidden="true">
+            {m ?? ""}
+          </span>
+        ))}
+      </div>
+      <div
+        data-testid="momentum-heatmap"
+        role="img"
+        aria-label={`近 ${MOMENTUM_WEEKS} 周学习热力`}
+        className="grid auto-cols-fr grid-flow-col grid-rows-7 gap-1"
+      >
+        {cells.map(({ day }, i) =>
+          day === null ? (
+            <span key={i} className="h-2.5 w-full" aria-hidden="true" />
+          ) : (
+            <span
+              key={day.date}
+              aria-hidden="true"
+              data-level={day.level}
+              data-unknown={day.unknown || undefined}
+              className={cn(
+                "h-2.5 w-full rounded-[2px]",
+                day.unknown && "border border-dashed border-line-strong"
+              )}
+              style={{
+                backgroundColor: LEVEL_FILL[day.level],
+                opacity: day.unknown ? 0.45 : 1,
+              }}
+            />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * 学习动量（对标 GitHub contributions + Duolingo streak）：
  * 12 周热力 + 12 周专属四统计（连续 / 总专注 / 活跃天数 / 单日最佳）。
  * 统计口径均为 12 周独立查询结果（与本周 Strip 不重复：Strip 是本周，环已删除，
  * 计划达成/按时完成只看 Strip）。数据独立查询（与 range preset 无关），
  * 纯新增表达层，不碰既有标题/testid/口径。
+ *
+ * embedded：作为「学习趋势」块的下半段使用，去掉独立 section/折叠头，热力与统计并排，
+ * 让趋势 + 动量在一屏内完成总览。
  */
-export function AnalyticsMomentum() {
+export function AnalyticsMomentum({ embedded = false, card = false }: { embedded?: boolean; card?: boolean }) {
   const [open, setOpen] = useState(true);
   const { data, loading, error, refresh } = useStudyMomentum();
   const columns = useHeatColumns(data?.days ?? []);
@@ -69,6 +259,108 @@ export function AnalyticsMomentum() {
     });
     return out;
   }, [monthLabels]);
+
+  // card：独立圆角区块内的动量视图（大连续天数 + 经典 12 周热力 + 三项统计）
+  if (card) {
+    return (
+      <div data-testid="analytics-momentum" className="flex h-full min-w-0 flex-col">
+        {error || (!loading && !data) ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6 text-center">
+            <p className="text-[11px] font-medium text-danger">学习动量加载失败</p>
+            <button
+              type="button"
+              onClick={() => refresh()}
+              className="text-[11px] font-semibold text-charcoal underline underline-offset-2 hover:text-black transition-colors"
+            >
+              重试
+            </button>
+          </div>
+        ) : loading || !data ? (
+          <div className="ux-skeleton h-40 w-full rounded-xl bg-alabaster animate-pulse" aria-label="动量加载中" />
+        ) : (
+          <>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[10.5px] font-medium text-sandrift">连续学习</p>
+                <p className="mt-1 text-[26px] font-semibold leading-none tracking-[-0.03em] text-charcoal tabular-nums">
+                  <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
+                </p>
+              </div>
+              <p className="pb-0.5 text-[10.5px] text-sandrift">
+                {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
+              </p>
+            </div>
+            <div className="mt-2.5">
+              <MomentumCardHeatmap columns={columns} shownMonths={shownMonths} />
+            </div>
+            <div className="mt-auto grid grid-cols-3 gap-3 border-t border-line-soft pt-2.5">
+              <div className="min-w-0">
+                <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
+                  {formatHours(data.totalMinutes)}
+                </p>
+                <p className="mt-1 text-[10.5px] text-sandrift">近 12 周总专注</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
+                  {data.activeDays} 天
+                </p>
+                <p className="mt-1 text-[10.5px] text-sandrift">活跃天数</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
+                  {data.bestDay ? formatHours(data.bestDay.minutes) : "—"}
+                </p>
+                <p className="mt-1 text-[10.5px] text-sandrift">
+                  单日最佳{data.bestDay ? ` · ${formatMonthDay(data.bestDay.date)}` : ""}
+                </p>
+              </div>
+            </div>
+            {data.activeDays === 0 && data.totalMinutes === 0 && (
+              <p className="mt-2 text-center text-[10.5px] text-sandrift">完成 1 个任务或专注 1 次即可点亮。</p>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // embedded：无独立 section 头，错误/加载也保持紧凑
+  if (embedded) {
+    return (
+      <div data-testid="analytics-momentum" className="min-w-0">
+        {error || (!loading && !data) ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-medium text-danger">学习动量加载失败，请稍后重试。</p>
+            <button
+              type="button"
+              onClick={() => refresh()}
+              className="text-[11px] font-semibold text-charcoal underline underline-offset-2 hover:text-black transition-colors"
+            >
+              重试
+            </button>
+          </div>
+        ) : loading || !data ? (
+          <div className="ux-skeleton h-24 w-full rounded-lg bg-alabaster animate-pulse" aria-label="动量加载中" />
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            <div className="flex flex-wrap items-start gap-x-7 gap-y-3">
+              <div className="min-w-[190px] flex-1">
+                <div className="flex items-center justify-between gap-2 pb-1.5">
+                  <p className="text-[11px] font-medium text-sandrift">学习动量 · 近 {MOMENTUM_WEEKS} 周</p>
+                  <MomentumLegend compact />
+                </div>
+                <MomentumHeatmap columns={columns} shownMonths={shownMonths} compact />
+              </div>
+              <MomentumStats data={data} compact />
+            </div>
+            {data.activeDays === 0 && data.totalMinutes === 0 && (
+              <p className="text-[10.5px] text-sandrift">完成 1 个任务或专注 1 次即可点亮。</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // error/空数据不再静默消失（与前瞻/历史 error→文案+重试同语言；refresh 已接线）
   if (error || (!loading && !data)) {
@@ -128,92 +420,15 @@ export function AnalyticsMomentum() {
             <div className="ux-skeleton h-[220px] w-full rounded-lg bg-alabaster animate-pulse" aria-label="动量加载中" />
           ) : (
             <div className="flex flex-col gap-4">
-              {/* 热力整块置顶（GitHub 式通栏） */}
               <div>
-                <div
-                  data-testid="momentum-heatmap"
-                  role="img"
-                  aria-label={`近 ${MOMENTUM_WEEKS} 周学习热力，连续学习 ${data.streakDays} 天`}
-                  className="flex gap-1 overflow-x-auto pb-1"
-                >
-                  {columns.map((col, ci) => (
-                    <div key={ci} className="flex flex-col gap-1 shrink-0">
-                      <span className="h-4 text-[10px] font-semibold text-sandrift whitespace-nowrap overflow-visible" aria-hidden="true">
-                        {shownMonths[ci] ?? ""}
-                      </span>
-                      {col.map(({ day }, ri) =>
-                        day === null ? (
-                          <span key={ri} className="w-5 h-5" aria-hidden="true" />
-                        ) : (
-                          <span
-                            key={day.date}
-                            aria-hidden="true"
-                            data-level={day.level}
-                            data-unknown={day.unknown || undefined}
-                            className={cn(
-                              "w-5 h-5 rounded-[5px]",
-                              day.unknown && "border border-dashed border-line-strong"
-                            )}
-                            style={{
-                              backgroundColor: LEVEL_FILL[day.level],
-                              opacity: day.unknown ? 0.45 : 1,
-                            }}
-                          />
-                        )
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <MomentumHeatmap columns={columns} shownMonths={shownMonths} />
                 <div className="mt-2 flex items-center justify-end text-[10px] text-sandrift">
-                  <span className="flex items-center gap-1" aria-hidden="true">
-                    少
-                    {[0, 1, 2, 3, 4].map((l) => (
-                      <span
-                        key={l}
-                        className="w-2.5 h-2.5 rounded-[2px] inline-block"
-                        style={{ backgroundColor: LEVEL_FILL[l] }}
-                      />
-                    ))}
-                    多
-                  </span>
+                  <MomentumLegend />
                 </div>
               </div>
-              {/* 12 周专属四统计：连续 / 总专注 / 活跃天数 / 单日最佳（与本周 Strip 不重复） */}
-              <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line-soft pt-4 sm:grid-cols-4">
-                <div className="min-w-0">
-                  <p className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
-                    <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
-                  </p>
-                  <p className="mt-1.5 text-[11px] leading-snug text-sandrift">
-                    连续学习 · {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
-                  </p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
-                    {formatHours(data.totalMinutes)}
-                  </p>
-                  <p className="mt-1.5 text-[11px] leading-snug text-sandrift">近 {MOMENTUM_WEEKS} 周总专注</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
-                    {data.activeDays} 天
-                  </p>
-                  <p className="mt-1.5 text-[11px] leading-snug text-sandrift">活跃天数</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[20px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
-                    {data.bestDay ? formatHours(data.bestDay.minutes) : "—"}
-                  </p>
-                  <p className="mt-1.5 text-[11px] leading-snug text-sandrift">
-                    单日最佳{data.bestDay ? ` · ${formatMonthDay(data.bestDay.date)}` : ""}
-                  </p>
-                </div>
-              </div>
-              {/* 全零空态弱提示（84 天全 0 时热力空白，给一个开始入口而非沉默数字） */}
+              <MomentumStats data={data} />
               {data.activeDays === 0 && data.totalMinutes === 0 && (
-                <p className="text-[11px] text-sandrift">
-                  完成 1 个任务或专注 1 次即可点亮。
-                </p>
+                <p className="text-[11px] text-sandrift">完成 1 个任务或专注 1 次即可点亮。</p>
               )}
             </div>
           )}
@@ -222,3 +437,8 @@ export function AnalyticsMomentum() {
     </section>
   );
 }
+
+
+
+
+

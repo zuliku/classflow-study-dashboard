@@ -30,11 +30,14 @@ export function LearningTrendChart({
   points,
   period,
   animate = true,
+  compact = false,
 }: {
   points: LearningTrendPoint[];
   period: AnalyticsPeriod;
   /** 是否播放 Recharts 条形入场动画（仅首次 meaningful load 启用；Range 切换由外层 ux-settle 表达） */
   animate?: boolean;
+  /** 总览模式：压缩图高，让趋势与动量同屏 */
+  compact?: boolean;
 }) {
   const reducedMotion = useEffectiveReducedMotion();
   const hasPlanValues = points.some((p) => p.plannedMinutes !== null);
@@ -49,21 +52,21 @@ export function LearningTrendChart({
   return (
     <div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-2">
-        <span className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
+        <span className="flex items-center gap-1 text-[10.5px] font-semibold text-sandrift">
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: FOCUS_COLOR }} />
           实际专注
         </span>
         {hasPlanValues ? (
-          <span className="flex items-center gap-1 text-[10px] font-semibold text-sandrift">
+          <span className="flex items-center gap-1 text-[10.5px] font-semibold text-sandrift">
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PLAN_COLOR }} />
             计划学习
           </span>
         ) : (
-          <span className="text-[10px] text-satin-grey">计划记录不足，暂不显示</span>
+          <span className="text-[10.5px] text-satin-grey">计划记录不足，暂不显示</span>
         )}
         <span className="ml-auto text-[10px] text-satin-grey">单位：分钟</span>
       </div>
-      <div className="h-60 w-full md:h-72">
+      <div className={compact ? "h-28 w-full md:h-32" : "h-60 w-full md:h-72"}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F0EBE1" vertical={false} />
@@ -101,3 +104,7 @@ export function LearningTrendChart({
     </div>
   );
 }
+
+
+
+

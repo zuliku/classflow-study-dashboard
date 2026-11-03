@@ -164,7 +164,7 @@ async function seedLearningHistory(page: Page) {
         sequence: 7,
         courseId: "c1",
         courseNameSnapshot: "数据结构与算法",
-        data: { date: localDate(now), startTime: "00:30", endTime: "01:30", plannedMinutes: 60 },
+        data: { date: localDate(now), startTime: "00:00", endTime: "01:00", plannedMinutes: 60 },
       }),
     ];
 
@@ -251,10 +251,10 @@ demoTest("近 4 周 range：coverage 提示出现、对比/信号消失", async 
 demoTest("空历史（本周）→ 无任何假指标/假图", async ({ page }) => {
   await openAnalytics(page);
 
-  // Fresh app：coverage 初始化为今天 → 本周视图提示不完整（真实行为）
-  await expect(visibleText(page, /部分历史记录不完整/)).toBeVisible();
+  // 空态保持干净：不渲染 coverage notice（历史尚未开始）
+  await expect(page.getByTestId("analytics-coverage-notice")).toHaveCount(0);
 
-  await expect(visibleText(page, /学习洞察会随着使用逐渐形成/)).toBeVisible();
+  await expect(visibleText(page, /还没有学习记录/)).toBeVisible();
   await expect(page.locator(".recharts-surface")).toHaveCount(0);
   await expect(page.getByText("学习趋势", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/执行情况/)).toHaveCount(0);
@@ -264,7 +264,7 @@ demoTest("完成任务 → 洞察实时更新（订阅链路）", async ({ page 
   await openAnalytics(page);
 
   // 先确认空状态
-  await expect(visibleText(page, /学习洞察会随着使用逐渐形成/)).toBeVisible();
+  await expect(visibleText(page, /还没有学习记录/)).toBeVisible();
 
   // 去任务工作区完成一个任务（drawer 主操作）
   await page.getByRole("button", { name: "任务与 DDL" }).first().click();
@@ -279,5 +279,6 @@ demoTest("完成任务 → 洞察实时更新（订阅链路）", async ({ page 
   // 回到洞察：完成任务 live 刷新（V3：fresh app 本周区间记录不完整 → 「已记录 1 项」）
   await page.getByRole("button", { name: "学习洞察" }).first().click();
   await expect(visibleText(page, /已记录 1 项/)).toBeVisible({ timeout: 10000 });
-  await expect(page.getByText(/学习洞察会随着使用逐渐形成/)).toHaveCount(0);
+  await expect(page.getByText(/还没有学习记录/)).toHaveCount(0);
 });
+

@@ -1,6 +1,6 @@
-﻿"use client";
+"use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { OutlookHealth, OutlookTask, StudyOutlook, StudyOutlookHorizon } from "@/lib/outlook/types";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
@@ -40,17 +40,22 @@ export function StudyOutlookCard({
   horizonDays,
   onHorizonChange,
   onOpenAssignment,
+  compact = false,
 }: {
   outlook: StudyOutlook;
   horizonDays: StudyOutlookHorizon;
   onHorizonChange: (h: StudyOutlookHorizon) => void;
   /** Workflow UX V13：Outlook task → 全局 Assignment Drawer（由 View 持有 navigation ownership） */
   onOpenAssignment: (assignmentId: string) => void;
+  /** 总览右下「下一步」：去卡片壳、压缩行高与次要区块，保留全部任务与操作 */
+  compact?: boolean;
 }) {
   // 低频 actions subscription：保持 actions surface，不订阅完整 session（避免 streaming rerender）
   const { handoffPrompt, handoffAssignmentPrompt } = useKiroSessionActions();
   const { summary, tasks, bottleneckDays, firstCapacityShortfall } = outlook;
+  const [showAll, setShowAll] = useState(false);
   const top = tasks.slice(0, 5);
+  const visibleTasks = compact && !showAll ? top.slice(0, 1) : top;
   const attentionCount = summary.counts.atRisk + summary.counts.attention;
 
   const fmt = (minutes: number) => {
@@ -69,9 +74,15 @@ export function StudyOutlookCard({
     tasks.some((t) => t.reasons.includes("scheduled_after_deadline"));
 
   return (
-    <div className="w-full min-w-0 bg-surface/70 border border-line-soft rounded-xl" data-testid="study-outlook-card">
-      <div className="px-4 pt-4 pb-3 border-b border-line-soft">
-        <AnalyticsCardHeader title="学习前瞻" action={
+    <div
+      className={cn(
+        "w-full min-w-0",
+        compact ? "flex h-full flex-col" : "bg-surface/70 border border-line-soft rounded-xl"
+      )}
+      data-testid="study-outlook-card"
+    >
+      <div className={cn("border-b border-line-soft", compact ? "pb-2" : "px-4 pt-4 pb-3")}>
+        <AnalyticsCardHeader title="学习前瞻" size={compact ? "sm" : "md"} action={
             <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong">
               {/* Workflow UX Motion M3：horizon 切换收敛为 SegmentedControl（compact xs）——
                   single moving plate（--motion-base / emphasized），替代静态 bg-white 瞬切 */}
@@ -121,7 +132,7 @@ export function StudyOutlookCard({
         )}
       </div>
 
-      {firstCapacityShortfall && summary.workload.preferredShortfallMinutes > 0 && (
+      {!compact && firstCapacityShortfall && summary.workload.preferredShortfallMinutes > 0 && (
         <div key={`shortfall-${horizonDays}`} className="ux-fade px-4 py-2 bg-[#9B5B57]/5 border-b border-line-soft">
           <p className="text-[11px] text-[#9B5B57] leading-relaxed" data-testid="outlook-shortfall-strip">
             最早容量缺口：{formatDeadline(firstCapacityShortfall.deadline)} 前约缺{" "}
@@ -135,24 +146,36 @@ export function StudyOutlookCard({
       )}
 
       {tasks.length === 0 ? (
-        <div key={`empty-${horizonDays}`} className="ux-settle px-4 py-6 text-center">
+        <div key={`empty-${horizonDays}`} className={cn("ux-settle text-center", compact ? "py-4" : "px-4 py-6")}>
           <p className="text-[11px] text-sandrift">未来 {horizonDays} 天暂无需要安排的任务</p>
         </div>
       ) : (
         <div key={`list-${horizonDays}`} className="ux-settle divide-y divide-line-soft">
-          {top.map((t) => (
+          {visibleTasks.map((t) => (
             <OutlookTaskRow
               key={t.assignmentId}
               task={t}
+              compact={compact}
               onOpenAssignment={onOpenAssignment}
               // Workflow UX V13：Assignment-scoped Kiro context（exact id，不再 generic）
               onEstimate={() => handoffAssignmentPrompt(t.assignmentId, ESTIMATE_PROMPT)}
             />
           ))}
+          {compact && tasks.length > 2 && (
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setShowAll((v) => !v)}
+                className="text-[10px] font-semibold text-sandrift underline-offset-2 hover:text-charcoal hover:underline transition-colors"
+              >
+                {showAll ? "收起" : `查看全部 ${tasks.length} 个任务`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {bottleneckDays.length > 0 && (
+      {!compact && bottleneckDays.length > 0 && (
         <div className="px-4 py-2 border-t border-line-soft ux-fade">
           <p className="text-[11px] text-sandrift">较忙的日子：
             {bottleneckDays.slice(0, 3).map((d, i) => {
@@ -171,7 +194,7 @@ export function StudyOutlookCard({
       )}
 
       {/* Kiro 入口收敛：最多一个优化入口 + 一个规划入口（不堆按钮） */}
-      <div className="px-4 py-3 border-t border-line-soft flex flex-wrap items-center gap-2">
+      <div className={cn("flex flex-wrap items-center gap-2 border-t border-line-soft", compact ? "py-2 mt-auto" : "px-4 py-3")}>
         {rebalanceSuggestion && (
           <KiroFlowButton
             icon={KiroLogoIcon}
@@ -206,17 +229,19 @@ function OutlookTaskRow({
   task,
   onOpenAssignment,
   onEstimate,
+  compact = false,
 }: {
   task: OutlookTask;
   onOpenAssignment: (assignmentId: string) => void;
   onEstimate: () => void;
+  compact?: boolean;
 }) {
   const health = HEALTH_COPY[task.health];
   const missingEstimate = task.reasons.includes("missing_estimate");
   const scheduledAfterDeadline = task.reasons.includes("scheduled_after_deadline");
   const unscheduled = task.unscheduledMinutes ?? 0;
   return (
-    <div className="px-4 py-2.5 space-y-1">
+    <div className={compact ? "space-y-0.5 py-1" : "px-4 py-2.5 space-y-1"}>
       <button
         type="button"
         aria-label={`打开任务《${task.title}》`}
@@ -224,13 +249,13 @@ function OutlookTaskRow({
         className="w-full text-left rounded-lg outline-none cursor-pointer group/row hover:bg-alabaster/60 focus-visible:bg-alabaster/60 focus-visible:outline-2 focus-visible:outline-charcoal/30 transition-colors duration-[var(--motion-fast)]"
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium text-charcoal truncate">{task.title}</p>
-          <span className={cn("shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded border", health.cls)}>
+          <p className={cn("font-medium text-charcoal truncate", compact ? "text-[11.5px]" : "text-[12px]")}>{task.title}</p>
+          <span className={cn("shrink-0 font-medium px-1.5 py-0.5 rounded border", compact ? "text-[9.5px]" : "text-[10px]", health.cls)}>
             {health.label}
           </span>
         </div>
         {/* facts 文本属于 main surface（只读信息；估算 control 在外层 sibling） */}
-        <p className="text-[11px] text-satin-grey pointer-events-none">
+        <p className={cn("text-satin-grey pointer-events-none", compact ? "text-[10.5px] leading-snug line-clamp-1" : "text-[11px]")}>
           {missingEstimate ? (
             <>缺少预计耗时，无法判断容量。</>
           ) : task.health === "overdue" ? (
@@ -278,4 +303,7 @@ function OutlookTaskRow({
     </div>
   );
 }
+
+
+
 

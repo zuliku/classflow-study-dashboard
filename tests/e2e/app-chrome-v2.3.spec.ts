@@ -118,8 +118,8 @@ test("Analytics：超宽屏 Header / ViewBar / Body 同一版心（流式布局�
 
 test("Analytics：Loading / Empty 下 Chrome 持续存在（空历史 → 空态，Header/ViewBar 仍在）", async ({ page }) => {
   await openAnalytics(page);
-  // demoFixtures 无学习历史 → EmptyState（学习洞察会随着使用逐渐形成）
-  await expect(page.getByText("学习洞察会随着使用逐渐形成")).toBeVisible({ timeout: 15000 });
+  // demoFixtures 无学习历史 → EmptyState（还没有学习记录）
+  await expect(page.getByText("还没有学习记录")).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole("heading", { name: "学习洞察" })).toBeVisible();
   await expect(page.getByTestId("analytics-viewbar")).toBeVisible();
 });
@@ -278,3 +278,4 @@ test("Group：Master–Detail 结构不回归（项目选择 + 详情）", async
   await page.getByRole("button", { name: /项目B/ }).first().click();
   await expect(page.getByRole("heading", { name: "项目B" })).toBeVisible();
 });
+

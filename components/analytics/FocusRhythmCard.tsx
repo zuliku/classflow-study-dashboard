@@ -7,14 +7,14 @@ import { AnalyticsCardHeader } from "@/components/analytics/AnalyticsCardHeader"
 import { cn } from "@/lib/utils";
 
 /** 专注节奏：时段分布 + active days / avg session / longest（产品化 V2：无卡片壳、无装饰图标） */
-export function FocusRhythmCard({ rhythm }: { rhythm: FocusRhythm }) {
+export function FocusRhythmCard({ rhythm, nested = false }: { rhythm: FocusRhythm; nested?: boolean }) {
   const maxMinutes = Math.max(...rhythm.byTimeOfDay.map((b) => b.minutes), 1);
   return (
     <div
       className="w-full min-w-0 h-full flex flex-col"
       data-testid="focus-rhythm-card"
     >
-      <AnalyticsCardHeader title="专注节奏" />
+      <AnalyticsCardHeader title="专注节奏" size={nested ? "sm" : "md"} />
       <div className="flex-1 flex flex-col justify-center gap-3 pt-4">
         {rhythm.byTimeOfDay.map((b) => {
           const active = rhythm.dominantTimeOfDay === b.bucket && b.minutes > 0;
@@ -46,3 +46,4 @@ export function FocusRhythmCard({ rhythm }: { rhythm: FocusRhythm }) {
     </div>
   );
 }
+

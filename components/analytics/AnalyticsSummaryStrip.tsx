@@ -10,32 +10,44 @@ import { cn } from "@/lib/utils";
  * - Desktop：4 列（vertical divider）；<lg：2×2
  * - detail 永不 truncate（可信度信息必须可读）：line-clamp-2 + title 完整文本
  * - divider 规则与 Skeleton 共用 summaryCellDividerClasses（无加载几何位移）
+ * - embedded：卡片内嵌档，去掉上下外边框并压缩数字/内边距
  */
 export function AnalyticsSummaryStrip({
   metrics,
   className,
+  embedded = false,
 }: {
   metrics: { label: string; view: AnalyticsMetricView }[];
   className?: string;
+  /** 卡片内嵌：去掉外层上下边框，由卡片提供边界 */
+  embedded?: boolean;
 }) {
   return (
     <div
       data-testid="analytics-summary-strip"
       className={cn(
         "grid grid-cols-2 lg:grid-cols-4",
-        "border-y border-line-soft",
+        embedded ? "border-t border-line-soft" : "border-y border-line-soft",
         className
       )}
     >
       {metrics.map((m, i) => (
-        <div key={m.label} className={summaryCellDividerClasses(i)}>
-          <p className="text-xs font-medium text-sandrift">{m.label}</p>
+        <div key={m.label} className={summaryCellDividerClasses(i, embedded ? "px-3 py-3" : undefined)}>
+          <p className={cn("font-medium text-sandrift", embedded ? "text-[11.5px]" : "text-xs")}>
+            {m.label}
+          </p>
           <p
             data-testid={`summary-value-${m.label}`}
             className={cn(
               // Hero 锚点：首项（实际专注）放大，其余保持同一字重层级
               "font-semibold leading-none tracking-[-0.02em] tabular-nums",
-              i === 0 ? "text-[34px] text-charcoal" : "text-[26px] text-charcoal"
+              embedded
+                ? i === 0
+                  ? "text-[28px] text-charcoal"
+                  : "text-[22px] text-charcoal"
+                : i === 0
+                  ? "text-[34px] text-charcoal"
+                  : "text-[26px] text-charcoal"
             )}
           >
             {m.view.value}
@@ -43,7 +55,10 @@ export function AnalyticsSummaryStrip({
           {m.view.detail && (
             <p
               data-testid={`summary-detail-${m.label}`}
-              className="text-[11px] leading-snug text-satin-grey line-clamp-2 min-h-[2.5em]"
+              className={cn(
+                "text-[11px] leading-snug text-satin-grey line-clamp-2",
+                embedded ? "min-h-[2em]" : "min-h-[2.5em]"
+              )}
             >
               {m.view.detail}
             </p>

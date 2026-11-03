@@ -238,16 +238,16 @@ demoTest("B：1920×1080 流式布局——占满工作区（无 1500 上限，d
   expect(Math.abs(header.width - body.width)).toBeLessThanOrEqual(2);
 });
 
-demoTest("C：配对行等高（grid stretch；signals 与 Trend 同高顶对齐，ca62dac 意图）", async ({ page }) => {
+demoTest("C：总览配对列等高（trend+动量 / signals+执行 同高顶对齐）", async ({ page }) => {
   await seedLearningHistory(page);
   await openAnalytics(page);
 
   const trendCard = page.getByTestId("learning-trend-card");
-  const signals = page.getByTestId("learning-signals-card");
-  await expect(signals).toBeVisible();
+  const signalsColumn = page.getByTestId("analytics-signals-column");
+  await expect(signalsColumn).toBeVisible();
   const trendBox = (await trendCard.boundingBox())!;
-  const signalsBox = (await signals.boundingBox())!;
-  // 等高 + 顶对齐（不等高断言已随等高重构废弃）
+  const signalsBox = (await signalsColumn.boundingBox())!;
+  // 等高 + 顶对齐（grid stretch；右列承载 signals + execution）
   expect(Math.abs(signalsBox.height - trendBox.height)).toBeLessThanOrEqual(2);
   expect(Math.abs(signalsBox.y - trendBox.y)).toBeLessThanOrEqual(2);
 });
