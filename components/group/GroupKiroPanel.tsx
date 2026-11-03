@@ -9,7 +9,7 @@ import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
 import type { GroupProject } from "@/types";
 
-const DOCK_WIDTH = "w-[clamp(320px,24vw,440px)]";
+const DOCK_WIDTH = "w-[clamp(360px,25vw,480px)]";
 
 /**
  * 小组协作 · 项目内嵌 Kiro（宽屏 Dock）。
@@ -50,19 +50,20 @@ export function GroupKiroPanel({
         aria-label={`项目 Kiro：${project.title}`}
         {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLElement>) : {})}
         className={cn(
-          "absolute right-0 top-0 flex h-full w-[clamp(320px,24vw,440px)] flex-col overflow-hidden rounded-xl border border-line-soft bg-surface/60",
+          "absolute right-0 top-0 flex h-full flex-col overflow-hidden border-l border-line-soft",
+          DOCK_WIDTH,
           "transition-[opacity,transform]",
           visible
             ? "translate-x-0 opacity-100 duration-[var(--motion-panel)] ease-[var(--ease-spring)]"
             : "pointer-events-none translate-x-4 opacity-0 duration-[var(--motion-exit-panel)] ease-[var(--ease-exit)]"
         )}
       >
-        <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-line-soft px-3">
+        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line-soft px-4">
           <div className="flex min-w-0 items-center gap-2">
             <KiroMark size="sm" />
             <div key={project.id} className="ux-detail-swap-in min-w-0 leading-tight">
-              <p className="text-[12px] font-semibold text-charcoal">项目 Kiro</p>
-              <p className="truncate text-[10px] text-sandrift">{project.title}</p>
+              <p className="text-[10px] font-medium text-sandrift">项目 Kiro</p>
+              <p className="truncate text-[13px] font-semibold text-charcoal">{project.title}</p>
             </div>
           </div>
           <button
@@ -76,9 +77,10 @@ export function GroupKiroPanel({
           </button>
         </header>
         <div className="flex min-h-0 flex-1 flex-col">
-          <KiroChatSurface variant="sidecar" />
+          <KiroChatSurface variant="dock" />
         </div>
       </aside>
     </div>
   );
 }
+

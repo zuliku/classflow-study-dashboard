@@ -15,11 +15,14 @@ import { cn } from "@/lib/utils";
 export function KiroEmptyState({
   onSuggestion,
   compact,
+  centered = false,
   contextSuggestions,
   playIntro = false,
 }: {
   onSuggestion: (text: string) => void;
   compact?: boolean;
+  /** Dock 等宽屏内嵌面板：垂直居中（Sidecar 保持内容偏上） */
+  centered?: boolean;
   /** Entry Context 建议节点（无消息时渲染在标题下方） */
   contextSuggestions?: React.ReactNode;
   /** Motion V1：本轮 empty generation 播放单次 intro（logo/title/subtitle/suggestions stagger） */
@@ -68,7 +71,7 @@ export function KiroEmptyState({
       data-testid="kiro-empty"
       className={cn(
         "flex-1 min-h-0 overflow-y-auto flex flex-col items-center text-center",
-        compact ? "justify-start px-3 pt-10" : "justify-center px-4 py-8"
+        centered || !compact ? "justify-center px-4 py-8" : "justify-start px-3 pt-10"
       )}
     >
       <div

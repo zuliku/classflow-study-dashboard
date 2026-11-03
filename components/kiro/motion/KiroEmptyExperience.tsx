@@ -16,12 +16,15 @@ import { cn } from "@/lib/utils";
 export function KiroEmptyExperience({
   open,
   compact,
+  centered = false,
   playIntro,
   onSuggestion,
   contextSuggestions,
 }: {
   open: boolean;
   compact: boolean;
+  /** Dock 等宽屏内嵌面板：空态垂直居中（Sidecar 保持内容偏上） */
+  centered?: boolean;
   playIntro: boolean;
   onSuggestion: (text: string) => void;
   contextSuggestions?: React.ReactNode;
@@ -54,6 +57,7 @@ export function KiroEmptyExperience({
       <KiroEmptyState
         onSuggestion={onSuggestion}
         compact={compact}
+        centered={centered}
         contextSuggestions={contextSuggestions}
         playIntro={playIntro}
       />

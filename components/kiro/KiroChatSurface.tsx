@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useCallback, useMemo, useRef } from "react";
 import { useAppStore } from "@/store/useAppStore";
@@ -34,12 +34,13 @@ import { cn } from "@/lib/utils";
  * （Empty/Conversation + Context + Suggestions + Composer）
  * 业务逻辑完全一致，只是显示密度不同（variant）。
  */
-export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" }) {
+export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" | "dock" }) {
   const runtime = useKiroRuntime();
   const { chat, attachments, activeRefs, removeContext, addManualContext } = runtime;
   const { suggestionsKind, suggestionsGen, lastUserTurnGen, emptyIntroGeneration, currentConversationId } = useKiroSessionMeta();
   const { claimEmptyIntro, newChat } = useKiroSessionActions();
-  const compact = variant === "sidecar";
+  const compact = variant !== "workspace";
+  const dock = variant === "dock";
 
   // Motion V1：Empty Intro claim（每 generation 每 surface 一次）。
   // 渲染期缓存 claim 结果 —— 同 generation 内后续 re-render 返回相同值，intro 类不闪失；
@@ -48,7 +49,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const playIntro = (() => {
     if (chat.messages.length > 0) return false;
     if (introClaimRef.current.generation === emptyIntroGeneration) return introClaimRef.current.value;
-    const value = claimEmptyIntro(variant, emptyIntroGeneration);
+    const value = claimEmptyIntro(variant === "workspace" ? "workspace" : "sidecar", emptyIntroGeneration);
     introClaimRef.current = { generation: emptyIntroGeneration, value };
     return value;
   })();
@@ -204,7 +205,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
     suggestionsKind != null && suggestionsGen > lastUserTurnGen;
   // 建议条父级 presence：裸条件会截断其内部退出折叠（同一 panel 时长对齐）
   const suggestionsPresence = usePresence(
-    variant === "sidecar" && hasMessages && hasContextSuggestions,
+    variant !== "workspace" && hasMessages && hasContextSuggestions,
     MOTION_EXIT_MS.panel
   );
   // Workspace 与 Sidecar 都启用 Context-aware Suggestions（无消息时渲染在标题下方）
@@ -284,7 +285,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
 
       {/* P5：Desktop Session Control Surface（Workspace / Sidecar 共用；位于 Conversation
            可滚动区之外、Composer 之上；没有真实 session → 不渲染） */}
-      <KiroComputerSessionSurface variant={variant} />
+      <KiroComputerSessionSurface variant={variant === "workspace" ? "workspace" : "sidecar"} />
 
       {/* Motion V1：main content stage —— Empty 为 absolute presence overlay（exit 不占 flex 布局，
           Conversation 第一条消息立即 mount；不给 Conversation 加 key / 不加 entrance animation） */}
@@ -292,6 +293,7 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
         <KiroEmptyExperience
           open={!hasMessages}
           compact={compact}
+          centered={dock}
           playIntro={playIntro}
           onSuggestion={chat.send}
           contextSuggestions={emptyContextSuggestions}
