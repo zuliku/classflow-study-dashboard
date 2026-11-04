@@ -259,3 +259,40 @@ test("Move V1 smoke：hover 显示把手 → 拖拽移动 → close/reopen 位�
   expect(Math.abs(reopened.x - moved.x)).toBeLessThanOrEqual(2);
   expect(Math.abs(reopened.y - moved.y)).toBeLessThanOrEqual(2);
 });
+
+test("Sidecar +N Popover 靠近右缘时完整可见（不被 Shell 裁切）", async ({ page }) => {
+  await seedAI(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
+
+  // Assignment Entry → Sidecar（带 1 个 manual context）
+  await page.locator("aside").first().getByRole("button", { name: "任务" }).click();
+  await page.locator('[data-testid="assignment-list"] [data-assignment-id="a1"]').click();
+  await page.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: "Ask Kiro" }).click();
+  const sidecar = page.getByTestId("kiro-sidecar");
+  await expect(sidecar).toBeVisible();
+
+  // 再添加 1 个 context → compact 槽位溢出，出现 +N
+  await page.getByTestId("kiro-composer-add").click();
+  await page.getByRole("menuitem", { name: /ClassFlow 上下文/ }).click();
+  await page.getByRole("menu", { name: "选择上下文" }).getByRole("menuitem").first().click();
+  const more = sidecar.getByRole("button", { name: /查看全部上下文/ });
+  await expect(more).toBeVisible();
+
+  await more.click();
+  const popover = sidecar.getByRole("dialog", { name: "当前上下文" });
+  await expect(popover).toBeVisible();
+
+  const [bar, box, side] = await Promise.all([
+    page.getByTestId("kiro-context-bar").boundingBox(),
+    popover.boundingBox(),
+    sidecar.boundingBox(),
+  ]);
+  expect(bar && box && side).toBeTruthy();
+  // 弹层必须完整落在 ContextBar 与 Sidecar 内（此前固定 left-0 会被 Shell 右缘裁切）
+  expect(box!.x).toBeGreaterThanOrEqual(bar!.x);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(bar!.x + bar!.width + 0.5);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(side!.x + side!.width);
+});

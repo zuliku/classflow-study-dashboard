@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BookOpen, CalendarClock, ClipboardCheck, FileText, Users, X } from "lucide-react";
 import { KiroContextRef } from "@/lib/ai/context/types";
+import { computeAnchoredPopoverX } from "@/lib/ai/ui/contextPopoverPosition";
 import {
   describeKiroContextRef,
   formatKiroContextDisplayLabel,
@@ -26,6 +27,10 @@ const AMBIENT_KIND_ICONS: Record<KiroContextRef["kind"], React.ComponentType<{ c
   material: FileText,
   artifact: FileText,
 };
+
+/** +N Popover 固定宽度（与 class w-[280px] 同源；定位计算需要） */
+const OVERFLOW_POPOVER_WIDTH = 280;
+const OVERFLOW_POPOVER_EDGE_PADDING = 4;
 
 /**
  * Kiro Context Strip（Task 7E）：Composer 上方的一条轻环境信息。
@@ -57,6 +62,53 @@ export function KiroContextBar({
   const enteringContextKeys = useEnterOnAdd(contexts.map((context) => context.key));
   const overflowPresence = usePresence(overflowOpen, MOTION_EXIT_MS.fast);
   const overflowInertRef = useInertOnHidden<HTMLDivElement>(!overflowPresence.visible);
+  // +N Popover 横向定位：按钮靠近窄 Sidecar 右缘时不能固定 left-0（会被 Shell 裁掉）
+  const [overflowPopoverX, setOverflowPopoverX] = useState<{
+    left: number;
+    transformOriginX: "left" | "right";
+  } | null>(null);
+  const updateOverflowPopoverX = useCallback(() => {
+    const parent = overflowBtnRef.current;
+    const button = parent?.querySelector("button");
+    const bar = parent?.closest('[data-testid="kiro-context-bar"]');
+    if (!parent || !button || !bar) return;
+    const anchorRect = button.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    const boundaryRect = bar.getBoundingClientRect();
+    const next = computeAnchoredPopoverX({
+      anchorLeft: anchorRect.left,
+      anchorRight: anchorRect.right,
+      boundaryLeft: boundaryRect.left,
+      boundaryRight: boundaryRect.right,
+      width: OVERFLOW_POPOVER_WIDTH,
+      padding: OVERFLOW_POPOVER_EDGE_PADDING,
+    });
+    setOverflowPopoverX((prev) =>
+      prev && prev.left === next.left - parentRect.left && prev.transformOriginX === next.transformOriginX
+        ? prev
+        : { left: next.left - parentRect.left, transformOriginX: next.transformOriginX }
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!overflowOpen) return;
+    updateOverflowPopoverX();
+  }, [overflowOpen, contexts.length, compact, updateOverflowPopoverX]);
+
+  // Sidecar resize / 窗口 resize / chip 重排导致按钮移动时重新对齐
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const bar = overflowBtnRef.current?.closest('[data-testid="kiro-context-bar"]');
+    const observer =
+      bar && typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateOverflowPopoverX) : null;
+    if (bar && observer) observer.observe(bar);
+    window.addEventListener("resize", updateOverflowPopoverX);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateOverflowPopoverX);
+    };
+  }, [overflowOpen, updateOverflowPopoverX]);
+
   // P2：chip 移除原位 collapse（160ms 后真正删除；外部整单替换直接卸载，不过渡）。
   const reducedMotion = useEffectiveReducedMotion();
   const [leavingKeys, setLeavingKeys] = useState<ReadonlySet<string>>(new Set());
@@ -207,8 +259,14 @@ export function KiroContextBar({
               }}
               role="dialog"
               aria-label="当前上下文"
+              style={{
+                left: overflowPopoverX?.left ?? 0,
+                transformOrigin: overflowPopoverX
+                  ? `bottom ${overflowPopoverX.transformOriginX}`
+                  : "bottom left",
+              }}
               className={cn(
-                "absolute left-0 bottom-full mb-1.5 w-[280px] max-h-[min(320px,50vh)] overflow-y-auto overflow-x-clip bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 z-40 ux-inline origin-bottom-left transition-[opacity,transform]",
+                "absolute bottom-full mb-1.5 w-[280px] max-h-[min(320px,50vh)] overflow-y-auto overflow-x-clip bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 z-40 ux-inline transition-[opacity,transform]",
                 overflowPresence.visible
                   ? "opacity-100 duration-[var(--motion-fast)]"
                   : "opacity-0 translate-y-[3px] scale-[0.99] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"

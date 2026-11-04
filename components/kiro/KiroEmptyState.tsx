@@ -93,7 +93,7 @@ export function KiroEmptyState({
         今天想先处理什么？
       </h2>
 
-      <div data-kiro-empty-suggestions>
+      <div data-kiro-empty-suggestions className="w-full min-w-0">
         {contextSuggestions ? (
           <div className={cn("w-full max-w-md", playIntro && "kiro-empty-suggestion-intro", compact ? "mt-5" : "mt-7")}>
             {contextSuggestions}

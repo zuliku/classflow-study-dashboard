@@ -216,8 +216,10 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const hasContextSuggestions =
     suggestionsKind != null && suggestionsGen > lastUserTurnGen;
   // 建议条父级 presence：裸条件会截断其内部退出折叠（同一 panel 时长对齐）
+  // 错误态不展示 follow-up 建议：错误卡片需要注意力，且短 Sidecar 中建议 + Composer
+  // 会挤压固定底部区域，导致输入框被 Shell 裁切。
   const suggestionsPresence = usePresence(
-    variant !== "workspace" && hasMessages && hasContextSuggestions,
+    variant !== "workspace" && hasMessages && hasContextSuggestions && !chat.error,
     MOTION_EXIT_MS.panel
   );
   // 首次真实 web_search 后的一次性隐私提示（历史会话同样触发；dismiss 后持久化）
@@ -350,8 +352,8 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
       </div>
 
       {suggestionsPresence.mounted && (
-        <ExitCollapse exiting={!suggestionsPresence.visible}>
-          <KiroContextSuggestions compact />
+        <ExitCollapse exiting={!suggestionsPresence.visible} innerClassName="min-w-0">
+          <KiroContextSuggestions compact inset />
         </ExitCollapse>
       )}
 
