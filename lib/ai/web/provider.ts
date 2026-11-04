@@ -48,15 +48,37 @@ export interface KiroWebEvidenceProvider {
 export type KiroWebProvider = KiroWebSearchProvider & KiroWebEvidenceProvider;
 
 import { createTavilyWebSearchProvider } from "@/lib/ai/web/tavily";
+import { createExaKeylessWebSearchProvider } from "@/lib/ai/web/keyless/exa";
+import { createParallelKeylessWebSearchProvider } from "@/lib/ai/web/keyless/parallel";
+import {
+  createKeylessEvidenceRouter,
+  createKeylessSearchRouter,
+} from "@/lib/ai/web/keyless/router";
 
 const tavilyProvider = createTavilyWebSearchProvider();
+const exaProvider = createExaKeylessWebSearchProvider();
+const parallelProvider = createParallelKeylessWebSearchProvider();
+const keylessSearchRouter = createKeylessSearchRouter({
+  exa: exaProvider,
+  parallel: parallelProvider,
+});
+const keylessEvidenceRouter = createKeylessEvidenceRouter({
+  exa: exaProvider,
+  parallel: parallelProvider,
+});
 
 const SEARCH_PROVIDERS: Record<KiroWebSearchProviderId, KiroWebSearchProvider> = {
   tavily: tavilyProvider,
+  exa: exaProvider,
+  parallel: parallelProvider,
+  auto: keylessSearchRouter.provider,
 };
 
 const EVIDENCE_PROVIDERS: Record<KiroWebSearchProviderId, KiroWebEvidenceProvider> = {
   tavily: tavilyProvider,
+  exa: exaProvider,
+  parallel: parallelProvider,
+  auto: keylessEvidenceRouter.provider,
 };
 
 export function getKiroWebSearchProvider(id: KiroWebSearchProviderId): KiroWebSearchProvider {

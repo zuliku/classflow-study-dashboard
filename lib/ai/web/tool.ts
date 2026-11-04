@@ -11,6 +11,7 @@
 import { tool, ToolSet } from "ai";
 import { z } from "zod";
 import {
+  KiroWebSearchAccess,
   KiroWebSearchCredentialMode,
   KiroWebSearchResult,
   KiroTrustedWebSource,
@@ -24,7 +25,11 @@ import {
   WEB_READ_TIMEOUT_MS,
 } from "@/lib/ai/web/types";
 import { kiroWebSearchInputSchema, kiroWebReadSourceSchema, normalizeWebSearchDomain, resolveExactMatchFlag } from "@/lib/ai/web/schemas";
-import { resolveWebSearchCredential, KiroWebSearchCredentialResult } from "@/lib/ai/web/credentials";
+import {
+  resolveKiroWebSearchAccess,
+  resolveWebSearchCredential,
+  KiroWebSearchCredentialResult,
+} from "@/lib/ai/web/credentials";
 import { KiroWebSearchProvider, KiroWebEvidenceProvider, getKiroWebSearchProvider, getKiroWebEvidenceProvider } from "@/lib/ai/web/provider";
 import { resolveKiroWebEvidence } from "@/lib/ai/web/evidenceRuntime";
 import { readNativeWebDocumentSource } from "@/lib/ai/web/native/documentReader";
@@ -128,7 +133,10 @@ export function inspectCurrentTurnWebEvidenceState(messages: unknown[]): {
 }
 
 export interface KiroWebSearchToolConfig {
+  /** Keyed 增强 Provider（Tavily） */
   provider: KiroWebSearchProvider;
+  /** Keyless 基础 Provider（Exa/Parallel 路由）；server 无 Key 时使用 */
+  keylessProvider?: KiroWebSearchProvider;
   /** 本次请求的凭据模式（server / byok）+ 用户 Key（仅 byok） */
   credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
   /** 本 Turn 已发生的搜索尝试数（成功与失败都计入；由 inspect 注入，跨 roundtrip 累计） */
@@ -295,18 +303,31 @@ function credentialFailure(
 export function assembleKiroToolsForRequest(input: {
   webSearchEnabled: boolean;
   credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
+  /** route 层已解析的访问能力；省略时按 credential 重新解析（测试/旧调用方兼容） */
+  access?: KiroWebSearchAccess | null;
   /** Task 19C2：已由 validateAIChatBody 归一化的 Vision 配置（enabled/model/apiKey） */
   webPdfVisionConfig?: { enabled: boolean; model: string; apiKey?: string };
   messages: unknown[];
   clientTools: ToolSet;
 }): ToolSet {
   if (!input.webSearchEnabled) return input.clientTools;
+  const access =
+    input.access ??
+    resolveKiroWebSearchAccess({
+      mode: input.credential.mode,
+      userApiKey: input.credential.userApiKey,
+    });
+  // BYOK 缺 Key / keyless 被运营开关禁用：不把必然失败的工具交给模型
+  if (!access.ok) return input.clientTools;
+
   const searchState = inspectCurrentTurnWebSearchState(input.messages);
   const evidenceState = inspectCurrentTurnWebEvidenceState(input.messages);
+  const keyless = access.kind === "keyless";
   return {
     ...input.clientTools,
     web_search: createKiroWebSearchTool({
       provider: getKiroWebSearchProvider("tavily"),
+      ...(keyless ? { keylessProvider: getKiroWebSearchProvider("auto") } : {}),
       credential: input.credential,
       attemptsSoFar: searchState.attempts,
       nextSourceIndex: searchState.nextSourceIndex,
@@ -314,7 +335,7 @@ export function assembleKiroToolsForRequest(input: {
       seenUrls: searchState.seenUrls,
     }),
     read_web_source: createKiroWebReadTool({
-      fallbackProvider: getKiroWebEvidenceProvider("tavily"),
+      fallbackProvider: getKiroWebEvidenceProvider(keyless ? "auto" : "tavily"),
       nativeReader: readNativeWebDocumentSource,
       webPdfVisionConfig: input.webPdfVisionConfig,
       credential: input.credential,
@@ -519,7 +540,7 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
  * execute 内部自己 catch safe 错误并返回 { ok:false, code, message }，绝不 throw Tavily raw response。
  */
 export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
-  const { provider, credential, attemptsSoFar, nextSourceIndex } = config;
+  const { provider, keylessProvider, credential, attemptsSoFar, nextSourceIndex } = config;
   let remainingAttempts = Math.max(0, MAX_WEB_SEARCHES_PER_TURN - attemptsSoFar);
   let sourceCursor = nextSourceIndex;
   const successfulQueries = new Set(config.successfulQueries.map(normalizeWebSearchQuery));
@@ -549,10 +570,21 @@ export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
       const normalizedQuery = normalizeWebSearchQuery(input.query);
       if (successfulQueries.has(normalizedQuery)) return duplicateQueryFailure();
 
+      // server 无 Key（或 keyless 运营开关允许）时使用基础搜索；keylessProvider 缺失 → 明确失败，不偷偷换通道。
+      const keyless = resolved.kind === "keyless";
+      if (keyless && !keylessProvider) {
+        return {
+          ok: false,
+          code: "WEB_SEARCH_KEY_REQUIRED",
+          message: webSearchSafeMessage("WEB_SEARCH_KEY_REQUIRED"),
+        };
+      }
+      const activeProvider = keyless ? keylessProvider! : provider;
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
       try {
-        const outcome = await provider.search(
+        const outcome = await activeProvider.search(
           {
             query: input.query,
             topic: input.topic,

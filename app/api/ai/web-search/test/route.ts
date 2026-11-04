@@ -1,4 +1,4 @@
-﻿import { resolveWebSearchCredential } from "@/lib/ai/web/credentials";
+﻿import { resolveKiroWebSearchAccess } from "@/lib/ai/web/credentials";
 import { getKiroWebSearchProvider } from "@/lib/ai/web/provider";
 import { WEB_SEARCH_TIMEOUT_MS } from "@/lib/ai/web/types";
 
@@ -22,26 +22,26 @@ export async function handleWebSearchTest(req: Request) {
   const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
   const mode = b.credentialMode === "byok" ? "byok" : "server";
 
-  const resolved = resolveWebSearchCredential({
+  const access = resolveKiroWebSearchAccess({
     mode,
     userApiKey: typeof b.apiKey === "string" ? b.apiKey : undefined,
   });
-  if (!resolved.ok) {
-    return Response.json({ ok: false, code: resolved.code, message: resolved.message }, { status: 200 });
+  if (!access.ok) {
+    return Response.json({ ok: false, code: access.code, message: access.message }, { status: 200 });
   }
 
-  const provider = getKiroWebSearchProvider("tavily");
+  const provider = getKiroWebSearchProvider(access.kind === "keyless" ? "auto" : "tavily");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEB_SEARCH_TIMEOUT_MS);
   try {
     const outcome = await provider.checkCredential({
-      apiKey: resolved.apiKey,
+      apiKey: access.kind === "keyed" ? access.apiKey : "",
       signal: controller.signal,
     });
     if (!outcome.ok) {
       return Response.json({ ok: false, code: outcome.code, message: outcome.message }, { status: 200 });
     }
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, mode: access.kind === "keyless" ? "basic" : "enhanced" });
   } finally {
     clearTimeout(timer);
   }

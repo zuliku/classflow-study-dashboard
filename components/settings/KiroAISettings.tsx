@@ -52,7 +52,10 @@ const REASONING_EFFORT_LABELS: Record<KiroReasoningEffort, string> = {
   max: "极高",
 };
 
-type TestState = { status: "idle" | "testing" } | { status: "success" } | { status: "error"; message: string };
+type TestState =
+  | { status: "idle" | "testing" }
+  | { status: "success"; mode?: "basic" | "enhanced" }
+  | { status: "error"; message: string };
 
 /**
  * Kiro 设置（Settings V4）：让 AI 工作的基础配置（AI 服务 / 模型 / API Key / 连接测试）
@@ -136,6 +139,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   const [test, setTest] = useState<TestState>({ status: "idle" });
   const [webSearchTest, setWebSearchTest] = useState<TestState>({ status: "idle" });
   const [serverSearchConfigured, setServerSearchConfigured] = useState<boolean | null>(null);
+  const [keylessSearchAvailable, setKeylessSearchAvailable] = useState<boolean | null>(null);
 
   // Hotfix：Server Search 配置状态（null = 检测中；不阻塞 Settings 渲染）
   useEffect(() => {
@@ -143,9 +147,12 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
     const doFetch = async () => {
       try {
         const res = await fetch(apiUrl("/api/ai/web-search/status"));
-        const data = res.ok ? ((await res.json()) as { serverConfigured?: boolean } | null) : null;
-        if (!cancelled && data && typeof data.serverConfigured === "boolean") {
-          setServerSearchConfigured(data.serverConfigured);
+        const data = res.ok
+          ? ((await res.json()) as { serverConfigured?: boolean; keylessAvailable?: boolean } | null)
+          : null;
+        if (!cancelled && data) {
+          if (typeof data.serverConfigured === "boolean") setServerSearchConfigured(data.serverConfigured);
+          if (typeof data.keylessAvailable === "boolean") setKeylessSearchAvailable(data.keylessAvailable);
         }
       } catch {
         if (!cancelled) setServerSearchConfigured(null);
@@ -257,9 +264,14 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           apiKey: webSearchCredentialMode === "byok" ? getSessionWebSearchApiKey() : undefined,
         }),
       });
-      const data = (await res.json()) as { ok: boolean; code?: string; message?: string };
+      const data = (await res.json()) as {
+        ok: boolean;
+        code?: string;
+        message?: string;
+        mode?: "basic" | "enhanced";
+      };
       if (seq !== webSearchSeqRef.current) return;
-      if (data.ok) setWebSearchTest({ status: "success" });
+      if (data.ok) setWebSearchTest({ status: "success", mode: data.mode });
       else setWebSearchTest({ status: "error", message: data.message || "搜索服务不可用" });
     } catch {
       if (seq !== webSearchSeqRef.current) return;
@@ -545,7 +557,13 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <DisclosureRegion open={webSearchEnabled}>
               <div className="px-3 -mt-1">
                 <p className="text-[11px] text-sandrift">
-                  {webSearchCredentialMode === "server" ? "ClassFlow 提供" : "使用自己的 API Key"}
+                  {webSearchCredentialMode === "server"
+                    ? serverSearchConfigured === true
+                      ? "增强搜索已启用"
+                      : keylessSearchAvailable === false
+                        ? "基础搜索不可用"
+                        : "基础搜索（免 Key）"
+                    : "使用自己的 Tavily Key"}
                 </p>
               </div>
               <button
@@ -587,26 +605,32 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                       }}
                       ariaLabel="Kiro Search 凭据"
                       options={[
-                        { value: "server", label: "ClassFlow 提供" },
-                        { value: "byok", label: "自己的 API Key" },
+                        { value: "server", label: "自动（推荐）" },
+                        { value: "byok", label: "自己的 Tavily Key" },
                       ]}
                     />
                     {webSearchCredentialMode === "server" && serverSearchConfigured === false && (
-                      <div className="flex flex-col gap-1.5 w-full">
-                        <span className="text-[11px] font-semibold text-danger">
-                          当前服务端未配置搜索凭据，请使用自己的 API Key。
+                      keylessSearchAvailable === false ? (
+                        <div className="flex flex-col gap-1.5 w-full">
+                          <span className="text-[11px] font-semibold text-danger">
+                            当前基础搜索不可用，请使用自己的 Tavily Key。
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWebSearchCredentialMode("byok");
+                              setWebSearchTest({ status: "idle" });
+                            }}
+                            className="self-start text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
+                          >
+                            使用自己的 Tavily Key
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-sandrift leading-relaxed">
+                          当前使用基础搜索（免 Key）；配置自己的 Tavily Key 可提高额度与稳定性。
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWebSearchCredentialMode("byok");
-                            setWebSearchTest({ status: "idle" });
-                          }}
-                          className="self-start text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
-                        >
-                          使用自己的 API Key
-                        </button>
-                      </div>
+                      )
                     )}
                   </SettingsRow>
 
@@ -655,7 +679,11 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                       {webSearchTest.status === "success" && (
                         <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
                           <Check className="w-3.5 h-3.5" />
-                          搜索服务可用
+                          {webSearchTest.mode === "basic"
+                            ? "基础搜索可用"
+                            : webSearchTest.mode === "enhanced"
+                              ? "增强搜索可用"
+                              : "搜索服务可用"}
                         </span>
                       )}
                       {webSearchTest.status === "error" && (
@@ -664,7 +692,11 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     </div>
                   </SettingsRow>
 
-                  <SettingsRow settingId="kiro-web-search-privacy" title="隐私" description="搜索查询可能发送给搜索服务。">
+                  <SettingsRow
+                    settingId="kiro-web-search-privacy"
+                    title="隐私"
+                    description="只发送搜索关键词给当前使用的第三方搜索服务；不会发送对话全文、文件或本地数据。"
+                  >
                     <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
                       按需发送
                     </span>

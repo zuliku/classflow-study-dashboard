@@ -15,10 +15,12 @@ function tavilyPayload(results: unknown[]): string {
 describe("Kiro Search credential resolver", () => {
   const prevKiro = process.env.KIRO_TAVILY_API_KEY;
   const prevStandard = process.env.TAVILY_API_KEY;
+  const prevDisableKeyless = process.env.CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH;
 
   beforeEach(() => {
     delete process.env.KIRO_TAVILY_API_KEY;
     delete process.env.TAVILY_API_KEY;
+    delete process.env.CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH;
     sessionStorage.clear();
   });
   afterEach(() => {
@@ -26,6 +28,8 @@ describe("Kiro Search credential resolver", () => {
     else process.env.KIRO_TAVILY_API_KEY = prevKiro;
     if (prevStandard === undefined) delete process.env.TAVILY_API_KEY;
     else process.env.TAVILY_API_KEY = prevStandard;
+    if (prevDisableKeyless === undefined) delete process.env.CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH;
+    else process.env.CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH = prevDisableKeyless;
   });
 
   it("1. server mode → 读取 Server Key", () => {
@@ -53,10 +57,14 @@ describe("Kiro Search credential resolver", () => {
     }
   });
 
-  it("server mode 缺 env → WEB_SEARCH_KEY_REQUIRED（不 crash）", () => {
+  it("server mode 缺 env → keyless 基础搜索（不 crash）", () => {
     const r = resolveWebSearchCredential({ mode: "server" });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.code).toBe("WEB_SEARCH_KEY_REQUIRED");
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.kind).toBe("keyless");
+      expect(r.apiKey).toBe("");
+      expect(r.mode).toBe("server");
+    }
   });
 
   it("RED/HOTFIX: 标准 TAVILY_API_KEY 应被识别（KIRO_ 未设置时）", () => {
@@ -94,12 +102,27 @@ describe("Kiro Search credential resolver", () => {
     if (r.ok) expect(r.apiKey).toBe("kiro-key");
   });
 
-  it("Case D: 两个都没有 → WEB_SEARCH_KEY_REQUIRED", () => {
+  it("Case D: 两个都没有 → keyless 基础搜索", () => {
     delete process.env.KIRO_TAVILY_API_KEY;
     delete process.env.TAVILY_API_KEY;
     const r = resolveWebSearchCredential({ mode: "server" });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.code).toBe("WEB_SEARCH_KEY_REQUIRED");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.kind).toBe("keyless");
+  });
+
+  it("Case D2: 运营安全阀禁用 keyless → server 无 Key 回到 WEB_SEARCH_KEY_REQUIRED", () => {
+    delete process.env.KIRO_TAVILY_API_KEY;
+    delete process.env.TAVILY_API_KEY;
+    const prev = process.env.CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH;
+    process.env.CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH = "1";
+    try {
+      const r = resolveWebSearchCredential({ mode: "server" });
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.code).toBe("WEB_SEARCH_KEY_REQUIRED");
+    } finally {
+      if (prev === undefined) delete process.env.CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH;
+      else process.env.CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH = prev;
+    }
   });
 
   it("Case E: Server 有 Key，但 byok 缺 userApiKey → WEB_SEARCH_KEY_REQUIRED（不偷 fallback Server）", () => {

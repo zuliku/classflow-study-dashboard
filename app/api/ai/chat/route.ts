@@ -14,6 +14,8 @@
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { KIRO_TOOLS, getKiroToolsForRequest } from "@/lib/ai/tools";
 import { assembleKiroToolsForRequest } from "@/lib/ai/web/tool";
+import { resolveKiroWebSearchAccess } from "@/lib/ai/web/credentials";
+import { buildKiroWebSearchCapabilitySection } from "@/lib/ai/web/capability";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
@@ -446,9 +448,25 @@ export async function handleChat(req: Request) {
     ? "\n\n# 纯文本追答\n本轮工具调用已全部完成，只根据对话历史中的已有工具结果作答，不要调用任何工具。"
     : "";
 
+  // 联网搜索运行时真值：server 无 Tavily Key 时自动 keyless；BYOK 缺 Key → 不暴露工具。
+  const webSearchAccess = parsed.webSearchConfig?.enabled
+    ? resolveKiroWebSearchAccess({
+        mode: parsed.webSearchConfig.credentialMode ?? "server",
+        userApiKey: parsed.webSearchConfig.apiKey,
+      })
+    : null;
+  const webSearchCapabilitySection =
+    parsed.webSearchConfig?.enabled && !textOnlyAnswer
+      ? buildKiroWebSearchCapabilitySection({
+          enabled: true,
+          access: webSearchAccess,
+          textOnlyAnswer,
+        })
+      : "";
+
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${tierGuidanceSection}${textOnlySuffix}${desktopRuntimeCapabilityContext}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
-    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + tierGuidanceSection + textOnlySuffix + desktopRuntimeCapabilityContext + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${tierGuidanceSection}${textOnlySuffix}${desktopRuntimeCapabilityContext}${webSearchCapabilitySection}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + tierGuidanceSection + textOnlySuffix + desktopRuntimeCapabilityContext + webSearchCapabilitySection + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
@@ -458,6 +476,7 @@ export async function handleChat(req: Request) {
         ? {}
         : assembleKiroToolsForRequest({
         webSearchEnabled: parsed.webSearchConfig?.enabled ?? false,
+        access: webSearchAccess,
         credential: {
           mode: parsed.webSearchConfig?.credentialMode ?? "server",
           userApiKey: parsed.webSearchConfig?.apiKey,

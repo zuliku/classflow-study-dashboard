@@ -6,9 +6,26 @@
  * 只依赖本文件的类型，绝不传播 Provider 原始 response。
  */
 
-export type KiroWebSearchProviderId = "tavily";
+/**
+ * Provider IDs：
+ * - tavily：Keyed 增强搜索（server env / BYOK）
+ * - exa / parallel：无 Key hosted MCP（基础搜索 / 基础读取）
+ * - auto：内部 Keyless 路由器（按语言/冷却在 exa / parallel 间选择）
+ */
+export type KiroWebSearchProviderId = "tavily" | "exa" | "parallel" | "auto";
 
 export type KiroWebSearchCredentialMode = "server" | "byok";
+
+/**
+ * 本轮联网搜索访问能力（server-only trust boundary）。
+ * - keyed：使用用户/服务端配置的 Tavily Key
+ * - keyless：使用内置 hosted MCP（无需账号/Key）
+ * - ok:false：BYOK 未填 Key（或 keyless 被运营开关禁用）
+ */
+export type KiroWebSearchAccess =
+  | { ok: true; kind: "keyed"; apiKey: string; mode: KiroWebSearchCredentialMode }
+  | { ok: true; kind: "keyless"; mode: "server" }
+  | { ok: false; code: "WEB_SEARCH_KEY_REQUIRED"; message: string };
 
 export type KiroWebSearchTopic = "general" | "news";
 
@@ -139,3 +156,22 @@ export const MAX_WEB_EVIDENCE_CHARS_PER_SOURCE = 5_000;
 export const MAX_WEB_EVIDENCE_CHARS_PER_TURN = 10_000;
 /** Task 17A：单 chunk 字符上限（所有 Provider chunks 与 fallback 切分统一经过） */
 export const MAX_WEB_EVIDENCE_CHUNK_CHARS = 1_800;
+
+/* ---------------- Keyless hosted MCP（Exa / Parallel） ---------------- */
+
+/** 单次 keyless 搜索请求结果上限（ClassFlow 最终仍过滤到 MAX_WEB_RESULTS） */
+export const MAX_KEYLESS_RESULTS = 8;
+/** Keyless provider 单次 attempt 超时：外层 web_search 仍是 10s，留出一次 fallback 预算 */
+export const KEYLESS_SEARCH_ATTEMPT_TIMEOUT_MS = 5_000;
+/** Keyless evidence 单次 attempt 超时：外层 read_web_source 仍是 15s */
+export const KEYLESS_EVIDENCE_ATTEMPT_TIMEOUT_MS = 6_000;
+/** MCP JSON-RPC 响应体上限（Parallel 10 条结果约 50KB；256KB 足够且防异常大包） */
+export const KEYLESS_MCP_MAX_BYTES = 256 * 1024;
+/** Keyless 搜索进程内缓存 TTL */
+export const KEYLESS_SEARCH_CACHE_TTL_MS = 5 * 60_000;
+/** Keyless 搜索进程内缓存条目上限 */
+export const KEYLESS_SEARCH_CACHE_MAX_ENTRIES = 64;
+/** Provider 429/5xx/403 冷却默认时长 */
+export const KEYLESS_PROVIDER_COOLDOWN_MS = 60_000;
+/** Provider 冷却上限（防止恶意 Retry-After 拖死搜索） */
+export const KEYLESS_PROVIDER_COOLDOWN_MAX_MS = 10 * 60_000;

@@ -40,10 +40,13 @@ npm run pack:win   # electron-vite build && electron-builder --win nsis → dist
 见 `.env.example`：
 
 ```
-TAVILY_API_KEY=            # Kiro 联网搜索（Tavily）Server 侧凭据
+TAVILY_API_KEY=            # 可选：Kiro 联网搜索的 Tavily 增强凭据
 # KIRO_TAVILY_API_KEY=     # 兼容别名，KIRO_ 前缀优先
+# CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH=1  # 可选：禁用免 Key 基础搜索（企业/隐私场景）
 ```
 
+- **不配置 `TAVILY_API_KEY` 也能联网搜索**：Kiro 默认使用官方 hosted MCP（Exa / Parallel）免 Key 基础搜索；Tavily 仅作为可选的增强通道（更高额度/更稳定的中文结果）。
+- 基础搜索只把搜索关键词发送给当前使用的第三方搜索服务（Exa / Parallel；配置 Tavily 时为 Tavily）；不发送对话全文、文件或本地数据。用户可在 Settings 或 Composer 关闭联网搜索。
 - 真实 `TAVILY_API_KEY` / `GOOGLE_OAUTH` 等凭据**严禁**写入源码或 `.env.production`，仅通过系统环境变量或桌面端 `SecretVault`（`bridge:credential:*`）注入。
 - `process.env.NEXT_PUBLIC_APP_VERSION` 仍沿用 Next 前缀，仅为兼容 `lib/version.ts`，构建时由 `electron.vite.config.ts` 从 `package.json` 注入。
 

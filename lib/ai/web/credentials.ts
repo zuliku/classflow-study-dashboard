@@ -8,15 +8,21 @@
  * "Server 默认" 的含义：默认 credentialMode = server；不是 BYOK 失败后偷偷消耗 Server Key。
  */
 
-import { KiroWebSearchCredentialMode, KiroWebSearchErrorCode } from "@/lib/ai/web/types";
+import {
+  KiroWebSearchAccess,
+  KiroWebSearchCredentialMode,
+  KiroWebSearchErrorCode,
+} from "@/lib/ai/web/types";
 
 /** Legacy ClassFlow-specific env 别名（Hotfix：向后兼容已有部署） */
 export const KIRO_TAVILY_API_KEY_ENV = "KIRO_TAVILY_API_KEY";
 /** Tavily 官方标准 env（Hotfix：服务端同时支持） */
 export const TAVILY_API_KEY_ENV = "TAVILY_API_KEY";
+/** 运营/隐私安全阀：设为 1/true 时禁用所有 keyless hosted 搜索。 */
+export const DISABLE_KEYLESS_WEB_SEARCH_ENV = "CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH";
 
 export type KiroWebSearchCredentialResult =
-  | { ok: true; apiKey: string; mode: KiroWebSearchCredentialMode }
+  | { ok: true; apiKey: string; mode: KiroWebSearchCredentialMode; kind?: "keyed" | "keyless" }
   | { ok: false; code: KiroWebSearchErrorCode; message: string };
 
 /**
@@ -35,22 +41,32 @@ export function isServerWebSearchConfigured(): boolean {
   return getServerWebSearchApiKey().length > 0;
 }
 
-export function resolveWebSearchCredential(input: {
+/** Keyless hosted 搜索是否被运营开关禁用（默认启用） */
+export function isKeylessWebSearchAvailable(): boolean {
+  const raw = (process.env[DISABLE_KEYLESS_WEB_SEARCH_ENV] ?? "").trim().toLowerCase();
+  return raw !== "1" && raw !== "true";
+}
+
+/**
+ * 解析本轮搜索访问能力：
+ * - server：Server Key → keyless → (安全阀关闭时) KEY_REQUIRED
+ * - byok：只认用户 Key；缺失/失败绝不回落到 Server Key 或 keyless
+ */
+export function resolveKiroWebSearchAccess(input: {
   mode: KiroWebSearchCredentialMode;
   userApiKey?: string;
-}): KiroWebSearchCredentialResult {
+}): KiroWebSearchAccess {
   if (input.mode === "server") {
     const key = getServerWebSearchApiKey();
-    if (!key) {
-      return {
-        ok: false,
-        code: "WEB_SEARCH_KEY_REQUIRED",
-        message: "Kiro Search 服务端未配置，请使用自己的 Tavily API Key 或配置服务端搜索凭据。",
-      };
-    }
-    return { ok: true, apiKey: key, mode: "server" };
+    if (key) return { ok: true, kind: "keyed", apiKey: key, mode: "server" };
+    if (isKeylessWebSearchAvailable()) return { ok: true, kind: "keyless", mode: "server" };
+    return {
+      ok: false,
+      code: "WEB_SEARCH_KEY_REQUIRED",
+      message: "Kiro Search 服务端未配置，请使用自己的 Tavily API Key 或配置服务端搜索凭据。",
+    };
   }
-  // byok：只使用用户 Key；缺失 → 明确错误，绝不回落到 Server Key
+  // byok：只使用用户 Key；缺失 → 明确错误，绝不回落到 Server Key / keyless
   const key = (input.userApiKey ?? "").trim();
   if (!key) {
     return {
@@ -59,7 +75,27 @@ export function resolveWebSearchCredential(input: {
       message: "请先在设置中填写 Kiro Search API Key。",
     };
   }
-  return { ok: true, apiKey: key, mode: "byok" };
+  return { ok: true, kind: "keyed", apiKey: key, mode: "byok" };
+}
+
+/**
+ * 兼容旧调用方的薄包装：
+ * - keyed → 保留 apiKey/mode
+ * - keyless → apiKey="" + kind:"keyless"（调用方必须显式分支，不能把空 key 当 Tavily Key 使用）
+ * - 失败 → 原错误码/文案
+ */
+export function resolveWebSearchCredential(input: {
+  mode: KiroWebSearchCredentialMode;
+  userApiKey?: string;
+}): KiroWebSearchCredentialResult {
+  const access = resolveKiroWebSearchAccess(input);
+  if (!access.ok) return access;
+  return {
+    ok: true,
+    apiKey: access.kind === "keyed" ? access.apiKey : "",
+    mode: access.mode,
+    kind: access.kind,
+  };
 }
 
 /* ---------------- BYOK sessionStorage（客户端） ---------------- */
