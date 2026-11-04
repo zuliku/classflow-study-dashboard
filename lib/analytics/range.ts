@@ -6,7 +6,7 @@
  */
 
 import { AnalyticsPeriod, AnalyticsPeriodWindow, AnalyticsRangePreset } from "@/lib/analytics/types";
-import { parseISO } from "date-fns";
+import { addDays, addWeeks, parseISO } from "date-fns";
 
 export const ANALYTICS_RANGE_PRESETS: AnalyticsRangePreset[] = ["week", "4weeks", "semester"];
 
@@ -37,7 +37,8 @@ export function resolveAnalyticsPeriod(
   if (preset === "week") {
     const thisMonday = mondayOfLocalWeek(now);
     const elapsed = now - thisMonday;
-    const prevMonday = thisMonday - 7 * 86400000;
+    // 用本地日历日加减，不用 7×86400000：DST 切换周不会把上周一算到周日 23:00
+    const prevMonday = addDays(new Date(thisMonday), -7).getTime();
     return {
       preset,
       current: { from: thisMonday, to: now },
@@ -48,20 +49,22 @@ export function resolveAnalyticsPeriod(
 
   if (preset === "4weeks") {
     const to = now;
-    const currentFrom = to - 28 * 86400000;
+    const currentFrom = addDays(new Date(to), -28).getTime();
+    const previousFrom = addDays(new Date(currentFrom), -28).getTime();
     return {
       preset,
       current: { from: currentFrom, to },
-      previous: { from: currentFrom - 28 * 86400000, to: currentFrom },
+      previous: { from: previousFrom, to: currentFrom },
       trendGrain: "week",
     };
   }
 
   // semester
   const start = parseISO(semester.startDate);
-  const semesterStart = Number.isNaN(start.getTime()) ? now : start.getTime();
-  // 学期结束估算：startDate + totalWeeks*7 天
-  const semesterEnd = semesterStart + semester.totalWeeks * 7 * 86400000;
+  const semesterStartDate = Number.isNaN(start.getTime()) ? new Date(now) : start;
+  const semesterStart = semesterStartDate.getTime();
+  // 学期结束估算：startDate + totalWeeks 周；同样按本地日历周计算（DST 安全）
+  const semesterEnd = addWeeks(semesterStartDate, semester.totalWeeks).getTime();
   const to = Math.min(now, semesterEnd);
   const current: AnalyticsPeriodWindow =
     now <= semesterStart ? { from: semesterStart, to: semesterStart } : { from: semesterStart, to };

@@ -67,6 +67,15 @@ export function KiroAgentRun({
   );
   const userToggledRef = useRef(false);
 
+  // 审批决策后 110ms 折叠退出（此前整段瞬时卸载，Timeline/Final Answer 上收跳变）
+  // P0 hooks order：usePresence / useRef 必须在 `if (!hasWorklog) return null` 之前，
+  // 否则「历史无 worklog → live 出现 worklog」时 hooks 数量变化会整页崩溃
+  // （Rendered fewer hooks than expected；长历史恢复后继续对话可复现）。
+  const approvalPresence = usePresence(!!approval, MOTION_EXIT_MS.fast);
+  const lastApprovalRef = React.useRef(approval);
+  if (approval) lastApprovalRef.current = approval;
+  const shownApproval = approval ?? (approvalPresence.mounted ? lastApprovalRef.current : null);
+
   if (!hasWorklog) return null;
 
   const status = resolveKiroAgentRunStatus({
@@ -94,12 +103,6 @@ export function KiroAgentRun({
     userToggledRef.current = true;
     setExpanded((value) => !value);
   };
-
-  // 审批决策后 110ms 折叠退出（此前整段瞬时卸载，Timeline/Final Answer 上收跳变）
-  const approvalPresence = usePresence(!!approval, MOTION_EXIT_MS.fast);
-  const lastApprovalRef = React.useRef(approval);
-  if (approval) lastApprovalRef.current = approval;
-  const shownApproval = approval ?? (approvalPresence.mounted ? lastApprovalRef.current : null);
 
   return (
     <div data-testid="kiro-agent-run" className="space-y-1 min-w-0 w-full">

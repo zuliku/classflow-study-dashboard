@@ -14,7 +14,7 @@ import {
   CourseInvestment,
   ExecutionAnalytics,
 } from "@/lib/analytics/types";
-import { format } from "date-fns";
+import { addDays, format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
 // ---------------- Duration ----------------
@@ -265,10 +265,14 @@ export function buildCoverageFactLines(f: CoverageFacts): string[] {
   return lines;
 }
 
-/** 折叠态摘要；无任何不完整 → null（不渲染） */
+/** 折叠态摘要；无任何不完整 → null（不渲染）。
+ *  注意：focusBackfilled 的「仍会正常计入」是正向说明，不是不完整，不能触发 warning notice。 */
 export function buildCoverageSummary(f: CoverageFacts): { title: string; hint: string } | null {
-  const lines = buildCoverageFactLines(f);
-  if (lines.length === 0) return null;
+  const hasIncomplete =
+    f.assignmentReliability === "partial" ||
+    f.planReliability === "partial" ||
+    f.focusReliability === "partial";
+  if (!hasIncomplete) return null;
   return { title: "部分历史记录不完整", hint: "部分指标仅展示已记录内容" };
 }
 
@@ -358,8 +362,8 @@ export function formatTrendBucketLabel(period: AnalyticsPeriod, key: string): st
 export function formatTrendTooltip(period: AnalyticsPeriod, key: string): string {
   if (period.trendGrain === "semester-week") {
     const w = Number(key.replace(/\D/g, ""));
-    const start = period.current.from + (w - 1) * 7 * 86400000;
-    return `第${w}周 · ${fmtRange(start, start + 6 * 86400000)}`;
+    const start = addDays(new Date(period.current.from), (w - 1) * 7).getTime();
+    return `第${w}周 · ${fmtRange(start, addDays(new Date(start), 6).getTime())}`;
   }
   const date = new Date(`${key}T00:00:00`);
   if (Number.isNaN(date.getTime())) return key;
@@ -367,7 +371,7 @@ export function formatTrendTooltip(period: AnalyticsPeriod, key: string): string
     return format(date, "M月d日 EEE", { locale: zhCN });
   }
   // 4weeks：bucket 起止周范围
-  return fmtRange(date.getTime(), date.getTime() + 6 * 86400000);
+  return fmtRange(date.getTime(), addDays(date, 6).getTime());
 }
 
 function fmtRange(from: number, to: number): string {

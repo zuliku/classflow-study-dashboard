@@ -13,7 +13,7 @@ describe("Analytics Range", () => {
     expect(period.current.from).toBe(MON);
     expect(period.current.to).toBe(WED_NOON);
     expect(period.previous).not.toBeNull();
-    expect(period.previous!.from).toBe(MON - 7 * 86400000);
+    expect(period.previous!.from).toBe(new Date(2026, 7, 10).getTime());
     expect(period.previous!.to).toBe(period.previous!.from + (WED_NOON - MON));
     expect(period.trendGrain).toBe("day");
   });
@@ -21,8 +21,8 @@ describe("Analytics Range", () => {
   it("4weeks：current = 最近 28d；previous = 之前 28d", () => {
     const period = resolveAnalyticsPeriod("4weeks", SEMESTER, WED_NOON);
     expect(period.current.to).toBe(WED_NOON);
-    expect(period.current.from).toBe(WED_NOON - 28 * 86400000);
-    expect(period.previous!.from).toBe(WED_NOON - 56 * 86400000);
+    expect(period.current.from).toBe(new Date(2026, 6, 22, 12).getTime());
+    expect(period.previous!.from).toBe(new Date(2026, 5, 24, 12).getTime());
     expect(period.previous!.to).toBe(period.current.from);
     expect(period.trendGrain).toBe("week");
   });
@@ -39,7 +39,7 @@ describe("Analytics Range", () => {
     const later = new Date(2026, 11, 15).getTime(); // 12-15，已过 8/3+16w=11/23
     const period = resolveAnalyticsPeriod("semester", SEMESTER, later);
     expect(period.current.to).toBeLessThan(later);
-    expect(period.current.to).toBe(new Date(2026, 7, 3).getTime() + 16 * 7 * 86400000);
+    expect(period.current.to).toBe(new Date(2026, 10, 23).getTime());
   });
 
   it("mondayOfLocalWeek：周日归到本周一", () => {

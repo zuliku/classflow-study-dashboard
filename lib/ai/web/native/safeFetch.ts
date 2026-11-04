@@ -458,7 +458,9 @@ async function safeWebFetchWithPolicy(
         debugKiroWebRead("address-failed", { sourceId, host: url.hostname, family, attempt: i + 1 });
       } finally {
         clearTimeout(addressTimer);
-        controller.signal.removeEventListener("abort", onHopAbort);
+        // 不在此处移除 onHopAbort：早期返回（redirect / 非 2xx / content-type 拒绝 / 超限）
+        // 只调用 controller.abort()，必须继续能传导到 attemptController 才能销毁响应流，
+        // 否则未消费的 response body 会静默占用 socket。成功路径在 body 读完后统一 abort。
       }
     }
 

@@ -25,6 +25,7 @@ import { buildLearningSignals } from "@/lib/analytics/signals";
 import { collectLearningHistoryEvents, resolveLearningHistoryQuery, sortLearningHistoryEvents } from "@/lib/history/query";
 import { getLearningHistoryCoverage } from "@/lib/history/store";
 import { formatAnalyticsDuration, formatTrendBucketLabel } from "@/lib/analytics/presentation";
+import { addDays, differenceInCalendarDays } from "date-fns";
 
 /** 事件 → projection 最小视图 */
 function toProjectionEvent(e: {
@@ -90,8 +91,6 @@ export function trendBucketLabel(period: AnalyticsPeriod, key: string): string {
   return formatTrendBucketLabel(period, key);
 }
 
-const DAY_MS = 86400000;
-
 function startOfLocalDay(ts: number): number {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
@@ -129,28 +128,37 @@ export function generateTrendBuckets(period: AnalyticsPeriod): TrendBucket[] {
   const buckets: TrendBucket[] = [];
 
   if (period.trendGrain === "day") {
-    const start = startOfLocalDay(current.from);
-    for (let t = start; t <= current.to; t += DAY_MS) {
-      buckets.push({ key: localDateOf(t), from: t, to: Math.min(t + DAY_MS - 1, current.to) });
+    const start = new Date(startOfLocalDay(current.from));
+    // 按本地日历日推进：DST 日的真实长度是 23/25h，不能用固定 24h 累加
+    for (let d = start; d.getTime() <= current.to; d = addDays(d, 1)) {
+      const from = d.getTime();
+      const to = Math.min(addDays(d, 1).getTime() - 1, current.to);
+      buckets.push({ key: localDateOf(from), from, to });
     }
     return buckets;
   }
 
   if (period.trendGrain === "week") {
-    let t = mondayOfLocalWeek(current.from);
-    while (t <= current.to) {
-      buckets.push({ key: localDateOf(t), from: t, to: Math.min(t + 7 * DAY_MS - 1, current.to) });
-      t += 7 * DAY_MS;
+    let d = new Date(mondayOfLocalWeek(current.from));
+    while (d.getTime() <= current.to) {
+      const from = d.getTime();
+      const to = Math.min(addDays(d, 7).getTime() - 1, current.to);
+      buckets.push({ key: localDateOf(from), from, to });
+      d = addDays(d, 7);
     }
     return buckets;
   }
 
   // semester-week：第 1 周 → 当前教学周（semester 预设下 current.from = 学期开始日）
-  const semesterStart = current.from;
-  const currentWeek = Math.max(1, Math.floor((current.to - semesterStart) / (7 * DAY_MS)) + 1);
+  const semesterStart = new Date(current.from);
+  const currentWeek = Math.max(
+    1,
+    Math.floor(differenceInCalendarDays(new Date(current.to), semesterStart) / 7) + 1
+  );
   for (let w = 1; w <= currentWeek; w += 1) {
-    const from = semesterStart + (w - 1) * 7 * DAY_MS;
-    buckets.push({ key: `w${w}`, from, to: Math.min(from + 7 * DAY_MS - 1, current.to) });
+    const from = addDays(semesterStart, (w - 1) * 7).getTime();
+    const to = Math.min(addDays(semesterStart, w * 7).getTime() - 1, current.to);
+    buckets.push({ key: `w${w}`, from, to });
   }
   return buckets;
 }
@@ -426,9 +434,9 @@ function grainKeyForStart(
     d.setDate(d.getDate() - (dow - 1));
     return localDateOf(d.getTime());
   }
-  // semester-week：以学期 startDate 为基准计算周数
+  // semester-week：以学期 startDate 为基准计算周数（calendar days，DST 安全）
   const start = new Date(`${semester.startDate}T00:00:00`);
   const target = new Date(ts);
-  const week = Math.floor((target.getTime() - start.getTime()) / (7 * 86400000)) + 1;
+  const week = Math.floor(differenceInCalendarDays(target, start) / 7) + 1;
   return `w${Math.max(week, 1)}`;
 }

@@ -170,7 +170,7 @@ demoTest("容量 UI：需求 4h / 普通时间尚缺 1h / 放宽课程约束后�
   await expect(card.getByTestId("outlook-capacity-line")).toContainText("放宽课程约束后仍缺 1h");
 
   // 一个任务容量不足（combined 仍缺 60min），另一个容量可覆盖（compact 默认只露 1 条）
-  await card.getByRole("button", { name: "查看全部" }).click();
+  await card.getByRole("button", { name: "查看更多" }).click();
   await expect(card.getByText(/预计仍缺 60min/).first()).toBeVisible();
   await expect(card.getByText(/当前容量可覆盖/).first()).toBeVisible();
 

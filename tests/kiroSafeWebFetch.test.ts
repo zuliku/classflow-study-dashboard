@@ -266,6 +266,27 @@ describe("safeWebFetch — 大小预算与内容策略", () => {
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.code).toBe("WEB_FETCH_UNSUPPORTED_CONTENT");
   });
+  it("Case 10b. 拒绝响应时 abort 对应 transport signal（未消费 body 不占用连接）", async () => {
+    for (const status of [200, 404]) {
+      let aborted = false;
+      const { transport } = recordingTransport(async (opts) => {
+        opts.signal.addEventListener("abort", () => {
+          aborted = true;
+        });
+        return {
+          status,
+          headers: status === 200 ? { "content-type": "image/png" } : {},
+          body: bodyOf([encode("unused")]),
+        };
+      });
+      const out = await safeWebFetch(
+        { url: "https://example.com/" },
+        { resolveHost: dns("93.184.216.34"), transport }
+      );
+      expect(out.ok).toBe(false);
+      expect(aborted).toBe(true);
+    }
+  });
   it("Content-Encoding 未知编码（compress）→ WEB_FETCH_UNSUPPORTED_CONTENT", async () => {
     const { transport } = recordingTransport(async () =>
       htmlResponse({ headers: { "content-type": "text/html", "content-encoding": "compress" } })

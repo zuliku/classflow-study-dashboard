@@ -1,5 +1,6 @@
 import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
+import { buildMinimalPdf } from "../fixtures/files";
 
 /**
  * Task 7 E2E：
@@ -30,7 +31,6 @@ async function seedAI(page: Page) {
 }
 
 test("Turn Snapshot：PDF Context 在 Tool Loop 中保持稳定（Composer 清空后仍在）", async ({ page }) => {
-  const { buildMinimalPdf } = require("../fixtures/files");
   const bodies: Record<string, unknown>[] = [];
   await page.route("**/api/ai/chat", async (route) => {
     const body = route.request().postDataJSON() as { messages?: { role: string; parts?: { type: string; state?: string }[] }[] };

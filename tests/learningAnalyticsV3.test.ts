@@ -409,6 +409,16 @@ describe("Coverage facts（V3.1 progressive disclosure）", () => {
         focusBackfilled: false,
       })
     ).toBeNull();
+    // 全 complete + 曾发生 backfill：正向说明不能伪装成「历史不完整」
+    expect(
+      buildCoverageSummary({
+        ...base,
+        assignmentReliability: "complete",
+        planReliability: "complete",
+        focusReliability: "complete",
+        focusBackfilled: true,
+      })
+    ).toBeNull();
   });
 
   it("H：展开只显示真实受影响的 metric", () => {

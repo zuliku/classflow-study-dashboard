@@ -63,6 +63,14 @@ async function openWorkspace(page: Page) {
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
 }
 
+/** 相对今天的本地 DDL（避免硬编码日期过期导致 change set preflight 拒绝） */
+function futureDdl(offsetDays: number, hour = 22): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(hour)}:00:00`;
+}
+
 async function sendMessage(page: Page, text: string) {
   const composer = page.getByTestId("kiro-composer");
   await composer.getByLabel("Ask Kiro").fill(text);
@@ -70,6 +78,9 @@ async function sendMessage(page: Page, text: string) {
 }
 
 test("E2E A：Change Set 批量成功 → 全部修改 + 单个 Card + 单个 Undo", async ({ page }) => {
+  const d1 = futureDdl(1);
+  const d2 = futureDdl(2);
+  const d3 = futureDdl(3);
   await page.route("**/api/ai/chat", async (route) => {
     const body = route.request().postDataJSON() as { messages?: { role: string; parts?: { type: string; state?: string }[] }[] };
     const hasToolOutput = (body?.messages ?? []).some(
@@ -82,9 +93,9 @@ test("E2E A：Change Set 批量成功 → 全部修改 + 单个 Card + 单个 Un
         body: toolCallSSE("apply_change_set", {
           summary: "推迟三个作业并提高优先级",
           actions: [
-            { tool: "set_assignment_ddl", input: { assignmentId: "a1", ddl: "2026-08-20T22:00:00" } },
-            { tool: "set_assignment_ddl", input: { assignmentId: "a2", ddl: "2026-08-21T22:00:00" } },
-            { tool: "set_assignment_ddl", input: { assignmentId: "a3", ddl: "2026-08-22T22:00:00" } },
+            { tool: "set_assignment_ddl", input: { assignmentId: "a1", ddl: d1 } },
+            { tool: "set_assignment_ddl", input: { assignmentId: "a2", ddl: d2 } },
+            { tool: "set_assignment_ddl", input: { assignmentId: "a3", ddl: d3 } },
             { tool: "set_assignment_priority", input: { assignmentId: "a1", priority: "high" } },
           ],
         }),
@@ -112,9 +123,9 @@ test("E2E A：Change Set 批量成功 → 全部修改 + 单个 Card + 单个 Un
     const a3 = s.assignments.find((a: any) => a.id === "a3");
     return { a1, a2, a3 };
   });
-  expect(stored.a1.ddl).toBe("2026-08-20T22:00:00");
-  expect(stored.a2.ddl).toBe("2026-08-21T22:00:00");
-  expect(stored.a3.ddl).toBe("2026-08-22T22:00:00");
+  expect(stored.a1.ddl).toBe(d1);
+  expect(stored.a2.ddl).toBe(d2);
+  expect(stored.a3.ddl).toBe(d3);
   expect(stored.a1.priority).toBe("high");
 
   // 单个 Change Set Card（不生成 4 张 Card）
@@ -130,7 +141,7 @@ test("E2E A：Change Set 批量成功 → 全部修改 + 单个 Card + 单个 Un
     const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
     return s.assignments.map((a: any) => a.ddl);
   });
-  expect(afterUndo).not.toContain("2026-08-20T22:00:00");
+  expect(afterUndo).not.toContain(d1);
 });
 
 test("E2E B：课表冲突 → preflight 失败 → 0 mutation + 自然说明", async ({ page }) => {

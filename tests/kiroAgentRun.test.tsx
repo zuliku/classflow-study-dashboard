@@ -186,6 +186,19 @@ describe("Agent Run 显示条件与 Header", () => {
     expect(q('[data-testid="kiro-agent-run-header"]')).toBeNull();
   });
 
+  it("同实例从无 worklog → live worklog（hooks 数量稳定，不崩溃）", async () => {
+    await render(
+      <KiroMessage
+        messageId="m-1"
+        assistantTurn={turn({ worklog: [], hasTools: false, phase: "working" })}
+        turnInFlight
+      />
+    );
+    expect(q('[data-testid="kiro-agent-run"]')).toBeNull();
+    await render(<KiroMessage messageId="m-1" assistantTurn={turn()} turnInFlight />);
+    expect(q('[data-testid="kiro-agent-run"]')).toBeTruthy();
+  });
+
   it("存在 tool → 显示 Agent Run；live working → 正在执行", async () => {
     await render(messageNode());
     expect(q('[data-testid="kiro-agent-run"]')).toBeTruthy();

@@ -6,6 +6,7 @@
  */
 
 import { parseLocalDDL } from "@/lib/ddl";
+import { addDays } from "date-fns";
 import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
 import { findFreeTime, FreeTimeSlot } from "@/lib/planning/freeTime";
 import { deriveAssignmentHealth } from "@/lib/tasks/taskHealth";
@@ -70,7 +71,7 @@ function pickCalibrationRef(
 
 export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {  const { assignments, studyBlocks, schedules, calendarMarks, semester, currentSemesterWeek, horizonDays, now, calibration } = input;
 
-  const horizonEnd = new Date(now.getTime() + horizonDays * 86400000);
+  const horizonEnd = addDays(new Date(now), horizonDays);
   horizonEnd.setHours(23, 59, 59, 999);
 
   // 1. Task selection：planning eligibility 单一事实源（todo/doing，Workflow UX V14）；
@@ -217,7 +218,7 @@ export function buildStudyOutlook(input: StudyOutlookBuildInput): StudyOutlook {
   // 5. Bottleneck days（deterministic 定义：dueTaskCount>=2 或 plannedStudyMinutes>=240）
   const days: { date: string; planned: number; due: number }[] = [];
   for (let i = 0; i < horizonDays; i++) {
-    const d = new Date(now.getTime() + i * 86400000);
+    const d = addDays(new Date(now), i);
     const date = dateStrOf(d);
     const planned = studyBlocks
       .filter((b) => b.date === date)

@@ -1,6 +1,7 @@
 import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 import http from "node:http";
+import { buildMinimalPdf } from "../fixtures/files";
 
 /**
  * Kiro Streaming Hot Path bounded fixture（Streaming UX V4.2 Phase 1 baseline）。
@@ -770,7 +771,6 @@ test("PERF Case S4: KaTeX → stable math 不重新 KaTeX render", async ({ page
 });
 
 test("PERF Case S5: citation → stable citation pill DOM identity 保留", async ({ page }) => {
-  const { buildMinimalPdf } = require("../fixtures/files");
   const ssePlan = plainPlan(S5_CITATION, 24, 24);
   const sse = await startSseServer(ssePlan.plan);
   await page.route("**/api/ai/chat", (route) => route.continue({ url: sse.url }));

@@ -55,7 +55,9 @@ export function StudyOutlookCard({
   const { summary, tasks, bottleneckDays, firstCapacityShortfall } = outlook;
   const [showAll, setShowAll] = useState(false);
   const top = tasks.slice(0, 5);
-  const visibleTasks = compact && !showAll ? top.slice(0, 1) : top;
+  // compact「查看更多」展示 snapshot 内的全部任务（最多 OUTLOOK_MAX_TASKS=8），
+  // 非 compact 仍保持 Top 5（详情卡密度约束）。
+  const visibleTasks = compact ? (showAll ? tasks : top.slice(0, 1)) : top;
   const attentionCount = summary.counts.atRisk + summary.counts.attention;
 
   const fmt = (minutes: number) => {
@@ -132,7 +134,7 @@ export function StudyOutlookCard({
               onClick={() => setShowAll((v) => !v)}
               className="shrink-0 text-[10.5px] font-medium text-sandrift underline-offset-2 transition-colors hover:text-charcoal hover:underline"
             >
-              {showAll ? "收起" : "查看全部"}
+              {showAll ? "收起" : "查看更多"}
             </button>
           )}
         </div>
