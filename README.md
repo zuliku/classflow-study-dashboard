@@ -46,7 +46,9 @@ TAVILY_API_KEY=            # 可选：Kiro 联网搜索的 Tavily 增强凭据
 ```
 
 - **不配置 `TAVILY_API_KEY` 也能联网搜索**：Kiro 默认使用官方 hosted MCP（Exa / Parallel）免 Key 基础搜索；Tavily 仅作为可选的增强通道（更高额度/更稳定的中文结果）。
+- 用户自己的 Tavily Key 通过桌面 `SecretVault` 加密保存（Renderer 只持有 `credentialRef`，不读取明文）；首次实际联网搜索后会显示一次性隐私提示。
 - 基础搜索只把搜索关键词发送给当前使用的第三方搜索服务（Exa / Parallel；配置 Tavily 时为 Tavily）；不发送对话全文、文件或本地数据。用户可在 Settings 或 Composer 关闭联网搜索。
+- QQ / 邮件 remote-channel 也允许联网搜索，但额度收紧为每轮 1 次搜索 / 1 次读取，写入类工具仍被 invocation allowlist 拒绝。
 - 真实 `TAVILY_API_KEY` / `GOOGLE_OAUTH` 等凭据**严禁**写入源码或 `.env.production`，仅通过系统环境变量或桌面端 `SecretVault`（`bridge:credential:*`）注入。
 - `process.env.NEXT_PUBLIC_APP_VERSION` 仍沿用 Next 前缀，仅为兼容 `lib/version.ts`，构建时由 `electron.vite.config.ts` 从 `package.json` 注入。
 

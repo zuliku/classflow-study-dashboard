@@ -11,6 +11,7 @@ import { findApprovalOwnerMessageId } from "@/lib/ai/ui/kiroAgentRun";
 import type { ComputerApprovalDecision } from "@/lib/ai/computer/approval";
 import { KiroConversation } from "@/components/kiro/KiroConversation";
 import { KiroComposer } from "@/components/kiro/KiroComposer";
+import { WebSearchPrivacyNotice } from "@/components/kiro/WebSearchPrivacyNotice";
 import { KiroModeCapsule, KiroModeCapsuleMode } from "@/components/kiro/KiroModeCapsule";
 import { KiroContextSuggestions } from "@/components/kiro/KiroContextSuggestions";
 import { useKiroPreferencesStore } from "@/store/useKiroPreferencesStore";
@@ -24,6 +25,7 @@ import { KiroChangeReviewDialog } from "@/components/kiro/computer/KiroChangeRev
 import { getModelCapabilities } from "@/lib/ai/providers/capabilities";
 import { resolveEffectiveReasoningEffort } from "@/lib/ai/reasoning/effective";
 import { getKiroOutputFontSize } from "@/lib/ai/ui/typography";
+import { hasUsedWebSearch } from "@/lib/ai/web/privacyNotice";
 import { usePresence } from "@/lib/usePresence";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { MOTION_EXIT_MS } from "@/lib/motion";
@@ -97,6 +99,11 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   // Task 7C：Kiro 输出字号（顶层一次订阅；CSS variable 让所有历史 Message 同步缩放，不逐条订阅）
   const outputTextSize = useKiroPreferencesStore((s) => s.outputTextSize);
   const outputFontSize = getKiroOutputFontSize(outputTextSize);
+  const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
+  const webSearchPrivacyNoticeSeen = useKiroPreferencesStore((s) => s.webSearchPrivacyNoticeSeen);
+  const setWebSearchPrivacyNoticeSeen = useKiroPreferencesStore(
+    (s) => s.setWebSearchPrivacyNoticeSeen
+  );
 
   const provider = useAISettingsStore((s) => s.provider);
   const model = useAISettingsStore((s) => s.model);
@@ -211,6 +218,12 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   // 建议条父级 presence：裸条件会截断其内部退出折叠（同一 panel 时长对齐）
   const suggestionsPresence = usePresence(
     variant !== "workspace" && hasMessages && hasContextSuggestions,
+    MOTION_EXIT_MS.panel
+  );
+  // 首次真实 web_search 后的一次性隐私提示（历史会话同样触发；dismiss 后持久化）
+  const usedWebSearch = useMemo(() => hasUsedWebSearch(chat.messages), [chat.messages]);
+  const webSearchPrivacyPresence = usePresence(
+    webSearchEnabled && usedWebSearch && !webSearchPrivacyNoticeSeen,
     MOTION_EXIT_MS.panel
   );
   // Workspace 与 Sidecar 都启用 Context-aware Suggestions（无消息时渲染在标题下方）
@@ -339,6 +352,16 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
       {suggestionsPresence.mounted && (
         <ExitCollapse exiting={!suggestionsPresence.visible}>
           <KiroContextSuggestions compact />
+        </ExitCollapse>
+      )}
+
+      {webSearchPrivacyPresence.mounted && (
+        <ExitCollapse exiting={!webSearchPrivacyPresence.visible}>
+          <div className={cn("shrink-0 pb-1", compact ? "px-2" : "px-4")}>
+            <WebSearchPrivacyNotice
+              onDismiss={() => setWebSearchPrivacyNoticeSeen(true)}
+            />
+          </div>
         </ExitCollapse>
       )}
 

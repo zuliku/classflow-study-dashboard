@@ -15,6 +15,8 @@ const FIXTURE = [
   "activate_skill",
   "mcp_search_tools",
   "begin_final_answer",
+  "web_search",
+  "read_web_source",
   "create_assignment",
   "update_assignment",
   "delete_assignment",
@@ -33,6 +35,8 @@ const REMOTE_ALLOW = [
   "activate_skill",
   "mcp_search_tools",
   "begin_final_answer",
+  "web_search",
+  "read_web_source",
 ];
 
 const REMOTE_DENY = [

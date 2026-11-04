@@ -28,6 +28,12 @@ import {
   setSessionWebSearchApiKey,
 } from "@/lib/ai/web/credentials";
 import {
+  deleteTavilyCredential,
+  isWebSearchSecretStorageAvailable,
+  listTavilyCredentialMetadata,
+  saveTavilyCredential,
+} from "@/lib/ai/web/secretStorage";
+import {
   getSessionWebPdfVisionApiKey,
   setSessionWebPdfVisionApiKey,
 } from "@/lib/ai/web/vision/credentials";
@@ -84,11 +90,13 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   // Intelligence V2 Task 1：回答偏好（随 Turn Snapshot 冻结；只影响 Final Answer 表达深度）
   const responsePreference = useKiroPreferencesStore((s) => s.responsePreference);
   const setResponsePreference = useKiroPreferencesStore((s) => s.setResponsePreference);
-  // Task 14：Kiro Search（联网搜索）——Key 只在 sessionStorage，不进 Store
+  // Task 14：Kiro Search（联网搜索）——Key 经 SecretVault；Store 只存 credentialRef
   const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
   const setWebSearchEnabled = useKiroPreferencesStore((s) => s.setWebSearchEnabled);
   const webSearchCredentialMode = useKiroPreferencesStore((s) => s.webSearchCredentialMode);
   const setWebSearchCredentialMode = useKiroPreferencesStore((s) => s.setWebSearchCredentialMode);
+  const webSearchCredentialRef = useKiroPreferencesStore((s) => s.webSearchCredentialRef);
+  const setWebSearchCredentialRef = useKiroPreferencesStore((s) => s.setWebSearchCredentialRef);
   const webPdfVisionEnabled = useKiroPreferencesStore((s) => s.webPdfVisionEnabled);
   const setWebPdfVisionEnabled = useKiroPreferencesStore((s) => s.setWebPdfVisionEnabled);
   const webPdfVisionModel = useKiroPreferencesStore((s) => s.webPdfVisionModel);
@@ -140,6 +148,8 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   const [webSearchTest, setWebSearchTest] = useState<TestState>({ status: "idle" });
   const [serverSearchConfigured, setServerSearchConfigured] = useState<boolean | null>(null);
   const [keylessSearchAvailable, setKeylessSearchAvailable] = useState<boolean | null>(null);
+  const [savingWebSearchKey, setSavingWebSearchKey] = useState(false);
+  const [webSearchKeyError, setWebSearchKeyError] = useState<string | null>(null);
 
   // Hotfix：Server Search 配置状态（null = 检测中；不阻塞 Settings 渲染）
   useEffect(() => {
@@ -163,6 +173,40 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
       cancelled = true;
     };
   }, []);
+
+  // BYOK Tavily Key：SecretVault 持久化（renderer 只保存 ref；明文绝不进 Store）
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!isWebSearchSecretStorageAvailable()) return;
+      const list = await listTavilyCredentialMetadata();
+      if (cancelled || list === null) return;
+      const currentRef = useKiroPreferencesStore.getState().webSearchCredentialRef;
+      const validRef =
+        currentRef && list.some((m) => m.credentialRef === currentRef)
+          ? currentRef
+          : (list[0]?.credentialRef ?? "");
+      if (validRef !== currentRef) setWebSearchCredentialRef(validRef);
+      if (validRef) return;
+
+      // 兼容升级：已有 sessionStorage Key 时自动迁移到 SecretVault，之后请求只发 ref。
+      const sessionKey = getSessionWebSearchApiKey();
+      if (!sessionKey) return;
+      try {
+        const ref = await saveTavilyCredential(sessionKey);
+        if (cancelled) return;
+        setWebSearchCredentialRef(ref);
+        setSessionWebSearchApiKey("");
+        setWebSearchApiKeyInput("");
+      } catch {
+        if (!cancelled) setWebSearchKeyError("Key 安全存储失败，当前仅在本次会话有效。");
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [setWebSearchCredentialRef]);
 
   // 统一模型 Catalog：Settings 与 Composer 共用同一模型集合（Task 10）
   const {
@@ -245,23 +289,64 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
     }
   };
 
-  /** BYOK Key：受控 React state + sessionStorage 同步（模式切换不丢失已输入值） */
+  /** BYOK Key：输入期间先写 sessionStorage（发送竞态兜底）；blur/测试时写入 SecretVault。 */
   const handleWebSearchKeyChange = (value: string) => {
     setWebSearchApiKeyInput(value);
     setSessionWebSearchApiKey(value);
+    setWebSearchKeyError(null);
     setWebSearchTest({ status: "idle" });
+  };
+
+  /** 将当前输入保存到 SecretVault；返回可发送的 credentialRef。 */
+  const persistWebSearchKey = async (): Promise<string | undefined> => {
+    const trimmed = webSearchApiKeyInput.trim();
+    if (!trimmed) return webSearchCredentialRef || undefined;
+    setSavingWebSearchKey(true);
+    setWebSearchKeyError(null);
+    try {
+      const ref = await saveTavilyCredential(trimmed, webSearchCredentialRef || undefined);
+      setWebSearchCredentialRef(ref);
+      setWebSearchApiKeyInput("");
+      setSessionWebSearchApiKey("");
+      return ref;
+    } catch (err) {
+      setWebSearchKeyError((err as Error).message || "Key 安全存储失败。");
+      return webSearchCredentialRef || undefined;
+    } finally {
+      setSavingWebSearchKey(false);
+    }
+  };
+
+  const clearWebSearchKey = async () => {
+    setWebSearchKeyError(null);
+    try {
+      if (webSearchCredentialRef) await deleteTavilyCredential(webSearchCredentialRef);
+      setWebSearchCredentialRef("");
+      setWebSearchApiKeyInput("");
+      setSessionWebSearchApiKey("");
+      setWebSearchTest({ status: "idle" });
+    } catch {
+      setWebSearchKeyError("清除失败，请稍后重试。");
+    }
   };
 
   const runWebSearchTest = async () => {
     const seq = ++webSearchSeqRef.current;
     setWebSearchTest({ status: "testing" });
+    const credentialRef =
+      webSearchCredentialMode === "byok" ? await persistWebSearchKey() : undefined;
     try {
       const res = await fetch(apiUrl("/api/ai/web-search/test"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           credentialMode: webSearchCredentialMode,
-          apiKey: webSearchCredentialMode === "byok" ? getSessionWebSearchApiKey() : undefined,
+          credentialRef,
+          // 旧会话 Key 兜底：vault 保存失败时仍可验证当前输入。
+          apiKey:
+            webSearchCredentialMode === "byok" && !credentialRef
+              ? getSessionWebSearchApiKey()
+              : undefined,
         }),
       });
       const data = (await res.json()) as {
@@ -431,7 +516,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
 
           {/* 连接状态 / 测试连接：只发送极小测试请求，不发送任何 ClassFlow 数据 */}
           <SettingsRow settingId="ai-connection-status" title="连接状态">
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center justify-end gap-2.5">
               <SettingsButton
                 variant="accent"
                 onClick={runTest}
@@ -481,25 +566,21 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-response-preference"
             title="回答偏好"
+            description={RESPONSE_PREFERENCE_DESCRIPTIONS[responsePreference]}
             modified={kiroSettingsModified.has("responsePreference")}
             onReset={() => resetKiroSettingsPreference("responsePreference")}
             resetAriaLabel="将回答偏好恢复默认"
           >
-            <div className="flex flex-col items-end gap-1">
-              <SettingsSegmentedControl<KiroResponsePreference>
-                value={responsePreference}
-                onChange={setResponsePreference}
-                ariaLabel="Kiro 回答偏好"
-                options={[
-                  { value: "dense", label: "高密度" },
-                  { value: "balanced", label: "平衡" },
-                  { value: "deep", label: "深入" },
-                ]}
-              />
-              <p className="text-[10px] text-sandrift leading-relaxed text-right max-w-[220px]">
-                {RESPONSE_PREFERENCE_DESCRIPTIONS[responsePreference]}
-              </p>
-            </div>
+            <SettingsSegmentedControl<KiroResponsePreference>
+              value={responsePreference}
+              onChange={setResponsePreference}
+              ariaLabel="Kiro 回答偏好"
+              options={[
+                { value: "dense", label: "高密度" },
+                { value: "balanced", label: "平衡" },
+                { value: "deep", label: "深入" },
+              ]}
+            />
           </SettingsRow>
 
           <SettingsRow
@@ -542,123 +623,167 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           <SettingsRow
             settingId="kiro-web-search-enabled"
             title="联网搜索"
+            description={
+              webSearchCredentialMode === "server"
+                ? serverSearchConfigured === true
+                  ? "需要最新信息时自动搜索；Tavily 增强已启用。"
+                  : keylessSearchAvailable === false
+                    ? "需要最新信息时自动搜索；当前基础搜索不可用。"
+                    : "需要最新信息时自动搜索；基础搜索免 Key。"
+                : "需要最新信息时自动搜索；使用自己的 Tavily Key。"
+            }
             modified={kiroSettingsModified.has("webSearchEnabled")}
             onReset={() => resetKiroSettingsPreference("webSearchEnabled")}
             resetAriaLabel="将联网搜索恢复默认"
           >
             <SettingsToggle
               checked={webSearchEnabled}
-              onChange={setWebSearchEnabled}
+              onChange={(enabled) => {
+                setWebSearchEnabled(enabled);
+                // 关闭时同时收起细节，避免下次开启瞬间弹出一大段造成跳变。
+                if (!enabled) setSearchSettingsOpen(false);
+              }}
               label="联网搜索"
             />
           </SettingsRow>
 
-          {/* 外层再包一层折叠（允许嵌套 DisclosureRegion；开关切换不硬顶布局） */}
+          {/* 外层折叠：开关关闭时整段设置收起；内容首行就是「搜索设置」，不再用负 margin 硬顶 */}
           <DisclosureRegion open={webSearchEnabled}>
-              <div className="px-3 -mt-1">
-                <p className="text-[11px] text-sandrift">
-                  {webSearchCredentialMode === "server"
-                    ? serverSearchConfigured === true
-                      ? "增强搜索已启用"
-                      : keylessSearchAvailable === false
-                        ? "基础搜索不可用"
-                        : "基础搜索（免 Key）"
-                    : "使用自己的 Tavily Key"}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSearchSettingsOpen((v) => !v)}
-                aria-expanded={searchSettingsOpen}
-                className="w-full flex items-center justify-between px-3 py-2 text-left text-[11px] font-bold text-satin-grey transition-colors hover:text-charcoal"
-              >
-                搜索设置
-                <ChevronDown
-                  className={cn(
-                    "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)]",
-                    searchSettingsOpen && "rotate-180"
-                  )}
-                  aria-hidden="true"
-                />
-              </button>
-              <DisclosureRegion open={searchSettingsOpen}>
-                <div className="space-y-1">
-                  <SettingsRow settingId="kiro-web-search-service" title="搜索服务">
-                    <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
-                      Kiro Search
-                    </span>
-                  </SettingsRow>
-
-                  <SettingsRow
-                    settingId="kiro-web-search-credential"
-                    title="凭据"
-                     description="自备 Key 仅本次会话有效。"
-                    modified={kiroSettingsModified.has("webSearchCredentialMode")}
-                    onReset={() => resetKiroSettingsPreference("webSearchCredentialMode")}
-                    resetAriaLabel="将搜索凭据恢复默认"
-                  >
-                    <SettingsSegmentedControl<"server" | "byok">
-                      value={webSearchCredentialMode}
-                      onChange={(v) => {
-                        setWebSearchCredentialMode(v);
-                        setWebSearchTest({ status: "idle" });
-                      }}
-                      ariaLabel="Kiro Search 凭据"
-                      options={[
-                        { value: "server", label: "自动（推荐）" },
-                        { value: "byok", label: "自己的 Tavily Key" },
-                      ]}
+              <div className="border-b border-line-soft last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => setSearchSettingsOpen((v) => !v)}
+                  aria-expanded={searchSettingsOpen}
+                  className="w-full flex items-center justify-between gap-3 min-h-[52px] py-3 text-left transition-colors hover:text-charcoal"
+                >
+                  <span className="text-xs font-bold text-charcoal">搜索设置</span>
+                  <span className="flex items-center gap-2 text-[11px] text-sandrift">
+                    {webSearchCredentialMode === "server"
+                      ? serverSearchConfigured === true
+                        ? "增强搜索"
+                        : keylessSearchAvailable === false
+                          ? "不可用"
+                          : "基础搜索"
+                      : "自己的 Key"}
+                    <ChevronDown
+                      className={cn(
+                        "w-3.5 h-3.5 text-sandrift transition-transform duration-[var(--motion-fast)]",
+                        searchSettingsOpen && "rotate-180"
+                      )}
+                      aria-hidden="true"
                     />
-                    {webSearchCredentialMode === "server" && serverSearchConfigured === false && (
-                      keylessSearchAvailable === false ? (
-                        <div className="flex flex-col gap-1.5 w-full">
-                          <span className="text-[11px] font-semibold text-danger">
-                            当前基础搜索不可用，请使用自己的 Tavily Key。
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setWebSearchCredentialMode("byok");
-                              setWebSearchTest({ status: "idle" });
-                            }}
-                            className="self-start text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
-                          >
-                            使用自己的 Tavily Key
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-sandrift leading-relaxed">
-                          当前使用基础搜索（免 Key）；配置自己的 Tavily Key 可提高额度与稳定性。
-                        </span>
-                      )
-                    )}
-                  </SettingsRow>
+                  </span>
+                </button>
+                <DisclosureRegion open={searchSettingsOpen}>
+                  <div className="pb-1">
+                    <SettingsRow
+                      settingId="kiro-web-search-service"
+                      title="搜索服务"
+                      description={
+                        webSearchCredentialMode === "server"
+                          ? serverSearchConfigured === true
+                            ? "Tavily 增强搜索"
+                            : keylessSearchAvailable === false
+                              ? "基础搜索不可用"
+                              : "免 Key 基础搜索"
+                          : "自己的 Tavily Key"
+                      }
+                    >
+                      <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
+                        Kiro Search
+                      </span>
+                    </SettingsRow>
+
+                    <SettingsRow
+                      settingId="kiro-web-search-credential"
+                      title="凭据"
+                      description={
+                        webSearchCredentialMode === "server"
+                          ? serverSearchConfigured === true
+                            ? "自动使用已配置的 Tavily 增强搜索。"
+                            : keylessSearchAvailable === false
+                              ? "基础搜索不可用；请使用自己的 Tavily Key。"
+                              : "自动使用基础搜索；配置自己的 Tavily Key 可提高额度与稳定性。"
+                          : "Key 保存在本机安全存储；不会进入备份。"
+                      }
+                      modified={kiroSettingsModified.has("webSearchCredentialMode")}
+                      onReset={() => resetKiroSettingsPreference("webSearchCredentialMode")}
+                      resetAriaLabel="将搜索凭据恢复默认"
+                    >
+                      <SettingsSegmentedControl<"server" | "byok">
+                        value={webSearchCredentialMode}
+                        onChange={(v) => {
+                          setWebSearchCredentialMode(v);
+                          setWebSearchTest({ status: "idle" });
+                        }}
+                        ariaLabel="Kiro Search 凭据"
+                        options={[
+                          { value: "server", label: "自动（推荐）" },
+                          { value: "byok", label: "自己的 Tavily Key" },
+                        ]}
+                      />
+                    </SettingsRow>
 
                   <DisclosureRegion open={webSearchCredentialMode === "byok"}>
                     <SettingsRow
                       settingId="kiro-web-search-byok-key"
                       title="Tavily API Key"
-                      description="仅本次会话有效。"
+                      description="保存在本机安全存储；已保存的 Key 不会再次显示。"
                     >
-                      <div className="relative w-full">
-                        <SettingsInput
-                          type={showWebSearchKey ? "text" : "password"}
-                          value={webSearchApiKeyInput}
-                          onChange={handleWebSearchKeyChange}
-                          placeholder="tvly-..."
-                          ariaLabel="Tavily API Key"
-                          autoComplete="off"
-                          spellCheck={false}
-                          mono
-                          className="pr-9"
-                        />
-                        <button
-                          onClick={() => setShowWebSearchKey((v) => !v)}
-                          aria-label={showWebSearchKey ? "隐藏 Kiro Search API Key" : "显示 Kiro Search API Key"}
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
-                        >
-                          {showWebSearchKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
+                      <div className="flex flex-col gap-1 w-full">
+                        <div className="relative w-full">
+                          <SettingsInput
+                            type={showWebSearchKey ? "text" : "password"}
+                            value={webSearchApiKeyInput}
+                            onChange={handleWebSearchKeyChange}
+                            onBlur={() => {
+                              if (webSearchApiKeyInput.trim()) void persistWebSearchKey();
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" && webSearchApiKeyInput.trim()) {
+                                event.preventDefault();
+                                void persistWebSearchKey();
+                              }
+                            }}
+                            placeholder={
+                              webSearchCredentialRef
+                                ? "已保存到本机安全存储（输入新 Key 可替换）"
+                                : "tvly-..."
+                            }
+                            ariaLabel="Tavily API Key"
+                            autoComplete="off"
+                            spellCheck={false}
+                            mono
+                            className="pr-9"
+                          />
+                          <button
+                            onClick={() => setShowWebSearchKey((v) => !v)}
+                            aria-label={showWebSearchKey ? "隐藏 Kiro Search API Key" : "显示 Kiro Search API Key"}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                          >
+                            {showWebSearchKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <div className="min-h-[16px] text-[10px] leading-4 text-sandrift">
+                          {savingWebSearchKey ? (
+                            <span>正在保存到本机安全存储…</span>
+                          ) : webSearchKeyError ? (
+                            <span className="font-semibold text-danger">{webSearchKeyError}</span>
+                          ) : webSearchCredentialRef && !webSearchApiKeyInput ? (
+                            <div className="flex items-center justify-between gap-2">
+                              <span>已保存到本机安全存储。</span>
+                              <button
+                                type="button"
+                                onClick={() => void clearWebSearchKey()}
+                                className="font-semibold hover:text-danger transition-colors"
+                              >
+                                清除
+                              </button>
+                            </div>
+                          ) : !isWebSearchSecretStorageAvailable() ? (
+                            <span>桌面安全存储不可用；Key 仅本次会话有效。</span>
+                          ) : null}
+                        </div>
                       </div>
                     </SettingsRow>
                   </DisclosureRegion>
@@ -667,7 +792,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     settingId="kiro-web-search-test"
                     title="测试搜索连接"
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center justify-end gap-2.5">
                       <SettingsButton variant="accent" onClick={runWebSearchTest} disabled={webSearchTest.status === "testing" || !webSearchEnabled}>
                         {webSearchTest.status === "testing" ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -702,7 +827,8 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     </span>
                   </SettingsRow>
                 </div>
-              </DisclosureRegion>
+                </DisclosureRegion>
+              </div>
           </DisclosureRegion>
 
           {/* ---- 记忆 ---- */}
@@ -717,7 +843,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             type="button"
             onClick={() => setAdvancedOpen((v) => !v)}
             aria-expanded={advancedOpen}
-            className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+            className="w-full flex items-center justify-between gap-3 min-h-[52px] py-3 text-left border-b border-line-soft last:border-b-0"
           >
             <span className="text-xs font-bold text-charcoal">高级设置</span>
             <ChevronDown
@@ -729,7 +855,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             />
           </button>
           <DisclosureRegion open={advancedOpen}>
-            <div className="px-3 pb-3 space-y-1">
+            <div className="pb-1 space-y-1">
               {/* 自定义 Provider 能力声明：capability engineering，使用该服务时按需配置 */}
               {isCustom && (
                 <SettingsRow
@@ -737,7 +863,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                   title="模型能力"
                    description="仅在兼容服务支持时开启。"
                 >
-                  <div className="flex items-center gap-4 text-[11px] font-semibold text-satin-grey">
+                  <div className="flex flex-wrap items-center gap-4 text-[11px] font-semibold text-satin-grey">
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"

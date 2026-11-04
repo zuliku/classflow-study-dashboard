@@ -91,8 +91,8 @@ Prompt 说“web_search 可用时”，但 System Context 没有明确告诉模�
 - 不新增“搜索开关”或改变默认 `webSearchEnabled=true`。
 - 不引入浏览器自动化 / 网页抓取登录态。
 - 不在 V1 支持 Exa / Parallel 的 BYOK Key 设置（Tavily BYOK 仍是唯一用户 Key 入口）。
-- 不在 V1 做 BYOK 的 SecretVault 持久化（列入 V1.1）。
-- 不在 V1 打开 remote-channel（QQ / 邮件）的联网搜索；`invocationFilter` 继续只允许 local-user 使用 `web_search`。远程渠道涉及外部用户额度与隐私，需单独评审。
+- BYOK Tavily Key 只通过 SecretVault 持久化；Renderer 不读取明文，Store 只保存 `credentialRef`。
+- remote-channel（QQ / 邮件）允许 `web_search` / `read_web_source`，但额度收紧为 1 次搜索 / 1 次读取；写工具仍拒绝。
 - 不保证免费通道 SLA；它是“默认可用的基础搜索”，增强稳定性仍靠用户 Tavily Key 或未来服务端通道。
 
 ---
@@ -334,7 +334,16 @@ const access = parsed.webSearchConfig?.enabled
 | 搜索服务 | “Kiro Search” | 保持；副文案区分“基础搜索 / 增强搜索” |
 | 测试连接 | 只测 Tavily `/usage` | server 有 Key → Tavily `/usage`；server 无 Key → keyless 最小搜索；BYOK → Tavily `/usage` |
 | 测试成功文案 | “搜索服务可用” | “基础搜索可用” / “增强搜索可用” |
-| 隐私 | “搜索查询可能发送给搜索服务” | “搜索查询会发送给当前使用的第三方搜索服务；不会发送对话、文件或本地数据” |
+| 隐私 | “搜索查询可能发送给搜索服务” | “只发送搜索关键词给当前使用的第三方搜索服务；不会发送对话全文、文件或本地数据” |
+
+**Settings 排版/动效收口（2026-11 追加）：**
+
+- 「联网搜索」只保留一个主行 + 动态 description；不再在行外挂“基础搜索（免 Key）”独立状态行。
+- 「搜索设置」改为标准 52px 折叠行（标题 + 状态摘要 + chevron），展开内容全部使用标准 `SettingsRow`。
+- 凭据行只把 segmented control 放右侧；状态/说明进入 description，避免长文本挤在 control 列。
+- `SettingsRow` 右侧 control 列统一 `min-w-0 + flex-wrap + justify-end`，窄屏换行而不是横向溢出。
+- `DisclosureRegion` 从 grid `1fr↔0fr` 改为 **measured height + ResizeObserver**：修复 Chromium 在 auto-height/overflow 宿主内 grid 过渡卡在起始值导致的硬切，并支持展开期间动态文案高度变化。
+- 「高级设置」按钮与搜索设置行统一 52px 行高/divider；回答偏好说明移到左侧 description。
 
 `/api/ai/web-search/status` 扩展为：
 
@@ -360,13 +369,14 @@ const access = parsed.webSearchConfig?.enabled
 - `read_web_source` keyless 正文兜底：Native Reader 失败后，用 Exa `web_fetch_exa` / Parallel `web_fetch` 读取，仍不产生不可信页码（HTML/普通网页只给 `[[source:web-N]]`）。
 - capability 真值、缓存、single-flight、429 冷却、Settings/Status/Test 真值。
 - 运营安全阀 `CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH`。
+- **BYOK Tavily Key SecretVault 持久化**：`SecretProvider = "tavily"`；Renderer 只保存 `credentialRef`（localStorage 仅 ref），Chat/Test 路由在主进程 resolve 明文；旧 sessionStorage Key 自动迁移。
+- **remote-channel 联网搜索**：`invocationFilter` 允许 `web_search` / `read_web_source`；每轮收紧为 1 次搜索 / 1 次读取；写工具仍拒绝。
+- **首次实际联网搜索一次性隐私提示**：Conversation Surface 在首个 `tool-web_search` part 后显示，点击「知道了」持久化；可关闭搜索。
 
 仍不在本期：
 
-- BYOK Tavily Key 写入 SecretVault：新增 `SecretProvider = "tavily"`，请求只传 `credentialRef`；解决重启后 Key 丢失。当前仍为 sessionStorage（与现有 AI Key 行为一致）。
 - Exa / Parallel BYOK Key 设置：用于提高免费额度。
 - Tavily keyless 作为最后兜底。
-- remote-channel（QQ / 邮件）联网搜索：需单独做额度、滥用与隐私评审。
 - OpenCode Go hosted web search：官方文档显示 OpenCode/Go 用户可使用 hosted search，但它是 Console/Agent 侧能力，未确认可作为外部应用独立 API 使用；不作为 V1 依赖，待有稳定公开接口再评估。
 
 ---
@@ -500,8 +510,8 @@ const access = parsed.webSearchConfig?.enabled
 6. 同一 query 在 5 分钟内重复出现时不重复请求 provider；并发相同 query 只发一次。
 7. Settings 不再出现“服务端未配置，请使用自己的 Key”这种与默认能力矛盾的红色警告。
 8. `CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH=1` 时，server 无 Key 会明确回到 `WEB_SEARCH_KEY_REQUIRED`，且 Settings 显示需要配置 Key。
-9. remote-channel（QQ / 邮件）仍然拿不到 `web_search`，不会因为本次改动扩大外部渠道能力。
-10. 不新增任何 secret 到源码、日志、localStorage、Zustand 或备份。
+9. remote-channel（QQ / 邮件）可以使用 `web_search` / `read_web_source`，但每轮最多 1 次搜索 / 1 次读取；写工具仍被拒绝。
+10. localStorage / Zustand 只出现 `credentialRef`，不出现 Tavily 明文 Key；SecretVault 密文之外无 secret。
 
 ---
 
@@ -519,11 +529,12 @@ const access = parsed.webSearchConfig?.enabled
 
 ### 决策记录
 
-1. **Exa + Parallel 作为默认 keyless 通道**：已确认。
+1. **Exa + Parallel 作为默认 keyless 通道**：已确认并实现。
 2. **`server` UI 改成“自动（推荐）”**：已实现。
 3. **V1 包含 `read_web_source` keyless 正文兜底**：已实现。
-4. **BYOK Tavily Key 迁入 SecretVault**：本期不做；仍为 sessionStorage（与现有 AI Key 行为一致）。
-5. **首次联网搜索隐私提示**：本期不做；Settings 隐私行 + README 先承担披露。若法务要求更强提示，再补一次性提示。
+4. **BYOK Tavily Key 迁入 SecretVault**：已实现（renderer 只持 ref，明文只进 Main）。
+5. **首次联网搜索隐私提示**：已实现（首个真实 `tool-web_search` 后一次性提示，dismiss 持久化）。
+6. **remote-channel 联网搜索**：已实现，额度收紧为 1 次搜索 / 1 次读取；写工具仍拒绝。
 
 ---
 

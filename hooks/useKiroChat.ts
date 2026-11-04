@@ -734,6 +734,7 @@ export function useKiroChat({
   // Task 14：Kiro Search（联网搜索）——随 Turn Snapshot 冻结；Key 不进 Store
   const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
   const webSearchCredentialMode = useKiroPreferencesStore((s) => s.webSearchCredentialMode);
+  const webSearchCredentialRef = useKiroPreferencesStore((s) => s.webSearchCredentialRef);
   // Task 19C1：扫描 Web PDF Vision 设置（Key 独立 session 存储，不进 Store）
   const webPdfVisionEnabled = useKiroPreferencesStore((s) => s.webPdfVisionEnabled);
   const webPdfVisionModel = useKiroPreferencesStore((s) => s.webPdfVisionModel);
@@ -1037,7 +1038,12 @@ export function useKiroChat({
     webSearch: {
       enabled: webSearchEnabled,
       credentialMode: webSearchCredentialMode,
-      ...(webSearchCredentialMode === "byok" && getSessionWebSearchApiKey()
+      // BYOK：优先只发 SecretVault ref（不把明文 Key 放进请求体）；
+      // 旧会话 Key 作为兼容/竞态兜底（用户输入后尚未完成 vault 保存时）。
+      ...(webSearchCredentialMode === "byok" && webSearchCredentialRef
+        ? { credentialRef: webSearchCredentialRef }
+        : {}),
+      ...(webSearchCredentialMode === "byok" && !webSearchCredentialRef && getSessionWebSearchApiKey()
         ? { apiKey: getSessionWebSearchApiKey() }
         : {}),
     },

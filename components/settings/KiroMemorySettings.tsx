@@ -45,7 +45,7 @@ export function KiroMemorySettings() {
       </SettingsRow>
 
       <SettingsRow settingId="kiro-memory-manager" title="记忆条目">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="text-[11px] font-semibold text-sandrift">{memory.memories.length} 条</span>
           <SettingsButton variant="accent" onClick={() => setManagerOpen(true)}>
             <Brain className="w-3.5 h-3.5" />

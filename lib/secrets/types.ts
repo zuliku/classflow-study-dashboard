@@ -5,7 +5,7 @@
 
 export type CredentialRef = string;
 
-export type SecretProvider = "mcp" | "qq-bot" | "google" | "qq-mail";
+export type SecretProvider = "mcp" | "qq-bot" | "google" | "qq-mail" | "tavily";
 
 export interface SecretMetadata {
   credentialRef: CredentialRef;
@@ -35,6 +35,7 @@ export const SECRET_PROVIDER_SET: ReadonlySet<SecretProvider> = new Set<SecretPr
   "qq-bot",
   "google",
   "qq-mail",
+  "tavily",
 ]);
 
 /** 创建/替换时的输入（secret 一次性通过 IPC 进入 Main Process） */

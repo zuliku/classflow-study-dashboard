@@ -7,6 +7,7 @@
 
 import { KiroResponsePreference, normalizeKiroResponsePreference } from "@/lib/ai/responsePreference";
 import { normalizeWebPdfVisionModel } from "@/lib/ai/web/vision/models";
+import { normalizeWebSearchCredentialRef } from "@/lib/ai/web/credentials";
 import { KiroReasoningEffort, REASONING_EFFORTS } from "@/lib/ai/reasoning/types";
 
 /** 客户端可提交的推理 effort（非法 → default；客户端永远不能提交 providerOptions） */
@@ -81,8 +82,13 @@ export function validateAIChatBody(body: unknown): {
   responsePreference: KiroResponsePreference;
   /** 推理投入（capability-driven；客户端仅发 effort，server 归一 + 映射 provider options） */
   reasoningEffort: KiroReasoningEffort;
-  /** Task 14：联网搜索配置（enabled / credentialMode / 仅 BYOK 带 userApiKey） */
-  webSearchConfig?: { enabled?: boolean; credentialMode?: "server" | "byok"; apiKey?: string };
+  /** Task 14：联网搜索配置（enabled / credentialMode / BYOK 的 SecretVault ref 或兼容 userApiKey） */
+  webSearchConfig?: {
+    enabled?: boolean;
+    credentialMode?: "server" | "byok";
+    apiKey?: string;
+    credentialRef?: string;
+  };
   /** Task 19C1：扫描 Web PDF Vision 配置（Provider 固定 OpenCode Go；19C2 才消费）。
    * 旧 Client 无该字段 → enabled=false（不会突然触发未来 Vision API）。
    * apiKey 只作为 transient server value：trim / 空值视为 undefined / 绝不写日志 / 不返回客户端。 */
@@ -121,6 +127,7 @@ export function validateAIChatBody(body: unknown): {
       enabled: webSearch.enabled === true,
       credentialMode: webSearch.credentialMode === "byok" ? "byok" : "server",
       apiKey: typeof webSearch.apiKey === "string" ? webSearch.apiKey : undefined,
+      credentialRef: normalizeWebSearchCredentialRef(webSearch.credentialRef),
     },
     webPdfVisionConfig: {
       enabled: vision.enabled === true,

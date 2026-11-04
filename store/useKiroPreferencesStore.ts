@@ -48,7 +48,7 @@ export interface KiroSettingsPreferences {
   autoContextEnabled: boolean;
   /** Intelligence V2 Task 1：回答偏好（只影响 Final Answer 表达深度） */
   responsePreference: KiroResponsePreference;
-  /** Task 14：Kiro Search（联网搜索）；Key 绝不进入 Store */
+  /** Task 14：Kiro Search（联网搜索）；Key 绝不进入 Store（BYOK 只持久化 SecretVault ref） */
   webSearchEnabled: boolean;
   webSearchCredentialMode: KiroWebSearchCredentialMode;
   /** Task 19C1：扫描 Web PDF Vision（设置；Key 绝不进入 Store） */
@@ -100,6 +100,10 @@ interface KiroPreferencesState extends KiroSettingsPreferences {
   sidecarMinimizedPosition: SidecarMinimizedPosition;
   /** Task B：截图隐私提示已展示过（只属于 UI preference；首次添加图片轻提示一次） */
   visualAttachmentPrivacyNoticeSeen: boolean;
+  /** BYOK Tavily Key 的 SecretVault ref（不是 Key 本身；Key 绝不进入 Store） */
+  webSearchCredentialRef: string;
+  /** 首次实际联网搜索后的一次性隐私提示已展示 */
+  webSearchPrivacyNoticeSeen: boolean;
   setOutputTextSize: (size: KiroOutputTextSize) => void;
   setAutoContextEnabled: (enabled: boolean) => void;
   setResponsePreference: (preference: KiroResponsePreference) => void;
@@ -116,6 +120,8 @@ interface KiroPreferencesState extends KiroSettingsPreferences {
   setSidecarPosition: (position: SidecarPosition) => void;
   setSidecarMinimizedPosition: (position: SidecarMinimizedPosition) => void;
   setVisualAttachmentPrivacyNoticeSeen: (seen: boolean) => void;
+  setWebSearchCredentialRef: (credentialRef: string) => void;
+  setWebSearchPrivacyNoticeSeen: (seen: boolean) => void;
 }
 
 export const useKiroPreferencesStore = create<KiroPreferencesState>()(
@@ -126,6 +132,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       sidecarPosition: SIDECAR_DEFAULT_POSITION,
       sidecarMinimizedPosition: DEFAULT_SIDECAR_MINIMIZED_POSITION,
       visualAttachmentPrivacyNoticeSeen: false,
+      webSearchCredentialRef: "",
+      webSearchPrivacyNoticeSeen: false,
       setOutputTextSize: (size) => set({ outputTextSize: normalizeKiroOutputTextSize(size) }),
       setAutoContextEnabled: (enabled) => set({ autoContextEnabled: enabled }),
       setResponsePreference: (preference) =>
@@ -145,6 +153,9 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
           sidecarPosition: SIDECAR_DEFAULT_POSITION,
           sidecarMinimizedPosition: DEFAULT_SIDECAR_MINIMIZED_POSITION,
           visualAttachmentPrivacyNoticeSeen: false,
+          // 明确不碰 webSearchCredentialRef：SecretVault 密文不在本 store reset 范围内；
+          // 清空 ref 会制造 orphan credential。用户可用设置里的「清除」单独删除。
+          webSearchPrivacyNoticeSeen: false,
         }),
       // 结构归一后保存；viewport clamp 由 Shell 在浏览器内执行
       setSidecarSize: (size) => set({ sidecarSize: normalizeSidecarSize(size) }),
@@ -154,6 +165,10 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         set({ sidecarMinimizedPosition: normalizeSidecarMinimizedPosition(position) }),
       setVisualAttachmentPrivacyNoticeSeen: (seen) =>
         set({ visualAttachmentPrivacyNoticeSeen: seen }),
+      setWebSearchCredentialRef: (credentialRef) =>
+        set({ webSearchCredentialRef: typeof credentialRef === "string" ? credentialRef.trim() : "" }),
+      setWebSearchPrivacyNoticeSeen: (seen) =>
+        set({ webSearchPrivacyNoticeSeen: seen === true }),
     }),
     {
       name: "classflow-kiro-preferences-v1",
@@ -182,6 +197,10 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         sidecarMinimizedPosition: state.sidecarMinimizedPosition,
         // Task B：截图隐私提示（UI preference）
         visualAttachmentPrivacyNoticeSeen: state.visualAttachmentPrivacyNoticeSeen,
+        // BYOK Tavily Key：只持久化 SecretVault ref，绝不持久化 Key
+        webSearchCredentialRef: state.webSearchCredentialRef,
+        // 首次联网搜索隐私提示
+        webSearchPrivacyNoticeSeen: state.webSearchPrivacyNoticeSeen,
       }),
       // 持久化值 hydrate 时同样清洗（旧数据 / 非法值 → 默认）
       merge: (persisted, current) => {
@@ -227,6 +246,12 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
           visualAttachmentPrivacyNoticeSeen:
             typeof p?.visualAttachmentPrivacyNoticeSeen === "boolean"
               ? p.visualAttachmentPrivacyNoticeSeen
+              : false,
+          webSearchCredentialRef:
+            typeof p?.webSearchCredentialRef === "string" ? p.webSearchCredentialRef.trim() : "",
+          webSearchPrivacyNoticeSeen:
+            typeof p?.webSearchPrivacyNoticeSeen === "boolean"
+              ? p.webSearchPrivacyNoticeSeen
               : false,
         };
       },

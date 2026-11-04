@@ -45,7 +45,7 @@ export function SettingsRow({
           <p className="text-[11px] leading-[1.5] text-sandrift mt-1 break-words">{description}</p>
         )}
       </div>
-      <div className="flex max-w-full shrink-0 items-center gap-2 ml-auto">
+      <div className="flex max-w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 ml-auto">
         {modified && onReset && (
           <button
             onClick={onReset}

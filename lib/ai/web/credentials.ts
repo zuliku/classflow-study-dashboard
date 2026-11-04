@@ -2,8 +2,8 @@
  * Kiro Search — Credential Resolver（Task 14A）。
  *
  * 规则严格：
- * - mode === "server" → 只使用 process.env.KIRO_TAVILY_API_KEY
- * - mode === "byok"   → 只使用 userApiKey；缺失 / 无效 / 401 / 额度问题绝不 fallback 到 Server Key
+ * - mode === "server" → Server Key（KIRO_TAVILY_API_KEY / TAVILY_API_KEY）优先；无 Key 时 keyless（可运营关闭）
+ * - mode === "byok"   → 只使用 userApiKey / SecretVault ref；缺失 / 无效 / 401 / 额度问题绝不 fallback 到 Server Key 或 keyless
  *
  * "Server 默认" 的含义：默认 credentialMode = server；不是 BYOK 失败后偷偷消耗 Server Key。
  */
@@ -20,6 +20,15 @@ export const KIRO_TAVILY_API_KEY_ENV = "KIRO_TAVILY_API_KEY";
 export const TAVILY_API_KEY_ENV = "TAVILY_API_KEY";
 /** 运营/隐私安全阀：设为 1/true 时禁用所有 keyless hosted 搜索。 */
 export const DISABLE_KEYLESS_WEB_SEARCH_ENV = "CLASSFLOW_DISABLE_KEYLESS_WEB_SEARCH";
+
+/** SecretVault credentialRef 形态（cred_s_<uuid>）；只接受该形态，拒绝任意字符串。 */
+const WEB_SEARCH_CREDENTIAL_REF_RE = /^cred_[A-Za-z0-9_-]{1,128}$/;
+
+export function normalizeWebSearchCredentialRef(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return WEB_SEARCH_CREDENTIAL_REF_RE.test(trimmed) ? trimmed : undefined;
+}
 
 export type KiroWebSearchCredentialResult =
   | { ok: true; apiKey: string; mode: KiroWebSearchCredentialMode; kind?: "keyed" | "keyless" }

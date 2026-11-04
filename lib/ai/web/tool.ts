@@ -16,10 +16,12 @@ import {
   KiroWebSearchResult,
   KiroTrustedWebSource,
   MAX_WEB_SEARCHES_PER_TURN,
+  MAX_REMOTE_WEB_SEARCHES_PER_TURN,
   MAX_WEB_RESULTS,
   MAX_WEB_RESULTS_PER_DOMAIN,
   MAX_WEB_SOURCES_PER_READ,
   MAX_WEB_READS_PER_TURN,
+  MAX_REMOTE_WEB_READS_PER_TURN,
   MAX_WEB_EVIDENCE_CHARS_PER_TURN,
   WEB_SEARCH_TIMEOUT_MS,
   WEB_READ_TIMEOUT_MS,
@@ -141,6 +143,8 @@ export interface KiroWebSearchToolConfig {
   credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
   /** 本 Turn 已发生的搜索尝试数（成功与失败都计入；由 inspect 注入，跨 roundtrip 累计） */
   attemptsSoFar: number;
+  /** 本 Turn 搜索上限；缺省 MAX_WEB_SEARCHES_PER_TURN（remote-channel 传 1） */
+  maxAttempts?: number;
   /** 下一个可用 web-N index（conversation-wide 递增） */
   nextSourceIndex: number;
   /** 本 Turn 已成功搜索的 normalized queries（重复查询守卫；跨 roundtrip 累计） */
@@ -305,6 +309,8 @@ export function assembleKiroToolsForRequest(input: {
   credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
   /** route 层已解析的访问能力；省略时按 credential 重新解析（测试/旧调用方兼容） */
   access?: KiroWebSearchAccess | null;
+  /** remote-channel（QQ/邮件）使用更低的搜索/读取额度；缺省 local-user */
+  origin?: "local-user" | "remote-channel";
   /** Task 19C2：已由 validateAIChatBody 归一化的 Vision 配置（enabled/model/apiKey） */
   webPdfVisionConfig?: { enabled: boolean; model: string; apiKey?: string };
   messages: unknown[];
@@ -323,13 +329,21 @@ export function assembleKiroToolsForRequest(input: {
   const searchState = inspectCurrentTurnWebSearchState(input.messages);
   const evidenceState = inspectCurrentTurnWebEvidenceState(input.messages);
   const keyless = access.kind === "keyless";
+  // BYOK 的 SecretVault ref 已在 route 解析成 key；execute 不应再次按空 userApiKey 解析。
+  // keyed access 的 key 只存在于 server memory / 本次 Tool config，不进入 prompt / 日志。
+  const effectiveCredential =
+    access.kind === "keyed"
+      ? { mode: access.mode, userApiKey: access.apiKey }
+      : input.credential;
+  const remote = input.origin === "remote-channel";
   return {
     ...input.clientTools,
     web_search: createKiroWebSearchTool({
       provider: getKiroWebSearchProvider("tavily"),
       ...(keyless ? { keylessProvider: getKiroWebSearchProvider("auto") } : {}),
-      credential: input.credential,
+      credential: effectiveCredential,
       attemptsSoFar: searchState.attempts,
+      maxAttempts: remote ? MAX_REMOTE_WEB_SEARCHES_PER_TURN : MAX_WEB_SEARCHES_PER_TURN,
       nextSourceIndex: searchState.nextSourceIndex,
       successfulQueries: searchState.successfulQueries,
       seenUrls: searchState.seenUrls,
@@ -338,8 +352,9 @@ export function assembleKiroToolsForRequest(input: {
       fallbackProvider: getKiroWebEvidenceProvider(keyless ? "auto" : "tavily"),
       nativeReader: readNativeWebDocumentSource,
       webPdfVisionConfig: input.webPdfVisionConfig,
-      credential: input.credential,
+      credential: effectiveCredential,
       attemptsSoFar: evidenceState.attempts,
+      maxAttempts: remote ? MAX_REMOTE_WEB_READS_PER_TURN : MAX_WEB_READS_PER_TURN,
       trustedSources: resolveCurrentTurnWebSources(input.messages),
       readSourceIds: evidenceState.readSourceIds,
       evidenceCharsUsed: evidenceState.evidenceCharsUsed,
@@ -358,6 +373,8 @@ export interface KiroWebReadToolConfig {
   credential: { mode: KiroWebSearchCredentialMode; userApiKey?: string };
   /** 本 Turn 已发生 read 尝试数（成功与失败都计入；跨 roundtrip 累计） */
   attemptsSoFar: number;
+  /** 本 Turn read 上限；缺省 MAX_WEB_READS_PER_TURN（remote-channel 传 1） */
+  maxAttempts?: number;
   /** 当前 Turn 可信 Web Sources（真实成功 web_search Tool Result；execute 不再从别处获取） */
   trustedSources: KiroTrustedWebSource[];
   /** 本 Turn 已成功读取的 sourceIds（重复读取守卫） */
@@ -378,8 +395,8 @@ function readLimitFailure(): { ok: false; code: "WEB_READ_LIMIT_REACHED"; messag
  * credential 惰性解析（Native 全成功不消耗 Tavily）；单次 Tool 共享 15s AbortController。
  */
 export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
-  const { fallbackProvider, nativeReader, webPdfVisionConfig, credential, attemptsSoFar, trustedSources, readSourceIds, evidenceCharsUsed } = config;
-  let remainingAttempts = Math.max(0, MAX_WEB_READS_PER_TURN - attemptsSoFar);
+  const { fallbackProvider, nativeReader, webPdfVisionConfig, credential, attemptsSoFar, maxAttempts, trustedSources, readSourceIds, evidenceCharsUsed } = config;
+  let remainingAttempts = Math.max(0, (maxAttempts ?? MAX_WEB_READS_PER_TURN) - attemptsSoFar);
   const trustedById = new Map(trustedSources.map((s) => [s.sourceId, s]));
   const readSet = new Set(readSourceIds);
   let charsUsed = evidenceCharsUsed;
@@ -540,8 +557,8 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
  * execute 内部自己 catch safe 错误并返回 { ok:false, code, message }，绝不 throw Tavily raw response。
  */
 export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
-  const { provider, keylessProvider, credential, attemptsSoFar, nextSourceIndex } = config;
-  let remainingAttempts = Math.max(0, MAX_WEB_SEARCHES_PER_TURN - attemptsSoFar);
+  const { provider, keylessProvider, credential, attemptsSoFar, maxAttempts, nextSourceIndex } = config;
+  let remainingAttempts = Math.max(0, (maxAttempts ?? MAX_WEB_SEARCHES_PER_TURN) - attemptsSoFar);
   let sourceCursor = nextSourceIndex;
   const successfulQueries = new Set(config.successfulQueries.map(normalizeWebSearchQuery));
   const seenCanonicalUrls = new Set(config.seenUrls);

@@ -136,6 +136,8 @@ export type KiroWebEvidenceOutcome =
 
 /** 一个 User Turn 内 web_search 最多调用次数（跨 client tool HTTP roundtrip 仍生效） */
 export const MAX_WEB_SEARCHES_PER_TURN = 3;
+/** QQ / 邮件等 remote-channel：更低额度，避免外部渠道滥用免费搜索 */
+export const MAX_REMOTE_WEB_SEARCHES_PER_TURN = 1;
 /** 每次搜索返回结果上限（ClassFlow 成本边界，LLM 不能覆盖） */
 export const MAX_WEB_RESULTS = 6;
 /** 单次搜索超时 */
@@ -150,6 +152,8 @@ export const MAX_WEB_RESULTS_PER_DOMAIN = 2;
 export const MAX_WEB_SOURCES_PER_READ = 2;
 /** Task 16A：一个 User Turn 最多执行 read_web_source 次数（与 search limit 独立） */
 export const MAX_WEB_READS_PER_TURN = 2;
+/** QQ / 邮件等 remote-channel：网页正文读取同样收紧 */
+export const MAX_REMOTE_WEB_READS_PER_TURN = 1;
 /** Task 16A：单 source evidence 字符预算 */
 export const MAX_WEB_EVIDENCE_CHARS_PER_SOURCE = 5_000;
 /** Task 16A：单 Turn evidence 字符总预算 */

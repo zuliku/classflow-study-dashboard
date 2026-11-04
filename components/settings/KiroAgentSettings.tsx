@@ -396,10 +396,9 @@ export function KiroAgentSettings() {
           <SettingsRow
             settingId="kiro-agent-workspace"
             title="当前工作区"
-            description={activeWorkspace ? activeWorkspace.name : "尚未配置工作区"}
           >
-            <span className="text-[11px] font-bold text-charcoal">
-              {activeWorkspace ? activeWorkspace.name : "未配置"}
+            <span className="max-w-[260px] truncate text-[11px] font-bold text-charcoal">
+              {activeWorkspace ? activeWorkspace.name : "尚未配置工作区"}
             </span>
           </SettingsRow>
         </SettingsGroup>

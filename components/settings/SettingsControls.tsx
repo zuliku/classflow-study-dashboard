@@ -102,6 +102,7 @@ export function SettingsInput({
   autoFocus,
   maxLength,
   onKeyDown,
+  onBlur,
   inputRef,
 }: {
   id?: string;
@@ -121,6 +122,7 @@ export function SettingsInput({
   autoFocus?: boolean;
   maxLength?: number;
   onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
+  onBlur?: React.FocusEventHandler<HTMLInputElement>;
   inputRef?: React.Ref<HTMLInputElement>;
 }) {
   return (
@@ -142,6 +144,7 @@ export function SettingsInput({
       autoFocus={autoFocus}
       maxLength={maxLength}
       onKeyDown={onKeyDown}
+      onBlur={onBlur}
     />
   );
 }

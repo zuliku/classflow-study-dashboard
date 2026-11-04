@@ -14,8 +14,8 @@
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
 import { KIRO_TOOLS, getKiroToolsForRequest } from "@/lib/ai/tools";
 import { assembleKiroToolsForRequest } from "@/lib/ai/web/tool";
-import { resolveKiroWebSearchAccess } from "@/lib/ai/web/credentials";
 import { buildKiroWebSearchCapabilitySection } from "@/lib/ai/web/capability";
+import { resolveKiroWebSearchAccessWithStoredRef } from "@/lib/ai/web/storedCredentials";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
@@ -450,9 +450,10 @@ export async function handleChat(req: Request) {
 
   // 联网搜索运行时真值：server 无 Tavily Key 时自动 keyless；BYOK 缺 Key → 不暴露工具。
   const webSearchAccess = parsed.webSearchConfig?.enabled
-    ? resolveKiroWebSearchAccess({
+    ? await resolveKiroWebSearchAccessWithStoredRef({
         mode: parsed.webSearchConfig.credentialMode ?? "server",
         userApiKey: parsed.webSearchConfig.apiKey,
+        credentialRef: parsed.webSearchConfig.credentialRef,
       })
     : null;
   const webSearchCapabilitySection =
@@ -461,6 +462,7 @@ export async function handleChat(req: Request) {
           enabled: true,
           access: webSearchAccess,
           textOnlyAnswer,
+          remote: invocationOrigin === "remote-channel",
         })
       : "";
 
@@ -477,6 +479,7 @@ export async function handleChat(req: Request) {
         : assembleKiroToolsForRequest({
         webSearchEnabled: parsed.webSearchConfig?.enabled ?? false,
         access: webSearchAccess,
+        origin: invocationOrigin,
         credential: {
           mode: parsed.webSearchConfig?.credentialMode ?? "server",
           userApiKey: parsed.webSearchConfig?.apiKey,

@@ -109,6 +109,14 @@ describe("capability prompt section", () => {
         access: { ok: true, kind: "keyless", mode: "server" },
       })
     ).toBe(true);
+
+    const remote = buildKiroWebSearchCapabilitySection({
+      enabled: true,
+      access: { ok: true, kind: "keyless", mode: "server" },
+      remote: true,
+    });
+    expect(remote).toContain("远程渠道");
+    expect(remote).toContain("最多 1 次搜索");
   });
 });
 
@@ -187,6 +195,38 @@ describe("tool assembly availability truth", () => {
     expect(keyless.search).toHaveBeenCalledTimes(1);
     expect(keyed.search).not.toHaveBeenCalled();
   });
+
+  it("remote-channel maxAttempts=1：第二次搜索直接 LIMIT_REACHED", async () => {
+    const keyless: KiroWebSearchProvider = {
+      id: "auto",
+      checkCredential: vi.fn(),
+      search: vi.fn().mockResolvedValue({
+        ok: true,
+        query: "news",
+        count: 1,
+        results: [{ sourceId: "", title: "A", url: "https://a.dev/1", domain: "a.dev", snippet: "s" }],
+      }),
+    };
+    const tool = createKiroWebSearchTool({
+      provider: { id: "tavily", checkCredential: vi.fn(), search: vi.fn() },
+      keylessProvider: keyless,
+      credential: { mode: "server" },
+      attemptsSoFar: 0,
+      maxAttempts: 1,
+      nextSourceIndex: 1,
+      successfulQueries: [],
+      seenUrls: [],
+    });
+    const first = (await tool.execute?.({ query: "news" }, {} as never)) as { ok: true };
+    expect(first.ok).toBe(true);
+    const second = (await tool.execute?.({ query: "other" }, {} as never)) as {
+      ok: false;
+      code: string;
+    };
+    expect(second.ok).toBe(false);
+    expect(second.code).toBe("WEB_SEARCH_LIMIT_REACHED");
+    expect(keyless.search).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("keyless read_web_source fallback", () => {
@@ -238,7 +278,7 @@ describe("prompt autonomy contract", () => {
   it("Settings 不再把默认搜索说成必须自带 Key", () => {
     const source = readFileSync("components/settings/KiroAISettings.tsx", "utf8");
     expect(source).toContain("自动（推荐）");
-    expect(source).toContain("基础搜索（免 Key）");
+    expect(source).toContain("基础搜索");
     expect(source).not.toContain("当前服务端未配置搜索凭据，请使用自己的 API Key");
   });
 });

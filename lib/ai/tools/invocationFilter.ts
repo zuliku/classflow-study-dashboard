@@ -53,6 +53,9 @@ const REMOTE_ALLOWED = new Set<string>([
   "mcp_search_tools",
   "get_current_context",
   "get_user_study_profile",
+  // 联网搜索是只读外部证据；remote-channel 允许使用，但 assemble 层收紧为 1 次/轮。
+  "web_search",
+  "read_web_source",
   "begin_final_answer",
 ]);
 
