@@ -144,7 +144,7 @@ export function KiroRecentArtifactsPopover() {
           className={cn(
             "absolute right-0 top-11 z-40 w-[360px] max-w-[calc(100vw-24px)] rounded-2xl bg-surface border border-line shadow-card flex flex-col overflow-hidden origin-top-right",
             panelPresence.visible
-              ? "animate-enter"
+              ? "opacity-100 scale-100 translate-y-0 transition-[opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)]"
               : "opacity-0 scale-[0.99] translate-y-[-2px] pointer-events-none transition-[opacity,transform] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
           )}
         >

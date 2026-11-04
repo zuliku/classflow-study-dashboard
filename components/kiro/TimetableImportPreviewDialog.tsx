@@ -10,6 +10,7 @@ import { normalizeTimetableImportDraft } from "@/lib/ai/timetableImport/draft";
 import { resolveLiveImageSources } from "@/lib/ai/attachments/liveImageRegistry";
 import { usePresence } from "@/lib/usePresence";
 import { useInertOnHidden } from "@/lib/useInertOnHidden";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -305,7 +306,7 @@ export function TimetableImportPreviewDialog({
                 </button>
               </p>
             )}
-            {bellEditorOpen && (
+            <DisclosureRegion open={bellEditorOpen}>
               <div className="pt-2.5">
                 <BellScheduleEditor
                   onSave={(t) => {
@@ -315,7 +316,7 @@ export function TimetableImportPreviewDialog({
                   onClose={() => setBellEditorOpen(false)}
                 />
               </div>
-            )}
+            </DisclosureRegion>
           </div>
 
           {/* 课程分组预览（可编辑） */}

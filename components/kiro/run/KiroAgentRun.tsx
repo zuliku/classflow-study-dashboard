@@ -67,11 +67,12 @@ export function KiroAgentRun({
   );
   const userToggledRef = useRef(false);
 
-  // 审批决策后 110ms 折叠退出（此前整段瞬时卸载，Timeline/Final Answer 上收跳变）
+  // 审批决策后折叠退出（此前整段瞬时卸载，Timeline/Final Answer 上收跳变）；
+  // presence 必须与 ExitCollapse 的 --motion-exit-panel（160ms）同源，否则折叠尾段被提前卸载截断。
   // P0 hooks order：usePresence / useRef 必须在 `if (!hasWorklog) return null` 之前，
   // 否则「历史无 worklog → live 出现 worklog」时 hooks 数量变化会整页崩溃
   // （Rendered fewer hooks than expected；长历史恢复后继续对话可复现）。
-  const approvalPresence = usePresence(!!approval, MOTION_EXIT_MS.fast);
+  const approvalPresence = usePresence(!!approval, MOTION_EXIT_MS.panel);
   const lastApprovalRef = React.useRef(approval);
   if (approval) lastApprovalRef.current = approval;
   const shownApproval = approval ?? (approvalPresence.mounted ? lastApprovalRef.current : null);

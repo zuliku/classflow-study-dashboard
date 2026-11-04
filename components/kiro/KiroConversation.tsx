@@ -266,8 +266,9 @@ export function KiroConversation({
   const lastMsg = messages[messages.length - 1];
   const showPending = (turnInFlight || !!preparingSend) && lastMsg?.role !== "assistant";
   // 错误条退出走折叠（重试成功/切会话/新建时直接卸载会顶起滚动高度）；
+  // presence 与 ExitCollapse 的 --motion-exit-panel（160ms）对齐，避免折叠尾段被截断。
   // 退出期 error 已清零，用 ref 快照保持内容直到卸载
-  const errorPresence = usePresence(!!error, MOTION_EXIT_MS.fast);
+  const errorPresence = usePresence(!!error, MOTION_EXIT_MS.panel);
   const lastErrorRef = useRef<AIError | null>(null);
   if (error) lastErrorRef.current = error;
   const shownError = error ?? lastErrorRef.current;

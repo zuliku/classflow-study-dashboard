@@ -356,6 +356,40 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(select).not.toContain("closeTimerRef");
     expect(select).not.toContain("rafRef");
   });
+
+  it("Comp P0：附件菜单与图片预览对称进退（不再硬卸载）", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    const chip = read("components/kiro/KiroAttachmentChip.tsx");
+    expect(chip).toContain("usePresence(menuOpen, MOTION_EXIT_MS.fast)");
+    expect(chip).toContain("!duration-[var(--motion-exit-fast)]");
+    expect(chip).not.toContain("menuOpen &&");
+    const preview = read("components/kiro/KiroImagePreviewDialog.tsx");
+    expect(preview).toContain("MOTION_EXIT_MS.base");
+    expect(preview).toContain("requestClose");
+    expect(preview).toContain("!duration-[var(--motion-exit-base)]");
+    expect(preview).not.toContain("animate-enter");
+  });
+
+  it("Comp P0：ExitCollapse 卸载窗口与 160ms 折叠同源；浮层退出不被父级裁剪", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    // Callers that gate an ExitCollapse must keep it mounted for the full --motion-exit-panel.
+    expect(read("components/kiro/run/KiroAgentRun.tsx")).toContain(
+      "usePresence(!!approval, MOTION_EXIT_MS.panel)"
+    );
+    expect(read("components/kiro/KiroMessage.tsx")).toMatch(
+      /const liveTrayPresence = usePresence\(\s*streaming === true && liveCitedWebSources\.length > 0,\s*MOTION_EXIT_MS\.panel\s*\)/
+    );
+    expect(read("components/kiro/KiroConversation.tsx")).toContain(
+      "usePresence(!!error, MOTION_EXIT_MS.panel)"
+    );
+    // Navigator shell keeps overflow-visible through the menu exit presence.
+    const navigator = read("components/kiro/navigation/KiroNavigator.tsx");
+    expect(navigator).toContain("usePresence(moreOpen, MOTION_EXIT_MS.panel)");
+    expect(navigator).toContain("moreOpen || morePresence.mounted ? \"overflow-visible\"");
+    // Context menu exit uses the fast exit tier (not the enter standard tier).
+    const contextMenu = read("components/assignment/AssignmentContextMenu.tsx");
+    expect(contextMenu).toContain("!duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]");
+  });
 });
 
 describe("usePresence lifecycle contract", () => {

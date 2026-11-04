@@ -296,10 +296,11 @@ export function AssignmentContextMenu({
       {...(!visible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
       className={cn(
         "fixed z-50 w-52 bg-surface border border-line-strong rounded-2xl shadow-card p-1.5 text-xs ux-inline overflow-x-clip",
-        // BUG-073：open 驱动进出场（fast 档上浮），退场期间冻结最后定位
+        // BUG-073：open 驱动进出场（fast 档上浮），退场期间冻结最后定位；
+        // 关闭分支显式使用 exit 档 + 加速曲线，与 usePresence(110ms) 同源，避免最后一段被硬卸载。
         open && visible
           ? "opacity-100 translate-y-0"
-          : "opacity-0 translate-y-1 pointer-events-none"
+          : "opacity-0 translate-y-1 pointer-events-none !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
       )}
       style={pos ? { left: pos.x, top: pos.y } : { left: anchor.anchorX, top: anchor.anchorY }}
     >

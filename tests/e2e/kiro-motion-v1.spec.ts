@@ -7,6 +7,26 @@ import { test as base, expect, Page } from "@playwright/test";
  * 不重测 Proposal Domain（unit/component tests 承担）。
  */
 
+// Task-12：纯 Chromium 无 Electron preload → 注入最小本地 invocation stub（仅测试）
+base.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } };
+    };
+    if (!w.classflowDesktop) w.classflowDesktop = {};
+    if (!w.classflowDesktop.invocation) {
+      let seq = 0;
+      w.classflowDesktop.invocation = {
+        beginLocal: async () => ({ invocationId: `inv_e2e_motion_${++seq}_00000000-0000-4000-8000-000000000000` }),
+      };
+    }
+  });
+});
+
+function sse(lines: string[]): string {
+  return lines.map((l) => `data: ${l}`).join("\n\n") + "\n\n";
+}
+
 const AI_SETTINGS = {
   enabled: true,
   provider: "deepseek",
@@ -37,7 +57,7 @@ async function sendFirstMessage(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: "text/event-stream",
-      body: [
+      body: sse([
         JSON.stringify({ type: "start", messageId: "m1" }),
         JSON.stringify({ type: "start-step" }),
         JSON.stringify({ type: "text-start", id: "t1" }),
@@ -45,7 +65,7 @@ async function sendFirstMessage(page: Page) {
         JSON.stringify({ type: "text-end", id: "t1" }),
         JSON.stringify({ type: "finish-step" }),
         JSON.stringify({ type: "finish", finishReason: "stop" }),
-      ].join("\n"),
+      ]),
     });
   });
   const composer = page.getByTestId("kiro-composer");
@@ -128,6 +148,26 @@ base("Navigator anchored morph：同一 shell DOM、width 52↔288/304、聊天�
     expect(Math.abs(w - 52)).toBeLessThanOrEqual(2);
   }).toPass({ timeout: 3000 });
   expect(await shell.evaluate((el) => (el as HTMLElement & { __motionProbe?: string }).__motionProbe === "same-shell")).toBe(true);
+});
+
+base("Navigator More 菜单：退出不被 shell overflow 裁剪（presence 窗内保持 visible）", async ({ page }) => {
+  await seedAI(page);
+  await openKiro(page);
+
+  const shell = page.getByTestId("kiro-navigator-shell");
+  await expect(shell).toHaveClass(/overflow-hidden/);
+
+  await page.getByRole("button", { name: "对话更多操作" }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(shell).toHaveClass(/overflow-visible/);
+
+  await page.keyboard.press("Escape");
+  // 退出 160ms 内：菜单仍在 DOM 播 opacity/位移，shell 不得提前 overflow-hidden
+  await expect(menu).toHaveClass(/opacity-0/);
+  await expect(shell).toHaveClass(/overflow-visible/);
+  await expect(menu).toHaveCount(0, { timeout: 2000 });
+  await expect(shell).toHaveClass(/overflow-hidden/);
 });
 
 base("Navigator Project Detail：同一 shell 内切换视图、聊天不移动（纯悬浮层）", async ({ page }) => {

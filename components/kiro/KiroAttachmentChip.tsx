@@ -8,6 +8,8 @@ import { useAppStore } from "@/store/useAppStore";
 import { computeFloatingPosition } from "@/lib/contextMenuPosition";
 import { resolveLiveImageSource } from "@/lib/ai/attachments/liveImageRegistry";
 import { KiroImagePreviewDialog } from "@/components/kiro/KiroImagePreviewDialog";
+import { usePresence } from "@/lib/usePresence";
+import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /** 稳定文件类型标签（UI 层由 kind/扩展名推导，不改数据模型） */
@@ -54,14 +56,14 @@ export function KiroAttachmentChip({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const { mounted: menuMounted, visible: menuVisible } = usePresence(menuOpen, MOTION_EXIT_MS.fast);
   usePortalMenuClose(menuOpen, () => setMenuOpen(false), [menuBtnRef, menuRef]);
 
   // 渲染后按真实尺寸定位（preferred=top-end；顶部不足自动翻转到底部；clamp 8px）
+  // 依赖 menuMounted：presence 首次挂载 portal 的那一帧菜单节点才存在（menuOpen 单独变化时
+  // 尚未挂载，测量会拿不到 menuRef，回退到错误坐标）。菜单退出期间保持最后位置。
   useLayoutEffect(() => {
-    if (!menuOpen) {
-      setMenuPos(null);
-      return;
-    }
+    if (!menuOpen) return;
     const btn = menuBtnRef.current;
     const el = menuRef.current;
     if (!btn || !el) return;
@@ -75,7 +77,7 @@ export function KiroAttachmentChip({
         align: "end",
       })
     );
-  }, [menuOpen]);
+  }, [menuOpen, menuMounted]);
 
   const isImage = attachment.kind === "image";
   const isMaterial = attachment.source === "material";
@@ -185,15 +187,18 @@ export function KiroAttachmentChip({
           >
             <MoreHorizontal className="w-3 h-3" />
           </button>
-          {menuOpen &&
+          {menuMounted &&
             anchorRect &&
             createPortal(
               <div
                 ref={menuRef}
                 role="menu"
+                {...(!menuVisible ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
                 className={cn(
                   "fixed z-50 w-56 max-h-[min(320px,60dvh)] overflow-y-auto overflow-x-clip bg-surface border border-line-strong rounded-2xl shadow-card p-1 ux-inline",
-                  menuPos ? "opacity-100" : "opacity-0"
+                  menuVisible
+                    ? "opacity-100 translate-y-0 duration-[var(--motion-fast)]"
+                    : "opacity-0 translate-y-1 pointer-events-none !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
                 )}
                 style={menuPos ? { left: menuPos.x, top: menuPos.y } : { left: anchorRect.right, top: anchorRect.top }}
               >

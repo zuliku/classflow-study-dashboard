@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { useAISettingsStore } from "@/store/useAISettingsStore";
 import { useKiroRuntime, useKiroSessionMeta, useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
@@ -43,16 +43,21 @@ export function KiroChatSurface({ variant }: { variant: "workspace" | "sidecar" 
   const dock = variant === "dock";
 
   // Motion V1：Empty Intro claim（每 generation 每 surface 一次）。
-  // 渲染期缓存 claim 结果 —— 同 generation 内后续 re-render 返回相同值，intro 类不闪失；
-  // new chat → generation 递增 → 缓存失效 → 可再次 claim。
-  const introClaimRef = useRef<{ generation: number; value: boolean }>({ generation: -1, value: false });
-  const playIntro = (() => {
-    if (chat.messages.length > 0) return false;
-    if (introClaimRef.current.generation === emptyIntroGeneration) return introClaimRef.current.value;
-    const value = claimEmptyIntro(variant === "workspace" ? "workspace" : "sidecar", emptyIntroGeneration);
-    introClaimRef.current = { generation: emptyIntroGeneration, value };
-    return value;
-  })();
+  // 在 effect 中 claim（不在 render 期消费）：StrictMode/并发丢弃的 render 不会提前吃掉 claim，
+  // 否则首个 committed 空态拿不到 intro class，动画静默缺失。
+  const introSurface = variant === "workspace" ? "workspace" : "sidecar";
+  const [playIntro, setPlayIntro] = useState(false);
+  const introClaimGenRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (chat.messages.length > 0) {
+      introClaimGenRef.current = emptyIntroGeneration;
+      setPlayIntro(false);
+      return;
+    }
+    if (introClaimGenRef.current === emptyIntroGeneration) return;
+    introClaimGenRef.current = emptyIntroGeneration;
+    setPlayIntro(claimEmptyIntro(introSurface, emptyIntroGeneration));
+  }, [chat.messages.length, emptyIntroGeneration, introSurface, claimEmptyIntro]);
 
   // Computer Agent Part 3：审批对话框 + 更改审查（runtime store 只存展示状态）
   const rawPendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);

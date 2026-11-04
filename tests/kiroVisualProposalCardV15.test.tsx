@@ -239,7 +239,7 @@ describe("VisualActionProposalCard V1.5：Header / Source Strip / Badge", () => 
     cleanup();
   });
 
-  it("Source Strip：live 来源缩略图（全部展示）+ 查看原图 → Source Gallery；Esc 关闭", () => {
+  it("Source Strip：live 来源缩略图（全部展示）+ 查看原图 → Source Gallery；Esc 关闭", async () => {
     const file1 = new File([new Uint8Array([1])], "1.png", { type: "image/png" });
     const file2 = new File([new Uint8Array([2])], "2.png", { type: "image/png" });
     const sources = [
@@ -267,7 +267,10 @@ describe("VisualActionProposalCard V1.5：Header / Source Strip / Badge", () => 
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(document.body.querySelector('[data-testid="kiro-image-preview"]')).toBeNull();
+    // exit（150ms）播放完父级才卸载
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-testid="kiro-image-preview"]')).toBeNull();
+    });
     cleanup();
   });
 

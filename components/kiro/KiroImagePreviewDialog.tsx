@@ -5,6 +5,9 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
 import { useFocusTrap } from "@/lib/useFocusTrap";
+import { MOTION_EXIT_MS } from "@/lib/motion";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { cn } from "@/lib/utils";
 
 /** Gallery 项：runtime File（调用方从 Live Image Source Registry 解析；绝不落历史） */
 export interface KiroImagePreviewSource {
@@ -54,6 +57,39 @@ export function KiroImagePreviewDialog({
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const prevFocusRef = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // 对称进退：父级当前是条件挂载（source 非空才渲染），因此关闭不能立即调 onClose，
+  // 需先播放 exit（backdrop/panel 与 Dialog 同档），再由父级卸载。
+  const [entered, setEntered] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
+  const reducedMotion = useEffectiveReducedMotion();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    // Reduced Motion：CSS 已近即时，跳过不可见 exit 等待，避免 150ms 空窗后才卸载
+    if (reducedMotion) {
+      onCloseRef.current();
+      return;
+    }
+    setClosing(true);
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      onCloseRef.current();
+    }, MOTION_EXIT_MS.base);
+  }, [reducedMotion]);
 
   const safeIndex = (() => {
     if (!gallery) return 0;
@@ -115,7 +151,7 @@ export function KiroImagePreviewDialog({
     pushOverlay("kiro-image-preview", 80);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (isTopmostOverlay("kiro-image-preview")) onClose();
+        if (isTopmostOverlay("kiro-image-preview")) requestClose();
         return;
       }
       if (e.key === "ArrowLeft") {
@@ -131,11 +167,12 @@ export function KiroImagePreviewDialog({
       window.removeEventListener("keydown", onKey);
       popOverlay("kiro-image-preview");
     };
-  }, [currentSource, onClose, step]);
+  }, [currentSource, requestClose, step]);
 
   // P0：URL 创建失败也进对话框错误态（此前直接 return null 消失，用户盲按 Esc）
   if (!currentSource) return null;
   const urlFailed = !url;
+  const shown = entered && !closing;
 
   const total = gallery?.length ?? 1;
   const shownIndex = gallery ? safeIndex : 0;
@@ -145,19 +182,32 @@ export function KiroImagePreviewDialog({
       data-testid="kiro-image-preview"
       ref={panelRef}
       onKeyDown={trapTab}
-      className="fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[80] flex items-center justify-center p-4 md:p-8"
+      {...(closing ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>) : {})}
+      className={cn(
+        "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[80] flex items-center justify-center p-4 md:p-8 transition-opacity",
+        shown
+          ? "opacity-100 duration-[var(--motion-overlay)] ease-[var(--ease-standard)]"
+          : "opacity-0 pointer-events-none !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
+      )}
       role="dialog"
       aria-modal="true"
       aria-label={currentSource.name ? `查看原图：${currentSource.name}` : "查看原图"}
     >
-      {/* Backdrop — 与全局灯箱同一强磨砂层；enter 一次性播放，退出由父级卸载 */}
+      {/* Backdrop — 与全局灯箱同一强磨砂层；root opacity 统一承担进退场 */}
       <div
         data-testid="kiro-image-preview-backdrop"
-        className="absolute inset-0 ux-scrim-strong animate-enter"
-        onClick={onClose}
+        className="absolute inset-0 ux-scrim-strong"
+        onClick={requestClose}
       />
 
-      <div className="animate-enter relative flex flex-col w-[min(94vw,1080px)] max-h-[86dvh]">
+      <div
+        className={cn(
+          "relative flex flex-col w-[min(94vw,1080px)] max-h-[86dvh] ux-modal-panel",
+          shown
+            ? "opacity-100 scale-100 translate-y-0 duration-[var(--motion-overlay)] ease-[var(--ease-standard)]"
+            : "opacity-0 scale-[0.985] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
+        )}
+      >
         {/* Header：名称 + Gallery 计数 + Close */}
         <div className="flex items-center justify-between gap-3 mb-2 shrink-0">
           <p className="min-w-0 truncate text-[11px] font-semibold text-white/90">
@@ -189,7 +239,7 @@ export function KiroImagePreviewDialog({
           <button
             ref={closeBtnRef}
             data-testid="kiro-image-preview-close"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="关闭预览"
             className="w-8 h-8 shrink-0 flex items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors"
           >
@@ -220,7 +270,7 @@ export function KiroImagePreviewDialog({
                 </button>
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={requestClose}
                   className="px-3 h-8 rounded-lg text-[11px] font-bold text-charcoal bg-alabaster hover:bg-pastel-mint transition-colors"
                 >
                   关闭

@@ -90,16 +90,18 @@ export function KiroNavigatorHome({
 
       <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
         {searching ? (
-          <KiroNavigatorSearch
-            query={query}
-            projects={projects}
-            threads={threads}
-            disabled={disabled}
-            onOpenProject={onOpenProject}
-            onOpenThread={onOpenThread}
-          />
+          <div key="search" className="ux-fade">
+            <KiroNavigatorSearch
+              query={query}
+              projects={projects}
+              threads={threads}
+              disabled={disabled}
+              onOpenProject={onOpenProject}
+              onOpenThread={onOpenThread}
+            />
+          </div>
         ) : (
-          <>
+          <div key="browse" className="ux-fade">
             <section aria-label="项目">
               <KiroNavigatorSectionHeader
                 label="项目"
@@ -200,7 +202,7 @@ export function KiroNavigatorHome({
                 </button>
               )}
             </section>
-          </>
+          </div>
         )}
       </div>
     </div>

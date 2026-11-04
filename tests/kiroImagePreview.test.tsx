@@ -167,13 +167,14 @@ describe("KiroImagePreviewDialog", () => {
     cleanup();
   });
 
-  it("Esc → onClose；无 Esc → 不关闭", () => {
+  it("Esc → onClose；无 Esc → 不关闭", async () => {
     const file = makeFile();
     const { cleanup, onClose } = renderDialog({ file, name: "x.png" });
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    // 关闭先播放 exit（150ms）再回调父级，避免硬卸载截断退场动画
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
     });
@@ -181,18 +182,23 @@ describe("KiroImagePreviewDialog", () => {
     cleanup();
   });
 
-  it("Backdrop 点击 → onClose；Close Button → onClose", () => {
+  it("Backdrop 点击 → onClose；Close Button → onClose", async () => {
     const file = makeFile();
-    const { cleanup, onClose } = renderDialog({ file, name: "x.png" });
+    const onClose = vi.fn();
+    const first = renderDialog({ file, name: "x.png" }, { onClose });
     act(() => {
       (document.body.querySelector('[data-testid="kiro-image-preview-backdrop"]') as HTMLDivElement).click();
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    first.cleanup();
+
+    // closing 后再次触发关闭被忽略（单次离场）；独立实例验证 Close Button 另一条路径
+    const second = renderDialog({ file, name: "x.png" }, { onClose });
     act(() => {
       (document.body.querySelector('[data-testid="kiro-image-preview-close"]') as HTMLButtonElement).click();
     });
-    expect(onClose).toHaveBeenCalledTimes(2);
-    cleanup();
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
+    second.cleanup();
   });
 
   it("source 变化 → 旧 URL revoke，新 URL create（不缓存无限 object URL）", () => {
@@ -254,7 +260,7 @@ describe("KiroImagePreviewDialog", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
-  it("Gallery：sources>1 显示 ←/→ 与计数；ArrowLeft/ArrowRight 切换；关闭后 index 状态不泄漏", () => {
+  it("Gallery：sources>1 显示 ←/→ 与计数；ArrowLeft/ArrowRight 切换；关闭后 index 状态不泄漏", async () => {
     const f1 = makeFile("1.png");
     const f2 = makeFile("2.png");
     const f3 = makeFile("3.png");
@@ -291,11 +297,11 @@ describe("KiroImagePreviewDialog", () => {
       (document.body.querySelector('[data-testid="kiro-image-preview-next"]') as HTMLButtonElement).click();
     });
     expect(document.body.textContent).toContain("2 / 3");
-    // Esc 关闭（仍工作）
+    // Esc 关闭（仍工作；exit 播完后回调父级）
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     cleanup();
   });
 

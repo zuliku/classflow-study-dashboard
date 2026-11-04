@@ -36,9 +36,20 @@ async function textareaTop(page: Page): Promise<number> {
   return box?.y ?? -1;
 }
 
+/** 等 Composer 自身进场（kiro-composer-intro，220ms translateY 6px）播完再取基线——
+ *  否则 before 采样落在 intro 位移中，会把进场残值误判成删除附件后的布局跳动。 */
+async function waitForComposerSettled(page: Page) {
+  await page.getByTestId("kiro-composer-surface").evaluate(async (el) => {
+    await Promise.all(
+      el.getAnimations().map((a) => a.finished.catch(() => undefined))
+    );
+  });
+}
+
 test("删除附件输入框零位移（mt-1.5 下跳回归）", async ({ page }) => {
   await openKiro(page);
   await dropFiles(page, [{ name: "a.txt", content: "hello world " }]);
+  await waitForComposerSettled(page);
 
   const before = await textareaTop(page);
   expect(before).toBeGreaterThan(0);

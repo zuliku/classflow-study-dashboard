@@ -91,18 +91,29 @@ async function addImageViaPicker(page: Page, name: string, buffer: Buffer = PNG_
   const composer = page.getByTestId("kiro-composer");
   await composer.getByRole("button", { name: "添加附件" }).click();
   const chooserPromise = page.waitForEvent("filechooser");
-  await page.getByRole("menuitem", { name: /添加聊天截图或图片/ }).click();
+  await page.getByTestId("kiro-composer-add-image").click();
   const chooser = await chooserPromise;
   await chooser.setFiles({ name, mimeType: "image/png", buffer: buffer as Buffer });
 }
 
-test("Attachment Picker：截图用途入口文案（添加聊天截图或图片）", async ({ page }) => {
+test("Attachment Picker：图片入口文案（添加图片）", async ({ page }) => {
   const composer = await openKiro(page);
   await composer.getByRole("button", { name: "添加附件" }).click();
-  const item = page.getByRole("menuitem", { name: /添加聊天截图或图片/ });
+  const item = page.getByTestId("kiro-composer-add-image");
   await expect(item).toBeVisible();
-  await expect(item).toContainText(/通知、作业或调课截图/);
-  await expect(item).toContainText(/截图/);
+  await expect(item).toContainText("添加图片");
+});
+
+test("附件保存菜单：关闭播放 exit（不是硬卸载）", async ({ page }) => {
+  const composer = await openKiro(page);
+  await addImageViaPicker(page, "menu.png");
+  await expect(page.getByTestId("kiro-attachment-chip")).toBeVisible({ timeout: 15000 });
+  await page.getByLabel("menu.png 更多操作").click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveClass(/opacity-0/);
+  await expect(menu).toHaveCount(0, { timeout: 2000 });
 });
 
 test("ready image suggestions：点击只填 Prompt，不直接发送", async ({ page }) => {

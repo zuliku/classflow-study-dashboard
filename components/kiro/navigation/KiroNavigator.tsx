@@ -85,6 +85,9 @@ export function KiroNavigator() {
   const [query, setQuery] = useState("");
   const [showAllThreads, setShowAllThreads] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // 菜单退出期间 shell 仍需 overflow-visible：否则 moreOpen=false 立即 overflow-hidden，
+  // 右外侧（right-end / top-end）菜单的 160ms 退场被父级直接裁掉。
+  const morePresence = usePresence(moreOpen, MOTION_EXIT_MS.panel);
   const [projects, setProjects] = useState<KiroProjectRecord[]>([]);
   const [threads, setThreads] = useState<KiroConversationRecord[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -353,7 +356,8 @@ export function KiroNavigator() {
         data-state={expanded ? "expanded" : "collapsed"}
         className={cn(
           "relative rounded-2xl bg-surface border border-line shadow-card",
-          moreOpen ? "overflow-visible" : "overflow-hidden",
+          // moreOpen 关闭后的 presence 窗口内继续保持 visible，让菜单 exit 播完（同 usePresence 160ms）
+          moreOpen || morePresence.mounted ? "overflow-visible" : "overflow-hidden",
           "w-[52px] data-[state=expanded]:w-[288px] lg:data-[state=expanded]:w-[304px]",
           "data-[state=expanded]:max-h-[calc(100dvh-120px)]",
           // 空间位移走 spring（M3 expressive 方向；时长仍是 spatial 档，仅换曲线 → 自然 settle）

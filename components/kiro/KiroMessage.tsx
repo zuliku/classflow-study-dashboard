@@ -149,10 +149,11 @@ export function KiroMessage({
     : streaming;
   // 光标出现/消失淡入淡出（inline span，用 presence 门控显隐，布局零位移）
   const cursorPresence = usePresence(showStreamingCursor === true, MOTION_EXIT_MS.fast);
-  // live 引用 tray：settled 后折叠退场（直接卸载会顶起下方工具栏）
+  // live 引用 tray：settled 后折叠退场（直接卸载会顶起下方工具栏）；
+  // presence 与 ExitCollapse 的 --motion-exit-panel（160ms）对齐，避免折叠尾段被截断。
   const liveTrayPresence = usePresence(
     streaming === true && liveCitedWebSources.length > 0,
-    MOTION_EXIT_MS.fast
+    MOTION_EXIT_MS.panel
   );
   const showComposingSkeleton =
     assistantTurn?.phase === "composing" && !content && !assistantTurn.answerStreaming;
