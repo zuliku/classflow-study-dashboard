@@ -40,15 +40,14 @@ import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { AnalyticsWorkspaceViewBar } from "@/components/analytics/AnalyticsWorkspaceViewBar";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 
-const ANALYTICS_CARD = "rounded-2xl border border-line-soft bg-surface/45 p-4";
-const ANALYTICS_CARD_STRONG = "rounded-2xl border border-line bg-surface/70 p-4";
+const ANALYTICS_CARD = "rounded-xl border border-line bg-surface p-4";
 
 const ANALYTICS_TOP_GRID =
-  "grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.95fr)_minmax(0,1fr)] items-stretch";
+  "grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.95fr)_minmax(0,1fr)] items-stretch";
 
 /** 主分析行：趋势（宽） / 值得注意（窄） */
 export const ANALYTICS_MAIN_GRID =
-  "grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.92fr)_minmax(0,1fr)] items-stretch";
+  "grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.92fr)_minmax(0,1fr)] items-stretch";
 
 function EmptyState({ onNewTask, onPlan }: { onNewTask: () => void; onPlan: () => void }) {
   // 数据感知的进度行：store 里已有课程/任务时告诉用户差什么（均为真实计数，不编造）
@@ -59,17 +58,14 @@ function EmptyState({ onNewTask, onPlan }: { onNewTask: () => void; onPlan: () =
       ? `你已有 ${assignmentCount} 个任务，完成 1 个即可开始。`
       : courseCount > 0
         ? `已建 ${courseCount} 门课程，新建任务并完成 1 个即可开始。`
-        : "先添加课程与任务。";
+        : "先添加课程与任务，完成 1 个即可开始。";
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-line-soft bg-surface/45 px-6 py-14 text-center md:py-16">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-line bg-surface px-6 py-14 text-center md:py-16">
       <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-alabaster text-sandrift">
         <Activity className="h-5 w-5" strokeWidth={1.6} aria-hidden="true" />
       </span>
       <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-charcoal">还没有学习记录</h2>
-      <p className="mt-1 max-w-[360px] text-xs leading-relaxed text-satin-grey">
-        完成 1 个任务或专注 1 次，趋势与动量会开始积累。
-      </p>
-      <p className="mt-1 text-[11px] leading-relaxed text-sandrift">{progressLine}</p>
+      <p className="mt-1 max-w-[360px] text-xs leading-relaxed text-satin-grey">{progressLine}</p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
         <button
           type="button"
@@ -259,22 +255,22 @@ export function LearningAnalyticsView() {
           {loading ? (
             <>
               <div className={ANALYTICS_TOP_GRID}>
-                <div className="rounded-2xl border border-line-soft bg-surface/45 p-4">
+                <div className="rounded-xl border border-line bg-surface p-4">
                   <div className="ux-skeleton h-10 w-2/3 rounded bg-alabaster" />
                   <div className="mt-3">
                     <AnalyticsSummaryStripSkeleton />
                   </div>
                 </div>
-                <div className="ux-skeleton h-[250px] w-full rounded-2xl border border-line-soft bg-alabaster" />
+                <div className="ux-skeleton h-[250px] w-full rounded-xl border border-line-soft bg-alabaster" />
               </div>
               <div className={ANALYTICS_MAIN_GRID}>
-                <div className="ux-skeleton h-[250px] w-full rounded-2xl border border-line-soft bg-alabaster" />
-                <div className="ux-skeleton h-[250px] w-full rounded-2xl border border-line-soft bg-alabaster" />
+                <div className="ux-skeleton h-[250px] w-full rounded-xl border border-line-soft bg-alabaster" />
+                <div className="ux-skeleton h-[250px] w-full rounded-xl border border-line-soft bg-alabaster" />
               </div>
-              <div className="ux-skeleton h-[200px] w-full rounded-2xl border border-line-soft bg-alabaster" />
+              <div className="ux-skeleton h-[200px] w-full rounded-xl border border-line-soft bg-alabaster" />
             </>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-line-soft bg-surface/45 px-6 py-14 text-center">
+            <div className="flex flex-col items-center justify-center rounded-xl border border-line bg-surface px-6 py-14 text-center">
               <p className="text-[14px] font-semibold text-charcoal">学习洞察加载失败</p>
               <p className="mt-1 text-xs text-sandrift">请稍后重试，已记录的数据不会丢失。</p>
               <button
@@ -319,7 +315,7 @@ export function LearningAnalyticsView() {
                     <section
                       data-testid="analytics-summary-card"
                       style={staggerStyle(0)}
-                      className={cn(ANALYTICS_CARD, "ux-settle flex h-full flex-col")}
+                      className={cn(ANALYTICS_CARD, "ux-settle flex h-full flex-col justify-center")}
                     >
                       <AnalyticsVerdict
                         verdict={buildAnalyticsVerdict({
@@ -329,23 +325,30 @@ export function LearningAnalyticsView() {
                         })}
                         onAction={navigate}
                       />
-                      <div className="mt-3 flex-1">
-                        <AnalyticsSummaryStrip metrics={summaryMetrics(data)} embedded className="h-full" />
+                      <div className="mt-3">
+                        <AnalyticsSummaryStrip metrics={summaryMetrics(data)} embedded />
                       </div>
-                      <div className="mt-3 border-t border-line-soft pt-2.5">
-                        <div className="flex items-center justify-between text-[10.5px] text-sandrift">
-                          <span>计划执行</span>
-                          <span>{planRatio !== null ? `${planRatio}%` : "记录不足"}</span>
+                      {/* 计划完成度只在「有已到时间的计划」时出现：无计划时 KPI 已表达，
+                          不再渲染空 track + 「记录不足」这种伪进度行。 */}
+                      {planRatio !== null && (
+                        <div className="mt-3 border-t border-line-soft pt-2.5">
+                          <div className="flex items-center justify-between text-[10.5px] text-sandrift">
+                            <span>计划完成度</span>
+                            <span className="tabular-nums">{planRatio}%</span>
+                          </div>
+                          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-alabaster">
+                            <div
+                              className="h-full rounded-full bg-charcoal/60 transition-[width] duration-[var(--motion-data)] ease-[var(--ease-standard)]"
+                              style={{ width: `${planRatio}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-alabaster">
-                          <div
-                            className="h-full rounded-full bg-charcoal/60 transition-[width] duration-[var(--motion-data)] ease-[var(--ease-standard)]"
-                            style={{ width: `${planRatio ?? 0}%` }}
-                          />
-                        </div>
-                      </div>
+                      )}
                     </section>
-                    <section style={staggerStyle(0)} className={cn(ANALYTICS_CARD_STRONG, "ux-settle")}>
+                    <section
+                      style={staggerStyle(0)}
+                      className={cn(ANALYTICS_CARD, "ux-settle flex h-full flex-col")}
+                    >
                       <div className="flex items-center justify-between gap-3 pb-2">
                         <AnalyticsCardHeader title="学习动量" />
                         <span className="text-[10.5px] text-sandrift">近 12 周</span>
@@ -367,10 +370,7 @@ export function LearningAnalyticsView() {
                       className={cn(ANALYTICS_CARD, "flex h-full flex-col ux-settle")}
                       data-testid="learning-trend-card"
                     >
-                      <AnalyticsCardHeader
-                        title="学习趋势"
-                        action={<span className="text-[10.5px] text-sandrift">实际专注 · 计划学习</span>}
-                      />
+                      <AnalyticsCardHeader title="学习趋势" />
                       <div className="flex-1 pt-2">
                         <LearningTrendChart points={data.trend} period={data.period} animate={trendAnimated} compact />
                       </div>
@@ -405,9 +405,6 @@ export function LearningAnalyticsView() {
                     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:divide-x xl:divide-line-soft">
                       <div className="min-w-0">
                         <AnalyticsCardHeader title="投入与节奏" />
-                        {data.coverage.focusReliability === "partial" && (
-                          <p className="mt-1 text-[10.5px] text-satin-grey">该区间记录不完整，以下为已记录部分</p>
-                        )}
                         <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <CourseInvestmentCard
                             investment={presentCourseInvestment(data.courseInvestment, courseNameById)}
@@ -421,7 +418,7 @@ export function LearningAnalyticsView() {
                           </div>
                         </div>
                       </div>
-                      <div className="min-w-0 border-t border-line-soft pt-4 xl:border-t-0 xl:pl-4 xl:pt-0">
+                      <div className="flex min-w-0 flex-col border-t border-line-soft pt-4 xl:border-t-0 xl:pl-4 xl:pt-0">
                         <AnalyticsCardHeader title="下一步" />
                         <div className="mt-3">{renderOutlookBlock()}</div>
                       </div>

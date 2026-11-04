@@ -157,7 +157,7 @@ async function openAnalytics(page: Page) {
   await expect(page.getByTestId("analytics-body")).toBeVisible();
 }
 
-demoTest("容量 UI：需求 4h / 普通时间尚缺 1h / 放宽课程约束后仍缺 1h；一个任务容量不足；最早容量缺口条", async ({ page }) => {
+demoTest("容量 UI：需求 4h / 普通时间尚缺 1h / 放宽课程约束后仍缺 1h；一个任务容量不足；compact 不堆缺口条", async ({ page }) => {
   await seedCapacityState(page);
   await openAnalytics(page);
 
@@ -169,15 +169,13 @@ demoTest("容量 UI：需求 4h / 普通时间尚缺 1h / 放宽课程约束后�
   await expect(card.getByTestId("outlook-capacity-line")).toContainText("普通时间尚缺 1h");
   await expect(card.getByTestId("outlook-capacity-line")).toContainText("放宽课程约束后仍缺 1h");
 
-  // 一个任务容量不足（combined 仍缺 60min），另一个容量可覆盖
+  // 一个任务容量不足（combined 仍缺 60min），另一个容量可覆盖（compact 默认只露 1 条）
+  await card.getByRole("button", { name: "查看全部" }).click();
   await expect(card.getByText(/预计仍缺 60min/).first()).toBeVisible();
   await expect(card.getByText(/当前容量可覆盖/).first()).toBeVisible();
 
-  // 最早容量缺口 strip
-  const strip = card.getByTestId("outlook-shortfall-strip");
-  await expect(strip).toBeVisible();
-  await expect(strip).toContainText("约缺 1h");
-  await expect(strip).toContainText("涉及");
+  // compact「下一步」不渲染独立缺口条：最早缺口结论由容量行承载（避免 4 行元信息堆叠）
+  await expect(card.getByTestId("outlook-shortfall-strip")).toHaveCount(0);
 
   // 无 missing estimate → 无"未计入容量判断"文案
   await expect(card.getByText(/未计入容量判断/)).toHaveCount(0);

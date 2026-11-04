@@ -135,7 +135,7 @@ demoTest("学习前瞻 UI：demo 全部缺估时 → 5 个截止任务 · 5 个�
   await expect(card.getByText(/5 个截止任务/)).toBeVisible();
 
   // 缺估时行：文案 + 估算任务弱操作（不做大红色警报）
-  await expect(card.getByText("缺少预计耗时，无法判断容量。").first()).toBeVisible();
+  await expect(card.getByText("缺少预计耗时").first()).toBeVisible();
   await expect(card.getByRole("button", { name: /估算任务/ }).first()).toBeVisible();
 
   // 排在第一的应是 DDL 最近的任务（a1 明天）

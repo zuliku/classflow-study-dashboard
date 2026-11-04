@@ -573,7 +573,6 @@ export function ReminderCenter() {
                 {history.length === 0 && (
                 <div className="px-4 py-3.5 text-center ux-fade">
                   <p className="text-[10px] text-sandrift">还没有提醒记录</p>
-                  <p className="text-[9px] text-satin-grey mt-0.5">触发过的提醒会保留在这里</p>
                 </div>
                 )}
               </ExitCollapse>

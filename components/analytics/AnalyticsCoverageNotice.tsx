@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Analytics V3.1 Coverage Notice（低关注，非 banner；progressive disclosure）：
- * 折叠：ⓘ 部分历史记录不完整 · 部分指标仅展示已记录内容 [查看范围]
+ * 折叠：ⓘ 部分历史记录不完整 · 部分指标仅展示已记录内容 [查看详情]
  * 展开：逐项事实（只来自真实 metadata；focus partial 不制造具体起点）
  */
 export function AnalyticsCoverageNotice({ facts }: { facts: CoverageFacts }) {
@@ -50,7 +50,7 @@ export function AnalyticsCoverageNotice({ facts }: { facts: CoverageFacts }) {
             onClick={() => setOpen((v) => !v)}
             className="ml-auto inline-flex items-center gap-0.5 shrink-0 text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
           >
-            {open ? "收起" : "查看范围"}
+            {open ? "收起" : "查看详情"}
             <ChevronDown className={cn("w-3 h-3 transition-transform duration-[var(--motion-fast)]", open && "rotate-180")} />
           </button>
         </p>

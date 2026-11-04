@@ -166,7 +166,7 @@ describe("Course Investment identity", () => {
 
 describe("Metric reliability presentation（Unknown ≠ Zero）", () => {
   it("G：partial + zero → —", () => {
-    expect(presentFocusMetric(0, "partial")).toMatchObject({ value: "—", detail: "该区间记录不完整" });
+    expect(presentFocusMetric(0, "partial")).toMatchObject({ value: "—", detail: "记录不完整" });
     expect(presentCompletedMetric(0, "partial")).toMatchObject({ value: "—" });
     expect(presentPlanMetric(0, "partial")).toMatchObject({ value: "—" });
   });
@@ -373,12 +373,12 @@ describe("Summary divider contract（V3.1）", () => {
     const c2 = summaryCellDividerClasses(2);
     expect(c2).toMatch(/(^|\s)border-t(\s|$)/);
     expect(c2).not.toMatch(/(^|\s)border-l(\s|$)/);
-    expect(c2).toContain("lg:border-l");
-    expect(c2).toContain("lg:border-t-0");
+    expect(c2).toContain("xl:border-l");
+    expect(c2).toContain("xl:border-t-0");
     const c3 = summaryCellDividerClasses(3);
     expect(c3).toMatch(/(^|\s)border-l(\s|$)/);
     expect(c3).toMatch(/(^|\s)border-t(\s|$)/);
-    expect(c3).toContain("lg:border-t-0");
+    expect(c3).toContain("xl:border-t-0");
     const c0 = summaryCellDividerClasses(0);
     expect(c0).not.toMatch(/(^|\s)border-l(\s|$)/);
     expect(c0).not.toMatch(/(^|\s)border-t(\s|$)/);

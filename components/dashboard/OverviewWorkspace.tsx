@@ -84,9 +84,6 @@ export function OverviewWorkspace() {
                 设置当前学期
               </button>
             </div>
-            <p className="text-[11px] text-sandrift">
-              新建任务即可开始安排。
-            </p>
           </div>
         </div>
       ) : (

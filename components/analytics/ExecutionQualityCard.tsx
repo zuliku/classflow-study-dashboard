@@ -22,21 +22,29 @@ export function ExecutionQualityCard({
 }) {
   if (inline) {
     return (
-      <div
-        data-testid="execution-quality-card"
-        className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-satin-grey"
-      >
-        <span className="text-[11px] font-medium text-sandrift">执行情况</span>
-        {[view.completed, view.reopened, view.onTime].map((m) => (
-          <span key={m.label} data-testid={`execution-${m.label}`} className="min-w-0">
-            <span className="text-sandrift">{m.label}</span>{" "}
-            <span className="font-semibold text-charcoal">{m.value}</span>
-            {m.detail && <span className="text-satin-grey"> · {m.detail}</span>}
+      <div data-testid="execution-quality-card">
+        <p className="text-[10.5px] font-medium text-sandrift">执行情况</p>
+        <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.35fr)] gap-3">
+          {[view.completed, view.reopened, view.onTime].map((m) => (
+            <div key={m.label} data-testid={`execution-${m.label}`} className="min-w-0">
+              <p className="text-[10px] text-sandrift">{m.label}</p>
+              <p className="mt-0.5 whitespace-nowrap text-[12px] font-semibold tabular-nums text-charcoal">
+                {m.value}
+              </p>
+              {m.detail && (
+                <p className="mt-0.5 text-[9.5px] leading-snug text-sandrift line-clamp-2">{m.detail}</p>
+              )}
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-t border-line-soft pt-1.5 text-[10px] text-sandrift">
+          <span>
+            {view.activeDays.label} {view.activeDays.value}
           </span>
-        ))}
-        <span className="ml-auto whitespace-nowrap text-[10.5px] text-sandrift">
-          {view.activeDays.label} {view.activeDays.value} · {view.avgFocusSession.label} {view.avgFocusSession.value}
-        </span>
+          <span>
+            {view.avgFocusSession.label} {view.avgFocusSession.value}
+          </span>
+        </p>
       </div>
     );
   }
@@ -86,8 +94,11 @@ export function ExecutionQualityCard({
         <span>
           {view.avgFocusSession.label} {view.avgFocusSession.value}
         </span>
-        {view.activeDays.detail && <span className="text-satin-grey/80">{view.activeDays.detail}</span>}
-        {view.avgFocusSession.detail && <span className="text-satin-grey/80">{view.avgFocusSession.detail}</span>}
+        {(view.activeDays.detail ?? view.avgFocusSession.detail) && (
+          <span className="text-satin-grey/80">
+            {view.activeDays.detail ?? view.avgFocusSession.detail}
+          </span>
+        )}
       </div>
     </div>
   );

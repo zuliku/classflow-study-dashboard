@@ -430,7 +430,7 @@ demoTest("I：partial range → Coverage 折叠可展开（只显示真实事实
   await expect(notice).toBeVisible();
   await expect(notice.getByText("部分历史记录不完整", { exact: true })).toBeVisible();
   await expect(notice.getByText("部分指标仅展示已记录内容", { exact: true })).toBeVisible();
-  const toggle = notice.getByRole("button", { name: /查看范围|收起/ });
+  const toggle = notice.getByRole("button", { name: /查看详情|收起/ });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
 
   // 展开：逐项事实；focus partial 无具体日期
@@ -443,7 +443,7 @@ demoTest("I：partial range → Coverage 折叠可展开（只显示真实事实
   // Execution：无伪精确按时率；completed 显示已记录
   const exec = page.getByTestId("execution-quality-card");
   await expect(exec.getByText("已记录 1 项", { exact: true }).first()).toBeVisible();
-  await expect(exec.getByText(/任务历史不完整，暂不判断按时率/)).toBeVisible();
+  await expect(exec.getByText(/任务历史不完整/)).toBeVisible();
   await expect(exec.getByText(/\d+%/, { exact: false })).toHaveCount(0);
 
   // Summary detail 可读（不被 ellipsis 隐藏）

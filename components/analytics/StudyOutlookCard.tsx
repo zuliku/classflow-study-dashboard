@@ -73,41 +73,72 @@ export function StudyOutlookCard({
     firstCapacityShortfall !== null ||
     tasks.some((t) => t.reasons.includes("scheduled_after_deadline"));
 
+  const horizonControl = (
+    <div className="flex items-center gap-1 rounded-lg border border-line-strong bg-alabaster p-0.5">
+      {/* Workflow UX Motion M3：horizon 切换收敛为 SegmentedControl（compact xs）——
+          single moving plate（--motion-base / emphasized），替代静态 bg-white 瞬切 */}
+      <SegmentedControl<StudyOutlookHorizon>
+        value={horizonDays}
+        onChange={onHorizonChange}
+        ariaLabel="学习前瞻范围"
+        size="xs"
+        className="border-0 p-0.5"
+        options={([7, 14] as StudyOutlookHorizon[]).map((h) => ({
+          value: h,
+          label: `未来 ${h} 天`,
+        }))}
+      />
+    </div>
+  );
+
   return (
     <div
       className={cn(
         "w-full min-w-0",
-        compact ? "flex h-full flex-col" : "bg-surface/70 border border-line-soft rounded-xl"
+        compact ? "flex h-full flex-col" : "rounded-xl border border-line bg-surface"
       )}
       data-testid="study-outlook-card"
     >
-      <div className={cn("border-b border-line-soft", compact ? "pb-2" : "px-4 pt-4 pb-3")}>
-        <AnalyticsCardHeader title="学习前瞻" size={compact ? "sm" : "md"} action={
-            <div className="flex items-center gap-1 bg-alabaster p-0.5 rounded-lg border border-line-strong">
-              {/* Workflow UX Motion M3：horizon 切换收敛为 SegmentedControl（compact xs）——
-                  single moving plate（--motion-base / emphasized），替代静态 bg-white 瞬切 */}
-              <SegmentedControl<StudyOutlookHorizon>
-                value={horizonDays}
-                onChange={onHorizonChange}
-                ariaLabel="学习前瞻范围"
-                size="xs"
-                className="border-0 p-0.5"
-                options={([7, 14] as StudyOutlookHorizon[]).map((h) => ({
-                  value: h,
-                  label: `未来 ${h} 天`,
-                }))}
-              />
-            </div>
-          }
-        />
-        <p className="text-[11px] text-sandrift mt-1.5">
-          {summary.counts.totalDue > 0
-            ? `${summary.counts.totalDue} 个截止任务${attentionCount > 0 ? ` · ${attentionCount} 个需注意` : ""}`
-            : `未来 ${horizonDays} 天暂无截止任务`}
-        </p>
+      <div className={cn("border-b border-line-soft", compact ? "pb-3" : "px-4 pt-4 pb-3")}>
+        {compact ? (
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <h3 className="text-[12px] font-semibold tracking-[0.01em] text-sandrift">学习前瞻</h3>
+            {horizonControl}
+          </div>
+        ) : (
+          <AnalyticsCardHeader title="学习前瞻" action={horizonControl} />
+        )}
+        <div className={cn("flex items-baseline justify-between gap-2", compact ? "mt-2" : "mt-1.5")}>
+          <p
+            className={cn(
+              "text-[11px] text-sandrift",
+              compact && "text-[12px] font-medium text-charcoal"
+            )}
+          >
+            {summary.counts.totalDue > 0 ? (
+              <>
+                {summary.counts.totalDue} 个截止任务
+                {attentionCount > 0 && (
+                  <span className="text-[#A87952]"> · {attentionCount} 个需注意</span>
+                )}
+              </>
+            ) : (
+              `未来 ${horizonDays} 天暂无截止任务`
+            )}
+          </p>
+          {compact && tasks.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setShowAll((v) => !v)}
+              className="shrink-0 text-[10.5px] font-medium text-sandrift underline-offset-2 transition-colors hover:text-charcoal hover:underline"
+            >
+              {showAll ? "收起" : "查看全部"}
+            </button>
+          )}
+        </div>
         {/* 容量事实：Preferred（非课程时间）vs Combined（soft fallback 后）三层状态 */}
         {summary.counts.totalDue > 0 && (
-          <p className="text-[11px] mt-1 ux-fade" data-testid="outlook-capacity-line">
+          <p className="mt-1 text-[11px] ux-fade" data-testid="outlook-capacity-line">
             {summary.workload.preferredShortfallMinutes === 0 ? (
               <span className="text-[#627566]">尚需安排 {fmt(summary.workload.remainingKnownMinutes)} · 非课程时间可覆盖</span>
             ) : summary.workload.combinedShortfallMinutes === 0 ? (
@@ -122,12 +153,12 @@ export function StudyOutlookCard({
                 {fmt(summary.workload.combinedShortfallMinutes)}
               </span>
             )}
-            {hasMissing && (
-              <span className="text-sandrift">
-                {" "}
-                · 另有 {summary.counts.missingEstimate} 个任务缺少预计耗时，未计入容量判断
-              </span>
-            )}
+          </p>
+        )}
+        {/* 缺估时是另一类事实（不是同一句容量结论的从句）：单独一行，避免长句折行成团 */}
+        {summary.counts.totalDue > 0 && hasMissing && (
+          <p className="mt-0.5 text-[10px] text-sandrift" data-testid="outlook-missing-estimate-line">
+            {summary.counts.missingEstimate} 个任务缺估时，未计入容量判断
           </p>
         )}
       </div>
@@ -161,17 +192,6 @@ export function StudyOutlookCard({
               onEstimate={() => handoffAssignmentPrompt(t.assignmentId, ESTIMATE_PROMPT)}
             />
           ))}
-          {compact && tasks.length > 2 && (
-            <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={() => setShowAll((v) => !v)}
-                className="text-[10px] font-semibold text-sandrift underline-offset-2 hover:text-charcoal hover:underline transition-colors"
-              >
-                {showAll ? "收起" : `查看全部 ${tasks.length} 个任务`}
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -241,7 +261,7 @@ function OutlookTaskRow({
   const scheduledAfterDeadline = task.reasons.includes("scheduled_after_deadline");
   const unscheduled = task.unscheduledMinutes ?? 0;
   return (
-    <div className={compact ? "space-y-0.5 py-1" : "px-4 py-2.5 space-y-1"}>
+    <div className={compact ? "space-y-1 py-2" : "px-4 py-2.5 space-y-1"}>
       <button
         type="button"
         aria-label={`打开任务《${task.title}》`}
@@ -257,9 +277,9 @@ function OutlookTaskRow({
         {/* facts 文本属于 main surface（只读信息；估算 control 在外层 sibling） */}
         <p className={cn("text-satin-grey pointer-events-none", compact ? "text-[10.5px] leading-snug line-clamp-1" : "text-[11px]")}>
           {missingEstimate ? (
-            <>缺少预计耗时，无法判断容量。</>
+            <>缺少预计耗时</>
           ) : task.health === "overdue" ? (
-            <>{formatDeadline(task.deadline)} · 已逾期，不占用未来容量</>
+            <>{formatDeadline(task.deadline)} · 不占用未来容量</>
           ) : task.capacityComplete === null ? (
             <>{formatDeadline(task.deadline)} · 信息不足</>
           ) : task.capacityComplete ? (

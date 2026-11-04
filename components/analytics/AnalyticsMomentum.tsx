@@ -15,8 +15,9 @@ function formatHours(minutes: number): string {
   return h >= 10 ? `${Math.round(h)} 小时` : `${Math.round(h * 10) / 10} 小时`;
 }
 
-function formatMonthDay(dateStr: string): string {
-  return `${Number(dateStr.slice(5, 7))}月${Number(dateStr.slice(8, 10))}日`;
+/** 卡片三列统计的紧凑日期（与趋势轴 M/d 一致，避免窄列折出单字） */
+function formatMonthDayShort(dateStr: string): string {
+  return `${Number(dateStr.slice(5, 7))}/${Number(dateStr.slice(8, 10))}`;
 }
 
 /** 84 天按周成列（GitHub 式：列 = 周，周一在上；首周前补空格对齐） */
@@ -173,7 +174,7 @@ function MomentumStats({ data, compact = false }: { data: StudyMomentum; compact
           {data.bestDay ? formatHours(data.bestDay.minutes) : "—"}
         </p>
         <p className={cn("leading-snug text-sandrift", compact ? "mt-1 text-[10px]" : "mt-1.5 text-[11px]")}>
-          单日最佳{data.bestDay ? ` · ${formatMonthDay(data.bestDay.date)}` : ""}
+          单日最佳{data.bestDay ? ` · ${formatMonthDayShort(data.bestDay.date)}` : ""}
         </p>
       </div>
     </div>
@@ -191,9 +192,10 @@ function MomentumCardHeatmap({
   const cells = columns.flatMap((col) => col);
   return (
     <div className="w-full">
-      <div className="grid grid-cols-12 gap-1 pb-1">
+      {/* 月刻度与热力共用 auto-cols-fr 列模型：列数 = 13（首周补齐）时也不会换行/错位 */}
+      <div className="grid auto-cols-fr grid-flow-col gap-1 pb-1">
         {shownMonths.map((m, i) => (
-          <span key={i} className="truncate text-[9px] font-medium text-sandrift" aria-hidden="true">
+          <span key={i} className="whitespace-nowrap text-[9px] font-medium text-sandrift" aria-hidden="true">
             {m ?? ""}
           </span>
         ))}
@@ -263,7 +265,7 @@ export function AnalyticsMomentum({ embedded = false, card = false }: { embedded
   // card：独立圆角区块内的动量视图（大连续天数 + 经典 12 周热力 + 三项统计）
   if (card) {
     return (
-      <div data-testid="analytics-momentum" className="flex h-full min-w-0 flex-col">
+      <div data-testid="analytics-momentum" className="flex min-w-0 flex-1 flex-col">
         {error || (!loading && !data) ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6 text-center">
             <p className="text-[11px] font-medium text-danger">学习动量加载失败</p>
@@ -279,40 +281,44 @@ export function AnalyticsMomentum({ embedded = false, card = false }: { embedded
           <div className="ux-skeleton h-40 w-full rounded-xl bg-alabaster animate-pulse" aria-label="动量加载中" />
         ) : (
           <>
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="text-[10.5px] font-medium text-sandrift">连续学习</p>
-                <p className="mt-1 text-[26px] font-semibold leading-none tracking-[-0.03em] text-charcoal tabular-nums">
-                  <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
-                </p>
+            <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-stretch lg:flex-col lg:gap-0">
+              <div className="flex min-w-0 flex-1 flex-col md:max-w-[520px] lg:max-w-none">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-[10.5px] font-medium text-sandrift">连续学习</p>
+                    <p className="mt-1 text-[26px] font-semibold leading-none tracking-[-0.03em] text-charcoal tabular-nums">
+                      <span data-testid="momentum-streak-value">{data.streakDays} 天</span>
+                    </p>
+                  </div>
+                  <p className="pb-0.5 text-[10.5px] text-sandrift">
+                    {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
+                  </p>
+                </div>
+                <div className="mt-2.5">
+                  <MomentumCardHeatmap columns={columns} shownMonths={shownMonths} />
+                </div>
               </div>
-              <p className="pb-0.5 text-[10.5px] text-sandrift">
-                {data.activeToday ? "今日已投入" : data.streakDays > 0 ? "今天继续保持" : "今天开始第一天"}
-              </p>
-            </div>
-            <div className="mt-2.5">
-              <MomentumCardHeatmap columns={columns} shownMonths={shownMonths} />
-            </div>
-            <div className="mt-auto grid grid-cols-3 gap-3 border-t border-line-soft pt-2.5">
-              <div className="min-w-0">
-                <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
-                  {formatHours(data.totalMinutes)}
-                </p>
-                <p className="mt-1 text-[10.5px] text-sandrift">近 12 周总专注</p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
-                  {data.activeDays} 天
-                </p>
-                <p className="mt-1 text-[10.5px] text-sandrift">活跃天数</p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
-                  {data.bestDay ? formatHours(data.bestDay.minutes) : "—"}
-                </p>
-                <p className="mt-1 text-[10.5px] text-sandrift">
-                  单日最佳{data.bestDay ? ` · ${formatMonthDay(data.bestDay.date)}` : ""}
-                </p>
+              <div className="grid grid-cols-3 gap-3 border-t border-line-soft pt-2.5 md:w-[200px] md:shrink-0 md:grid-cols-1 md:gap-2 md:self-center md:border-t-0 md:border-l md:pl-4 md:pt-0 lg:mt-auto lg:w-auto lg:grid-cols-3 lg:gap-3 lg:self-stretch lg:border-l-0 lg:border-t lg:border-line-soft lg:pl-0 lg:pt-2.5">
+                <div className="min-w-0">
+                  <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
+                    {formatHours(data.totalMinutes)}
+                  </p>
+                  <p className="mt-1 text-[10.5px] text-sandrift">近 12 周总专注</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
+                    {data.activeDays} 天
+                  </p>
+                  <p className="mt-1 text-[10.5px] text-sandrift">活跃天数</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-charcoal tabular-nums">
+                    {data.bestDay ? formatHours(data.bestDay.minutes) : "—"}
+                  </p>
+                  <p className="mt-1 text-[10.5px] text-sandrift">
+                    单日最佳{data.bestDay ? ` · ${formatMonthDayShort(data.bestDay.date)}` : ""}
+                  </p>
+                </div>
               </div>
             </div>
             {data.activeDays === 0 && data.totalMinutes === 0 && (

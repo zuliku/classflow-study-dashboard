@@ -27,11 +27,11 @@ export function FocusRhythmCard({ rhythm, nested = false }: { rhythm: FocusRhyth
                     "h-full rounded-full transition-[width] duration-[var(--motion-data)] ease-[var(--ease-standard)]",
                     active ? "bg-charcoal" : "bg-[#CDB9AB]"
                   )}
-                  style={{ width: `${Math.max((b.minutes / maxMinutes) * 100, 2)}%` }}
+                  style={{ width: b.minutes > 0 ? `${Math.max((b.minutes / maxMinutes) * 100, 2)}%` : "0%" }}
                 />
               </div>
-              <span className="w-[78px] text-right text-[11px] text-sandrift shrink-0 tabular-nums">
-                {formatAnalyticsDuration(b.minutes, "compact")}
+              <span className="w-[112px] shrink-0 whitespace-nowrap text-right text-[11px] text-sandrift tabular-nums">
+                {formatAnalyticsDuration(b.minutes)}
                 {b.sessions > 0 ? ` · ${b.sessions} 次` : ""}
               </span>
             </div>

@@ -59,11 +59,12 @@ export function presentFocusMetric(
   if (focusMinutes > 0) {
     return {
       value: formatAnalyticsDuration(focusMinutes),
-      detail: "已记录 · 当前区间可能不完整",
+      // 只保留最小 partial 标记；区间缺失的完整解释统一由顶部 Coverage Notice 承载
+      detail: "已记录",
       reliability,
     };
   }
-  return { value: "—", detail: "该区间记录不完整", reliability };
+  return { value: "—", detail: "记录不完整", reliability };
 }
 
 /** Completed：complete → N 项；partial+N>0 → 已记录 N 项；partial+0 → — */
@@ -75,9 +76,9 @@ export function presentCompletedMetric(
     return { value: `${count} 项`, reliability };
   }
   if (count > 0) {
-    return { value: `已记录 ${count} 项`, detail: "当前区间可能不完整", reliability };
+    return { value: `已记录 ${count} 项`, reliability };
   }
-  return { value: "—", detail: "该区间记录不完整", reliability };
+  return { value: "—", detail: "记录不完整", reliability };
 }
 
 /** Plan total：complete → 正常；partial → 已记录 X / — */
@@ -89,9 +90,9 @@ export function presentPlanMetric(
     return { value: formatAnalyticsDuration(plannedMinutes), reliability };
   }
   if (plannedMinutes > 0) {
-    return { value: `已记录 ${formatAnalyticsDuration(plannedMinutes)}`, detail: "当前区间可能不完整", reliability };
+    return { value: `已记录 ${formatAnalyticsDuration(plannedMinutes)}`, reliability };
   }
-  return { value: "—", detail: "该区间记录不完整", reliability };
+  return { value: "—", detail: "记录不完整", reliability };
 }
 
 /** Plan Execution ratio：complete+planned>0 → % + 实际/计划；planned=0 → —；partial → — */
@@ -103,7 +104,7 @@ export function presentPlanExecutionMetric(
   if (reliability !== "complete" || plannedMinutes <= 0) {
     return {
       value: "—",
-      detail: reliability !== "complete" ? "计划记录不完整" : "本周期暂无已到时间的学习计划",
+      detail: reliability !== "complete" ? "计划记录不完整" : "暂无已到时间的计划",
       reliability: reliability === "complete" ? "unavailable" : reliability,
     };
   }
@@ -123,7 +124,7 @@ export function presentOnTimeMetric(
   assignmentReliability: AnalyticsReliability
 ): AnalyticsMetricView {
   if (assignmentReliability !== "complete") {
-    return { value: "—", detail: "任务历史不完整，暂不判断按时率", reliability: "partial" };
+    return { value: "—", detail: "任务历史不完整", reliability: "partial" };
   }
   if (onTimeEligible <= 0 || onTimeRate === null) {
     return { value: "—", detail: "暂无可靠截止时间可判断", reliability: "unavailable" };
@@ -164,7 +165,7 @@ export function presentExecutionQuality(
   assignmentReliability: AnalyticsReliability,
   focusReliability: AnalyticsReliability
 ): ExecutionQualityView {
-  const assignmentDetail = "该区间任务历史不完整";
+  const assignmentDetail = "记录不完整";
   const completed: ExecutionMetricView =
     assignmentReliability === "complete"
       ? { label: "完成任务", value: `${execution.uniqueCompletedAssignments} 项`, reliability: "complete" }
@@ -188,8 +189,8 @@ export function presentExecutionQuality(
     focusReliability === "complete"
       ? { label: "活跃天数", value: `${execution.activeDays} 天`, reliability: "complete" }
       : execution.activeDays > 0
-        ? { label: "活跃天数", value: `已记录 ${execution.activeDays} 天`, detail: "该区间专注记录可能不完整", reliability: "partial" }
-        : { label: "活跃天数", value: "—", detail: "该区间专注记录不完整", reliability: "partial" };
+        ? { label: "活跃天数", value: `已记录 ${execution.activeDays} 天`, reliability: "partial" }
+        : { label: "活跃天数", value: "—", detail: "记录不完整", reliability: "partial" };
 
   const avgFocusSession: ExecutionMetricView =
     focusReliability === "complete"
@@ -199,8 +200,8 @@ export function presentExecutionQuality(
           reliability: "complete",
         }
       : execution.avgFocusSessionMinutes !== null
-        ? { label: "平均专注", value: `已记录平均 ${execution.avgFocusSessionMinutes} 分钟/次`, detail: "该区间专注记录可能不完整", reliability: "partial" }
-        : { label: "平均专注", value: "—", detail: "该区间专注记录不完整", reliability: "partial" };
+        ? { label: "平均专注", value: `已记录平均 ${execution.avgFocusSessionMinutes} 分钟/次`, reliability: "partial" }
+        : { label: "平均专注", value: "—", detail: "记录不完整", reliability: "partial" };
 
   return { completed, reopened, onTime, activeDays, avgFocusSession };
 }
@@ -217,8 +218,8 @@ export function summaryCellDividerClasses(index: number, padding = "px-4 py-3.5"
     `min-w-0 ${padding} flex flex-col justify-center gap-0.5`,
     (index === 1 || index === 3) && "border-l border-line-soft",
     index >= 2 && "border-t border-line-soft",
-    index > 0 && "lg:border-l lg:border-line-soft",
-    index >= 2 && "lg:border-t-0",
+    index > 0 && "xl:border-l xl:border-line-soft",
+    index >= 2 && "xl:border-t-0",
   ]
     .filter(Boolean)
     .join(" ");
@@ -375,4 +376,3 @@ function fmtRange(from: number, to: number): string {
   const p = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`;
   return `${p(f)}–${p(t)}`;
 }
-

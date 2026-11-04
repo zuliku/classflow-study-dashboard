@@ -26,7 +26,7 @@ export function AnalyticsSummaryStrip({
     <div
       data-testid="analytics-summary-strip"
       className={cn(
-        "grid grid-cols-2 lg:grid-cols-4",
+        "grid grid-cols-2 xl:grid-cols-4",
         embedded ? "border-t border-line-soft" : "border-y border-line-soft",
         className
       )}
@@ -39,30 +39,39 @@ export function AnalyticsSummaryStrip({
           <p
             data-testid={`summary-value-${m.label}`}
             className={cn(
-              // Hero 锚点：首项（实际专注）放大，其余保持同一字重层级
-              "font-semibold leading-none tracking-[-0.02em] tabular-nums",
+              // Hero 锚点：首项（实际专注）放大，其余保持同一字重层级。
+              // 移动端收一档字号，避免「2 小时 55 分」在 2×2 格子里折行。
+              "whitespace-nowrap font-semibold tracking-[-0.02em] tabular-nums",
+              // value 槽位定高：28px Hero 与 22px 次级值共用同一行高，
+              // 四列 label / value / detail 才能真正同基线。
+              embedded ? "min-h-[21px] sm:min-h-[28px]" : "min-h-[28px] sm:min-h-[34px]",
               embedded
                 ? i === 0
-                  ? "text-[28px] text-charcoal"
-                  : "text-[22px] text-charcoal"
+                  ? "text-[21px] text-charcoal sm:text-[28px]"
+                  : "text-[17px] text-charcoal sm:text-[22px]"
                 : i === 0
-                  ? "text-[34px] text-charcoal"
-                  : "text-[26px] text-charcoal"
+                  ? "text-[28px] text-charcoal sm:text-[34px]"
+                  : "text-[22px] text-charcoal sm:text-[26px]",
+              // 必须放在 text-[…] 之后：twMerge 会把任意字号前的 leading-* 视为冲突丢弃
+              "leading-none"
             )}
           >
             {m.view.value}
           </p>
-          {m.view.detail && (
-            <p
-              data-testid={`summary-detail-${m.label}`}
-              className={cn(
-                "text-[11px] leading-snug text-satin-grey line-clamp-2",
-                embedded ? "min-h-[2em]" : "min-h-[2.5em]"
-              )}
-            >
-              {m.view.detail}
-            </p>
-          )}
+          {/* detail 槽位恒存在：四列 label / value / detail 严格同基线，
+              无 detail 时占位但不可见（不缩高、不被读屏播报）。 */}
+          <p
+            data-testid={`summary-detail-${m.label}`}
+            className={cn(
+              "text-[11px] leading-snug text-satin-grey line-clamp-2",
+              // 固定两行槽位：1 行 / 2 行 detail 的格子也保持同基线
+              "min-h-[2.75em]",
+              !m.view.detail && "invisible"
+            )}
+            aria-hidden={!m.view.detail || undefined}
+          >
+            {m.view.detail ?? "\u00A0"}
+          </p>
         </div>
       ))}
     </div>
@@ -74,7 +83,7 @@ export function AnalyticsSummaryStripSkeleton() {
   return (
     <div
       data-testid="analytics-summary-strip"
-      className="ux-skeleton grid grid-cols-2 lg:grid-cols-4 border-y border-line-soft"
+      className="ux-skeleton grid grid-cols-2 xl:grid-cols-4 border-y border-line-soft"
       aria-label="学习指标加载中"
     >
       {["实际专注", "完成任务", "计划执行", "按时完成"].map((label, i) => (

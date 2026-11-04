@@ -16,6 +16,7 @@ import { LearningTrendPoint } from "@/lib/analytics/types";
 import { AnalyticsPeriod } from "@/lib/analytics/types";
 import { formatAnalyticsDuration } from "@/lib/analytics/presentation";
 import { formatTrendTooltip } from "@/lib/analytics/presentation";
+import { cn } from "@/lib/utils";
 
 const PLAN_COLOR = "#CDB9AB";
 const FOCUS_COLOR = "#627566";
@@ -50,8 +51,8 @@ export function LearningTrendChart({
     completed: p.completedAssignments,
   }));
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-2">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 pb-2">
         <span className="flex items-center gap-1 text-[10.5px] font-semibold text-sandrift">
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: FOCUS_COLOR }} />
           实际专注
@@ -62,11 +63,11 @@ export function LearningTrendChart({
             计划学习
           </span>
         ) : (
-          <span className="text-[10.5px] text-satin-grey">计划记录不足，暂不显示</span>
+          <span className="text-[10.5px] text-satin-grey">暂无计划记录</span>
         )}
         <span className="ml-auto text-[10px] text-satin-grey">单位：分钟</span>
       </div>
-      <div className={compact ? "h-28 w-full md:h-32" : "h-60 w-full md:h-72"}>
+      <div className={cn("w-full flex-1", compact ? "min-h-[112px] md:min-h-[128px]" : "min-h-[240px] md:min-h-[288px]")}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F0EBE1" vertical={false} />

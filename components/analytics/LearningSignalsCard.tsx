@@ -44,7 +44,7 @@ export function LearningSignalsCard({
       >
         <AnalyticsCardHeader title="值得注意" />
         <div className="flex flex-1 items-center justify-center py-8">
-          <p className="text-[11px] text-sandrift">目前没有明显需要调整的信号</p>
+          <p className="text-[11px] text-sandrift">暂无需要调整的信号</p>
         </div>
       </div>
     );

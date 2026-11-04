@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { CalendarPlus, Info } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
 import { LearningAnalyticsSnapshot } from "@/lib/analytics/types";
 import { buildWeeklyReview, weeklyReviewCopy } from "@/lib/analytics/weeklyReview";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
@@ -27,20 +27,10 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
   const { handoffPrompt } = useKiroSessionActions();
 
   const isEmpty = snapshot.isEmpty;
-  const coverageDate = snapshot.coverage.historyStartedAt
-    ? new Date(snapshot.coverage.historyStartedAt)
-    : null;
-  const coverageNote =
-    !snapshot.coverage.fullCoverage && coverageDate
-      ? `完整历史自 ${coverageDate.getFullYear()}/${String(coverageDate.getMonth() + 1).padStart(2, "0")}/${String(
-          coverageDate.getDate()
-        ).padStart(2, "0")} 起记录，本周部分数据可能不完整。`
-      : null;
-
   const headline = review.headline;
 
   return (
-    <div className="bg-surface/70 border border-line-soft rounded-xl overflow-hidden" data-testid="weekly-review-card">
+    <div className="rounded-xl border border-line bg-surface overflow-hidden" data-testid="weekly-review-card">
       <div className="px-4 pt-4 pb-3 border-b border-line-soft">
         <AnalyticsCardHeader
           title="本周回顾"
@@ -50,18 +40,11 @@ export function WeeklyReviewCard({ snapshot }: { snapshot: LearningAnalyticsSnap
             </span>
           }
         />
-        {coverageNote && (
-          <div className="flex items-start gap-1.5 mt-2 text-[10px] text-sandrift">
-            <Info className="w-3 h-3 shrink-0 mt-0.5" />
-            <p>{coverageNote}</p>
-          </div>
-        )}
       </div>
 
       {isEmpty ? (
         <div className="px-4 py-6 flex flex-col items-center justify-center text-center gap-1.5">
           <p className="text-[13px] font-semibold text-charcoal">本周还没有足够的学习记录</p>
-          <p className="text-[11px] text-sandrift">完成任务或专注后即可生成回顾</p>
           <KiroFlowButton
             icon={KiroLogoIcon}
             label="让 Kiro 帮我规划本周"
