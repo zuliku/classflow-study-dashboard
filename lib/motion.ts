@@ -16,18 +16,14 @@
  *   MOTION_EXIT_MS.base   = --motion-exit-base   disclosure close / dialog exit / content swap-out
  *   MOTION_EXIT_MS.panel  = --motion-exit-panel  drawer exit / list-row structural collapse
  *
- * Easing（V3 baseline / V5 非线性曲线族）：
- *   EASE.standard   = --ease-standard    默认 V3 通用曲线；V5 flag 下 = outStrong
- *   EASE.emphasized = --ease-emphasized  默认 V3；V5 flag 下 = outExpo
- *   EASE.enter      = --ease-enter       默认 V3；V5 flag 下 = outStrong
- *   EASE.exit       = --ease-exit        默认 V3；V5 flag 下 = inExit
- *   EASE.spring     = --ease-spring      默认 V3；V5 flag 下 = springSoft
+ * Easing（V5 全量默认）：
+ *   EASE.standard   = --ease-standard     = outStrong（兼容 alias）
+ *   EASE.emphasized = --ease-emphasized   = outExpo（兼容 alias）
+ *   EASE.enter      = --ease-enter        = outStrong（兼容 alias）
+ *   EASE.exit       = --ease-exit         = inExit（兼容 alias）
+ *   EASE.spring     = --ease-spring       = springSoft（兼容 alias）
  *   EASE_V5.outSoft / outStrong / outExpo / inExit / springSoft / springSnappy
- *                   = V5 linear() 曲线族（默认不启用；dev 灰度见 html[data-motion-easing="v5"]）
- *
- * V5 灰度（dev）：
- *   ?motion-easing=v5 / MotionGallery 开关 → html[data-motion-easing="v5"]
- *   不改变 duration / presence；只是把 legacy alias 切到 linear() 曲线。
+ *                   = V5 linear() 曲线族（CSS/WAAPI/契约测试共享字面量）
  * 约定：
  * - Primitive 的 CSS transition 时长必须引用上述 CSS 变量（或与注释声明对应），
  *   presence/unmount 计时必须引用本文件常量——一种交互语义只存在一个 Motion 时间真值。
@@ -53,12 +49,11 @@ export const MOTION_EXIT_MS = {
 } as const;
 
 /**
- * Easing 唯一真值（V3 基线 + V5 曲线族，与 :root --ease-* 一一对应）。
- * 数值 = cubic-bezier / linear() 字面量（CSS 侧 var() 引用；JS 侧仅契约与 WAAPI/测试用途）。
+ * Easing 唯一真值（V5 全量，与 :root --ease-* 一一对应）。
+ * 数值 = linear() 字面量（CSS 侧 var() 引用；JS 侧用于 WAAPI/契约/测试）。
  *
- * V5 曲线默认不生效：只有 html[data-motion-easing="v5"] 才会把 legacy alias 指向
- * EASE_V5（dev 开关 ?motion-easing=v5 / MotionGallery 切换）。旧 EASE 值保留为
- * 兼容 alias 的默认值，保证未开启灰度时视觉不变。
+ * legacy alias（standard / emphasized / enter / exit / spring）长期保留，
+ * 全部指向 EASE_V5；组件可继续使用旧名称，不需要大面积迁移。
  */
 export const EASE_V5 = {
   outSoft: "linear(0, 0.1855, 0.3439, 0.478, 0.5904, 0.6836, 0.7599, 0.8215, 0.8704, 0.9085, 0.9375, 0.959, 0.9744, 0.985, 0.9919, 0.9961, 0.9984, 0.9995, 0.9999, 1, 1)",
@@ -70,12 +65,11 @@ export const EASE_V5 = {
 } as const;
 
 export const EASE = {
-  standard: "cubic-bezier(0.2, 0.8, 0.2, 1)",
-  emphasized: "cubic-bezier(0.22, 1, 0.36, 1)",
-  enter: "cubic-bezier(0, 0, 0.2, 1)",
-  exit: "cubic-bezier(0.3, 0, 1, 1)",
-  spring: "cubic-bezier(0.32, 0.72, 0, 1)",
-  // V5 primitives（默认仅文档/灰度预览；legacy alias 在 CSS flag 下指向它们）
+  standard: EASE_V5.outStrong,
+  emphasized: EASE_V5.outExpo,
+  enter: EASE_V5.outStrong,
+  exit: EASE_V5.inExit,
+  spring: EASE_V5.springSoft,
   outSoft: EASE_V5.outSoft,
   outStrong: EASE_V5.outStrong,
   outExpo: EASE_V5.outExpo,
@@ -86,15 +80,14 @@ export const EASE = {
 
 /**
  * EASE 的数值镜像（Framer Motion / WAAPI 需要 tuple；CSS 仍引用 EASE 字符串）。
- * 两处必须同值，由 motionContract 测试校验。
- * V5 新 key 使用 cubic-bezier 近似值，仅供不支持 linear() 字符串的第三方库降级。
+ * V5 曲线使用 cubic-bezier 近似值，仅供不支持 linear() 字符串的第三方库降级。
  */
 export const EASE_BEZIER: Record<keyof typeof EASE, [number, number, number, number]> = {
-  standard: [0.2, 0.8, 0.2, 1],
-  emphasized: [0.22, 1, 0.36, 1],
-  enter: [0, 0, 0.2, 1],
+  standard: [0.22, 1, 0.36, 1],
+  emphasized: [0.16, 1, 0.3, 1],
+  enter: [0.22, 1, 0.36, 1],
   exit: [0.3, 0, 1, 1],
-  spring: [0.32, 0.72, 0, 1],
+  spring: [0.22, 1, 0.36, 1],
   outSoft: [0.25, 1, 0.5, 1],
   outStrong: [0.22, 1, 0.36, 1],
   outExpo: [0.16, 1, 0.3, 1],

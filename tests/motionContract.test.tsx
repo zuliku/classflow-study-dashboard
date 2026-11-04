@@ -84,34 +84,32 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(MOTION_EXIT_MS.panel).toBeLessThan(MOTION_MS.overlay);
   });
 
-  it("Motion V3 easing：CSS token ↔ JS EASE 一一对应", () => {
-    expect(css).toMatch(/--ease-standard:\s*cubic-bezier\(0\.2,\s*0\.8,\s*0\.2,\s*1\)/);
-    expect(css).toMatch(/--ease-emphasized:\s*cubic-bezier\(0\.22,\s*1,\s*0\.36,\s*1\)/);
-    expect(css).toMatch(/--ease-enter:\s*cubic-bezier\(0,\s*0,\s*0\.2,\s*1\)/);
-    expect(css).toMatch(/--ease-exit:\s*cubic-bezier\(0\.3,\s*0,\s*1,\s*1\)/);
-    expect(css).toMatch(/--ease-spring:\s*cubic-bezier\(0\.32,\s*0\.72,\s*0,\s*1\)/);
-    expect(EASE.standard).toBe("cubic-bezier(0.2, 0.8, 0.2, 1)");
-    expect(EASE.emphasized).toBe("cubic-bezier(0.22, 1, 0.36, 1)");
-    expect(EASE.enter).toBe("cubic-bezier(0, 0, 0.2, 1)");
-    expect(EASE.exit).toBe("cubic-bezier(0.3, 0, 1, 1)");
-    expect(EASE.spring).toBe("cubic-bezier(0.32, 0.72, 0, 1)");
-    // Framer Motion / WAAPI 使用数值镜像，必须与 CSS 字符串同值
-    expect(EASE_BEZIER.standard).toEqual([0.2, 0.8, 0.2, 1]);
-    expect(EASE_BEZIER.enter).toEqual([0, 0, 0.2, 1]);
+  it("Motion V5 easing：CSS alias ↔ JS EASE 一一对应", () => {
+    expect(css).toMatch(/--ease-standard:\s*var\(--ease-out-strong\)/);
+    expect(css).toMatch(/--ease-emphasized:\s*var\(--ease-out-expo\)/);
+    expect(css).toMatch(/--ease-enter:\s*var\(--ease-out-strong\)/);
+    expect(css).toMatch(/--ease-exit:\s*var\(--ease-in-exit\)/);
+    expect(css).toMatch(/--ease-spring:\s*var\(--ease-spring-soft\)/);
+    expect(EASE.standard).toBe(EASE_V5.outStrong);
+    expect(EASE.emphasized).toBe(EASE_V5.outExpo);
+    expect(EASE.enter).toBe(EASE_V5.outStrong);
+    expect(EASE.exit).toBe(EASE_V5.inExit);
+    expect(EASE.spring).toBe(EASE_V5.springSoft);
+    // Framer Motion / WAAPI 数值镜像
+    expect(EASE_BEZIER.standard).toEqual([0.22, 1, 0.36, 1]);
+    expect(EASE_BEZIER.emphasized).toEqual([0.16, 1, 0.3, 1]);
+    expect(EASE_BEZIER.enter).toEqual([0.22, 1, 0.36, 1]);
     expect(EASE_BEZIER.exit).toEqual([0.3, 0, 1, 1]);
+    expect(EASE_BEZIER.spring).toEqual([0.22, 1, 0.36, 1]);
   });
 
-  it("Motion V5：linear() 曲线族 + dev flag 映射（默认仍 V3）", () => {
-    // 默认 :root 保持 V3；只有 data-motion-easing=v5 才切换 legacy alias
-    expect(css).toMatch(/html\[data-motion-easing="v5"\]\s*\{[\s\S]*?--ease-standard:\s*var\(--ease-out-strong\)/);
-    expect(css).toMatch(/html\[data-motion-easing="v5"\]\s*\{[\s\S]*?--ease-emphasized:\s*var\(--ease-out-expo\)/);
-    expect(css).toMatch(/html\[data-motion-easing="v5"\]\s*\{[\s\S]*?--ease-exit:\s*var\(--ease-in-exit\)/);
-    expect(css).toMatch(/html\[data-motion-easing="v5"\]\s*\{[\s\S]*?--ease-spring:\s*var\(--ease-spring-soft\)/);
+  it("Motion V5：linear() 曲线族全量默认（无灰度开关）", () => {
+    expect(css).not.toContain("data-motion-easing");
     expect(css).toMatch(/--ease-selection:\s*var\(--ease-spring-snappy\)/);
     expect(css).toMatch(/--ease-spatial:\s*var\(--ease-spring-soft\)/);
-    // 默认语义 token 必须保持 V3，避免未开灰度时视觉漂移
-    expect(css).toMatch(/--ease-selection:\s*var\(--ease-emphasized\)/);
-    expect(css).toMatch(/--ease-spatial:\s*var\(--ease-spring\)/);
+    expect(css).toMatch(/--ease-page:\s*var\(--ease-out-soft\)/);
+    expect(css).toMatch(/--ease-overlay:\s*var\(--ease-out-expo\)/);
+    expect(css).toMatch(/--ease-intro-text:\s*var\(--ease-out-expo\)/);
 
     const numbers = (curve: string) =>
       (curve.match(/-?\d*\.?\d+/g) ?? []).map(Number);
@@ -124,14 +122,11 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
       if (key === "springSnappy") expect(peak).toBeLessThanOrEqual(1.02);
       else expect(peak).toBeLessThanOrEqual(1);
     }
-    expect(EASE.outSoft).toBe(EASE_V5.outSoft);
-    expect(EASE.outStrong).toBe(EASE_V5.outStrong);
-    expect(EASE.outExpo).toBe(EASE_V5.outExpo);
-    expect(EASE.inExit).toBe(EASE_V5.inExit);
-    expect(EASE.springSoft).toBe(EASE_V5.springSoft);
-    expect(EASE.springSnappy).toBe(EASE_V5.springSnappy);
-    // 未开灰度时 legacy EASE 仍是 V3 值
-    expect(EASE.standard).toBe("cubic-bezier(0.2, 0.8, 0.2, 1)");
+    expect(EASE.standard).toBe(EASE_V5.outStrong);
+    expect(EASE.emphasized).toBe(EASE_V5.outExpo);
+    expect(EASE.enter).toBe(EASE_V5.outStrong);
+    expect(EASE.exit).toBe(EASE_V5.inExit);
+    expect(EASE.spring).toBe(EASE_V5.springSoft);
 
     // CSS ↔ JS 曲线字面量必须同源（空白归一化）
     const cssCurves: Record<keyof typeof EASE_V5, string> = {

@@ -54,7 +54,7 @@ import type { StudyOutlook, StudyOutlookHorizon } from "@/lib/outlook/types";
 
 /**
  * Workflow UX Motion M3 —— Selection Continuity：
- * - SegmentedControl plate：--motion-base / --ease-emphasized；--motion-select orphan token 已收口
+ * - SegmentedControl plate：--motion-base / --ease-selection；--motion-select orphan token 已收口
  * - programmatic value change → plate 跟随（无 imperative animation）
  * - AnalyticsRangeSelector 与 StudyOutlook horizon 均收敛到 SegmentedControl
  */

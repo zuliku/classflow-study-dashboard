@@ -1,5 +1,8 @@
 # Motion System V4 · 动画与磨砂遮罩统一审计
 
+> **已被 `docs/motion-system-v5-easing.md` 取代（V5 全量默认）。**
+> 本文件保留为 V4 历史审计记录；当前 easing 以 lib/motion.ts / app/globals.css 的 V5 token 为准。
+
 > 目标：参考 ChatGPT / Apple 的克制、连续、可预期动效语言，收敛 ClassFlow 中
 > 弹窗、抽屉、浮层、列表与背景磨砂的冲突项。
 > 唯一时间/缓动真值仍是 `lib/motion.ts` ↔ `app/globals.css`，本文件只记录语法。

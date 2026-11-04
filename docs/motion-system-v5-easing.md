@@ -1,8 +1,8 @@
 # Motion System V5 · 非线性缓动设计
 
-> 状态：**设计稿 + Phase 0/1 灰度实现（默认仍 V3）**。
-> 本文件不改变默认生产动效；`html[data-motion-easing="v5"]` 才启用 V5 曲线。
-> 预览：`?motion-easing=v5`，或 dev `?motion-gallery=1` 内的「V5 曲线」开关。
+> 状态：**已全量上线（V5 默认）**。
+> `app/globals.css` / `lib/motion.ts` 直接输出 V5；不再有 dev 灰度开关。
+> legacy alias（standard / emphasized / enter / exit / spring）长期保留为兼容名称。
 > 目标：在不改变现有 duration / presence / 交互语义的前提下，把全站 easing 从
 > “少量 cubic-bezier + 一个伪 spring”升级为按交互语义分层的非线性速度曲线。
 
@@ -170,7 +170,7 @@
   --ease-spring-soft: linear(...);
   --ease-spring-snappy: linear(...);
 
-  /* V3/V4 compatibility aliases */
+  /* legacy compatibility aliases（长期保留，值指向 V5） */
   --ease-standard: var(--ease-out-strong);
   --ease-emphasized: var(--ease-out-expo);
   --ease-enter: var(--ease-out-strong);
@@ -264,20 +264,20 @@ export const EASE = {
 
 ### Phase 0 · Tokens only（零组件改动）
 
-- 在 `app/globals.css` 增加 6 条曲线 + 4 个语义 token。
+- 在 `app/globals.css` 增加 6 条曲线 + 语义 token。
 - `lib/motion.ts` 增加 `EASE` 新 key 与 `EASE_BEZIER` 镜像。
-- 旧 token 暂不切换，先扩 `MotionGallery` 做 V3/V5 曲线并排预览。
+- 6 条曲线 + 4 个语义 token 直接进入 :root；legacy alias 指向 V5。
 
-> 当前状态：已实现。`lib/motion.ts` 同时保留 V3 legacy 值与 `EASE_V5` 曲线族。
+> 当前状态：已实现并全量上线。`lib/motion.ts` 的 `EASE_V5` 是曲线真值，
+> `EASE.standard` 等 legacy key 全部指向 V5。
 
-### Phase 1 · Legacy alias 切换（一行级回滚）
+### Phase 1 · Legacy alias 切换（已全量上线）
 
 - `--ease-standard/emphasized/enter/exit/spring` 指向 V5。
 - 跑全量动效相关单测 + 目标 E2E + 人工抽检。
-- 若某一语义明显不适，单独把该 alias 改回旧值即可。
+- 保留 alias 名称，便于旧组件与外部文档继续引用。
 
-> 当前状态：已实现，但只在 `html[data-motion-easing="v5"]` 下生效。
-> 生产默认仍是 V3；灰度开关由 `?motion-easing=v5` / MotionGallery 控制。
+> 当前状态：已全量上线，无灰度开关。
 
 ### Phase 2 · Spatial
 
@@ -285,15 +285,14 @@ export const EASE = {
   `GroupKiroPanel.tsx`；Sidebar profile padding 同步。
 - 保持所有 duration 不变，只替换 easing。
 
-> 当前状态：已接入上述空间壳；默认值仍是 V3 `--ease-spring`，V5 flag 下变 `spring-soft`。
+> 当前状态：已接入，空间壳统一 `spring-soft`。
 
 ### Phase 3 · Selection
 
 - `--ease-selection` 接入：`SegmentedControl.tsx`、`KiroModeCapsule.tsx`。
 - 选中 plate 允许 ≤1.1% overshoot；文字/图标仍用 `out-soft`。
 
-> 当前状态：已接入。`SegmentedControl` 使用语义 token；Kiro Mode Capsule 通过
-> `html[data-motion-easing="v5"] .kiro-mode-capsule-indicator` 限定 V5 才切到 snappy。
+> 当前状态：已接入，选中面使用 `spring-snappy`（1.06% 微回弹）。
 
 ### Phase 4 · Overlay / Page / Data
 
@@ -307,7 +306,7 @@ export const EASE = {
 
 ### Phase 5 · 清理
 
-- 观察一个版本后，删除不再被引用的旧 alias；
+- 保留 legacy alias（已确认长期兼容），只清理无引用的临时开关/文档；
 - 更新 `docs/motion-system-v4.md` → V5 语义表；
 - `motionContract` 增加曲线字符串/峰值断言。
 
@@ -336,9 +335,9 @@ export const EASE = {
 6. Reduced Motion 仍即时落位。
 7. 连续快速开合（中断动画）无跳变、无 1px 抖动、无滚动条闪烁。
 
-## 10. 待确认决策
+## 10. 已确认决策
 
-1. 选中指示器的微回弹是否接受 **1.06%**（推荐）还是完全零 overshoot？
-2. Empty Intro 的文字/logo 是否继续 `out-expo`，仅空间壳使用 `spring-soft`？（推荐）
-3. Phase 1 是否直接切换全站 alias，还是先用 dev 开关 `data-motion-easing="v5"` 灰度？
-4. `--ease-standard` 长期保留为 alias，还是 Phase 5 后彻底删除？
+1. 选中指示器接受 **1.06%** 微回弹。
+2. Empty Intro 文字/logo 使用 `out-expo`；只有空间壳使用 `spring-soft`。
+3. 已全量上线，不再保留 dev 灰度开关。
+4. `--ease-standard` 等 legacy alias 长期保留为兼容名称。

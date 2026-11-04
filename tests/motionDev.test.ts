@@ -5,19 +5,12 @@ import {
   summarizeFrameDeltas,
   shouldShowFpsProbe,
   shouldShowMotionGallery,
-  resolveMotionEasingPreview,
-  shouldUseMotionEasingV5,
-  applyMotionEasingPreview,
-  MOTION_EASING_STORAGE_KEY,
 } from "@/lib/motionDev";
 
 describe("motionDev 门禁与换算", () => {
   const originalEnv = process.env.NODE_ENV;
   afterEach(() => {
     process.env.NODE_ENV = originalEnv;
-    document.documentElement.removeAttribute("data-motion-easing");
-    window.localStorage.clear();
-    window.history.replaceState(null, "", "/");
   });
 
   it("非 dev 构建：query 再对也关闭（production/test 永不渲染）", () => {
@@ -38,41 +31,6 @@ describe("motionDev 门禁与换算", () => {
     expect(shouldShowFpsProbe("?foo=1")).toBe(false);
     // 坏 query 不抛
     expect(shouldShowMotionGallery("?%")).toBe(false);
-  });
-
-  it("Motion V5 easing 灰度：URL 优先、localStorage 持久化、非 dev 关闭", () => {
-    process.env.NODE_ENV = "development";
-    expect(resolveMotionEasingPreview("?motion-easing=v5", "v4")).toBe("v5");
-    expect(resolveMotionEasingPreview("?motion-easing=v4", "v5")).toBe("v4");
-    expect(resolveMotionEasingPreview("", "v5")).toBe("v5");
-    expect(resolveMotionEasingPreview("", "v4")).toBe("v4");
-    expect(resolveMotionEasingPreview("", null)).toBe("v4");
-    expect(resolveMotionEasingPreview("?%", "v5")).toBe("v5");
-
-    expect(shouldUseMotionEasingV5("?motion-easing=v5", null)).toBe(true);
-    expect(shouldUseMotionEasingV5("", "v5")).toBe(true);
-    expect(shouldUseMotionEasingV5("", "v4")).toBe(false);
-    process.env.NODE_ENV = "production";
-    expect(shouldUseMotionEasingV5("?motion-easing=v5", null)).toBe(false);
-  });
-
-  it("applyMotionEasingPreview：dataset / storage / URL / 事件同步", () => {
-    process.env.NODE_ENV = "development";
-    const events: boolean[] = [];
-    const onEasing = (e: Event) => events.push((e as CustomEvent<boolean>).detail);
-    window.addEventListener("classflow:motion-easing-change", onEasing);
-    applyMotionEasingPreview(true);
-    expect(document.documentElement.dataset.motionEasing).toBe("v5");
-    expect(window.localStorage.getItem(MOTION_EASING_STORAGE_KEY)).toBe("v5");
-    expect(window.location.search).toContain("motion-easing=v5");
-    expect(events).toEqual([true]);
-
-    applyMotionEasingPreview(false);
-    expect(document.documentElement.dataset.motionEasing).toBeUndefined();
-    expect(window.localStorage.getItem(MOTION_EASING_STORAGE_KEY)).toBe("v4");
-    expect(window.location.search).not.toContain("motion-easing=v5");
-    expect(events).toEqual([true, false]);
-    window.removeEventListener("classflow:motion-easing-change", onEasing);
   });
 
   it("computeFps：500ms 窗口换算 + 除零/非法保护", () => {

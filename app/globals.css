@@ -86,18 +86,9 @@
   --motion-exit-fast: 110ms;
   --motion-exit-base: 150ms;
   --motion-exit-panel: 160ms;
-  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
-  /* Motion V3：进出不对称（M3/Apple 对齐）——进入减速（decelerate），退出加速（accelerate）；
-     与 lib/motion.ts EASE 一一对应。进入保持 --ease-standard（历史视觉不变）；
-     所有退出分支用 --ease-exit；大位移 morph 可用 --ease-spring（无 bounce 通用档）。 */
-  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
-  --ease-exit: cubic-bezier(0.3, 0, 1, 1);
-  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
-
-  /* Motion V5 curve primitives（默认只作为新语义 token 的候选值；
-     只有 html[data-motion-easing="v5"] 才会把 legacy alias 切到这些曲线）。
-     linear() 为 21 点采样，Chromium 原生插值；数值与 lib/motion.ts EASE_V5 一一对应。 */
+  /* Motion V5 曲线族（全量默认）：21 点 linear() 采样，Chromium 原生插值；
+     数值与 lib/motion.ts EASE_V5 一一对应。
+     legacy alias（standard / emphasized / enter / exit / spring）长期保留为兼容名称。 */
   --ease-out-soft: linear(0, 0.1855, 0.3439, 0.478, 0.5904, 0.6836, 0.7599, 0.8215, 0.8704, 0.9085, 0.9375, 0.959, 0.9744, 0.985, 0.9919, 0.9961, 0.9984, 0.9995, 0.9999, 1, 1);
   --ease-out-strong: linear(0, 0.2262, 0.4095, 0.5563, 0.6723, 0.7627, 0.8319, 0.884, 0.9222, 0.9497, 0.9688, 0.9815, 0.9898, 0.9947, 0.9976, 0.999, 0.9997, 0.9999, 1, 1, 1);
   --ease-out-expo: linear(0, 0.2932, 0.5005, 0.6471, 0.7507, 0.824, 0.8759, 0.9125, 0.9384, 0.9567, 0.9697, 0.9789, 0.9853, 0.9899, 0.9932, 0.9954, 0.9971, 0.9982, 0.999, 0.9996, 1);
@@ -105,14 +96,21 @@
   --ease-spring-soft: linear(0, 0.0754, 0.2275, 0.3908, 0.5372, 0.6575, 0.7513, 0.8222, 0.8743, 0.912, 0.9389, 0.9579, 0.9711, 0.9803, 0.9866, 0.9909, 0.9939, 0.9959, 0.9972, 0.9982, 1);
   --ease-spring-snappy: linear(0, 0.1477, 0.4125, 0.6511, 0.8209, 0.9243, 0.9789, 1.003, 1.0106, 1.0105, 1.0079, 1.005, 1.0027, 1.0013, 1.0005, 1.0001, 0.9999, 0.9999, 0.9999, 0.9999, 1);
 
-  /* V5 semantic tokens：默认值 = V3 现行语义；v5 flag 下再切到新曲线。
-     这样组件可以先迁移到语义 token，而不改变未开启灰度时的视觉。 */
-  --ease-overlay: var(--ease-standard);
-  --ease-page: var(--ease-standard);
-  --ease-intro-text: var(--ease-standard);
-  --ease-spatial: var(--ease-spring);
-  --ease-selection: var(--ease-emphasized);
-  --ease-data: var(--ease-standard);
+  /* 兼容 alias：旧调用点继续用这些名字，但值全部指向 V5。
+     长期保留，避免组件大面积改名。 */
+  --ease-standard: var(--ease-out-strong);
+  --ease-emphasized: var(--ease-out-expo);
+  --ease-enter: var(--ease-out-strong);
+  --ease-exit: var(--ease-in-exit);
+  --ease-spring: var(--ease-spring-soft);
+
+  /* V5 semantic tokens */
+  --ease-overlay: var(--ease-out-expo);
+  --ease-page: var(--ease-out-soft);
+  --ease-intro-text: var(--ease-out-expo);
+  --ease-spatial: var(--ease-spring-soft);
+  --ease-selection: var(--ease-spring-snappy);
+  --ease-data: var(--ease-out-soft);
   /* Motion V3 P1：skeleton 扫光周期（常驻 infinite 治理 token，不扩散到其他场景） */
   --skeleton-sweep: 1.6s;
 
@@ -203,34 +201,10 @@
   --ring-offset: 2px;
 }
 
-/* Motion V5 灰度开关（dev）：?motion-easing=v5 / MotionGallery 切换。
-   未命中时 legacy alias 保持 V3 曲线；命中后进入 V5 非线性曲线族。
-   长期保留 legacy alias 名称，避免组件大面积改名。 */
-html[data-motion-easing="v5"] {
-  --ease-standard: var(--ease-out-strong);
-  --ease-emphasized: var(--ease-out-expo);
-  --ease-enter: var(--ease-out-strong);
-  --ease-exit: var(--ease-in-exit);
-  --ease-spring: var(--ease-spring-soft);
-
-  --ease-overlay: var(--ease-out-expo);
-  --ease-page: var(--ease-out-soft);
-  --ease-intro-text: var(--ease-out-expo);
-  --ease-spatial: var(--ease-spring-soft);
-  --ease-selection: var(--ease-spring-snappy);
-  --ease-data: var(--ease-out-soft);
-}
-
-/* Kiro Mode Capsule：组件当前用 --ease-standard；V5 灰度下选中面单独走
-   spring-snappy（1.06% 微回弹），文字颜色仍走标准过渡。 */
-html[data-motion-easing="v5"] .kiro-mode-capsule-indicator {
+/* Kiro Mode Capsule：选中面单独走 spring-snappy（1.06% 微回弹），
+   文字颜色仍走标准过渡。 */
+.kiro-mode-capsule-indicator {
   transition-timing-function: var(--ease-selection);
-}
-
-/* Slash 菜单是浮层揭示，不是空间 morph；V5 下改走 out-expo，
-   避免 spring-soft 只用于空间壳的约束被菜单意外继承。 */
-html[data-motion-easing="v5"] .kiro-slash-enter {
-  animation-timing-function: var(--ease-out-expo);
 }
 @media (max-height: 720px) {
   :root {
@@ -1623,9 +1597,9 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   }
 
   /* Slash（/）菜单：指令弹出——从输入前缘（左下）弹出，
-     位移 6px + scale .98，spring 缓动收尾（与 Mention 的中央柔附着区分） */
+     位移 6px + scale .98，out-expo 收尾（浮层揭示，不是空间 morph；与 Mention 的中央柔附着区分） */
   .kiro-slash-enter {
-    animation: kiro-slash-in var(--motion-panel) var(--ease-spring) both;
+    animation: kiro-slash-in var(--motion-panel) var(--ease-out-expo) both;
     transform-origin: bottom left;
   }
   @keyframes kiro-slash-in {

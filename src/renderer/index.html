@@ -31,19 +31,6 @@
           root.dataset.motionPreference = preference;
           root.dataset.motionEffective = reduced ? "reduced" : "full";
           root.dataset.uiFont = uiFont;
-          // Motion V5 灰度：仅本地 dev（localhost / 127.0.0.1），
-          // URL 显式 v4/v5 优先，否则读 Gallery 持久化值。生产 file:// 不命中。
-          const isLocalDev = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
-          if (isLocalDev) {
-            const params = new URLSearchParams(window.location.search);
-            const urlEasing = params.get("motion-easing");
-            let storedEasing = null;
-            try {
-              storedEasing = window.localStorage.getItem("classflow-motion-easing");
-            } catch {}
-            const easing = urlEasing === "v5" || urlEasing === "v4" ? urlEasing : storedEasing;
-            if (easing === "v5") root.dataset.motionEasing = "v5";
-          }
         } catch {}
       })();
     </script>

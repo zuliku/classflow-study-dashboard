@@ -74,12 +74,15 @@ describe("AnalyticsMomentum 三态（N1）", () => {
 describe("KiroPendingIndicator 心跳（N2）", () => {
   it("3 秒后显示已等待秒数（首 token 前存活感）", async () => {
     const { KiroPendingIndicator } = await import("@/components/kiro/KiroWorklog");
-    // 用真实计时器：fake timers 在 full-suite 并行时会被其它模块的 interval 干扰而挂起
+    // 用 fake timers + 系统时间：该组件按 Date.now() 计算秒数，真实 3.3s 等待在
+    // full-suite 并行时会被事件循环拖到 20s 测试超时（曾多次误报）。
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
     const el = renderNode(<KiroPendingIndicator />);
     expect(el.textContent).toContain("正在准备");
     expect(el.textContent).not.toContain("已等待");
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 3300));
+    act(() => {
+      vi.advanceTimersByTime(3100);
     });
     expect(el.textContent).toContain("已等待");
   });
