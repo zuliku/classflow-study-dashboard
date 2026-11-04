@@ -32,6 +32,16 @@ import { splitKiroStreamingMarkdown } from "@/lib/ai/streaming/markdownBlocks";
 import { isKiroFinalAnswerToolName } from "@/lib/ai/tools/finalAnswer";
 import { resolveToolOutcomeStatus } from "@/lib/ai/presentation/toolOutcome";
 import { bumpStreamPerf, addStreamPerfChars } from "@/lib/ai/perf/streamPerf";
+import {
+  KIRO_UPDATE_AGENT_PLAN_TOOL_NAME,
+  KiroAgentPlan,
+  normalizeAgentPlan,
+} from "@/lib/ai/agent/plan";
+import {
+  KIRO_ASK_USER_TOOL_NAME,
+  KiroUserQuestion,
+  normalizeUserQuestion,
+} from "@/lib/ai/agent/ask";
 
 export type KiroTurnPhase = "working" | "composing" | "answering" | "done";
 
@@ -66,6 +76,10 @@ export interface KiroAssistantTurnPresentation {
   /** 压缩推理摘要（不暴露 chain-of-thought 原文，仅“正在分析…xx字”计数，供 Worklog 轻量占位） */
   reasoningSummary?: string;
   reasoningStreaming?: boolean;
+  /** Agent Superpowers：本 turn 最新执行计划（不进入 Worklog；独立 Plan Card） */
+  plan?: KiroAgentPlan;
+  /** Agent Superpowers：本 turn 结构化澄清问题（不进入 Worklog；独立 Ask Card） */
+  question?: KiroUserQuestion;
 }
 
 /**
@@ -123,7 +137,8 @@ function collectTrustedWebSources(
   const trustedWebSources = new Map<string, { title: string; domain: string }>();
   for (const p of rawParts) {
     if (!isToolPart(p)) continue;
-    if (toolNameOf(p) !== "web_search") continue;
+    const toolName = toolNameOf(p);
+    if (toolName !== "web_search" && toolName !== "web_research") continue;
     if (toolStatusOf(p) !== "done") continue;
     const data = (p.output as { ok?: boolean; data?: { results?: unknown[] } } | null)?.data;
     const results = data?.results;
@@ -278,6 +293,8 @@ export function updateLiveTurnPresentation(
   let answerPartStreaming = false;
   let reasoningChars = 0;
   let reasoningStreaming = false;
+  let agentPlan: KiroAgentPlan | undefined;
+  let userQuestion: KiroUserQuestion | undefined;
 
   for (let i = 0; i < rawParts.length; i++) {
     const p = rawParts[i];
@@ -297,6 +314,23 @@ export function updateLiveTurnPresentation(
       // 控制信号本身不进入 Worklog（V4.1：无 milestone / 无 Tool Row / 无 Action Card；
       // phase 由 boundary 后的 composing 表达）
       if (isKiroFinalAnswerToolName(toolNameOf(p))) {
+        continue;
+      }
+      const toolName = toolNameOf(p);
+      // Agent Superpowers：计划 / 澄清是控制信号，走独立卡片，不进入 Worklog。
+      // live 阶段 output 未到 → 用 input 先展示；后续 output 到达后以规范化结果覆盖。
+      if (toolName === KIRO_UPDATE_AGENT_PLAN_TOOL_NAME) {
+        const output = p.output as { ok?: boolean; data?: { plan?: unknown } } | null | undefined;
+        const source = output?.ok === true ? output.data?.plan : p.input;
+        const plan = normalizeAgentPlan(source);
+        if (plan) agentPlan = plan;
+        continue;
+      }
+      if (toolName === KIRO_ASK_USER_TOOL_NAME) {
+        const output = p.output as { ok?: boolean; data?: { question?: unknown } } | null | undefined;
+        const source = output?.ok === true ? output.data?.question : p.input;
+        const question = normalizeUserQuestion(source);
+        if (question) userQuestion = question;
         continue;
       }
       worklog.push(buildToolBlock(p, i, stepIndex, trustedWebSources));
@@ -396,6 +430,8 @@ export function updateLiveTurnPresentation(
     phase,
     reasoningSummary,
     reasoningStreaming: reasoningSummary ? reasoningStreaming : undefined,
+    ...(agentPlan ? { plan: agentPlan } : {}),
+    ...(userQuestion ? { question: userQuestion } : {}),
   };
 }
 

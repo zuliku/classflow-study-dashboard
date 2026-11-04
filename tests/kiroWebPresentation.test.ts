@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  formatKiroToolActivityDetail,
   formatKiroToolActivityHeadline,
   formatWebSearchQueryForActivity,
   WEB_ACTIVITY_QUERY_MAX_CHARS,
@@ -100,6 +101,49 @@ describe("formatKiroToolActivityHeadline — web_search", () => {
       })
     ).toBe("网页搜索失败：新学期 选课");
     expect(formatKiroToolActivityHeadline({ toolName: "web_search", status: "error" })).toBe("网页搜索失败");
+  });
+});
+
+describe("formatKiroToolActivityHeadline — web_research", () => {
+  const researchOutput = {
+    ok: true,
+    data: {
+      topic: "AI agents",
+      queries: ["AI agents 2026", "agent frameworks comparison"],
+      results: [{ sourceId: "web-1" }, { sourceId: "web-2" }, { sourceId: "web-3" }],
+    },
+  };
+
+  it("working 显示研究主题；done 显示方向数/来源数；error 安全文案", () => {
+    expect(
+      formatKiroToolActivityHeadline({
+        toolName: "web_research",
+        status: "working",
+        input: { topic: "AI agents" },
+      })
+    ).toBe("正在研究：AI agents");
+    expect(
+      formatKiroToolActivityHeadline({
+        toolName: "web_research",
+        status: "done",
+        input: { topic: "AI agents" },
+        output: researchOutput,
+      })
+    ).toBe("已完成深度检索 · 2 个方向 · 3 个来源");
+    expect(
+      formatKiroToolActivityHeadline({
+        toolName: "web_research",
+        status: "error",
+        input: { topic: "AI agents" },
+      })
+    ).toBe("深度检索失败");
+  });
+
+  it("detail 显示来源数与检索方向（最多 3 个）", () => {
+    const details = formatKiroToolActivityDetail("web_research", "done", researchOutput);
+    expect(details[0]).toBe("深度检索 · 3 个来源");
+    expect(details).toContain("方向：AI agents 2026");
+    expect(details).toContain("方向：agent frameworks comparison");
   });
 });
 

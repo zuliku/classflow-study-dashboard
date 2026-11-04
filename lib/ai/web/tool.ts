@@ -17,8 +17,6 @@ import {
   KiroTrustedWebSource,
   MAX_WEB_SEARCHES_PER_TURN,
   MAX_REMOTE_WEB_SEARCHES_PER_TURN,
-  MAX_WEB_RESULTS,
-  MAX_WEB_RESULTS_PER_DOMAIN,
   MAX_WEB_SOURCES_PER_READ,
   MAX_WEB_READS_PER_TURN,
   MAX_REMOTE_WEB_READS_PER_TURN,
@@ -38,11 +36,18 @@ import { readNativeWebDocumentSource } from "@/lib/ai/web/native/documentReader"
 import { createWebPdfVisionBudget } from "@/lib/ai/web/vision/runtime";
 import { normalizeWebPdfVisionModel } from "@/lib/ai/web/vision/models";
 import { webSearchSafeMessage, canonicalWebSearchUrl } from "@/lib/ai/web/tavily";
+import { createKiroWebResearchTool } from "@/lib/ai/web/research";
+import {
+  allocateWebSourceIds,
+  createKiroWebTurnState,
+  KiroWebTurnState,
+} from "@/lib/ai/web/turnState";
+import {
+  filterWebSearchResults,
+  normalizeWebSearchQuery,
+} from "@/lib/ai/web/resultPipeline";
 
-/** 重复查询检测用归一化（trim / collapse whitespace / lowercase Latin；不做分词/stemming） */
-export function normalizeWebSearchQuery(query: string): string {
-  return query.trim().replace(/\s+/g, " ").toLowerCase();
-}
+export { filterWebSearchResults, normalizeWebSearchQuery } from "@/lib/ai/web/resultPipeline";
 
 /**
  * 可信 Web Source Resolver（Task 16A）：
@@ -65,7 +70,8 @@ export function resolveCurrentTurnWebSources(messages: unknown[]): KiroTrustedWe
     const parts: { type?: string; output?: unknown }[] = Array.isArray(m?.parts) ? (m.parts as { type?: string; output?: unknown }[]) : [];
     for (const p of parts) {
       if (typeof p?.type !== "string" || !p.type.startsWith("tool-")) continue;
-      if (p.type.slice("tool-".length) !== "web_search") continue;
+      const toolName = p.type.slice("tool-".length);
+      if (toolName !== "web_search" && toolName !== "web_research") continue;
       const output = p.output as { ok?: boolean; data?: { results?: KiroWebSearchResult[] } } | null;
       if (!output?.ok || !Array.isArray(output.data?.results)) continue;
       for (const r of output.data.results) {
@@ -151,6 +157,8 @@ export interface KiroWebSearchToolConfig {
   successfulQueries: string[];
   /** 本 Turn 已成功返回结果的 canonical URLs（跨搜索去重；跨 roundtrip 累计） */
   seenUrls: string[];
+  /** 同一请求内与 web_research 共享的预算 / sourceId / 去重状态（可选；测试可独立创建） */
+  state?: KiroWebTurnState;
 }
 
 interface ToolPartLike {
@@ -160,11 +168,11 @@ interface ToolPartLike {
 }
 
 /**
- * 扫描 Conversation 计算 Kiro Search 状态（Task 15A/B）：
- * - attempts：只统计最后一个 User Message 之后、已产生 Tool Result（无论 ok）的 tool-web_search part，
- *   按 toolCallId 去重（无 toolCallId 的旧记录按 occurrence 计一次）
+ * 扫描 Conversation 计算 Kiro Search / Deep Research 状态（Task 15A/B + Agent Superpowers）：
+ * - attempts：只统计最后一个 User Message 之后、已产生 Tool Result（无论 ok）的调用；
+ *   web_search 每次 1 次；web_research 按实际执行的 query 数计；按 toolCallId 去重
  * - nextSourceIndex：扫描整段 Conversation（所有 Turn），只信真实 Tool Result 的 /^web-(\d+)$/ sourceId
- * - successfulQueries / seenUrls：只扫描当前 Turn 的真实成功 web_search outputs
+ * - successfulQueries / seenUrls：只扫描当前 Turn 的真实成功 web_search / web_research outputs
  */
 export function inspectCurrentTurnWebSearchState(messages: unknown[]): {
   attempts: number;
@@ -195,38 +203,66 @@ export function inspectCurrentTurnWebSearchState(messages: unknown[]): {
     for (const p of parts) {
       if (typeof p?.type !== "string" || !p.type.startsWith("tool-")) continue;
       const toolName = p.type.slice("tool-".length);
-      if (toolName !== "web_search") continue;
+      if (toolName !== "web_search" && toolName !== "web_research") continue;
 
       const output = p.output as {
         ok?: boolean;
         query?: string;
-        data?: { results?: KiroWebSearchResult[] };
+        data?: {
+          results?: KiroWebSearchResult[];
+          queries?: string[];
+          failedQueries?: { query?: string }[];
+          attempts?: number;
+        };
       } | null;
       if (output?.ok === true) {
         const results = Array.isArray(output.data?.results) ? output.data.results : [];
         for (const r of results) {
           const mIdx = /^web-(\d+)$/.exec(r.sourceId ?? "");
           if (mIdx) maxSourceIndex = Math.max(maxSourceIndex, parseInt(mIdx[1], 10));
-          // seenUrls（conversation-wide 或 turn-wide？）：只对当前 Turn 生效（去重范围 = 本 Turn）
+          // seenUrls：只对当前 Turn 生效（去重范围 = 本 Turn；web_search / web_research 共享）
           if (inCurrentTurn && r.url) {
             const canonical = canonicalWebSearchUrl(r.url);
             if (canonical) seenCanonical.add(canonical);
           }
         }
-        if (inCurrentTurn && typeof output.query === "string" && output.query.trim()) {
-          successfulQueries.push(normalizeWebSearchQuery(output.query));
+        if (inCurrentTurn) {
+          if (toolName === "web_search" && typeof output.query === "string" && output.query.trim()) {
+            successfulQueries.push(normalizeWebSearchQuery(output.query));
+          }
+          if (toolName === "web_research") {
+            const failed = new Set(
+              (Array.isArray(output.data?.failedQueries) ? output.data.failedQueries : [])
+                .map((f) => normalizeWebSearchQuery(String(f?.query ?? "")))
+                .filter(Boolean)
+            );
+            for (const q of Array.isArray(output.data?.queries) ? output.data.queries : []) {
+              if (typeof q !== "string" || !q.trim()) continue;
+              const normalized = normalizeWebSearchQuery(q);
+              if (!failed.has(normalized)) successfulQueries.push(normalized);
+            }
+          }
         }
       }
 
-      // attempts：当前 Turn 内、已产生 Tool Result（ok:true 或 ok:false）的每次调用都计入
+      // attempts：当前 Turn 内、已产生 Tool Result（ok:true 或 ok:false）的每次调用都计入。
+      // web_research 每次调用按真实尝试的 query 数计费（至少 1，避免失败调用绕过上限）。
       if (inCurrentTurn && p.output !== undefined && p.output !== null) {
+        const attemptCost =
+          toolName === "web_research"
+            ? Math.max(
+                1,
+                Array.isArray(output?.data?.queries) ? output!.data!.queries!.length : 0,
+                typeof output?.data?.attempts === "number" ? output!.data!.attempts! : 0
+              )
+            : 1;
         if (typeof p.toolCallId === "string" && p.toolCallId) {
           if (!attemptedIds.has(p.toolCallId)) {
             attemptedIds.add(p.toolCallId);
-            attempts += 1;
+            attempts += attemptCost;
           }
         } else {
-          attempts += 1; // 旧记录无 toolCallId：按 occurrence 计一次
+          attempts += attemptCost; // 旧记录无 toolCallId：按 occurrence 计一次
         }
       }
     }
@@ -260,38 +296,8 @@ function duplicateQueryFailure(): {
 }
 
 /**
- * Post-processing pipeline（Task 15B，纯函数）：
- * provider 结果 → 跨搜索 canonical URL 去重 → domain diversity（无 includeDomains 时每域 ≤2）→ 上限 6。
- * 保持 Provider relevance 顺序；diversity 只是 skip 超出 domain cap 的后续结果。
+ * Post-processing pipeline 已迁移至 lib/ai/web/resultPipeline.ts（web_search / web_research 共享）。
  */
-export function filterWebSearchResults(input: {
-  results: KiroWebSearchResult[];
-  seenCanonicalUrls: string[];
-  includeDomains?: string[];
-}): { results: KiroWebSearchResult[]; duplicatesFiltered: number } {
-  const seen = new Set(input.seenCanonicalUrls);
-  const perDomain = new Map<string, number>();
-  const kept: KiroWebSearchResult[] = [];
-  let duplicatesFiltered = 0;
-  const diversityEnabled = !(input.includeDomains && input.includeDomains.length > 0);
-
-  for (const r of input.results) {
-    if (kept.length >= MAX_WEB_RESULTS) break;
-    const canonical = canonicalWebSearchUrl(r.url);
-    if (!canonical || seen.has(canonical)) {
-      duplicatesFiltered += 1;
-      continue;
-    }
-    seen.add(canonical);
-    if (diversityEnabled) {
-      const n = perDomain.get(r.domain) ?? 0;
-      if (n >= MAX_WEB_RESULTS_PER_DOMAIN) continue; // 多样性跳过（非重复，不计数）
-      perDomain.set(r.domain, n + 1);
-    }
-    kept.push(r);
-  }
-  return { results: kept, duplicatesFiltered };
-}
 
 function credentialFailure(
   result: Extract<KiroWebSearchCredentialResult, { ok: false }>
@@ -336,6 +342,15 @@ export function assembleKiroToolsForRequest(input: {
       ? { mode: access.mode, userApiKey: access.apiKey }
       : input.credential;
   const remote = input.origin === "remote-channel";
+  const maxSearchAttempts = remote ? MAX_REMOTE_WEB_SEARCHES_PER_TURN : MAX_WEB_SEARCHES_PER_TURN;
+  // web_search / web_research 共享同一请求内预算、sourceId 游标与去重集合
+  const webTurnState = createKiroWebTurnState({
+    attemptsSoFar: searchState.attempts,
+    maxAttempts: maxSearchAttempts,
+    nextSourceIndex: searchState.nextSourceIndex,
+    successfulQueries: searchState.successfulQueries,
+    seenUrls: searchState.seenUrls,
+  });
   return {
     ...input.clientTools,
     web_search: createKiroWebSearchTool({
@@ -343,10 +358,17 @@ export function assembleKiroToolsForRequest(input: {
       ...(keyless ? { keylessProvider: getKiroWebSearchProvider("auto") } : {}),
       credential: effectiveCredential,
       attemptsSoFar: searchState.attempts,
-      maxAttempts: remote ? MAX_REMOTE_WEB_SEARCHES_PER_TURN : MAX_WEB_SEARCHES_PER_TURN,
+      maxAttempts: maxSearchAttempts,
       nextSourceIndex: searchState.nextSourceIndex,
       successfulQueries: searchState.successfulQueries,
       seenUrls: searchState.seenUrls,
+      state: webTurnState,
+    }),
+    web_research: createKiroWebResearchTool({
+      provider: getKiroWebSearchProvider("tavily"),
+      ...(keyless ? { keylessProvider: getKiroWebSearchProvider("auto") } : {}),
+      credential: effectiveCredential,
+      state: webTurnState,
     }),
     read_web_source: createKiroWebReadTool({
       fallbackProvider: getKiroWebEvidenceProvider(keyless ? "auto" : "tavily"),
@@ -558,10 +580,15 @@ export function createKiroWebReadTool(config: KiroWebReadToolConfig) {
  */
 export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
   const { provider, keylessProvider, credential, attemptsSoFar, maxAttempts, nextSourceIndex } = config;
-  let remainingAttempts = Math.max(0, (maxAttempts ?? MAX_WEB_SEARCHES_PER_TURN) - attemptsSoFar);
-  let sourceCursor = nextSourceIndex;
-  const successfulQueries = new Set(config.successfulQueries.map(normalizeWebSearchQuery));
-  const seenCanonicalUrls = new Set(config.seenUrls);
+  const state =
+    config.state ??
+    createKiroWebTurnState({
+      attemptsSoFar,
+      maxAttempts,
+      nextSourceIndex,
+      successfulQueries: config.successfulQueries,
+      seenUrls: config.seenUrls,
+    });
 
   return tool({
     description:
@@ -571,21 +598,21 @@ export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
     inputSchema: kiroWebSearchInputSchema,
     execute: async (input: z.infer<typeof kiroWebSearchInputSchema>) => {
       // attempt-based limit：无论成功/失败，每次真正尝试（含凭据失败）都消耗额度
-      if (remainingAttempts <= 0) return limitFailure();
+      if (state.remainingSearchAttempts <= 0) return limitFailure();
       const resolved = resolveWebSearchCredential({
         mode: credential.mode,
         userApiKey: credential.userApiKey,
       });
       if (!resolved.ok) {
-        remainingAttempts -= 1;
+        state.remainingSearchAttempts -= 1;
         return credentialFailure(resolved);
       }
 
-      remainingAttempts -= 1;
+      state.remainingSearchAttempts -= 1;
 
       // Task 15B：重复查询守卫（仍计一次 logical attempt；不请求 Provider）
       const normalizedQuery = normalizeWebSearchQuery(input.query);
-      if (successfulQueries.has(normalizedQuery)) return duplicateQueryFailure();
+      if (state.successfulQueries.has(normalizedQuery)) return duplicateQueryFailure();
 
       // server 无 Key（或 keyless 运营开关允许）时使用基础搜索；keylessProvider 缺失 → 明确失败，不偷偷换通道。
       const keyless = resolved.kind === "keyless";
@@ -618,20 +645,20 @@ export function createKiroWebSearchTool(config: KiroWebSearchToolConfig) {
         // 跨搜索去重 + domain diversity + 上限（保持 Provider relevance 顺序）
         const filtered = filterWebSearchResults({
           results: outcome.results,
-          seenCanonicalUrls: Array.from(seenCanonicalUrls),
+          seenCanonicalUrls: Array.from(state.seenUrls),
           includeDomains: input.includeDomains,
         });
         // sourceId 只分配给最终返回的新结果，且保持连续（web-<cursor> 起）
+        const sourceIds = allocateWebSourceIds(state, filtered.results.length);
         const results = filtered.results.map((r, i) => ({
           ...r,
-          sourceId: `web-${sourceCursor + i}`,
+          sourceId: sourceIds[i],
         }));
-        sourceCursor += results.length;
         for (const r of results) {
           const canonical = canonicalWebSearchUrl(r.url);
-          if (canonical) seenCanonicalUrls.add(canonical);
+          if (canonical) state.seenUrls.add(canonical);
         }
-        successfulQueries.add(normalizedQuery);
+        state.successfulQueries.add(normalizedQuery);
         return {
           ok: true,
           data: {

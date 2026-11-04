@@ -7,6 +7,8 @@
 import { describe, expect, it } from "vitest";
 import { createKeylessSearchRouter } from "@/lib/ai/web/keyless/router";
 import { createKeylessEvidenceRouter } from "@/lib/ai/web/keyless/router";
+import { createKiroWebResearchTool } from "@/lib/ai/web/research";
+import { createKiroWebTurnState } from "@/lib/ai/web/turnState";
 
 const LIVE = process.env.KIRO_WEB_SEARCH_LIVE === "1";
 
@@ -68,5 +70,37 @@ describe.skipIf(!LIVE)("Kiro keyless web search live", () => {
       router.reset();
     },
     25_000
+  );
+
+  it(
+    "web_research：keyless 并发 2 个方向 → 去重来源 + 连续 web-N",
+    async () => {
+      const router = createKeylessSearchRouter();
+      const state = createKiroWebTurnState({ attemptsSoFar: 0, nextSourceIndex: 1 });
+      const tool = createKiroWebResearchTool({
+        provider: router.provider,
+        keylessProvider: router.provider,
+        credential: { mode: "server" },
+        state,
+      });
+      const result = (await tool.execute?.(
+        { topic: "AI agent frameworks", queries: ["AI agent frameworks 2026", "Claude agent capabilities"] },
+        {} as never
+      )) as {
+        ok: boolean;
+        data?: { results: { sourceId: string; url: string }[]; queries: string[]; failedQueries: unknown[] };
+      };
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.data!.queries).toHaveLength(2);
+      expect(result.data!.results.length).toBeGreaterThan(0);
+      const ids = result.data!.results.map((r) => r.sourceId);
+      expect(new Set(ids).size).toBe(ids.length);
+      for (const id of ids) expect(id).toMatch(/^web-\d+$/);
+      for (const r of result.data!.results) expect(r.url).toMatch(/^https?:\/\//);
+      expect(state.remainingSearchAttempts).toBe(1);
+      router.reset();
+    },
+    35_000
   );
 });

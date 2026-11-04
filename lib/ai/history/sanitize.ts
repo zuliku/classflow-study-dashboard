@@ -21,6 +21,8 @@ import { KiroContextRef } from "@/lib/ai/context/types";
 import type { AppState } from "@/store/useAppStore";
 import { KiroAgentTask } from "@/lib/ai/computer/task";
 import { normalizeContextUsageSnapshot } from "@/lib/ai/contextBudget/usage";
+import { normalizeAgentPlan } from "@/lib/ai/agent/plan";
+import { normalizeUserQuestion } from "@/lib/ai/agent/ask";
 
 /** 单条消息内容上限（极宽但有限，防止异常历史卡死 UI） */
 export const MAX_PERSISTED_MESSAGE_CONTENT = 100_000;
@@ -182,7 +184,8 @@ export function sanitizeConversation(input: {
         (m.historyActions?.length ?? 0) > 0 ||
         Boolean(m.computerTask || m.historyComputerTask) ||
         (m.visualActionProposals?.length ?? 0) > 0 ||
-        (m.historyVisualActionProposals?.length ?? 0) > 0
+        (m.historyVisualActionProposals?.length ?? 0) > 0 ||
+        Boolean(m.assistantTurn?.plan || m.assistantTurn?.question)
     )
     .map((m) => {
       // live action（可 undo）→ 最小事实数据；恢复的历史 action 原样透传（canUndo 恒 false）
@@ -213,6 +216,10 @@ export function sanitizeConversation(input: {
       ];
       // 上下文占用快照（Codex-style 指示）：只持久化归一化后的有界数字快照
       const contextUsage = normalizeContextUsageSnapshot(m.contextUsage);
+      // Agent Superpowers：plan / ask 只持久化规范化展示快照（无工具参数）
+      const agentPlan = m.role === "assistant" ? normalizeAgentPlan(m.assistantTurn?.plan) : null;
+      const agentQuestion =
+        m.role === "assistant" ? normalizeUserQuestion(m.assistantTurn?.question) : null;
       return {
         id: m.id,
         role: m.role,
@@ -228,6 +235,8 @@ export function sanitizeConversation(input: {
         computerTask: toPersistedComputerTask(m.computerTask, m.historyComputerTask),
         ...(visualProposals.length > 0 ? { visualProposals } : {}),
         ...(contextUsage ? { contextUsage } : {}),
+        ...(agentPlan ? { agentPlan } : {}),
+        ...(agentQuestion ? { agentQuestion } : {}),
       };
     });
 

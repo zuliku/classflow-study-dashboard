@@ -138,6 +138,14 @@ export type KiroWebEvidenceOutcome =
 export const MAX_WEB_SEARCHES_PER_TURN = 3;
 /** QQ / 邮件等 remote-channel：更低额度，避免外部渠道滥用免费搜索 */
 export const MAX_REMOTE_WEB_SEARCHES_PER_TURN = 1;
+/** Deep Research：一次调用最多查询方向数（每个 query 消耗 1 次搜索预算） */
+export const MAX_WEB_RESEARCH_QUERIES = 3;
+/** Deep Research：本次 Tool 返回的结果总数上限 */
+export const MAX_WEB_RESEARCH_RESULTS = 10;
+/** Deep Research：每个 query 最多保留的结果数（共享域名多样性后） */
+export const MAX_WEB_RESEARCH_RESULTS_PER_QUERY = 4;
+/** Deep Research：一次调用的总超时（并发搜索共享） */
+export const WEB_RESEARCH_TIMEOUT_MS = 15_000;
 /** 每次搜索返回结果上限（ClassFlow 成本边界，LLM 不能覆盖） */
 export const MAX_WEB_RESULTS = 6;
 /** 单次搜索超时 */

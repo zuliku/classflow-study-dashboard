@@ -626,11 +626,11 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             description={
               webSearchCredentialMode === "server"
                 ? serverSearchConfigured === true
-                  ? "需要最新信息时自动搜索；Tavily 增强已启用。"
+                  ? "需要最新信息时自动搜索；多角度问题自动深入检索；Tavily 增强已启用。"
                   : keylessSearchAvailable === false
                     ? "需要最新信息时自动搜索；当前基础搜索不可用。"
-                    : "需要最新信息时自动搜索；基础搜索免 Key。"
-                : "需要最新信息时自动搜索；使用自己的 Tavily Key。"
+                    : "需要最新信息时自动搜索；多角度问题自动深入检索；基础搜索免 Key。"
+                : "需要最新信息时自动搜索；多角度问题自动深入检索；使用自己的 Tavily Key。"
             }
             modified={kiroSettingsModified.has("webSearchEnabled")}
             onReset={() => resetKiroSettingsPreference("webSearchEnabled")}

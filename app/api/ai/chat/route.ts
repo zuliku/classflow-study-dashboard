@@ -33,7 +33,7 @@ import { validateComputerTurnSnapshot } from "@/lib/ai/computer/snapshot";
 import { COMPUTER_MUTATION_LIMIT_PER_TURN } from "@/lib/ai/computer/executor";
 import { resolveDocumentAuthoringVersion } from "@/lib/ai/computer/documents/authoring/protocol";
 import { deriveDocumentFailureFuseState } from "@/lib/ai/computer/documents/failureFuse";
-import { KIRO_FINAL_ANSWER_TOOL_NAME, kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl, kiroFinalAnswerBoundarySeenInCurrentTurn, isKiroFinalAnswerToolName, type KiroFinalAnswerStepLike } from "@/lib/ai/tools/finalAnswer";
+import { KIRO_FINAL_ANSWER_TOOL_NAME, kiroFinalAnswerBoundarySeen, kiroFinalAnswerAfterBoundaryControl, kiroFinalAnswerBoundarySeenInCurrentTurn, kiroAskUserSeen, isKiroFinalAnswerToolName, type KiroFinalAnswerStepLike } from "@/lib/ai/tools/finalAnswer";
 import {
   textOnlySmoothStream,
   KIRO_NATIVE_DELTA_CHARS,
@@ -672,6 +672,11 @@ export async function handleChat(req: Request) {
         if (kiroFinalAnswerBoundarySeen(steps)) {
           // DeepSeek Thinking Mode：boundary 后只用空 activeTools 关闭工具，不发送 tool_choice
           return kiroFinalAnswerAfterBoundaryControl(!!omitToolChoice);
+        }
+        // Agent Superpowers：ask_user 已发出 → 强制下一步只保留 begin_final_answer，
+        // 让模型先结束本轮并等待用户选择，不能在提问后继续执行/假设答案。
+        if (kiroAskUserSeen(steps as KiroFinalAnswerStepLike[])) {
+          return { activeTools: [KIRO_FINAL_ANSWER_TOOL_NAME] };
         }
         const stepsBusiness = (steps as KiroFinalAnswerStepLike[]).some((s) =>
           (s.toolCalls ?? []).some((tc) => !isKiroFinalAnswerToolName(tc.toolName))

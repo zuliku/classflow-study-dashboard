@@ -186,6 +186,8 @@ import {
   DocumentFailureFuseState,
 } from "@/lib/ai/computer/documents/failureFuse";
 import { resolveToolOutcomeStatus } from "@/lib/ai/presentation/toolOutcome";
+import { normalizeAgentPlan } from "@/lib/ai/agent/plan";
+import { normalizeUserQuestion } from "@/lib/ai/agent/ask";
 
 /** 每回合工具调用上限：Read ≤ 12，Write ≤ 8 */
 export const MAX_READ_TOOL_CALLS_PER_TURN_UI = 12;
@@ -411,6 +413,19 @@ export function buildKiroMessageView(
     assistantTurn = commit
       ? updateLiveTurnPresentation(commit, m.parts ?? [], turnInFlight)
       : deriveKiroAssistantTurn(m.parts ?? [], turnInFlight);
+    if (restored) {
+      // Agent Superpowers：历史 parts 已剥离 → plan / ask 从持久化 metadata 恢复展示
+      const meta = m.metadata as Record<string, unknown> | undefined;
+      const plan = normalizeAgentPlan(meta?.agentPlan);
+      const question = normalizeUserQuestion(meta?.agentQuestion);
+      if (plan || question) {
+        assistantTurn = {
+          ...assistantTurn,
+          ...(plan ? { plan } : {}),
+          ...(question ? { question } : {}),
+        };
+      }
+    }
     content = assistantTurn.answer;
     streaming = assistantTurn.answerStreaming;
   } else {
@@ -3849,6 +3864,8 @@ export function useKiroChat({
         metadata: {
           ...buildRestoredMessageMetadata(pm),
           ...(restoredContextUsage ? { contextUsage: restoredContextUsage } : {}),
+          ...(pm.agentPlan ? { agentPlan: pm.agentPlan } : {}),
+          ...(pm.agentQuestion ? { agentQuestion: pm.agentQuestion } : {}),
         },
       };
     });
@@ -3904,7 +3921,8 @@ export function useKiroChat({
       if (m.role !== "assistant") continue;
       for (const p of (m.parts ?? []) as { type?: string; output?: unknown }[]) {
         if (typeof p.type !== "string" || !p.type.startsWith("tool-")) continue;
-        if (p.type.slice("tool-".length) !== "web_search") continue;
+        const toolName = p.type.slice("tool-".length);
+        if (toolName !== "web_search" && toolName !== "web_research") continue;
         const output = p.output as { ok?: boolean; data?: { results?: KiroWebSearchResult[] } } | null;
         if (!output?.ok || !Array.isArray(output.data?.results)) continue;
         for (const r of output.data.results) {

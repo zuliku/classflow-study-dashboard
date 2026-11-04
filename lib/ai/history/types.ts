@@ -12,6 +12,9 @@ import type { VisualActionKind } from "@/lib/ai/visual/types";
 import type { PersistedTaskCheckpoint } from "@/lib/ai/computer/checkpoints";
 /** 执行计划（type-only import 不产生 runtime cycle） */
 import type { PersistedExecutionPlan } from "@/lib/ai/computer/plans/types";
+/** Agent Superpowers：plan / ask 展示快照（type-only） */
+import type { KiroAgentPlan } from "@/lib/ai/agent/plan";
+import type { KiroUserQuestion } from "@/lib/ai/agent/ask";
 
 export interface PersistedContextRef {
   kind: "course" | "assignment" | "group-project" | "material" | "week";
@@ -155,6 +158,10 @@ export interface PersistedKiroMessage {
    * 旧记录无此字段（= 未知），恢复后自然显示「等待首次请求」。
    */
   contextUsage?: import("@/lib/ai/contextBudget/usage").ContextUsageSnapshot;
+  /** Agent Superpowers：执行计划展示快照（只含标题/步骤/状态，无工具参数） */
+  agentPlan?: KiroAgentPlan;
+  /** Agent Superpowers：结构化澄清问题快照（只含问题/选项，无工具参数） */
+  agentQuestion?: KiroUserQuestion;
 }
 
 /** Conversation Summary（Task 7）：内部 Model Context，不代表当前 ClassFlow 数据 */

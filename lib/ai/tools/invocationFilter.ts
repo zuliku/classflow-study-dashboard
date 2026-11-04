@@ -55,7 +55,11 @@ const REMOTE_ALLOWED = new Set<string>([
   "get_user_study_profile",
   // 联网搜索是只读外部证据；remote-channel 允许使用，但 assemble 层收紧为 1 次/轮。
   "web_search",
+  "web_research",
   "read_web_source",
+  // Agent Superpowers：plan / ask 是零 IO 控制信号，不扩大写权限
+  "update_agent_plan",
+  "ask_user",
   "begin_final_answer",
 ]);
 

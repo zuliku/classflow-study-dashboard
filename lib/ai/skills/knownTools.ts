@@ -21,7 +21,7 @@ export type KiroSkillToolStatus =
   | "external-unverified"
   | "unknown";
 
-const CANONICAL_WEB_TOOLS = ["web_search", "read_web_source"] as const;
+const CANONICAL_WEB_TOOLS = ["web_search", "web_research", "read_web_source"] as const;
 const MCP_GATEWAY_TOOLS = ["mcp_search_tools", "mcp_call_tool"] as const;
 
 const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set<string>([

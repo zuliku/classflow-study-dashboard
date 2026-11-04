@@ -12,6 +12,8 @@
  * 这取代了旧的「等 100ms 猜语义」gate：文字通道由协议决定，不再依赖时间启发。
  */
 
+import { KIRO_ASK_USER_TOOL_NAME } from "@/lib/ai/agent/ask";
+
 export const KIRO_FINAL_ANSWER_TOOL_NAME = "begin_final_answer";
 
 export const KIRO_FINAL_ANSWER_TOOL_DESCRIPTION =
@@ -113,6 +115,11 @@ export interface KiroFinalAnswerStepLike {
 /** 历史 step 是否已出现 begin_final_answer（Final Answer Boundary） */
 export function kiroFinalAnswerBoundarySeen(steps: ReadonlyArray<KiroFinalAnswerStepLike>): boolean {
   return steps.some((s) => (s.toolCalls ?? []).some((tc) => tc.toolName === KIRO_FINAL_ANSWER_TOOL_NAME));
+}
+
+/** Agent Superpowers：历史 step 是否已出现 ask_user（提问后必须结束本轮等待用户选择） */
+export function kiroAskUserSeen(steps: ReadonlyArray<KiroFinalAnswerStepLike>): boolean {
+  return steps.some((s) => (s.toolCalls ?? []).some((tc) => tc.toolName === KIRO_ASK_USER_TOOL_NAME));
 }
 
 /** Boundary 后最多再走 N 个 step（Final text）的 stopWhen（boundary 本身不消耗 business quota） */

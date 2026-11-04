@@ -65,3 +65,26 @@ export const kiroWebReadSourceSchema = z.object({
   /** 「希望从这些网页中找什么」；可选 */
   query: z.string().trim().min(2).max(300).optional(),
 });
+
+/**
+ * Deep Research schema（Agent Superpowers V1）：
+ * - 只控制主题与 2–3 个互补 query；不允许 search_depth / max_results / API Key
+ * - 每个 query 仍消耗本轮 web_search 预算
+ */
+export const kiroWebResearchInputSchema = z.object({
+  topic: z.string().trim().min(2, "研究主题至少 2 个字符").max(200, "研究主题过长"),
+  queries: z
+    .array(z.string().trim().min(2).max(WEB_SEARCH_QUERY_MAX))
+    .max(3, "最多 3 个检索方向")
+    .optional(),
+  topicType: z.enum(["general", "news"]).optional(),
+  timeRange: z.enum(["day", "week", "month", "year"]).optional(),
+  includeDomains: z
+    .array(z.string().trim().min(1).max(200))
+    .max(WEB_SEARCH_MAX_INCLUDE_DOMAINS, `最多 ${WEB_SEARCH_MAX_INCLUDE_DOMAINS} 个域名`)
+    .optional(),
+  excludeDomains: z
+    .array(z.string().trim().min(1).max(200))
+    .max(WEB_SEARCH_MAX_INCLUDE_DOMAINS, `最多 ${WEB_SEARCH_MAX_INCLUDE_DOMAINS} 个域名`)
+    .optional(),
+});

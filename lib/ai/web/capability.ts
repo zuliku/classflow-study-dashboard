@@ -39,14 +39,16 @@ export function isKiroWebSearchAvailable(input: KiroWebSearchCapabilityInput): b
 export function buildKiroWebSearchCapabilitySection(input: KiroWebSearchCapabilityInput): string {
   const mode = resolveKiroWebSearchMode(input);
   if (mode === "off") {
-    return "\n\n# 联网搜索能力（本轮）\n本轮联网搜索不可用（已关闭或当前为纯文本追答）。不要调用 web_search，不要声称已经搜索，也不要引用网页来源。";
+    return "\n\n# 联网搜索能力（本轮）\n本轮联网搜索不可用（已关闭或当前为纯文本追答）。不要调用 web_search / web_research，不要声称已经搜索，也不要引用网页来源。";
   }
   if (mode === "unavailable") {
-    return "\n\n# 联网搜索能力（本轮）\n本轮联网搜索不可用（用户选择了自备搜索 Key，但尚未配置）。不要调用 web_search，不要引用网页来源；如需最新外部信息，提示用户在设置中填写 Tavily API Key，或切换到自动搜索。";
+    return "\n\n# 联网搜索能力（本轮）\n本轮联网搜索不可用（用户选择了自备搜索 Key，但尚未配置）。不要调用 web_search / web_research，不要引用网页来源；如需最新外部信息，提示用户在设置中填写 Tavily API Key，或切换到自动搜索。";
   }
-  const limit = input.remote ? "本轮为远程渠道（QQ/邮件），最多 1 次搜索、1 次读取；" : "每轮最多 3 次搜索、2 次读取；";
+  const limit = input.remote
+    ? "本轮为远程渠道（QQ/邮件），最多 1 次搜索、1 次读取（web_research 也按 query 数计入）；"
+    : "每轮最多 3 次搜索、2 次读取（web_research 的每个 query 同样消耗搜索次数）；";
   if (mode === "basic") {
-    return `\n\n# 联网搜索能力（本轮）\n本轮联网搜索可用：基础搜索（免 Key）。遇到新闻、政策、公告、招生、价格、版本、赛事等时效性外部信息时，默认先自主搜索，不要先问用户。${limit}中文关键词结果不相关时，可用英文关键词/官方英文名再搜一次。搜索服务限流或失败时如实说明，不要编造来源、标题或日期。`;
+    return `\n\n# 联网搜索能力（本轮）\n本轮联网搜索可用：基础搜索（免 Key）。遇到新闻、政策、公告、招生、价格、版本、赛事等时效性外部信息时，默认先自主搜索，不要先问用户。${limit}多角度研究可用 web_research 一次覆盖 2–3 个方向；单点查证用 web_search。中文关键词结果不相关时，可用英文关键词/官方英文名再搜一次。搜索服务限流或失败时如实说明，不要编造来源、标题或日期。`;
   }
-  return `\n\n# 联网搜索能力（本轮）\n本轮联网搜索可用：增强搜索（用户已配置 Tavily Key）。按现有 Kiro Search 策略自主使用；需要最新外部信息时直接搜索，不需要先征求用户同意。${limit}`;
+  return `\n\n# 联网搜索能力（本轮）\n本轮联网搜索可用：增强搜索（用户已配置 Tavily Key）。按现有 Kiro Search 策略自主使用；需要最新外部信息时直接搜索，不需要先征求用户同意。${limit}多角度研究可用 web_research 一次覆盖 2–3 个方向；单点查证用 web_search。`;
 }

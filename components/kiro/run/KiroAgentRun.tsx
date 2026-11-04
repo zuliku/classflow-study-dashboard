@@ -11,6 +11,8 @@ import {
 import { KiroAgentRunHeader } from "@/components/kiro/run/KiroAgentRunHeader";
 import { KiroWorklogTimeline } from "@/components/kiro/KiroWorklog";
 import { KiroInlineApproval } from "@/components/kiro/run/KiroInlineApproval";
+import { KiroAgentPlanCard } from "@/components/kiro/run/KiroAgentPlanCard";
+import { KiroAskUserCard } from "@/components/kiro/run/KiroAskUserCard";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS } from "@/lib/motion";
@@ -45,6 +47,7 @@ export function KiroAgentRun({
   approval,
   turnInFlight,
   desktopPaused,
+  questionAnswerable,
   onStop,
 }: {
   assistantTurn: KiroAssistantTurnPresentation;
@@ -54,9 +57,15 @@ export function KiroAgentRun({
   approval?: KiroAgentRunApprovalBinding | null;
   turnInFlight: boolean;
   desktopPaused?: boolean;
+  /** 本消息是最后一条 assistant 且当前无进行中的 turn → Ask Card 可回答 */
+  questionAnswerable?: boolean;
   onStop?: () => void;
 }) {
-  const hasWorklog = assistantTurn.worklog.length > 0 || !!assistantTurn.reasoningSummary;
+  const hasWorklog =
+    assistantTurn.worklog.length > 0 ||
+    !!assistantTurn.reasoningSummary ||
+    !!assistantTurn.plan ||
+    !!assistantTurn.question;
 
   // 当前 Turn：working/composing/answering 保持 expanded；历史恢复（初始 done）默认折叠；
   // 不因 done 瞬时 collapse（避免完成瞬间 layout 跳动）；用户手动操作始终优先。
@@ -116,12 +125,23 @@ export function KiroAgentRun({
         onStop={onStop}
       />
 
+      {assistantTurn.plan && (
+        <KiroAgentPlanCard plan={assistantTurn.plan} running={turnInFlight} />
+      )}
+
       <KiroWorklogTimeline
         worklog={assistantTurn.worklog}
         phase={assistantTurn.phase}
         reasoningSummary={assistantTurn.reasoningSummary}
         expanded={expanded}
       />
+
+      {assistantTurn.question && (
+        <KiroAskUserCard
+          question={assistantTurn.question}
+          answerable={!!questionAnswerable}
+        />
+      )}
 
       {/* Inline Approval：Timeline 后、Final Answer 前；折叠 Timeline 也始终可见 */}
       {shownApproval && (

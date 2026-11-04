@@ -93,6 +93,24 @@ export function formatKiroToolActivityHeadline(input: KiroToolActivityHeadlineIn
     return q ? `已搜索网页：${q}${suffix}` : `搜索网页${suffix}`;
   }
 
+  if (toolName === "web_research") {
+    const rawTopic = (toolInput as { topic?: unknown } | null | undefined)?.topic;
+    const topic =
+      typeof rawTopic === "string"
+        ? truncateActivityTitle(rawTopic.trim().replace(/\s+/g, " "))
+        : "";
+    if (status === "working") return topic ? `正在研究：${topic}` : "正在进行多角度检索…";
+    if (status === "error") return "深度检索失败";
+    const data = (output as { ok?: boolean; data?: { queries?: unknown[]; results?: unknown[] } } | null)?.data;
+    const queryCount = Array.isArray(data?.queries) ? data.queries.length : 0;
+    const resultCount = Array.isArray(data?.results) ? data.results.length : 0;
+    const parts = [
+      queryCount > 0 ? `${queryCount} 个方向` : "",
+      resultCount > 0 ? `${resultCount} 个来源` : "",
+    ].filter(Boolean);
+    return parts.length > 0 ? `已完成深度检索 · ${parts.join(" · ")}` : "已完成深度检索";
+  }
+
   if (toolName === "read_web_source") {
     const ids = readSourceIdsOf(toolInput);
     const present = ids
@@ -164,6 +182,20 @@ export function formatKiroToolActivityDetail(
     const data = (output as { ok?: boolean; data?: { results?: unknown[] } } | null)?.data;
     const count = Array.isArray(data?.results) ? data.results.length : 0;
     return [`搜索网络 · ${count} 个来源`];
+  }
+  if (toolName === "web_research") {
+    if (status === "working") return ["正在进行多角度检索"];
+    if (status === "error") return ["深度检索失败"];
+    const data = (output as { ok?: boolean; data?: { results?: unknown[]; queries?: unknown[] } } | null)?.data;
+    const count = Array.isArray(data?.results) ? data.results.length : 0;
+    const queries = Array.isArray(data?.queries)
+      ? data.queries.filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+      : [];
+    const details = [`深度检索 · ${count} 个来源`];
+    for (const q of queries.slice(0, 3)) {
+      details.push(`方向：${q.trim().replace(/\s+/g, " ").slice(0, 60)}`);
+    }
+    return details;
   }
   if (status !== "done") return DEFAULT_DETAILS[status];
   if (!isOkEnvelope(output)) return DEFAULT_DETAILS.done;

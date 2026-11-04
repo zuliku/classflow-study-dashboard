@@ -1,4 +1,4 @@
-/** 是否已有真实 web_search Tool Part（含 live / 历史恢复；只认 tool type，不扫正文）。 */
+/** 是否已有真实 web_search / web_research Tool Part（含 live / 历史恢复；只认 tool type，不扫正文）。 */
 export function hasUsedWebSearch(messages: unknown[]): boolean {
   if (!Array.isArray(messages)) return false;
   for (const message of messages) {
@@ -7,7 +7,8 @@ export function hasUsedWebSearch(messages: unknown[]): boolean {
     if (!Array.isArray(parts)) continue;
     for (const part of parts) {
       if (!part || typeof part !== "object") continue;
-      if ((part as { type?: unknown }).type === "tool-web_search") return true;
+      const type = (part as { type?: unknown }).type;
+      if (type === "tool-web_search" || type === "tool-web_research") return true;
     }
   }
   return false;

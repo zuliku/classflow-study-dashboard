@@ -71,6 +71,8 @@ export const KIRO_TOOL_LABELS: Record<string, string> = {
   apply_change_set: "整体修改",
   // Task 14：Kiro Search（联网搜索；产品层叫 Kiro Search，不显示 Tavily）
   web_search: "搜索网络",
+  // Agent Superpowers：多角度深度检索（仍是只读搜索，不是任意 URL 抓取）
+  web_research: "深度检索",
   // Task 16A：Kiro Web Evidence（用户侧显示「阅读网页」，不出现 Tavily Extract）
   read_web_source: "阅读网页",
   // Computer Agent（V2.2：补齐用户语义标签，避免 fallback「执行操作」）

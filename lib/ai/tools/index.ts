@@ -19,12 +19,60 @@ import {
   resolveGuiControlCapability,
   GuiControlCapabilityState,
 } from "@/lib/ai/computer/gui/capability";
+import {
+  KIRO_UPDATE_AGENT_PLAN_TOOL_NAME,
+  kiroUpdateAgentPlanInputSchema,
+  normalizeAgentPlan,
+} from "@/lib/ai/agent/plan";
+import {
+  KIRO_ASK_USER_TOOL_NAME,
+  kiroAskUserInputSchema,
+  normalizeUserQuestion,
+} from "@/lib/ai/agent/ask";
 
-/** Kiro 全部基础工具（Read + Write + Memory）：Server 提供 schema，Client 按同名执行 */
+/**
+ * Kiro Agent Superpowers（Plan / Ask）：
+ * 纯控制信号，execute 零 IO，仅把规范化结果回传给 Browser 渲染。
+ * 不写 Store、不执行工具、不提升权限；不属于 mutation / audit。
+ */
+const AGENT_CONTROL_TOOLS = {
+  [KIRO_UPDATE_AGENT_PLAN_TOOL_NAME]: tool({
+    description:
+      "提交/更新本轮执行计划（可见 checklist）。仅在任务需要 3 个以上独立步骤、跨工具/跨阶段时使用。" +
+      "steps 用简短可执行标题；同一时间只允许一个 in_progress；开始一步时标记 in_progress，完成并验证后标记 completed。" +
+      "单步任务、纯问答、简单读取不要调用。该工具零 IO，不等于执行结论。",
+    inputSchema: kiroUpdateAgentPlanInputSchema,
+    execute: async (input) => {
+      const plan = normalizeAgentPlan(input);
+      if (!plan) {
+        return { ok: false as const, code: "INVALID_PLAN", message: "执行计划至少需要一个有效步骤。" };
+      }
+      return { ok: true as const, data: { plan: { ...plan, updatedAt: Date.now() } } };
+    },
+  }),
+  [KIRO_ASK_USER_TOOL_NAME]: tool({
+    description:
+      "在必须由用户决定、且无法从上下文/工具推断时，提出一个结构化问题（2–5 个具体选项，可允许自由输入）。" +
+      "只问一个决定性问题，不要用泛泛的“是否需要我继续”。调用后必须立即 begin_final_answer，并用一句话请用户选择；" +
+      "不得假设用户答案继续执行，也不得通过本工具请求权限提升。",
+    inputSchema: kiroAskUserInputSchema,
+    execute: async (input) => {
+      const question = normalizeUserQuestion(input);
+      if (!question) {
+        return { ok: false as const, code: "INVALID_QUESTION", message: "问题至少需要 2 个有效选项。" };
+      }
+      return { ok: true as const, data: { question } };
+    },
+  }),
+};
+
+/** Kiro 全部基础工具（Read + Write + Memory + Agent control）：Server 提供 schema，Client 按同名执行 */
 export const KIRO_TOOLS = {
   ...KIRO_READ_TOOLS,
   ...KIRO_WRITE_TOOLS,
   ...KIRO_MEMORY_TOOLS,
+  ...AGENT_CONTROL_TOOLS,
+
   // Final Answer Boundary（Streaming UX V3 + V4.1）：内部控制信号工具。
   // V4.1：begin_final_answer 是纯 Server control tool——execute 立即成功（无 Browser 状态 /
   // Workspace / IndexedDB / 用户确认），结果直接随同一 UI stream 到 Browser，

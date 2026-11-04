@@ -14,7 +14,7 @@ describe("web search first-use privacy notice", () => {
     });
   });
 
-  it("hasUsedWebSearch 只认真实 tool-web_search part", () => {
+  it("hasUsedWebSearch 认真实 web_search / web_research part，不认正文或 read", () => {
     expect(
       hasUsedWebSearch([
         { role: "assistant", parts: [{ type: "text", text: "web_search 可用" }] },
@@ -23,6 +23,11 @@ describe("web search first-use privacy notice", () => {
     expect(
       hasUsedWebSearch([
         { role: "assistant", parts: [{ type: "tool-web_search", toolCallId: "s1" }] },
+      ])
+    ).toBe(true);
+    expect(
+      hasUsedWebSearch([
+        { role: "assistant", parts: [{ type: "tool-web_research", toolCallId: "rs1" }] },
       ])
     ).toBe(true);
     expect(

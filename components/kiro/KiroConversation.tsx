@@ -309,6 +309,7 @@ export function KiroConversation({
                   onEditUserMessage={onEditUserMessage}
                   // P4：live run 只标记最后一条 assistant 行（其他行保持稳定 props → memo 命中）
                   runLive={idx === lastAssistantIndex && turnInFlight}
+                  questionAnswerable={idx === lastAssistantIndex && !turnInFlight && !m.restored}
                   approval={approvalBinding && m.id === approvalOwnerMessageId ? approvalBinding : undefined}
                   desktopPaused={idx === lastAssistantIndex ? desktopPaused : false}
                   onStop={onStop}
@@ -424,6 +425,8 @@ export interface KiroConversationRowProps {
   onEditUserMessage: (messageId: string, text: string) => Promise<boolean>;
   /** P4：本行是 live run（最后一条 assistant 且 turn 进行中） */
   runLive: boolean;
+  /** Agent Superpowers：本行是最后一条 assistant 且 turn 已结算 → Ask Card 可回答 */
+  questionAnswerable?: boolean;
   /** P4：属于本行的 Inline Approval（taskId 精确匹配） */
   approval?: KiroAgentRunApprovalBinding;
   desktopPaused?: boolean;
@@ -459,6 +462,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   onRetry,
   onEditUserMessage,
   runLive,
+  questionAnswerable,
   approval,
   desktopPaused,
   onStop,
@@ -556,6 +560,7 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
         onRegenerateAnswer={onRegenerateAnswer}
         approval={approval}
         turnInFlight={runLive}
+        questionAnswerable={questionAnswerable}
         desktopPaused={desktopPaused}
         onStop={onStop}
         onReviewComputerTask={onReviewComputerTask}

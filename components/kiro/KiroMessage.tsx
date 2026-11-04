@@ -55,6 +55,7 @@ export function KiroMessage({
   executionPlans,
   approval,
   turnInFlight,
+  questionAnswerable,
   desktopPaused,
   onStop,
   onReviewComputerTask,
@@ -95,6 +96,8 @@ export function KiroMessage({
   approval?: KiroAgentRunApprovalBinding | null;
   /** P4：本消息是否为 live run（turn 进行中且为最后一条 assistant） */
   turnInFlight?: boolean;
+  /** Agent Superpowers：最后一条 assistant message 且当前无进行中 turn → Ask Card 可回答 */
+  questionAnswerable?: boolean;
   /** P4：Desktop GUI Session 暂停（仅 live run 生效） */
   desktopPaused?: boolean;
   /** P4：Run Header 的停止入口（canonical Stop） */
@@ -192,6 +195,7 @@ export function KiroMessage({
           approval={approval}
           turnInFlight={!!turnInFlight}
           desktopPaused={desktopPaused}
+          questionAnswerable={questionAnswerable}
           onStop={onStop}
         />
       )}
