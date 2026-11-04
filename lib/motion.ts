@@ -16,13 +16,18 @@
  *   MOTION_EXIT_MS.base   = --motion-exit-base   disclosure close / dialog exit / content swap-out
  *   MOTION_EXIT_MS.panel  = --motion-exit-panel  drawer exit / list-row structural collapse
  *
- * Easing（V3 新增，M3/Apple 对齐：进入减速、退出加速）：
- *   EASE.standard   = --ease-standard    通用进入 / 常驻（decelerate-like，保持历史视觉）
- *   EASE.emphasized = --ease-emphasized  品牌 / intro / Sidebar morph（原值不变）
- *   EASE.enter      = --ease-enter       新代码进入首选（M3 standard decelerate）
- *   EASE.exit       = --ease-exit        所有退出首选（M3 standard accelerate，比进入更快离场）
- *   EASE.spring     = --ease-spring      大位移 morph 近似 spring（无 bounce，bounce=0 通用档）
+ * Easing（V3 baseline / V5 非线性曲线族）：
+ *   EASE.standard   = --ease-standard    默认 V3 通用曲线；V5 flag 下 = outStrong
+ *   EASE.emphasized = --ease-emphasized  默认 V3；V5 flag 下 = outExpo
+ *   EASE.enter      = --ease-enter       默认 V3；V5 flag 下 = outStrong
+ *   EASE.exit       = --ease-exit        默认 V3；V5 flag 下 = inExit
+ *   EASE.spring     = --ease-spring      默认 V3；V5 flag 下 = springSoft
+ *   EASE_V5.outSoft / outStrong / outExpo / inExit / springSoft / springSnappy
+ *                   = V5 linear() 曲线族（默认不启用；dev 灰度见 html[data-motion-easing="v5"]）
  *
+ * V5 灰度（dev）：
+ *   ?motion-easing=v5 / MotionGallery 开关 → html[data-motion-easing="v5"]
+ *   不改变 duration / presence；只是把 legacy alias 切到 linear() 曲线。
  * 约定：
  * - Primitive 的 CSS transition 时长必须引用上述 CSS 变量（或与注释声明对应），
  *   presence/unmount 计时必须引用本文件常量——一种交互语义只存在一个 Motion 时间真值。
@@ -48,20 +53,41 @@ export const MOTION_EXIT_MS = {
 } as const;
 
 /**
- * Easing 唯一真值（V3，与 :root --ease-* 一一对应）。
- * 数值 = cubic-bezier 字面量（CSS 侧 var() 引用；JS 侧仅契约与 WAAPI/测试用途）。
+ * Easing 唯一真值（V3 基线 + V5 曲线族，与 :root --ease-* 一一对应）。
+ * 数值 = cubic-bezier / linear() 字面量（CSS 侧 var() 引用；JS 侧仅契约与 WAAPI/测试用途）。
+ *
+ * V5 曲线默认不生效：只有 html[data-motion-easing="v5"] 才会把 legacy alias 指向
+ * EASE_V5（dev 开关 ?motion-easing=v5 / MotionGallery 切换）。旧 EASE 值保留为
+ * 兼容 alias 的默认值，保证未开启灰度时视觉不变。
  */
+export const EASE_V5 = {
+  outSoft: "linear(0, 0.1855, 0.3439, 0.478, 0.5904, 0.6836, 0.7599, 0.8215, 0.8704, 0.9085, 0.9375, 0.959, 0.9744, 0.985, 0.9919, 0.9961, 0.9984, 0.9995, 0.9999, 1, 1)",
+  outStrong: "linear(0, 0.2262, 0.4095, 0.5563, 0.6723, 0.7627, 0.8319, 0.884, 0.9222, 0.9497, 0.9688, 0.9815, 0.9898, 0.9947, 0.9976, 0.999, 0.9997, 0.9999, 1, 1, 1)",
+  outExpo: "linear(0, 0.2932, 0.5005, 0.6471, 0.7507, 0.824, 0.8759, 0.9125, 0.9384, 0.9567, 0.9697, 0.9789, 0.9853, 0.9899, 0.9932, 0.9954, 0.9971, 0.9982, 0.999, 0.9996, 1)",
+  inExit: "linear(0, 0.0225, 0.0478, 0.0761, 0.1072, 0.1412, 0.1782, 0.218, 0.2608, 0.3065, 0.355, 0.4065, 0.4608, 0.5181, 0.5782, 0.6412, 0.7072, 0.776, 0.8478, 0.9224, 1)",
+  springSoft: "linear(0, 0.0754, 0.2275, 0.3908, 0.5372, 0.6575, 0.7513, 0.8222, 0.8743, 0.912, 0.9389, 0.9579, 0.9711, 0.9803, 0.9866, 0.9909, 0.9939, 0.9959, 0.9972, 0.9982, 1)",
+  springSnappy: "linear(0, 0.1477, 0.4125, 0.6511, 0.8209, 0.9243, 0.9789, 1.003, 1.0106, 1.0105, 1.0079, 1.005, 1.0027, 1.0013, 1.0005, 1.0001, 0.9999, 0.9999, 0.9999, 0.9999, 1)",
+} as const;
+
 export const EASE = {
   standard: "cubic-bezier(0.2, 0.8, 0.2, 1)",
   emphasized: "cubic-bezier(0.22, 1, 0.36, 1)",
   enter: "cubic-bezier(0, 0, 0.2, 1)",
   exit: "cubic-bezier(0.3, 0, 1, 1)",
   spring: "cubic-bezier(0.32, 0.72, 0, 1)",
+  // V5 primitives（默认仅文档/灰度预览；legacy alias 在 CSS flag 下指向它们）
+  outSoft: EASE_V5.outSoft,
+  outStrong: EASE_V5.outStrong,
+  outExpo: EASE_V5.outExpo,
+  inExit: EASE_V5.inExit,
+  springSoft: EASE_V5.springSoft,
+  springSnappy: EASE_V5.springSnappy,
 } as const;
 
 /**
  * EASE 的数值镜像（Framer Motion / WAAPI 需要 tuple；CSS 仍引用 EASE 字符串）。
  * 两处必须同值，由 motionContract 测试校验。
+ * V5 新 key 使用 cubic-bezier 近似值，仅供不支持 linear() 字符串的第三方库降级。
  */
 export const EASE_BEZIER: Record<keyof typeof EASE, [number, number, number, number]> = {
   standard: [0.2, 0.8, 0.2, 1],
@@ -69,6 +95,12 @@ export const EASE_BEZIER: Record<keyof typeof EASE, [number, number, number, num
   enter: [0, 0, 0.2, 1],
   exit: [0.3, 0, 1, 1],
   spring: [0.32, 0.72, 0, 1],
+  outSoft: [0.25, 1, 0.5, 1],
+  outStrong: [0.22, 1, 0.36, 1],
+  outExpo: [0.16, 1, 0.3, 1],
+  inExit: [0.3, 0, 1, 1],
+  springSoft: [0.22, 1, 0.36, 1],
+  springSnappy: [0.34, 1.06, 0.64, 1],
 };
 
 /**

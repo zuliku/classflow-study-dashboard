@@ -19,7 +19,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-import { MOTION_MS, MOTION_EXIT_MS, EASE, EASE_BEZIER, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
+import { MOTION_MS, MOTION_EXIT_MS, EASE, EASE_V5, EASE_BEZIER, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
 import { usePresence } from "@/lib/usePresence";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -101,7 +101,66 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(EASE_BEZIER.exit).toEqual([0.3, 0, 1, 1]);
   });
 
-  it("Motion V3：退出分支统一加速离场（--ease-exit），进入保持 standard", () => {
+  it("Motion V5：linear() 曲线族 + dev flag 映射（默认仍 V3）", () => {
+    // 默认 :root 保持 V3；只有 data-motion-easing=v5 才切换 legacy alias
+    expect(css).toMatch(/html\[data-motion-easing="v5"\]\s*\{[\s\S]*?--ease-standard:\s*var\(--ease-out-strong\)/);
+    expect(css).toMatch(/html\[data-motion-easing="v5"\]\s*\{[\s\S]*?--ease-emphasized:\s*var\(--ease-out-expo\)/);
+    expect(css).toMatch(/html\[data-motion-easing="v5"\]\s*\{[\s\S]*?--ease-exit:\s*var\(--ease-in-exit\)/);
+    expect(css).toMatch(/html\[data-motion-easing="v5"\]\s*\{[\s\S]*?--ease-spring:\s*var\(--ease-spring-soft\)/);
+    expect(css).toMatch(/--ease-selection:\s*var\(--ease-spring-snappy\)/);
+    expect(css).toMatch(/--ease-spatial:\s*var\(--ease-spring-soft\)/);
+    // 默认语义 token 必须保持 V3，避免未开灰度时视觉漂移
+    expect(css).toMatch(/--ease-selection:\s*var\(--ease-emphasized\)/);
+    expect(css).toMatch(/--ease-spatial:\s*var\(--ease-spring\)/);
+
+    const numbers = (curve: string) =>
+      (curve.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+    for (const [key, curve] of Object.entries(EASE_V5)) {
+      expect(curve.startsWith("linear(")).toBe(true);
+      const values = numbers(curve);
+      expect(values[0]).toBe(0);
+      expect(values[values.length - 1]).toBe(1);
+      const peak = Math.max(...values);
+      if (key === "springSnappy") expect(peak).toBeLessThanOrEqual(1.02);
+      else expect(peak).toBeLessThanOrEqual(1);
+    }
+    expect(EASE.outSoft).toBe(EASE_V5.outSoft);
+    expect(EASE.outStrong).toBe(EASE_V5.outStrong);
+    expect(EASE.outExpo).toBe(EASE_V5.outExpo);
+    expect(EASE.inExit).toBe(EASE_V5.inExit);
+    expect(EASE.springSoft).toBe(EASE_V5.springSoft);
+    expect(EASE.springSnappy).toBe(EASE_V5.springSnappy);
+    // 未开灰度时 legacy EASE 仍是 V3 值
+    expect(EASE.standard).toBe("cubic-bezier(0.2, 0.8, 0.2, 1)");
+
+    // CSS ↔ JS 曲线字面量必须同源（空白归一化）
+    const cssCurves: Record<keyof typeof EASE_V5, string> = {
+      outSoft: "--ease-out-soft",
+      outStrong: "--ease-out-strong",
+      outExpo: "--ease-out-expo",
+      inExit: "--ease-in-exit",
+      springSoft: "--ease-spring-soft",
+      springSnappy: "--ease-spring-snappy",
+    };
+    for (const [key, varName] of Object.entries(cssCurves) as [keyof typeof EASE_V5, string][]) {
+      const match = css.match(new RegExp(`${varName}:\\s*(linear\\([^;]+\\))`));
+      expect(match).not.toBeNull();
+      expect(match![1].replace(/\s+/g, "")).toBe(EASE_V5[key].replace(/\s+/g, ""));
+    }
+  });
+
+  it("Motion V5：intro/page/selection/spatial 语义 token 已接线", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    expect(css).toMatch(/\.kiro-empty-title-intro\s*\{[^}]*var\(--ease-intro-text\)/s);
+    expect(css).toMatch(/\.ux-page\s*\{[^}]*var\(--ease-page\)/s);
+    expect(css).toMatch(/\.ux-modal-panel\s*\{[^}]*var\(--ease-overlay\)/s);
+    expect(read("components/ui/SegmentedControl.tsx")).toContain("ease-[var(--ease-selection)]");
+    expect(read("components/kiro/KiroModeCapsule.tsx")).toContain("kiro-mode-capsule-indicator");
+    expect(read("components/kiro/navigation/KiroNavigator.tsx")).toContain("ease-[var(--ease-spatial)]");
+    expect(read("components/kiro/sidecar/KiroSidecarShell.tsx")).toContain("ease-[var(--ease-spatial)]");
+  });
+
+  it("Motion V3：退出分支统一加速离场（--ease-exit），进入保持 overlay", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
     for (const f of [
       "components/ui/Dialog.tsx",
@@ -113,7 +172,7 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     ]) {
       expect(read(f)).toMatch(/ease-\[var\(--ease-exit\)\]/);
     }
-    expect(read("components/ui/Dialog.tsx")).toMatch(/ease-\[var\(--ease-standard\)\]/);
+    expect(read("components/ui/Dialog.tsx")).toMatch(/ease-\[var\(--ease-overlay\)\]/);
   });
 
   it("Motion V3 P1：staged/skeleton 工具 + reduced 守卫", () => {
@@ -143,16 +202,16 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(read("components/analytics/AnalyticsSummaryStrip.tsx")).toMatch(/animate-pulse/);
   });
 
-  it("Motion V3 P2：Sidebar width morph 走 spring（时长不变，仅曲线）", () => {
-    expect(css).toMatch(/\.sidebar-shell\s*\{[^}]*transition-timing-function:\s*var\(--ease-spring\)/s);
+  it("Motion V3 P2：Sidebar width morph 走 spatial spring（时长不变，仅曲线）", () => {
+    expect(css).toMatch(/\.sidebar-shell\s*\{[^}]*transition-timing-function:\s*var\(--ease-spatial\)/s);
   });
 
-  it("P1 空间位移 spring 化：Navigator shell + Sidecar 进入走 spring，退出仍加速", () => {
+  it("P1 空间位移 spring 化：Navigator shell + Sidecar 进入走 spatial，退出仍加速", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
     const navigator = read("components/kiro/navigation/KiroNavigator.tsx");
-    expect(navigator).toMatch(/transition-\[width\][\s\S]{0,120}?ease-\[var\(--ease-spring\)\]/);
+    expect(navigator).toMatch(/transition-\[width\][\s\S]{0,120}?ease-\[var\(--ease-spatial\)\]/);
     const sidecar = read("components/kiro/sidecar/KiroSidecarShell.tsx");
-    expect(sidecar).toMatch(/duration-\[var\(--motion-panel\)\] ease-\[var\(--ease-spring\)\]/);
+    expect(sidecar).toMatch(/duration-\[var\(--motion-panel\)\] ease-\[var\(--ease-spatial\)\]/);
     expect(sidecar).toMatch(/duration-\[var\(--motion-exit-panel\)\] ease-\[var\(--ease-exit\)\]/);
   });
 

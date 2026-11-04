@@ -249,7 +249,7 @@ export function TimetableImportPreviewDialog({
         className={cn(
           "w-full max-w-2xl max-h-full flex flex-col bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
           dialogPresence.visible
-            ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-standard)]"
+            ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-overlay)]"
             : "opacity-0 scale-[0.985] translate-y-1 pointer-events-none !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
         )}
       >

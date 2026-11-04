@@ -42,7 +42,7 @@ export function GroupKiroPanel({
       className={cn(
         "group-kiro-dock sticky top-20 ml-auto hidden h-[calc(100vh-120px)] shrink-0 self-start overflow-hidden transition-[width] 2xl:block",
         visible
-          ? cn(DOCK_WIDTH, "duration-[var(--motion-panel)] ease-[var(--ease-spring)]")
+          ? cn(DOCK_WIDTH, "duration-[var(--motion-panel)] ease-[var(--ease-spatial)]")
           : "w-0 duration-[var(--motion-exit-panel)] ease-[var(--ease-exit)]"
       )}
     >
@@ -54,7 +54,7 @@ export function GroupKiroPanel({
           DOCK_WIDTH,
           "transition-[opacity,transform]",
           visible
-            ? "translate-x-0 opacity-100 duration-[var(--motion-panel)] ease-[var(--ease-spring)]"
+            ? "translate-x-0 opacity-100 duration-[var(--motion-panel)] ease-[var(--ease-spatial)]"
             : "pointer-events-none translate-x-4 opacity-0 duration-[var(--motion-exit-panel)] ease-[var(--ease-exit)]"
         )}
       >

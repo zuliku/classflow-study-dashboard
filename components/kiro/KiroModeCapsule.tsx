@@ -63,7 +63,7 @@ export function KiroModeCapsule({
         <span
           aria-hidden="true"
           // 小浮层位移用 control 档（不用 spatial spring：胶囊是轻量切换，非空间位移）
-          className="absolute left-0 top-0.5 bottom-0.5 rounded-full bg-charcoal shadow-subtle transition-[transform,width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
+          className="kiro-mode-capsule-indicator absolute left-0 top-0.5 bottom-0.5 rounded-full bg-charcoal shadow-subtle transition-[transform,width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
           style={{ width: pill.width, transform: `translateX(${pill.left}px)` }}
         />
       )}

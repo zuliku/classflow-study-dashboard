@@ -87,7 +87,7 @@ export function SegmentedControl<T extends string | number>({
           className={cn(
             // 明确 absolute 原点：left-0 top-0，坐标全部由 transform 表达（避免 static position 参与导致偏移）
             "absolute left-0 top-0 rounded-md bg-white shadow-subtle pointer-events-none",
-            "transition-[transform,width] ease-[var(--ease-emphasized)]",
+            "transition-[transform,width] ease-[var(--ease-selection)]",
             measuredRef.current && !reducedMotion
               ? "duration-[var(--motion-base)]"
               : "duration-0"

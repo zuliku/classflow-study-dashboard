@@ -189,7 +189,12 @@ describe("Typography V1 — CSS tokens & ownership", () => {
     expect(html).toContain('uiFont = "harmonyos-sans-sc"');
     // no separate localStorage key for font
     const storageMatches = html.match(/localStorage\.getItem\("([^"]+)"\)/g) ?? [];
-    expect(storageMatches.every((s) => s === 'localStorage.getItem("classflow-storage-v2")')).toBe(true);
+    expect(storageMatches.every((s) =>
+      s === 'localStorage.getItem("classflow-storage-v2")'
+      || s === 'localStorage.getItem("classflow-motion-easing")'
+    )).toBe(true);
+    // Motion V5 dev 灰度使用独立 key；字体仍只来自 classflow-storage-v2
+    expect(html).toContain("classflow-motion-easing");
   });
 
   it("public/fonts licenses exist (no MiSans binary)", () => {

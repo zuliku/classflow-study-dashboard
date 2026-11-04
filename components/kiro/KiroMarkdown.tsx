@@ -121,7 +121,7 @@ function KiroMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
             className={cn(
               "relative max-w-[90vw] max-h-[86vh] bg-white rounded-2xl overflow-auto p-2 shadow-card ux-modal-panel",
               lightboxPresence.visible
-                ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-standard)]"
+                ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-overlay)]"
                 : "opacity-0 scale-[0.985] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
             )}
             onClick={(e) => e.stopPropagation()}

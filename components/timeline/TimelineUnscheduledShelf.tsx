@@ -5,6 +5,7 @@ import { ChevronDown, GripVertical, CalendarPlus } from "lucide-react";
 import { Assignment } from "@/types";
 import { usePresence } from "@/lib/usePresence";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { useMotionEasingV5 } from "@/hooks/useMotionEasingV5";
 import { MOTION_EXIT_MS, EASE } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ export function TimelineUnscheduledShelf({
   const listRef = useRef<HTMLDivElement | null>(null);
   const fromHeightRef = useRef(0);
   const reducedMotion = useEffectiveReducedMotion();
+  const easingV5 = useMotionEasingV5();
   const toggleExpanded = () => {
     const el = listRef.current;
     if (el) fromHeightRef.current = el.offsetHeight;
@@ -48,13 +50,13 @@ export function TimelineUnscheduledShelf({
     fromHeightRef.current = 0;
     const to = el.offsetHeight;
     if (!from || Math.abs(to - from) < 2) return;
-    // 与 --motion-base（180ms）/ --ease-standard 同源（WAAPI 不解析 var()，引用 EASE 真值）
+    // 与 --motion-base（180ms）/ --ease-standard（V5: out-strong）同源
     const anim = el.animate([{ height: `${from}px` }, { height: `${to}px` }], {
       duration: 180,
-      easing: EASE.standard,
+      easing: easingV5 ? EASE.outStrong : EASE.standard,
     });
     return () => anim.cancel();
-  }, [expanded, reducedMotion]);
+  }, [expanded, reducedMotion, easingV5]);
   if (!mounted) return null;
 
   const ddlText = (a: Assignment): string => {

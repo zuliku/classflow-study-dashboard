@@ -8,6 +8,7 @@ import { ProviderLogo } from "@/components/kiro/ProviderLogo";
 import { AIModelVendor } from "@/lib/ai/providers/types";
 import { EASE_BEZIER, MOTION_EXIT_MS, MOTION_MS } from "@/lib/motion";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { useMotionEasingV5 } from "@/hooks/useMotionEasingV5";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { cn } from "@/lib/utils";
 
@@ -94,6 +95,9 @@ export function KiroModelSelector({
   const listId = `kiro-model-list-${baseId}`;
   const panelId = `kiro-model-panel-${baseId}`;
   const reducedMotion = useEffectiveReducedMotion();
+  const easingV5 = useMotionEasingV5();
+  const enterEase = easingV5 ? EASE_BEZIER.outStrong : EASE_BEZIER.standard;
+  const exitEase = easingV5 ? EASE_BEZIER.inExit : EASE_BEZIER.exit;
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -282,13 +286,13 @@ export function KiroModelSelector({
                     ? { opacity: 0, transition: { duration: 0 } }
                     : {
                         opacity: 0,
-                        transition: { duration: PANEL_EXIT_S, ease: EASE_BEZIER.exit },
+                        transition: { duration: PANEL_EXIT_S, ease: exitEase },
                       }
                 }
                 transition={
                   reducedMotion
                     ? { duration: 0 }
-                    : { duration: PANEL_ENTER_S, ease: EASE_BEZIER.standard }
+                    : { duration: PANEL_ENTER_S, ease: enterEase }
                 }
               >
                 <div className="flex min-h-0 flex-1 flex-col py-1.5">

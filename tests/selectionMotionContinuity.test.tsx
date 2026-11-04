@@ -79,11 +79,11 @@ afterEach(() => {
 });
 
 describe("SegmentedControl selection motion", () => {
-  it("plate 使用 --motion-base + --ease-emphasized（transform,width）", async () => {
+  it("plate 使用 --motion-base + --ease-selection（transform,width）", async () => {
     const fs = await import("node:fs");
     const path = await import("node:path");
     const src = fs.readFileSync(path.join(process.cwd(), "components/ui/SegmentedControl.tsx"), "utf-8");
-    expect(src).toContain("transition-[transform,width] ease-[var(--ease-emphasized)]");
+    expect(src).toContain("transition-[transform,width] ease-[var(--ease-selection)]");
     expect(src).toContain("duration-[var(--motion-base)]");
     expect(src).not.toContain("var(--motion-select)");
   });
@@ -107,7 +107,7 @@ describe("SegmentedControl selection motion", () => {
     );
     expect(screen.getByRole("button", { name: "A" }).getAttribute("aria-pressed")).toBe("true");
     // jsdom 无布局（offsetLeft/Width = 0）→ transform 数值不可断言；
-    // 程序化变更的契约 = 语义状态立即跟随 + plate 节点持续存在并以 base/emphasized 运动
+    // 程序化变更的契约 = 语义状态立即跟随 + plate 节点持续存在并以 base/selection 运动
     rerender(
       <SegmentedControl
         value="b"

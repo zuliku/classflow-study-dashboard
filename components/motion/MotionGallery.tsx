@@ -3,7 +3,12 @@
 import React, { useState } from "react";
 import { usePresence } from "@/lib/usePresence";
 import { MOTION_EXIT_MS, MOTION_MS, EASE } from "@/lib/motion";
-import { shouldShowMotionGallery, isMotionDev } from "@/lib/motionDev";
+import {
+  shouldShowMotionGallery,
+  isMotionDev,
+  isMotionEasingV5Active,
+  applyMotionEasingPreview,
+} from "@/lib/motionDev";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,6 +38,13 @@ const EASE_ROWS: { label: string; token: string; value: string }[] = [
   { label: "enter（新代码进入首选）", token: "--ease-enter", value: EASE.enter },
   { label: "exit（退出加速离场）", token: "--ease-exit", value: EASE.exit },
   { label: "spring（大位移 morph）", token: "--ease-spring", value: EASE.spring },
+  // V5 primitives（灰度开启后 legacy alias 会指向这些曲线）
+  { label: "out-soft（micro/control）", token: "--ease-out-soft", value: EASE.outSoft },
+  { label: "out-strong（surface）", token: "--ease-out-strong", value: EASE.outStrong },
+  { label: "out-expo（overlay/intro）", token: "--ease-out-expo", value: EASE.outExpo },
+  { label: "in-exit（加速离场）", token: "--ease-in-exit", value: EASE.inExit },
+  { label: "spring-soft（空间壳）", token: "--ease-spring-soft", value: EASE.springSoft },
+  { label: "spring-snappy（选中面）", token: "--ease-spring-snappy", value: EASE.springSnappy },
 ];
 
 function PresenceDemo() {
@@ -74,7 +86,16 @@ export function MotionGallery() {
     () => typeof window !== "undefined" && shouldShowMotionGallery(window.location.search)
   );
   const [nonce, setNonce] = useState(0);
+  const [easingV5, setEasingV5] = useState(
+    () => typeof document !== "undefined" && isMotionEasingV5Active()
+  );
   if (!isMotionDev() || !open) return null;
+
+  const toggleEasing = () => {
+    const next = !easingV5;
+    setEasingV5(next);
+    applyMotionEasingPreview(next);
+  };
 
   const close = () => {
     setOpen(false);
@@ -98,10 +119,24 @@ export function MotionGallery() {
       <div className="flex max-h-[calc(100dvh-48px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-drawer">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
           <div>
-            <h2 className="text-sm font-bold text-charcoal">Motion Gallery（V3 Contract 活文档）</h2>
-            <p className="text-[11px] text-sandrift">dev-only · ?motion-gallery=1 · 全部演示只引用 token</p>
+            <h2 className="text-sm font-bold text-charcoal">Motion Gallery（V3/V5 灰度预览）</h2>
+            <p className="text-[11px] text-sandrift">dev-only · ?motion-gallery=1 · V5 曲线开关即时生效</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="motion-gallery-easing-toggle"
+              aria-pressed={easingV5}
+              onClick={toggleEasing}
+              className={cn(
+                "ux-press rounded-lg px-2.5 py-1.5 text-[11px] font-bold transition-colors duration-[var(--motion-fast)]",
+                easingV5
+                  ? "bg-charcoal text-white hover:bg-black"
+                  : "bg-[#F7F5F5] text-charcoal hover:bg-alabaster"
+              )}
+            >
+              V5 曲线 · {easingV5 ? "开" : "关"}
+            </button>
             <button
               type="button"
               onClick={() => setNonce((n) => n + 1)}
@@ -159,7 +194,7 @@ export function MotionGallery() {
                 </div>
               ))}
             </div>
-            <p className="mt-1 text-[10px] text-sandrift">点「重播」切换往返方向，对比进入减速 vs 退出加速的手感。</p>
+            <p className="mt-1 text-[10px] text-sandrift">点「重播」切换往返方向，对比进入减速 vs 退出加速的手感。V5 开关关闭时 legacy alias 保持 V3 cubic-bezier；开启后 standard/emphasized/exit/spring 切到 linear() 曲线。</p>
           </section>
 
           <section>
