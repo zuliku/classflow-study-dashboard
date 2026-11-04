@@ -95,11 +95,11 @@ export function KiroEmptyState({
 
       <div data-kiro-empty-suggestions className="w-full min-w-0">
         {contextSuggestions ? (
-          <div className={cn("w-full max-w-md", playIntro && "kiro-empty-suggestion-intro", compact ? "mt-5" : "mt-7")}>
+          <div className={cn("w-full max-w-md mx-auto", playIntro && "kiro-empty-suggestion-intro", compact ? "mt-5" : "mt-7")}>
             {contextSuggestions}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-7 w-full max-w-md mx-auto">
             {suggestions.map((s, index) => {
               const Icon = s.icon;
               return (

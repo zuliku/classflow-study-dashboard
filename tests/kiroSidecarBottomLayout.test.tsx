@@ -41,8 +41,9 @@ describe("Kiro sidecar bottom layout", () => {
     expect(src).toContain("hasContextSuggestions && !chat.error");
   });
 
-  it("EmptyState：建议容器撑满可用宽度（避免 shrink-to-fit 造成窄列错位）", () => {
+  it("EmptyState：建议容器撑满可用宽度并居中（避免 shrink-to-fit 造成窄列/左对齐错位）", () => {
     const src = read("components/kiro/KiroEmptyState.tsx");
     expect(src).toContain('data-kiro-empty-suggestions className="w-full min-w-0"');
+    expect(src).toContain("w-full max-w-md mx-auto");
   });
 });
