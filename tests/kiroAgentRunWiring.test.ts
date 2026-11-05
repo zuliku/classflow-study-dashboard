@@ -70,8 +70,11 @@ describe("P4 性能边界：Worklog canonical timeline + memo 契约", () => {
     expect(worklog).toContain("KiroToolRow");
   });
 
-  it("raw reasoning 绝不渲染：只有 reasoningSummary 占位", () => {
-    expect(worklog).toContain("reasoningSummary");
+  it("raw reasoning 绝不渲染：Header 只消费稳定 reasoningSummary 占位", () => {
+    const header = read("components/kiro/run/KiroAgentRunHeader.tsx");
+    const run = read("components/kiro/run/KiroAgentRun.tsx");
+    expect(run).toContain("reasoningSummary");
+    expect(header).toContain("reasoning");
     expect(worklog).not.toContain("reasoningText");
     expect(worklog).not.toContain("chain-of-thought");
   });

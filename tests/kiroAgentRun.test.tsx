@@ -207,9 +207,44 @@ describe("Agent Run 显示条件与 Header", () => {
     expect(header.textContent).toContain("正在执行");
   });
 
+  it("working Tool → Header 显示当前具体动作", async () => {
+    await render(
+      messageNode({
+        assistantTurn: turn({
+          worklog: [toolBlock({ status: "working", label: "搜索网络" })],
+        }),
+      })
+    );
+    expect(q('[data-testid="kiro-agent-run-header"]')!.textContent).toContain("正在搜索网络");
+  });
+
+  it("reasoning-only live → Header 显示「正在思考」而不是通用占位", async () => {
+    await render(
+      messageNode({
+        assistantTurn: turn({
+          worklog: [],
+          reasoningSummary: "正在思考",
+          phase: "working",
+        }),
+      })
+    );
+    const header = q('[data-testid="kiro-agent-run-header"]');
+    expect(header).toBeTruthy();
+    expect(header!.textContent).toContain("正在思考");
+  });
+
   it("composing → 正在整理回答", async () => {
     await render(messageNode({ assistantTurn: turn({ phase: "composing" }) }));
     expect(q('[data-testid="kiro-agent-run-header"]')!.textContent).toContain("正在整理回答");
+  });
+
+  it("answering（Final Answer 已开始）→ 正在回答", async () => {
+    await render(
+      messageNode({
+        assistantTurn: turn({ phase: "answering", answer: "答案开始", answerStreaming: true }),
+      })
+    );
+    expect(q('[data-testid="kiro-agent-run-header"]')!.textContent).toContain("正在回答");
   });
 
   it("settled done 且无 Task 时间戳 → 已完成（绝不伪造用时）", async () => {
@@ -288,6 +323,38 @@ describe("Agent Run 显示条件与 Header", () => {
 describe("Disclosure 语义", () => {
   it("live working → 默认展开（Timeline 可见）", async () => {
     await render(messageNode());
+    expect(q('[data-testid="kiro-tool-row"]')).toBeTruthy();
+  });
+
+  it("回答 lane 开始 → 自动收起 Worklog（focus）", async () => {
+    await render(messageNode());
+    expect(q('[data-testid="kiro-tool-row"]')).toBeTruthy();
+    await render(
+      messageNode({ assistantTurn: turn({ phase: "answering", answer: "开始回答", answerStreaming: true }) })
+    );
+    const toggle = q('[data-testid="kiro-agent-run-header"] button')!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 220));
+    });
+    expect(q('[data-testid="kiro-tool-row"]')).toBeNull();
+  });
+
+  it("用户手动展开优先 → 回答 lane 不强制收起", async () => {
+    await render(messageNode());
+    const firstToggle = q('[data-testid="kiro-agent-run-header"] button')!;
+    // 手动折叠再展开 → userToggledRef 生效
+    await act(async () => {
+      firstToggle.click();
+    });
+    await act(async () => {
+      q('[data-testid="kiro-agent-run-header"] button')!.click();
+    });
+    await render(
+      messageNode({ assistantTurn: turn({ phase: "answering", answer: "开始回答", answerStreaming: true }) })
+    );
+    const toggle = q('[data-testid="kiro-agent-run-header"] button')!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(q('[data-testid="kiro-tool-row"]')).toBeTruthy();
   });
 

@@ -25,10 +25,13 @@ export const KiroStreamingTail = React.memo(function KiroStreamingTail({
   text,
   tailState,
   sources,
+  cursor = false,
 }: {
   text: string;
   tailState: KiroMarkdownTailState;
   sources?: KiroSourceMeta[];
+  /** Streaming UX V5：fence/math fallback 内联 caret */
+  cursor?: boolean;
 }) {
   if (tailState === "fence") {
     // 与稳定代码块同几何：外层容器 + 头部占位（label + 复制按钮同高），闭合只去掉 marker，
@@ -54,6 +57,13 @@ export const KiroStreamingTail = React.memo(function KiroStreamingTail({
         </div>
         <pre className="m-0 p-4 overflow-x-auto font-mono text-[0.84em] leading-[1.65] text-charcoal whitespace-pre">
           {stripOpenMarker(/^```/, text)}
+          {cursor && (
+            <span
+              data-testid="kiro-streaming-cursor"
+              className="kiro-stream-caret"
+              aria-hidden="true"
+            />
+          )}
         </pre>
       </div>
     );
@@ -67,6 +77,13 @@ export const KiroStreamingTail = React.memo(function KiroStreamingTail({
       >
         <span className="font-mono text-[0.9em] text-charcoal whitespace-pre-wrap break-words">
           {stripOpenMarker(/^\$\$/, text)}
+          {cursor && (
+            <span
+              data-testid="kiro-streaming-cursor"
+              className="kiro-stream-caret"
+              aria-hidden="true"
+            />
+          )}
         </span>
       </div>
     );

@@ -14,6 +14,7 @@ import {
   isKiroAgentRunActive,
   isKiroAgentRunTerminal,
   kiroAgentRunHeaderText,
+  resolveKiroAgentRunActiveLabel,
   resolveKiroAgentRunStatus,
   summarizeComputerTaskResult,
 } from "@/lib/ai/ui/kiroAgentRun";
@@ -92,6 +93,31 @@ describe("Header 文案", () => {
     expect(kiroAgentRunHeaderText("cancelled")).toBe("已停止");
     // 非 running 不套用 desktop 文案
     expect(kiroAgentRunHeaderText("composing", { desktopActive: true })).toBe("正在整理回答");
+  });
+});
+
+describe("resolveKiroAgentRunActiveLabel：只读公开语义", () => {
+  it("取最后一个 working Tool 的 label；done/commentary 忽略", () => {
+    expect(
+      resolveKiroAgentRunActiveLabel([
+        { kind: "tool", status: "done", label: "查看文件" },
+        { kind: "commentary" },
+        { kind: "tool", status: "working", label: "搜索网络" },
+      ])
+    ).toBe("搜索网络");
+    expect(resolveKiroAgentRunActiveLabel([{ kind: "tool", status: "done", label: "查看文件" }])).toBeNull();
+  });
+
+  it("子代理使用用户语义；fallback label / 空 label → null", () => {
+    expect(
+      resolveKiroAgentRunActiveLabel([
+        { kind: "tool", status: "working", label: "子代理", toolName: "delegate_subagent" },
+      ])
+    ).toBe("等待子代理");
+    expect(
+      resolveKiroAgentRunActiveLabel([{ kind: "tool", status: "working", label: "执行操作" }])
+    ).toBeNull();
+    expect(resolveKiroAgentRunActiveLabel([{ kind: "tool", status: "working", label: "" }])).toBeNull();
   });
 });
 

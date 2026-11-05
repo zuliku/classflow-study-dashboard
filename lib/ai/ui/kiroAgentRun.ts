@@ -72,6 +72,30 @@ export function kiroAgentRunHeaderText(
   return KIRO_AGENT_RUN_STATUS_TEXT[status];
 }
 
+/**
+ * Streaming UX V5：从 worklog 推导「当前动作」短语（不含“正在”）。
+ * 只读取真实 working Tool 的公开语义 label；绝不读取 input/output。
+ * 无具体动作（含 fallback label）→ null，Header 保持泛化「正在执行」。
+ */
+export function resolveKiroAgentRunActiveLabel(
+  worklog: ReadonlyArray<{
+    kind: string;
+    status?: string;
+    label?: string;
+    toolName?: string;
+  }>
+): string | null {
+  for (let i = worklog.length - 1; i >= 0; i--) {
+    const block = worklog[i];
+    if (block.kind !== "tool" || block.status !== "working") continue;
+    if (block.toolName === "delegate_subagent") return "等待子代理";
+    const label = block.label?.trim();
+    if (!label || label === "执行操作") return null;
+    return label;
+  }
+  return null;
+}
+
 /** 是否处于进行中（Header 活跃信号 / 停止入口） */
 export function isKiroAgentRunActive(status: KiroAgentRunStatus): boolean {
   return (

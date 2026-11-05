@@ -158,20 +158,18 @@ function rowClasses(block: ToolBlock): string {
  * Kiro Worklog Timeline（Streaming UX V3 + V4 + V4.1 Stable + V4.2 Hot Path + P4 抽离）：
  * - 只负责 canonical Agent trace 的 body：commentary + Tool rows + Terminal activity + Final Answer 分割线；
  * - Header / disclosure ownership / Inline Approval 由 Agent Run 层负责（KiroAgentRun）；
- * - V4.2：memo + 明确 comparator——props 缩窄为 worklog + phase + reasoningSummary + expanded。
+ * - V4.2：memo + 明确 comparator——props 缩窄为 worklog + phase + expanded。
  *   Final Answer token 期间 worklog 内容不变 → Timeline 不重渲染，completed Tool 不重渲染；
  * - Final Answer 分割线无论折叠与否都保留（answering/done 才可能有 answer）；
- * - raw reasoning 永不显示：只有压缩 reasoningSummary 占位。
+ * - raw reasoning 永不显示（reasoning 的 live 状态由 Agent Run Header 表达）。
  */
 export const KiroWorklogTimeline = React.memo(function KiroWorklogTimeline({
   worklog,
   phase,
-  reasoningSummary,
   expanded,
 }: {
   worklog: KiroWorklogBlock[];
   phase: KiroTurnPhase;
-  reasoningSummary?: string;
   expanded: boolean;
 }) {
   bumpStreamPerf("worklogRenders");
@@ -192,15 +190,6 @@ export const KiroWorklogTimeline = React.memo(function KiroWorklogTimeline({
   return (
     <div data-testid="kiro-worklog" className="min-w-0 w-full">
       <DisclosureRegion open={expanded} innerClassName="space-y-1">
-        {worklog.length === 0 && reasoningSummary && (
-          <p
-            data-testid="kiro-reasoning-summary"
-            className="text-[11px] text-sandrift leading-relaxed whitespace-pre-wrap break-words"
-            aria-live="polite"
-          >
-            {reasoningSummary}
-          </p>
-        )}
         {worklog.map((block) =>
           block.kind === "commentary" ? (
             <p
@@ -234,25 +223,22 @@ export const KiroWorklogTimeline = React.memo(function KiroWorklogTimeline({
   );
 }, worklogTimelinePropsEqual);
 
-/** KiroWorklogTimeline comparator：只有 expanded / phase / reasoningSummary 或 worklog 内容真正变化才重渲染 */
+/** KiroWorklogTimeline comparator：只有 expanded / phase 或 worklog 内容真正变化才重渲染 */
 function worklogTimelinePropsEqual(
   a: {
     worklog: KiroWorklogBlock[];
     phase: KiroTurnPhase;
-    reasoningSummary?: string;
     expanded: boolean;
   },
   b: {
     worklog: KiroWorklogBlock[];
     phase: KiroTurnPhase;
-    reasoningSummary?: string;
     expanded: boolean;
   }
 ): boolean {
   return (
     a.expanded === b.expanded &&
     a.phase === b.phase &&
-    a.reasoningSummary === b.reasoningSummary &&
     worklogEquals(a.worklog, b.worklog)
   );
 }
@@ -282,7 +268,7 @@ export function KiroPendingIndicator() {
         aria-atomic="true"
         className="flex items-center gap-1.5"
       >
-        <span className="text-xs font-medium text-charcoal">
+        <span className="text-xs font-medium text-charcoal kiro-stream-shimmer">
           正在准备{waitedSec >= 3 ? ` · 已等待 ${waitedSec} 秒` : ""}
         </span>
         <Loader2 className="w-3.5 h-3.5 animate-spin text-sandrift shrink-0" aria-hidden="true" />

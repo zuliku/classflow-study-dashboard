@@ -414,10 +414,11 @@ export function updateLiveTurnPresentation(
     phase = "working";
   }
 
-  // 推理摘要：仅长度计数与“思考中”占位，不回显原文（安全）
+  // 推理摘要：仅稳定占位（具体时长由叶子组件计时），不回显原文（安全）。
+  // 稳定字符串避免每个 reasoning delta 触发 worklog/message 重渲染。
   const reasoningSummary =
     reasoningChars > 0 && turnInFlight && phase === "working" && worklog.length === 0
-      ? `正在分析 · ${reasoningChars} 字思考`
+      ? "正在思考"
       : undefined;
 
   return {

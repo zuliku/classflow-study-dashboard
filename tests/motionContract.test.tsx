@@ -334,14 +334,14 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     expect(css).toMatch(/--kiro-ambient-breathe:\s*3\.2s/);
     expect(css).toMatch(/animation:\s*kiro-now-course-breathe\s+var\(--kiro-ambient-breathe/);
     // 每条常驻 infinite 必须引用治理中的 token/时长：ambient-breathe、flow 三档、
-    // computer ring、reasoning flow、thinking pulse 2.1s、skeleton sweep —— 新增常驻动画会触发本测试
+    // computer ring、reasoning flow、thinking pulse 2.1s、skeleton sweep、stream shimmer —— 新增常驻动画会触发本测试
     const infiniteLines = css
       .split("\n")
       .filter((l) => l.includes("infinite") && l.includes("animation:"));
     expect(infiniteLines.length).toBeGreaterThan(0);
     for (const line of infiniteLines) {
       expect(line).toMatch(
-        /var\(--kiro-(ambient-breathe|flow-ambient|flow-active|flow-working|computer-ring-duration|reasoning-flow)\)?|kiro-rail-thinking-pulse 2\.1s|var\(--skeleton-sweep/
+        /var\(--kiro-(ambient-breathe|flow-ambient|flow-active|flow-working|computer-ring-duration|reasoning-flow|stream-shimmer|stream-caret)\)?|kiro-rail-thinking-pulse 2\.1s|var\(--skeleton-sweep/
       );
     }
   });
@@ -588,7 +588,7 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
 
   it("深度排查 Batch1：Kiro 消息/会话/导航/历史/检查器对称进退", () => {
     const message = read("components/kiro/KiroMessage.tsx");
-    expect(message).toContain("usePresence(showStreamingCursor === true, MOTION_EXIT_MS.fast)");
+    expect(message).toContain("showCursor={showStreamingCursor === true}");
     expect(message).toContain("animate-enter");
     const surface = read("components/kiro/computer/session/KiroComputerSessionSurface.tsx");
     expect(surface).toContain("animate-enter");

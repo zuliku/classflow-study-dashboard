@@ -828,6 +828,130 @@ button:disabled {
   }
 }
 
+/* ============ Streaming UX V5 — Live status & inline caret ============ */
+/* 状态文字微光：暖中性（sandrift → charcoal），只用于“正在思考/正在搜索”等低频状态，
+   不进入 token 正文。reduced-motion 下静态。 */
+.kiro-stream-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--sandrift) 0%,
+    var(--sandrift) 30%,
+    var(--dark-charcoal) 50%,
+    var(--sandrift) 70%,
+    var(--sandrift) 100%
+  );
+  background-size: 220% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: kiro-stream-shimmer var(--kiro-stream-shimmer, 2.4s) linear infinite;
+}
+
+@keyframes kiro-stream-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+/* 真实 span caret（fence / math fallback） */
+.kiro-stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  border-radius: 1px;
+  background: var(--sandrift);
+  vertical-align: -0.14em;
+  animation: kiro-caret-breathe var(--kiro-stream-caret, 1.15s) ease-in-out infinite;
+}
+
+/* text tail：caret 属于最后一个文本容器的行内尾部（跟随真实文本末尾，而不是 block 之后的下一行） */
+[data-kiro-stream-cursor] .kiro-markdown > :is(p, h1, h2, h3, h4, h5, h6, td, th):last-child::after,
+[data-kiro-stream-cursor] .kiro-markdown > blockquote:last-child > p:last-child::after,
+[data-kiro-stream-cursor] .kiro-markdown > ul:last-child > li:last-child:not(:has(p))::after,
+[data-kiro-stream-cursor] .kiro-markdown > ul:last-child > li:last-child > p:last-child::after,
+[data-kiro-stream-cursor] .kiro-markdown > ol:last-child > li:last-child:not(:has(p))::after,
+[data-kiro-stream-cursor] .kiro-markdown > ol:last-child > li:last-child > p:last-child::after,
+[data-kiro-stream-cursor] .kiro-markdown > table:last-child tr:last-child > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  border-radius: 1px;
+  background: var(--sandrift);
+  vertical-align: -0.14em;
+  animation: kiro-caret-breathe var(--kiro-stream-caret, 1.15s) ease-in-out infinite;
+}
+
+@keyframes kiro-caret-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+html[data-motion-effective="reduced"] .kiro-stream-shimmer {
+  animation: none;
+  background-position: 0 0;
+}
+html[data-motion-effective="reduced"] .kiro-stream-caret,
+html[data-motion-effective="reduced"] [data-kiro-stream-cursor] .kiro-markdown > :is(p, h1, h2, h3, h4, h5, h6, td, th):last-child::after,
+html[data-motion-effective="reduced"] [data-kiro-stream-cursor] .kiro-markdown > blockquote:last-child > p:last-child::after,
+html[data-motion-effective="reduced"] [data-kiro-stream-cursor] .kiro-markdown > ul:last-child > li:last-child::after,
+html[data-motion-effective="reduced"] [data-kiro-stream-cursor] .kiro-markdown > ul:last-child > li:last-child > p:last-child::after,
+html[data-motion-effective="reduced"] [data-kiro-stream-cursor] .kiro-markdown > ol:last-child > li:last-child::after,
+html[data-motion-effective="reduced"] [data-kiro-stream-cursor] .kiro-markdown > ol:last-child > li:last-child > p:last-child::after,
+html[data-motion-effective="reduced"] [data-kiro-stream-cursor] .kiro-markdown > table:last-child tr:last-child > :last-child::after {
+  animation: none;
+  opacity: 0.65;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion-preference="full"]) .kiro-stream-shimmer {
+    animation: none !important;
+    background-position: 0 0;
+  }
+  html:not([data-motion-preference="full"]) .kiro-stream-caret,
+  html:not([data-motion-preference="full"]) [data-kiro-stream-cursor] .kiro-markdown > :is(p, h1, h2, h3, h4, h5, h6, td, th):last-child::after,
+  html:not([data-motion-preference="full"]) [data-kiro-stream-cursor] .kiro-markdown > blockquote:last-child > p:last-child::after,
+  html:not([data-motion-preference="full"]) [data-kiro-stream-cursor] .kiro-markdown > ul:last-child > li:last-child::after,
+  html:not([data-motion-preference="full"]) [data-kiro-stream-cursor] .kiro-markdown > ul:last-child > li:last-child > p:last-child::after,
+  html:not([data-motion-preference="full"]) [data-kiro-stream-cursor] .kiro-markdown > ol:last-child > li:last-child::after,
+  html:not([data-motion-preference="full"]) [data-kiro-stream-cursor] .kiro-markdown > ol:last-child > li:last-child > p:last-child::after,
+  html:not([data-motion-preference="full"]) [data-kiro-stream-cursor] .kiro-markdown > table:last-child tr:last-child > :last-child::after {
+    animation: none !important;
+    opacity: 0.65;
+  }
+}
+
+/* 强制颜色（Windows 高对比度）：渐变文字会被系统忽略为透明，回退到系统文本色 */
+@media (forced-colors: active) {
+  .kiro-stream-shimmer {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+  .kiro-stream-caret,
+  [data-kiro-stream-cursor] .kiro-markdown > :is(p, h1, h2, h3, h4, h5, h6, td, th):last-child::after,
+  [data-kiro-stream-cursor] .kiro-markdown > blockquote:last-child > p:last-child::after,
+  [data-kiro-stream-cursor] .kiro-markdown > ul:last-child > li:last-child::after,
+  [data-kiro-stream-cursor] .kiro-markdown > ul:last-child > li:last-child > p:last-child::after,
+  [data-kiro-stream-cursor] .kiro-markdown > ol:last-child > li:last-child::after,
+  [data-kiro-stream-cursor] .kiro-markdown > ol:last-child > li:last-child > p:last-child::after,
+  [data-kiro-stream-cursor] .kiro-markdown > table:last-child tr:last-child > :last-child::after {
+    background: CanvasText;
+  }
+}
+
 /* 尊重系统减弱动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion-preference="full"]) *,
@@ -1475,6 +1599,10 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   --kiro-ambient-breathe: 3.2s;
   /* 思考程度最高档流动彩条周期（暖色光谱；reduced-motion 下静止但保留彩色终态） */
   --kiro-reasoning-flow: 2.6s;
+  /* Streaming V5 live status 微光周期（仅状态文字，不进入正文） */
+  --kiro-stream-shimmer: 2.4s;
+  /* Streaming V5 caret 呼吸周期（文本末尾光标） */
+  --kiro-stream-caret: 1.15s;
 }
 
 .kiro-motion-workspace {

@@ -109,6 +109,9 @@ export function KiroConversation({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const [showScrollBtn, setShowScrollBtn] = React.useState(false);
+  // Streaming UX V5：用户上滑阅读时，新内容到达 → 浮钮出现“有新内容”提示
+  const [hasNewBelow, setHasNewBelow] = React.useState(false);
+  const lastScrollHeightRef = useRef(0);
   // Motion V1：回到底部浮钮 presence（enter fast / exit 同源 exit-fast；hidden 立即不可交互）
   const scrollBtnPresence = usePresence(showScrollBtn, MOTION_EXIT_MS.fast);
   // 退出隐藏后不可聚焦（aria-hidden 与键盘可达必须一致）
@@ -160,9 +163,11 @@ export function KiroConversation({
     const el = scrollRef.current;
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    stickToBottomRef.current = distance < SCROLL_STICK_DISTANCE_PX;
+    const atBottom = distance < SCROLL_STICK_DISTANCE_PX;
+    stickToBottomRef.current = atBottom;
     const shouldShow = distance > SCROLL_BUTTON_DISTANCE_PX;
     setShowScrollBtn((prev) => (prev === shouldShow ? prev : shouldShow));
+    if (atBottom) setHasNewBelow((prev) => (prev ? false : prev));
   }, []);
 
   // P0 流畅度：scroll 事件 60Hz 风暴 → rAF 节流（只置位 + 单帧合并一次 sync）
@@ -195,22 +200,35 @@ export function KiroConversation({
       bumpStreamPerf("resizeObserverCalls");
       const el = scrollRef.current;
       if (!el) return;
+      const nextHeight = el.scrollHeight;
+      const prevHeight = lastScrollHeightRef.current;
+      // 用户已上滑阅读，且本轮仍在生成：内容增长 → 标记“有新内容”
+      if (
+        !stickToBottomRef.current &&
+        turnInFlight &&
+        prevHeight > 0 &&
+        nextHeight > prevHeight + 2
+      ) {
+        setHasNewBelow((prev) => (prev ? prev : true));
+      }
+      lastScrollHeightRef.current = nextHeight;
       if (stickToBottomRef.current) {
-        const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+        const distance = nextHeight - el.scrollTop - el.clientHeight;
         if (distance > SCROLL_WRITE_TOLERANCE_PX) {
           bumpStreamPerf("scrollTopWrites");
-          el.scrollTop = el.scrollHeight;
+          el.scrollTop = nextHeight;
         }
       }
       syncScrollState();
     });
-  }, [syncScrollState]);
+  }, [syncScrollState, turnInFlight]);
 
   // 内容高度变化（streaming / Worklog / Action / Proposal / Breakdown Card 增长）：
   // 唯一 reconcile 入口（Task 5：不再有第二套 scrollSignal 驱动路径）
   useEffect(() => {
     const content = contentRef.current;
     if (!content) return;
+    lastScrollHeightRef.current = content.scrollHeight;
     const observer = new ResizeObserver(() => scheduleHeightReconcile());
     observer.observe(content);
     return () => {
@@ -239,6 +257,8 @@ export function KiroConversation({
       prevConversationKeyRef.current = key;
       stickToBottomRef.current = true;
       setShowScrollBtn(false);
+      setHasNewBelow(false);
+      lastScrollHeightRef.current = 0;
       const raf = requestAnimationFrame(() => {
         const el = scrollRef.current;
         if (el) {
@@ -250,6 +270,11 @@ export function KiroConversation({
     }
   }, [conversationScrollKey]);
 
+  // 轮次结束：未读新内容提示自动消失（不再有新增内容）
+  useEffect(() => {
+    if (!turnInFlight) setHasNewBelow(false);
+  }, [turnInFlight]);
+
   const scrollToBottom = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -257,6 +282,8 @@ export function KiroConversation({
     // 用户手动点击：允许 smooth；streaming 自动跟随仍用直接赋值
     el.scrollTo({ top: el.scrollHeight, behavior: reducedMotion ? "auto" : "smooth" });
     setShowScrollBtn(false);
+    setHasNewBelow(false);
+    lastScrollHeightRef.current = el.scrollHeight;
   };
 
   // 首 token 前占位：turn in-flight 且当前没有任何可见 Assistant（content / worklog / action / computer task）。
@@ -382,7 +409,8 @@ export function KiroConversation({
         <button
           ref={scrollBtnInertRef}
           onClick={scrollToBottom}
-          aria-label="回到底部"
+          aria-label={hasNewBelow ? "有新内容，回到底部" : "回到底部"}
+          data-has-new={hasNewBelow ? "true" : undefined}
           aria-hidden={!showScrollBtn}
           className={cn(
             "absolute bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-surface border border-line shadow-subtle flex items-center justify-center text-sandrift hover:text-charcoal hover:border-line-strong z-10",
@@ -392,6 +420,13 @@ export function KiroConversation({
               : cn("opacity-0 translate-x-[-50%] translate-y-0.5 scale-95 kiro-scroll-control-exit")
           )}
         >
+          {hasNewBelow && (
+            <span
+              data-testid="kiro-scroll-new-indicator"
+              aria-hidden="true"
+              className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-charcoal ring-2 ring-surface animate-pulse"
+            />
+          )}
           <ChevronDown className="w-4 h-4" />
         </button>
       )}
@@ -508,11 +543,14 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
   // 之后 worklog/content 到达只替换 body——outer shell（KiroMark + 左侧 column）不 remount。
   // 只要存在任一可见内容（final answer / worklog / action / computer task）就渲染消息行。
   const hasWorklog = (view.assistantTurn?.worklog.length ?? 0) > 0;
+  // Streaming UX V5：reasoning-only live turn 也必须占一行（否则退化为通用「正在准备」）
+  const hasReasoning = Boolean(view.assistantTurn?.reasoningSummary);
   const hasComputerTask = Boolean(view.computerTask || view.historyComputerTask);
   const hasExecutionPlan = (view.executionPlans?.length ?? 0) > 0;
   if (
     !view.content &&
     !hasWorklog &&
+    !hasReasoning &&
     !view.actions?.length &&
     !view.historyActions?.length &&
     !hasComputerTask &&

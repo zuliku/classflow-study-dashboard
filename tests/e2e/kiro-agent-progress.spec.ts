@@ -244,8 +244,10 @@ test("Agent 流程：leading progress 首次到达即进入 Worklog，后续 Too
     }
     // 请求 2（V4.1）：begin_final_answer 由 server execute，Final Answer 同一响应继续
     //（不再需要单独的 boundary → Browser → 新请求；request 数 3 → 2）
+    // V5：boundary 到达会触发 Worklog 自动收起；给 lane 断言一个稳定窗口。
     return [
       {
+        delay: 1200,
         events: [
           JSON.stringify({ type: "start", messageId: "mock-agent-1" }),
           JSON.stringify({ type: "start-step" }),
@@ -281,6 +283,9 @@ test("Agent 流程：leading progress 首次到达即进入 Worklog，后续 Too
   const commentary = worklog.getByText(LEADING, { exact: true });
   await expect(commentary).toHaveCount(1);
   await expect(commentary).toBeVisible();
+  // 在 boundary/自动收起前读取 commentary 字号（V5 answer lane 会收起 Worklog）
+  const commentaryFont = await commentary.evaluate((el) => getComputedStyle(el).fontSize);
+  expect(parseFloat(commentaryFont)).toBeLessThanOrEqual(12); // 11px worklog 字体，绝非回答字号
   await expect(msg.locator(".kiro-markdown")).toHaveCount(0);
 
   // T1：Tool 到达 → leading 仍为同一 commentary（仅一次，worklog 字体）；Tool row 出现
@@ -289,27 +294,20 @@ test("Agent 流程：leading progress 首次到达即进入 Worklog，后续 Too
   await expect(commentary).toHaveCount(1);
   // 永远不进入 Final Answer 通道
   await expect(msg.locator(".kiro-markdown").getByText(LEADING)).toHaveCount(0);
-  const commentaryFont = await commentary.evaluate((el) => getComputedStyle(el).fontSize);
-  expect(parseFloat(commentaryFont)).toBeLessThanOrEqual(12); // 11px worklog 字体，绝非回答字号
-  // Worklog 保持展开（工具循环的假 done 不折叠：awaiting-tool-result / awaiting-continuation 仍 in-flight）
-  await expect(worklog.locator('[data-state="open"]').first()).toBeVisible({ timeout: 10000 });
   await expect.poll(() => requestCount).toBe(2); // V4.1：boundary server execute + Final 同一响应（3 → 2）
 
-  // T3：Final Answer streaming → cursor 出现；Worklog 在首 token 时不折叠
+  // T3（V5）：Final Answer streaming → 内联 caret + Worklog 自动收起（focus）
   const answer = msg.locator(".kiro-markdown").first();
   await expect(answer).toContainText("检查完成", { timeout: 10000 });
-  await expect(page.getByTestId("kiro-streaming-cursor")).toBeVisible();
-  await expect(commentary).toBeVisible(); // answering 阶段 Worklog 保持展开（无首 token 突变）
-  // 整个工具循环 + answering 过程中 Worklog 从未收起再展开（无假 settled bounce）
-  await expect(worklog.locator('[data-state="open"]').first()).toBeVisible();
+  await expect(page.locator("[data-kiro-stream-cursor]")).toHaveCount(1);
+  await expect(worklog.locator('[data-state="open"]')).toHaveCount(0);
+  await expect(commentary).toHaveCount(0, { timeout: 3000 });
 
-  // T4：完成 → Markdown stable（h2 真实渲染）、cursor 消失；
-  // V4.1：完成瞬间 Worklog 不自动折叠（无 layout 跳动），commentary 保持可见
+  // T4：完成 → Markdown stable（h2 真实渲染）、caret 消失；Worklog 保持收起（无二次折叠）
   await expect(msg.locator("h2")).toHaveText("摘要", { timeout: 10000 });
-  await expect(page.getByTestId("kiro-streaming-cursor")).toHaveCount(0);
-  await expect(page.getByText("已完成 · 1 个步骤", { exact: true })).toBeVisible();
-  await expect(worklog.locator('[data-state="open"]').first()).toBeVisible(); // 完成不折叠（layout stability）
-  await expect(commentary).toBeVisible();
+  await expect(page.locator("[data-kiro-stream-cursor]")).toHaveCount(0);
+  await expect(worklog.locator('[data-state="open"]')).toHaveCount(0);
+  await expect(commentary).toHaveCount(0);
 
   await sse.close();
 });
@@ -408,7 +406,7 @@ test("V4：Progressive Worklog 分阶段真实到达（T0 时 progress 已在 Wo
       0
     );
     if (toolOutputCount === 0) {
-      // 请求 1：T0 progress1（250ms 后才出现 Tool）→ T1 tool1 input
+      // 请求 1：T0 progress1（1800ms 后才出现 Tool；给 T0 断言稳定窗口）→ T1 tool1 input
       return [
         {
           events: [
@@ -420,7 +418,7 @@ test("V4：Progressive Worklog 分阶段真实到达（T0 时 progress 已在 Wo
           ],
         },
         {
-          delay: 250,
+          delay: 1800,
           events: [
             JSON.stringify({ type: "tool-input-start", toolCallId: "call_v4_a", toolName: "search_assignments" }),
             JSON.stringify({ type: "tool-input-delta", toolCallId: "call_v4_a", inputTextDelta: '{"scope":"today"}' }),
@@ -522,16 +520,16 @@ test("V4：Progressive Worklog 分阶段真实到达（T0 时 progress 已在 Wo
   // T4+T5：Tool 2 出现（client 自动续跑链可能让 tool2 与 boundary 几乎连续；只断言出现过 2 个 tool）
   await expect(toolRows).toHaveCount(2, { timeout: 10000 });
 
-  // T6+T7（V4.1）：begin_final_answer（server execute）+ Final Answer 同一响应；
-  // 无 milestone（worklog 只含 commentary + tool）；无入场动画 class
+  // T6+T7（V5）：Final Answer streaming → 内联 caret；Worklog 自动收起
   await expect(msg.locator(".kiro-markdown").first()).toContainText("正在整理", { timeout: 10000 });
-  await expect(page.getByTestId("kiro-streaming-cursor")).toBeVisible();
+  await expect(page.locator("[data-kiro-stream-cursor]")).toHaveCount(1);
+  await expect(worklog.locator('[data-state="open"]')).toHaveCount(0);
   await expect(page.getByTestId("kiro-worklog-milestone")).toHaveCount(0);
   await expect(page.locator(".kiro-worklog-enter")).toHaveCount(0);
 
-  // 收尾（V4.1）：summary 显示已完成 · 2 个步骤；完成瞬间 Worklog 不自动折叠（layout stability）
-  await expect(page.getByText("已完成 · 2 个步骤", { exact: true })).toBeVisible({ timeout: 10000 });
-  await expect(worklog.locator('[data-state="open"]').first()).toBeVisible();
+  // 收尾：caret 消失；Worklog 保持收起（无二次折叠）
+  await expect(page.locator("[data-kiro-stream-cursor]")).toHaveCount(0);
+  await expect(worklog.locator('[data-state="open"]')).toHaveCount(0);
 
   await sse.close();
 });

@@ -85,11 +85,13 @@ const KiroStreamingBlock = React.memo(
     sources,
     streaming,
     epoch,
+    cursor,
   }: {
     block: KiroStreamingRenderBlock;
     sources?: KiroSourceMeta[];
     streaming: boolean;
     epoch: number;
+    cursor: boolean;
   }) {
     bumpStreamPerf("blockRenders");
     React.useEffect(() => {
@@ -135,9 +137,9 @@ const KiroStreamingBlock = React.memo(
     let inner: React.ReactNode;
     if (block.tailState === "fence") {
       // 未闭合 fence：稳定几何 fallback（outer 不变；闭合瞬间 inner 允许一次替换）
-      inner = <KiroStreamingTail text={block.text} tailState="fence" sources={sources} />;
+      inner = <KiroStreamingTail text={block.text} tailState="fence" sources={sources} cursor={cursor} />;
     } else if (block.tailState === "math") {
-      inner = <KiroStreamingTail text={block.text} tailState="math" sources={sources} />;
+      inner = <KiroStreamingTail text={block.text} tailState="math" sources={sources} cursor={cursor} />;
     } else if (fragmentSafe) {
       inner = (
         <div
@@ -161,6 +163,7 @@ const KiroStreamingBlock = React.memo(
         className={spacing ? "mt-[0.8em]" : undefined}
         data-kiro-stream-block-id={`${block.ordinal}`}
         data-kiro-stream-epoch={`${epoch}`}
+        data-kiro-stream-cursor={cursor && block.tailState === "text" ? "true" : undefined}
       >
         {inner}
       </div>
@@ -172,6 +175,7 @@ const KiroStreamingBlock = React.memo(
     if (prev.block.text !== next.block.text) return false;
     if (prev.block.tailState !== next.block.tailState) return false;
     if (prev.sources !== next.sources) return false;
+    if (prev.cursor !== next.cursor) return false;
     return true;
   }
 );
@@ -206,10 +210,13 @@ export function KiroStreamingMarkdown({
   content,
   streaming,
   sources,
+  showCursor = false,
 }: {
   content: string;
   streaming: boolean;
   sources?: KiroSourceMeta[];
+  /** Streaming UX V5：末块内联 caret（text）或 fallback fence/math caret */
+  showCursor?: boolean;
 }) {
   const blockScanRef = React.useRef<KiroMarkdownScanState | null>(null);
   // 两阶段 handoff：settled 且需要 canonical fallback 时置 true → 渲染完整 KiroMarkdown
@@ -371,6 +378,10 @@ export function KiroStreamingMarkdown({
     return next;
   }, [split, content, streaming]);
 
+  // Streaming UX V5：caret 只属于最后一个 active block（text 走 CSS 尾字符；fence/math 走真实 span）
+  const cursorOrdinal =
+    streaming && showCursor && blocks.length > 0 ? blocks[blocks.length - 1].ordinal : null;
+
   if (canonicalRender) {
     // Phase 2 canonical fallback：完整 document render（正确性优先；允许一次重 parse；切换淡入）
     return (
@@ -389,6 +400,7 @@ export function KiroStreamingMarkdown({
           sources={sources}
           streaming={streaming}
           epoch={renderEpochRef.current}
+          cursor={cursorOrdinal === b.ordinal}
         />
       ))}
     </div>

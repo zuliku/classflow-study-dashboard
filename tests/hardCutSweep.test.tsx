@@ -199,7 +199,7 @@ describe("硬切深筛源码契约", () => {
 
   it("深度 Batch1：Kiro 消息/会话/导航/历史/检查器对称进退", () => {
     const message = read("components/kiro/KiroMessage.tsx");
-    expect(message).toContain("cursorPresence.mounted");
+    expect(message).toContain("showCursor={showStreamingCursor === true}");
     const run = read("components/kiro/run/KiroAgentRunResult.tsx");
     expect(run).toContain("animate-enter");
     const plan = read("components/kiro/run/KiroExecutionPlanCard.tsx");

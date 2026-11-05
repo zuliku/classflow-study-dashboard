@@ -6,6 +6,7 @@ import { KiroAgentTask } from "@/lib/ai/computer/task";
 import { ComputerApprovalDecision, ComputerApprovalRequest } from "@/lib/ai/computer/approval";
 import {
   formatKiroAgentRunDuration,
+  resolveKiroAgentRunActiveLabel,
   resolveKiroAgentRunStatus,
 } from "@/lib/ai/ui/kiroAgentRun";
 import { KiroAgentRunHeader } from "@/components/kiro/run/KiroAgentRunHeader";
@@ -67,13 +68,10 @@ export function KiroAgentRun({
     !!assistantTurn.plan ||
     !!assistantTurn.question;
 
-  // 当前 Turn：working/composing/answering 保持 expanded；历史恢复（初始 done）默认折叠；
-  // 不因 done 瞬时 collapse（避免完成瞬间 layout 跳动）；用户手动操作始终优先。
-  const [expanded, setExpanded] = useState(
-    assistantTurn.phase === "working" ||
-      assistantTurn.phase === "composing" ||
-      assistantTurn.phase === "answering"
-  );
+  // 当前 Turn：working 保持 expanded；回答 lane（composing/answering）默认收起（V5 focus）；
+  // 历史恢复（初始 done）默认折叠；不因 done 瞬时 collapse（避免完成瞬间 layout 跳动）；
+  // 用户手动操作始终优先。
+  const [expanded, setExpanded] = useState(assistantTurn.phase === "working");
   const userToggledRef = useRef(false);
 
   // Plan 退出 presence：plan 被新状态替换/清空时仍播放收起，不硬切顶起 Final Answer。
@@ -89,6 +87,26 @@ export function KiroAgentRun({
   if (approval) lastApprovalRef.current = approval;
   const shownApproval = approval ?? (approvalPresence.mounted ? lastApprovalRef.current : null);
 
+  // Streaming UX V5：回答 lane 开始 → 自动收起执行轨迹（ChatGPT/Claude 的 focus 行为）。
+  // - 用户手动 toggle 永远优先；
+  // - 若 provisional answer 后来被降级回 commentary（working），恢复展开；
+  // - 完成（done）不强制折叠，保留既有「完成瞬间无 layout jump」契约。
+  const autoCollapsedForAnswerRef = React.useRef(false);
+  React.useEffect(() => {
+    if (userToggledRef.current) return;
+    const answerLane =
+      assistantTurn.phase === "composing" || assistantTurn.phase === "answering";
+    if (answerLane) {
+      if (!autoCollapsedForAnswerRef.current) {
+        autoCollapsedForAnswerRef.current = true;
+        setExpanded(false);
+      }
+    } else if (assistantTurn.phase === "working" && autoCollapsedForAnswerRef.current) {
+      autoCollapsedForAnswerRef.current = false;
+      setExpanded(true);
+    }
+  }, [assistantTurn.phase]);
+
   // plan 退出期间仍保留 Run 外壳，直到 ExitCollapse 播完。
   if (!hasWorklog && !planPresence.mounted) return null;
 
@@ -99,6 +117,10 @@ export function KiroAgentRun({
     waitingApproval: !!approval,
     desktopPaused,
   });
+
+  // Streaming UX V5：running 时展示真实 working Tool 的公开语义动作（不含 input/output）
+  const activeToolLabel =
+    status === "running" ? resolveKiroAgentRunActiveLabel(assistantTurn.worklog) : null;
 
   // GUI 操作进行中 → 「正在操作电脑」（Computer Session 事实；扫描小数组，不进 hot path 之外）
   const desktopActive =
@@ -124,6 +146,10 @@ export function KiroAgentRun({
         status={status}
         durationLabel={durationLabel}
         desktopActive={desktopActive}
+        activeToolLabel={activeToolLabel}
+        reasoning={!!assistantTurn.reasoningSummary}
+        answering={assistantTurn.phase === "answering"}
+        collapsible={assistantTurn.worklog.length > 0}
         expanded={expanded}
         onToggle={toggleExpanded}
         onStop={onStop}
@@ -138,7 +164,6 @@ export function KiroAgentRun({
       <KiroWorklogTimeline
         worklog={assistantTurn.worklog}
         phase={assistantTurn.phase}
-        reasoningSummary={assistantTurn.reasoningSummary}
         expanded={expanded}
       />
 

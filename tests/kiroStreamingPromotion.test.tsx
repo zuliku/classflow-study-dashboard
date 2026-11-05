@@ -144,3 +144,36 @@ describe("KiroStreamingMarkdown V4.5（Promotion-Stable DOM）", () => {
     expect(dom.window.document.querySelectorAll("[data-testid='kiro-inline-fragment-paragraph']").length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("Streaming UX V5：inline caret ownership", () => {
+  it("showCursor 只标记最后一个 block；关闭后移除", () => {
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.appendChild(container);
+    let root!: Root;
+    act(() => {
+      root = createRoot(container);
+    });
+    const render = (showCursor: boolean) => {
+      act(() => {
+        root.render(
+          React.createElement(KiroStreamingMarkdown, {
+            content: "第一段。\n\n第二段正在输出",
+            streaming: true,
+            showCursor,
+          })
+        );
+      });
+    };
+
+    render(true);
+    const blocks = container.querySelectorAll("[data-kiro-stream-block-id]");
+    expect(blocks.length).toBe(2);
+    expect(blocks[0].getAttribute("data-kiro-stream-cursor")).toBeNull();
+    expect(blocks[1].getAttribute("data-kiro-stream-cursor")).toBe("true");
+
+    render(false);
+    expect(container.querySelector("[data-kiro-stream-cursor]")).toBeNull();
+    act(() => root.unmount());
+    container.remove();
+  });
+});

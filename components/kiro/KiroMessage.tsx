@@ -146,12 +146,11 @@ export function KiroMessage({
 
   const reducedMotion = useEffectiveReducedMotion();
   // streaming cursor 只在 Final Answer 真正 streaming 时出现（phase === "answering" 且
-  // answer 仍有 streaming text part）；绝不给 commentary / tool row / 已完成的 answer 显示 cursor
+  // answer 仍有 streaming text part）；绝不给 commentary / tool row / 已完成的 answer 显示 cursor。
+  // Streaming UX V5：caret 由 KiroStreamingMarkdown 渲染在真实文本末尾（不再作为 block 之后的兄弟节点）。
   const showStreamingCursor = assistantTurn
     ? assistantTurn.phase === "answering" && assistantTurn.answerStreaming
     : streaming;
-  // 光标出现/消失淡入淡出（inline span，用 presence 门控显隐，布局零位移）
-  const cursorPresence = usePresence(showStreamingCursor === true, MOTION_EXIT_MS.fast);
   // live 引用 tray：settled 后折叠退场（直接卸载会顶起下方工具栏）；
   // presence 与 ExitCollapse 的 --motion-exit-panel（160ms）对齐，避免折叠尾段被截断。
   const liveTrayPresence = usePresence(
@@ -204,7 +203,12 @@ export function KiroMessage({
           <div key={content ? "content" : "skeleton"} className="ux-fade">
             {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（同语义 Markdown） */}
             {content ? (
-              <KiroStreamingMarkdown content={content} streaming={!!streaming} sources={sources} />
+              <KiroStreamingMarkdown
+                content={content}
+                streaming={!!streaming}
+                sources={sources}
+                showCursor={showStreamingCursor === true}
+              />
             ) : (
               <div
                 data-testid="kiro-composing-skeleton"
@@ -214,19 +218,6 @@ export function KiroMessage({
                 <div className="h-3 w-3/4 rounded bg-alabaster animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />
                 <div className="h-3 w-1/2 rounded bg-alabaster/70 animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />
               </div>
-            )}
-            {cursorPresence.mounted && (
-              <span
-                aria-hidden="true"
-                data-testid="kiro-streaming-cursor"
-                className={cn(
-                  "inline-block w-[2px] h-3.5 bg-sandrift align-middle transition-opacity",
-                  cursorPresence.visible
-                    ? "opacity-100 duration-[var(--motion-fast)]"
-                    : "opacity-0 duration-[var(--motion-exit-fast)]",
-                  !reducedMotion && cursorPresence.visible && "animate-pulse"
-                )}
-              />
             )}
             {/* V2 live 引用预取：流式中即显示已引用的来源 chips（settled 后收敛到 More→来源） */}
             {liveTrayPresence.mounted && (
