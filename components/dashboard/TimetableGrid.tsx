@@ -265,25 +265,28 @@ export function TimetableGrid({
   };
   const gridBodyRef = useRef<HTMLDivElement | null>(null);
   /**
-   * 窄容器卡片降级：按「每天列宽」而不是 viewport 判断。
-   * Overview（density=compact）始终是摘要卡（~81–97px/天）；
-   * Timeline 在 <132px/天 时同样降级，1440 宽屏保留完整 teacher/location。
+   * 卡片信息密度：按「每天列宽」而不是 viewport 判断。
+   * - Overview（density=compact）始终走紧凑排版，但宽列（≈130px+/天）要恢复教师/地点；
+   * - Timeline 在 <132px/天 时进入紧凑排版，1440 宽屏保留完整 teacher/location。
+   * 之前 Overview 无条件只显示课程名，导致大窗（1920）卡片信息缺失。
    */
-  const [compactCards, setCompactCards] = useState(isCompactDensity);
+  const [dayWidth, setDayWidth] = useState<number>(
+    isCompactDensity ? 0 : Number.POSITIVE_INFINITY
+  );
+  const [bodyHeight, setBodyHeight] = useState(0);
   useEffect(() => {
     const el = gridBodyRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const measure = () => {
-      const dayWidth = el.clientWidth / Math.max(1, dayCount);
-      // Overview（density=compact）始终走摘要卡；Timeline 独立判定：
-      // <132px/天（1024–1280）进入摘要卡，1440（~154px）保留 teacher + location。
-      setCompactCards(isCompactDensity || dayWidth < 132);
+      setDayWidth(el.clientWidth / Math.max(1, dayCount));
+      setBodyHeight(el.clientHeight);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [dayCount, isCompactDensity]);
+  }, [dayCount]);
+  const compactCards = isCompactDensity || dayWidth < 132;
   const pendingRef = useRef<{
     origin: CourseSchedule;
     startX: number;
@@ -805,9 +808,16 @@ export function TimetableGrid({
                       ((startM - dayStartMinutes) / totalMinutes) * 100;
                     const heightPct =
                       ((endM - startM) / totalMinutes) * 100;
-                    // 窄列：只保留课程名；Overview（density=compact）列宽仅 81–97px，
-                    // 再塞 teacher/location 会碎成「王 教…」这类不可读片段，统一降为 sr-only + 卡片 title。
-                    const hideMeta = compactCards && (isCompactDensity || heightPct < 9);
+                    // 分级信息恢复：先教师，再地点；矮卡优先保住课程名。
+                    // 宽度门槛避免 1024/1280 再次出现碎片；高度门槛用真实像素，
+                    // 避免同一 7.5% 在 800/1080 高窗口下得到完全不同的可读性。
+                    // 1440（~97px/天）恢复教师 + 地点；1920（~143px/天）完整展示。
+                    const cardHeightPx =
+                      (bodyHeight * Math.max(heightPct - 0.3, 7.5)) / 100;
+                    const showTeacherMeta =
+                      !compactCards || (dayWidth >= 88 && cardHeightPx >= 34);
+                    const showLocationMeta =
+                      !compactCards || (dayWidth >= 90 && cardHeightPx >= 56);
                     const cardTitle = [
                       course.name,
                       course.teacher,
@@ -921,23 +931,36 @@ export function TimetableGrid({
                           </div>
 
                           {/* 2. Teacher / Location Info
-                              compact：只保留教师一行（1024/1280 时间表列宽 117–131px，
-                              合并 teacher · location 会把两者都压成 1–2 字 + 省略号）；
-                              地点进卡片 title / sr-only。非 compact 保持 teacher + location 两行。 */}
+                              compact：按列宽/高度分级恢复。宽列先恢复教师，再恢复地点；
+                              地点单独一行（不与教师挤在同一行），避免「王 · 教…」碎片。
+                              不满足宽度时仍保留 sr-only + 卡片 title。 */}
                           {compactCards ? (
-                            <div
-                              className={cn(
-                                "items-center gap-1 text-[9px] sm:text-[10px] opacity-85 font-medium leading-none min-w-0",
-                                hideMeta ? "sr-only" : "flex"
+                            <>
+                              {showTeacherMeta ? (
+                                <div className="flex items-center gap-1 text-[9px] sm:text-[10px] opacity-85 font-medium leading-none min-w-0">
+                                  {sched.source === "extra" && (
+                                    <span className="shrink-0 font-extrabold opacity-80" aria-hidden="true">+</span>
+                                  )}
+                                  <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                                  <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
+                                  {!showLocationMeta && sched.location && (
+                                    <span className="sr-only">，地点 {sched.location}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="sr-only">
+                                  {sched.source === "extra" ? "补课，" : ""}
+                                  {course.teacher}
+                                  {sched.location ? `，地点 ${sched.location}` : ""}
+                                </span>
                               )}
-                            >
-                              {sched.source === "extra" && (
-                                <span className="shrink-0 font-extrabold opacity-80" aria-hidden="true">+</span>
+                              {showLocationMeta && sched.location && (
+                                <div className="flex items-center gap-1 text-[9px] sm:text-[10px] opacity-85 font-medium leading-none min-w-0">
+                                  <MapPin className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                                  <span title={sched.location} className="truncate min-w-0">{sched.location}</span>
+                                </div>
                               )}
-                              <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                              <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
-                              {sched.location && <span className="sr-only">，地点 {sched.location}</span>}
-                            </div>
+                            </>
                           ) : (
                             <div className="flex items-center text-[10px] sm:text-[11px] opacity-85 space-x-1 font-medium leading-none">
                               <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
@@ -946,7 +969,9 @@ export function TimetableGrid({
                           )}
                         </div>
 
-                        {/* Bottom Row: Extra Marker + Location Badge（compact 不渲染地点行，地点进卡片 title / sr-only） */}
+                        {/* Bottom Row: Extra Marker + Location Badge
+                            非 compact 的底部地点行；compact 地点在标题下方单独一行（满足宽度/高度时），
+                            不满足时进卡片 title / sr-only。 */}
                         {!compactCards && (
                         <div className="flex items-center text-[10px] sm:text-[11px] opacity-90 pt-0.5 border-t border-black/5 font-medium leading-none mt-0.5">
                           {sched.source === "extra" && (

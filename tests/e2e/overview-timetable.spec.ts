@@ -103,6 +103,17 @@ test("Full Timetable Workspace / Modal 不受 compact 影响", async ({ page }) 
   expect(body).toBeGreaterThanOrEqual(440);
 });
 
+test("1920 总览：宽列恢复教师 + 地点，不再只剩课程名", async ({ page }) => {
+  await openOverview(page, 1920, 1080);
+  const card = page
+    .getByTestId("schedule-card")
+    .filter({ hasText: "微观经济学" })
+    .first();
+  await expect(card.getByText("微观经济学", { exact: true })).toBeVisible();
+  await expect(card.getByText("王教授", { exact: true })).toBeVisible();
+  await expect(card.getByText("教二 201", { exact: true })).toBeVisible();
+});
+
 test("1280/1024 总览：7 天全部可见，课程卡降级为摘要态且无横向滚动", async ({ page }) => {
   for (const width of [1280, 1024]) {
     await openOverview(page, width, 900);
