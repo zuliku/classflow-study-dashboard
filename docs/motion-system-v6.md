@@ -78,6 +78,19 @@ asymmetric transition）、Linear / Raycast（micro 快速、浮层从触发点�
 - 进度条等 data-tier 现有 width 过渡保留 WARN；新增代码优先 transform。
 - scrim 的 blur 静态，只过渡 opacity，避免逐帧重算 backdrop-filter。
 
+### 5.1 浅色磨砂 scrim（V6）
+
+全站统一浅色暖纸磨砂，不再使用深色 charcoal dim：
+
+| tone | tint | blur |
+| --- | --- | --- |
+| standard | `rgba(240,235,225,0.62)` | 14px saturate 1.05 |
+| soft | `rgba(240,235,225,0.42)` | 8px saturate 1.02 |
+| strong | `rgba(247,245,245,0.78)` | 22px saturate 1.08 |
+
+- 面板本身仍是 `bg-surface` + border/shadow；scrim 只负责“把背景洗成浅色磨砂”，不承担面板对比。
+- 无 backdrop-filter 时回退到 0.90/0.78/0.94 浅色纸面，保证背景仍被柔化。
+
 ## 6. Reduced Motion
 
 - `prefers-reduced-motion` 或应用内 reduced：所有 animation/transition 压到 0.01ms；

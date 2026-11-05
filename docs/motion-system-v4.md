@@ -1,7 +1,8 @@
 # Motion System V4 · 动画与磨砂遮罩统一审计
 
-> **已被 `docs/motion-system-v5-easing.md` 取代（V5 全量默认）。**
-> 本文件保留为 V4 历史审计记录；当前 easing 以 lib/motion.ts / app/globals.css 的 V5 token 为准。
+> **已被 `docs/motion-system-v5-easing.md` / `docs/motion-system-v6.md` 取代。**
+> 本文件保留为 V4 历史审计记录；当前 easing 以 lib/motion.ts / app/globals.css 的 V5/V6 token 为准。
+> **V6 更新：全站 scrim 已从深色 dim 改为浅色暖纸磨砂。**
 
 > 目标：参考 ChatGPT / Apple 的克制、连续、可预期动效语言，收敛 ClassFlow 中
 > 弹窗、抽屉、浮层、列表与背景磨砂的冲突项。
@@ -28,11 +29,14 @@
 
 `.ux-scrim*` 是唯一全屏背景视觉：
 
-| 档位 | 背景 | 模糊 | 使用场景 |
+| 档位 | 背景（V6 浅色） | 模糊 | 使用场景 |
 | --- | --- | --- | --- |
-| `.ux-scrim` | `rgba(49,48,50,0.24)` | 8px / saturate .92 | Dialog / Drawer / CommandCenter / 导入预览 |
-| `.ux-scrim-soft` | `rgba(49,48,50,0.14)` | 4px / saturate .98 | ReminderCenter / Kiro 侧 sheet |
-| `.ux-scrim-strong` | `rgba(32,31,33,0.54)` | 12px / saturate .90 | 图片灯箱 / Markdown lightbox |
+| `.ux-scrim` | `rgba(240,235,225,0.62)` | 14px / saturate 1.05 | Dialog / Drawer / CommandCenter / 导入预览 |
+| `.ux-scrim-soft` | `rgba(240,235,225,0.42)` | 8px / saturate 1.02 | ReminderCenter / Kiro 侧 sheet |
+| `.ux-scrim-strong` | `rgba(247,245,245,0.78)` | 22px / saturate 1.08 | 图片灯箱 / Markdown lightbox |
+
+无 `backdrop-filter` 回退：0.90 / 0.78 / 0.94 不透明度浅色纸面。
+全站统一浅色磨砂，不再使用深色 charcoal dim。
 
 原则：
 

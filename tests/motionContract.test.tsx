@@ -673,12 +673,16 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
     expect(navigator).toContain("duration-[var(--motion-exit-fast)]");
   });
 
-  it("统一磨砂遮罩：静态 blur + OverlayLayer scrimTone（不逐帧重模糊）", () => {
+  it("统一磨砂遮罩：浅色纸面 + 静态 blur + OverlayLayer scrimTone（不逐帧重模糊）", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
     const css = read("app/globals.css");
     expect(css).toContain(".ux-scrim {");
-    expect(css).toContain("backdrop-filter: blur(8px) saturate(0.92);");
-    expect(css).toContain(".ux-scrim-strong {");
+    expect(css).toContain("backdrop-filter: blur(14px) saturate(1.05);");
+    expect(css).toMatch(/\.ux-scrim\s*\{[^}]*background-color:\s*rgba\(240, 235, 225, 0\.62\)/s);
+    expect(css).toMatch(/\.ux-scrim-soft\s*\{[^}]*background-color:\s*rgba\(240, 235, 225, 0\.42\)/s);
+    expect(css).toMatch(/\.ux-scrim-strong\s*\{[^}]*background-color:\s*rgba\(247, 245, 245, 0\.78\)/s);
+    // 统一浅色：不得再回到深色 dim
+    expect(css).not.toMatch(/\.ux-scrim(?:\s|\{|,)[^{]*\{[^}]*rgba\((49, 48, 50|32, 31, 33)/s);
     const layer = read("components/ui/OverlayLayer.tsx");
     expect(layer).toContain('scrimTone = "standard"');
     expect(layer).toContain('scrimTone === "standard" && "ux-scrim"');
