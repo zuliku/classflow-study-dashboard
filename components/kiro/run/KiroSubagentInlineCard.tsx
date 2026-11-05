@@ -141,7 +141,7 @@ export function KiroSubagentInlineCard({
       ) : null}
 
       {run.status === "completed" && (
-        <p className="mt-1 text-[9px] text-sandrift/90">完整结果见右侧「子代理」栏目</p>
+        <p className="mt-1 text-[9px] text-sandrift/90">结果已归档</p>
       )}
       {run.error && <p className="mt-1 text-[10px] text-danger">{run.error}</p>}
     </div>

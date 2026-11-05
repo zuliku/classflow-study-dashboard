@@ -82,10 +82,7 @@ export function KiroInspectorSubagents() {
   return (
     <KiroInspectorSection title="子代理" count={visible.length} testId="kiro-inspector-subagents">
       {visible.length === 0 ? (
-        <KiroInspectorEmptyState
-          text="暂无子代理"
-          hint="复杂任务会自动派生研究员 / 规划师 / 审查员。"
-        />
+        <KiroInspectorEmptyState text="暂无子代理" />
       ) : (
         <div className="space-y-1">
           {visible.map((run) => (

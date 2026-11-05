@@ -177,9 +177,6 @@ export function SkillDistillDialog({ open, onOpenChange, trace, onSaved, prebuil
         </div>
         <div>
           <h4 className="text-sm font-bold text-charcoal">将工作流保存为 Skill</h4>
-          <p className="text-[11px] text-sandrift">
-            {prebuiltDraft ? "来自桌面轨迹 · 预览 · 测试 · 安装" : "自动整理 · 预览 · 测试 · 安装"}
-          </p>
         </div>
       </div>
 

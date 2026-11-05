@@ -153,7 +153,7 @@ describe("Subagent UI", () => {
 
     act(() => useKiroSubagentStore.getState().complete("sub-1", "框架 A 更适合。", true));
     expect(screen.getByTestId("kiro-subagent-inline").textContent).toContain("已完成");
-    expect(screen.getByTestId("kiro-subagent-inline").textContent).toContain("完整结果见右侧");
+    expect(screen.getByTestId("kiro-subagent-inline").textContent).toContain("结果已归档");
   });
 
   it("右侧 Inspector 子代理栏目按会话展示，可展开完整摘要", () => {
