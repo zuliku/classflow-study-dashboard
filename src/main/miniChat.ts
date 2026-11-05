@@ -205,6 +205,20 @@ function applyModeConstraints(w: BrowserWindow): void {
   }
 }
 
+/** 已在屏幕外（旧 bounds / 拔显示器 / 拖出边界）→ 移回当前显示器工作区 */
+function ensureWindowVisible(w: BrowserWindow): void {
+  if (!w || w.isDestroyed()) return;
+  try {
+    const bounds = w.getBounds();
+    const clamped = clampBounds(bounds);
+    if (clamped.x !== bounds.x || clamped.y !== bounds.y) {
+      w.setPosition(clamped.x as number, clamped.y as number);
+    }
+  } catch {
+    /* 窗口销毁竞态：忽略 */
+  }
+}
+
 function animateBounds(
   w: BrowserWindow,
   target: { x?: number; y?: number; width: number; height: number },
@@ -360,6 +374,7 @@ async function ensureMiniWindow(opts: {
   });
   w.on("ready-to-show", () => {
     applyModeConstraints(w);
+    ensureWindowVisible(w);
     w.show();
     // 重开即推最新快照（relay 可能在 mini 关闭期间持续 publish，缓存保证不空白）
     if (latestSnapshot && !w.webContents.isDestroyed()) {
@@ -506,14 +521,7 @@ function registerDisplayListeners(): void {
   const reclamp = () => {
     const w = getMiniWindow();
     if (!w || w.isDestroyed()) return;
-    const [x, y] = w.getPosition();
-    const [width, height] = w.getSize();
-    const next = clampBounds({ x, y, width, height });
-    if (next.x !== x || next.y !== y) {
-      try {
-        w.setPosition(next.x as number, next.y as number);
-      } catch {}
-    }
+    ensureWindowVisible(w);
   };
   screen.on("display-removed", reclamp);
   screen.on("display-metrics-changed", reclamp);
@@ -549,6 +557,7 @@ export function registerMiniChatIpc(deps: MiniChatMainDeps): void {
       allowedDevOrigin,
     });
     if (!w.isDestroyed()) {
+      ensureWindowVisible(w);
       if (!w.isVisible()) w.show();
       w.focus();
       if (latestSnapshot && !w.webContents.isDestroyed()) {

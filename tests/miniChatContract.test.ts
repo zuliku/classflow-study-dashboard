@@ -90,6 +90,7 @@ describe("Main 侧（src/main/miniChat.ts + index.ts 接线）", () => {
     expect(index).toContain("disposeMiniChat");
     expect(src).toContain("setBackgroundThrottling");
     expect(src).toContain("getDisplayMatching");
+    expect(src).toContain("ensureWindowVisible");
     expect(src).toContain("globalShortcut");
     expect(src).toContain("MINI_CAPSULE_SIZE");
   });
