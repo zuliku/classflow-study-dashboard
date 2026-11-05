@@ -205,8 +205,16 @@ describe("MiniChatApp", () => {
     expect(container!.textContent).toContain("迷你窗仅在桌面端可用");
   });
 
-  it("快捷 Prompt 点击直接发送", async () => {
+  it("有消息时不再显示快捷 Prompt", async () => {
     await renderApp();
+    expect(q('[data-testid="kiro-mini-suggestions"]')).toBeNull();
+  });
+
+  it("快捷 Prompt 点击直接发送（空会话）", async () => {
+    await renderApp();
+    await act(async () => {
+      stateListener?.({ ...SNAP, messages: [] });
+    });
     const chip = Array.from(container!.querySelectorAll("button")).find(
       (button) => button.textContent === "今天要做什么"
     );
@@ -299,6 +307,34 @@ describe("MiniChatApp", () => {
     const countdown = q('[data-testid="kiro-mini-approval-countdown"]');
     expect(countdown).toBeTruthy();
     expect(countdown!.textContent).toContain("剩余");
+  });
+
+  it("会话菜单：打开聚焦首项，方向键移动，Esc 关闭并回到触发按钮", async () => {
+    await renderApp();
+    const trigger = q('[aria-label="切换对话"]') as HTMLButtonElement;
+    await act(async () => {
+      trigger.click();
+    });
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    expect(document.activeElement?.textContent).toContain("主窗口");
+    await act(async () => {
+      (document.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+      );
+    });
+    expect(document.activeElement?.textContent).toContain("新对话");
+    await act(async () => {
+      (document.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    expect(q('[data-testid="kiro-mini-conversation-menu"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("胶囊模式：展开先进入轻量 morph 层，动画后再挂载聊天界面", async () => {

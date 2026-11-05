@@ -1,17 +1,14 @@
 "use client";
 
 import React from "react";
-import { ChevronDown, Minus, Pin, PinOff, Plus, X } from "lucide-react";
+import { ChevronDown, Minus, Plus, X } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
-import { cn } from "@/lib/utils";
 
 export function MiniChatHeader({
   title,
   busy,
   unread,
   menuOpen,
-  onTop,
-  onPin,
   onCollapse,
   onHide,
   onNewChat,
@@ -21,8 +18,6 @@ export function MiniChatHeader({
   busy: boolean;
   unread: number;
   menuOpen: boolean;
-  onTop: boolean;
-  onPin: () => void;
   onCollapse: () => void;
   onHide: () => void;
   onNewChat: () => void;
@@ -67,19 +62,6 @@ export function MiniChatHeader({
         onClick={onNewChat}
       >
         <Plus className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        aria-label={onTop ? "取消置顶" : "置顶显示"}
-        className={cn(
-          "mini-no-drag flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-alabaster hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15",
-          onTop ? "text-charcoal" : "text-satin-grey"
-        )}
-        onClick={onPin}
-      >
-        <span key={String(onTop)} className="inline-flex kiro-status-swap">
-          {onTop ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-        </span>
       </button>
       <button
         type="button"

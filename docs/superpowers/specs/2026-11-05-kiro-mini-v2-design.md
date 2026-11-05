@@ -69,11 +69,11 @@ Main process validates the current snapshot approval id + `canApproveInMini`; th
 
 Expanded layout:
 
-1. Header: Kiro mark, conversation title/dropdown, small busy dot, new chat, pin, collapse, hide. Run status text is intentionally **not** in the header: it lives in the composer busy bar so the title keeps its width at 300 px.
+1. Header: Kiro mark, conversation title/dropdown, small busy dot, new chat, collapse, hide. Run status text is intentionally **not** in the header: it lives in the composer busy bar so the title keeps its width at 300 px. Pin/unpin lives in the conversation menu.
 2. Status strip: low-risk approval card (with queue count and deadline countdown), plan progress, current activity, source chips. While an approval is pending the plan collapses to one line and sources are hidden; completed/cancelled plans use the same one-line form. Runtime errors render a dedicated error card with a "主窗口查看" handoff.
 3. Messages: Markdown-lite (paragraphs/lists/code copy/links/tables; no HTML, images, Mermaid/KaTeX/charts), streaming caret, sticky-bottom auto-follow, "新内容" control, copy last answer when settled. A ResizeObserver keeps the list pinned to the bottom during native window resizing when the user was already at the bottom.
-4. Composer: quick prompts (click sends immediately), attachment tray, paste image, auto-height textarea, send/stop. The busy bar shows the live status label + elapsed seconds + Stop.
-5. Conversation menu: `role="menu"`, `aria-expanded` trigger, recent conversations, new chat, open main; 28–30 px rows.
+4. Composer: quick prompts (click sends immediately) only for an empty conversation, attachment tray, paste image, auto-height textarea, send/stop. The busy bar shows the live status label + elapsed seconds + Stop.
+5. Conversation menu: `role="menu"`, `aria-expanded` trigger, arrow-key/Home/End navigation, Tab focus trap, Escape returns focus to the trigger, relative timestamps, pin toggle, recent conversations, new chat, open main; 28–30 px rows.
 
 Secondary text uses `satin-grey` (WCAG AA on surface) rather than `sandrift`; primary controls are at least 28 px tall (most 32 px).
 

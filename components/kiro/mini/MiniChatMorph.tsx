@@ -35,7 +35,7 @@ export const MiniChatMorph = React.memo(function MiniChatMorph({
     >
       <div
         className={cn(
-          "mini-morph-card absolute left-0 top-0 overflow-hidden rounded-[20px] bg-surface ring-1 ring-inset ring-line-soft",
+          "mini-morph-card absolute left-0 top-0 overflow-hidden rounded-[20px] bg-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] ring-1 ring-inset ring-line-soft",
           toHeader ? "mini-morph-card-expand" : "mini-morph-card-collapse"
         )}
         style={{ contain: "layout paint" }}

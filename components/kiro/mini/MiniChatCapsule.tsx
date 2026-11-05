@@ -31,7 +31,7 @@ export function MiniChatCapsule({
   const showStatus = busy || !!statusLabel || phase === "waiting-approval" || phase === "error";
   return (
     <div
-      className="mini-drag-region group relative select-none overflow-hidden rounded-[20px] bg-surface"
+      className="mini-drag-region group relative select-none overflow-hidden rounded-[20px] bg-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]"
       style={{ width: MINI_CAPSULE_SIZE, height: MINI_CAPSULE_SIZE }}
       data-testid="kiro-mini-capsule"
       aria-label={statusLabel ? `Kiro Mini，${statusLabel}` : "Kiro Mini"}

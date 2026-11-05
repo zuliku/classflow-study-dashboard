@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, ChevronDown, Copy, Plus } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Copy, Pin, PinOff, Plus } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { getClassFlowDesktopMiniBridge } from "@/lib/desktop/bridge";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
@@ -27,6 +27,21 @@ import { MiniChatMorph } from "@/components/kiro/mini/MiniChatMorph";
 import { MiniChatStatusStrip } from "@/components/kiro/mini/MiniChatStatusStrip";
 import { MiniChatComposer } from "@/components/kiro/mini/MiniChatComposer";
 import { MiniMarkdown } from "@/components/kiro/mini/MiniMarkdown";
+
+function formatRelativeTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const diff = Math.max(0, Date.now() - t);
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "昨天";
+  if (days < 7) return `${days} 天前`;
+  return new Date(t).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
 
 /**
  * Kiro Mini 窗（`?mini=1` 独立 BrowserWindow 根；瘦客户端，无聊天运行时）：
@@ -60,6 +75,7 @@ export function MiniChatApp() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const listRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
   const busySinceRef = useRef<number | null>(null);
   const previousBusyRef = useRef(false);
@@ -100,6 +116,60 @@ export function MiniChatApp() {
       setSyncError(true);
     }
   }, []);
+
+  const closeMenu = useCallback((restoreFocus = true) => {
+    setMenuOpen(false);
+    if (!restoreFocus) return;
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>('[aria-label="切换对话"]')?.focus();
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const raf = requestAnimationFrame(() => {
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [menuOpen]);
+
+  const handleMenuKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeMenu(true);
+        return;
+      }
+      const items = Array.from(
+        menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []
+      );
+      if (items.length === 0) return;
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        items[index < 0 ? 0 : (index + 1) % items.length]?.focus();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        items[index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length]?.focus();
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        items[0]?.focus();
+      } else if (event.key === "End") {
+        event.preventDefault();
+        items[items.length - 1]?.focus();
+      } else if (event.key === "Tab" && index >= 0) {
+        if (!event.shiftKey && index === items.length - 1) {
+          event.preventDefault();
+          items[0]?.focus();
+        } else if (event.shiftKey && index === 0) {
+          event.preventDefault();
+          items[items.length - 1]?.focus();
+        }
+      }
+    },
+    [closeMenu]
+  );
 
   // 初始快照 + 窗口状态 + 推送订阅（无 bridge 即 fallback，不抛错）
   useEffect(() => {
@@ -408,8 +478,8 @@ export function MiniChatApp() {
     try {
       getClassFlowDesktopMiniBridge()?.focusMain(conversationId);
     } catch {}
-    setMenuOpen(false);
-  }, []);
+    closeMenu(false);
+  }, [closeMenu]);
 
   const copyMessage = useCallback(async (id: string, text: string) => {
     const ok = await copyTextToClipboard(text);
@@ -425,11 +495,11 @@ export function MiniChatApp() {
       setNotice("先停止当前回答");
       return;
     }
-    setMenuOpen(false);
+    closeMenu(true);
     try {
       getClassFlowDesktopMiniBridge()?.newChat();
     } catch {}
-  }, [busy, transitioning]);
+  }, [busy, closeMenu, transitioning]);
 
   const switchConversation = useCallback(
     (conversation: MiniChatConversationSummary) => {
@@ -438,15 +508,15 @@ export function MiniChatApp() {
         return;
       }
       if (conversation.id === snapshot?.conversationId) {
-        setMenuOpen(false);
+        closeMenu(true);
         return;
       }
-      setMenuOpen(false);
+      closeMenu(true);
       try {
         getClassFlowDesktopMiniBridge()?.switchConversation(conversation.id);
       } catch {}
     },
-    [busy, transitioning, snapshot?.conversationId]
+    [busy, closeMenu, transitioning, snapshot?.conversationId]
   );
 
   const resolveApproval = useCallback(
@@ -468,14 +538,14 @@ export function MiniChatApp() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (menuOpen) {
-        setMenuOpen(false);
+        closeMenu(true);
         return;
       }
       hide();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hide, menuOpen]);
+  }, [closeMenu, hide, menuOpen]);
 
   if (!miniAvailable) {
     return (
@@ -510,7 +580,7 @@ export function MiniChatApp() {
 
   return (
     <div
-      className="relative flex h-screen flex-col overflow-hidden rounded-[20px] bg-surface text-charcoal ring-1 ring-inset ring-line-soft"
+      className="relative flex h-screen flex-col overflow-hidden rounded-[20px] bg-surface text-charcoal shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] ring-1 ring-inset ring-line-soft"
       data-testid="kiro-mini-app"
       onDragOver={(event) => {
         event.preventDefault();
@@ -528,8 +598,6 @@ export function MiniChatApp() {
         busy={busyPresence.mounted}
         unread={unread}
         menuOpen={menuOpen}
-        onTop={onTop}
-        onPin={togglePin}
         onCollapse={() => setMode("capsule")}
         onHide={hide}
         onNewChat={newChat}
@@ -672,7 +740,7 @@ export function MiniChatApp() {
           elapsed={elapsed}
           configured={configured}
           transitioning={transitioning}
-          suggestions={suggestions}
+          suggestions={messages.length === 0 ? suggestions : []}
           onFocusMain={() => focusMain(snapshot?.conversationId ?? undefined)}
         />
 
@@ -683,13 +751,16 @@ export function MiniChatApp() {
           <button
             type="button"
             aria-label="关闭对话菜单"
+            tabIndex={-1}
             className="absolute inset-0 z-20 cursor-default bg-transparent"
-            onClick={() => setMenuOpen(false)}
+            onClick={() => closeMenu(true)}
           />
           <div
+            ref={menuRef}
             data-testid="kiro-mini-conversation-menu"
             role="menu"
             aria-label="最近对话"
+            onKeyDown={handleMenuKeyDown}
             className="absolute inset-x-2 top-12 z-30 max-h-[62%] overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-card animate-enter focus:outline-none"
           >
             <div className="flex items-center justify-between px-2 py-1">
@@ -712,6 +783,18 @@ export function MiniChatApp() {
               <Plus className="h-3 w-3" />
               新对话
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                togglePin();
+                closeMenu(true);
+              }}
+              className="flex w-full items-center gap-1.5 rounded-lg px-2 py-2 text-left text-[11px] text-satin-grey hover:bg-alabaster hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
+            >
+              {onTop ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+              {onTop ? "取消置顶" : "置顶显示"}
+            </button>
             {(snapshot?.conversations ?? []).map((conversation) => (
               <button
                 key={conversation.id}
@@ -727,8 +810,11 @@ export function MiniChatApp() {
                 )}
               >
                 <span className="truncate">{conversation.title}</span>
+                <span className="ml-auto shrink-0 text-[9px] font-normal text-satin-grey">
+                  {formatRelativeTime(conversation.updatedAt)}
+                </span>
                 {conversation.id === snapshot?.conversationId && (
-                  <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-charcoal" />
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-charcoal" />
                 )}
               </button>
             ))}

@@ -54,10 +54,7 @@ const SNAPSHOT = {
 
 const IDLE_SNAPSHOT = {
   ...SNAPSHOT,
-  messages: [
-    { id: "m1", role: "user", text: "这周还有哪些 DDL？" },
-    { id: "m2", role: "assistant", text: "我先查一下。" },
-  ],
+  messages: [],
   busy: false,
   streaming: false,
   phase: "idle",
