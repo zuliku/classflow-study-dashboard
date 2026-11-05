@@ -445,7 +445,7 @@ export function CommandCenter() {
       >
         {searchModalView === "guide" ? (
           /* ---- Shortcut Guide 子视图（BUG-G10：key 驱动 ux-fade 淡入） ---- */
-          <div key="guide" className="ux-fade p-5 space-y-4">
+          <div key="guide" className="ux-fade p-5 space-y-4 max-h-[calc(100dvh-7rem)] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-charcoal flex items-center gap-2">
                 <Keyboard className="w-4 h-4 text-sandrift" />

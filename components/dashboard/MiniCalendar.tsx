@@ -598,7 +598,7 @@ export function MiniCalendar() {
       data-week-rows={weekRows}
       data-agenda-required={Math.round(agendaRequiredHeight)}
       data-agenda-visible={agendaVisible ? "1" : "0"}
-      className="dashboard-card p-4 space-y-3 flex flex-col min-h-0 h-full"
+      className="dashboard-card relative p-4 space-y-3 flex flex-col min-h-0 h-full"
     >
       {/* Header：年月 min-w-0 不主动 truncate；右侧 controls shrink-0（compact 释放空间） */}
       <div
@@ -943,79 +943,80 @@ export function MiniCalendar() {
       </div>
       </DisclosureRegion>
 
-      {/* DDL Move Feedback：局部轻量反馈（撤销 + 修改时间），不破坏全局 Toast；折叠进退。
-          退场播 stale 快照（内容在折叠播完前不消失，与抽屉 staleMark 同模式） */}
-      <DisclosureRegion open={feedback != null}>
-        {shownFeedback ? (
-        <div className="relative">
-          <div
-            data-testid="ddl-move-feedback"
-            className="ux-inline bg-surface border border-line-strong rounded-xl shadow-card p-2.5 space-y-2"
-          >
+      {/* DDL Move Feedback：绝对浮层，不参与 flex 高度分配（避免把日历网格压扁）；
+          修改时间 popover 放在 DisclosureRegion 外，避免被折叠容器 overflow-hidden 裁切。 */}
+      <div className="absolute inset-x-4 bottom-4 z-30">
+        <DisclosureRegion open={feedback != null}>
+          {shownFeedback ? (
+            <div
+              data-testid="ddl-move-feedback"
+              className="ux-inline bg-surface border border-line-strong rounded-xl shadow-card p-2.5 space-y-2"
+            >
               <p className="text-[11px] font-bold text-charcoal">
                 已移动到{" "}
                 {format(parseISO(shownFeedback.targetDate), "M月d日", { locale: zhCN })} ·{" "}
                 {getLocalDDLTime(shownFeedback.current.ddl)}
               </p>
-            <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={openTimeEdit}
+                  className="text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
+                >
+                  修改时间
+                </button>
+                <button
+                  onClick={handleUndoDDLMove}
+                  className="text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  撤销
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </DisclosureRegion>
+
+        {/* 修改时间 Popover：贴近反馈区，Esc / click outside 关闭，对称进退 */}
+        {timeEditPresence.mounted && shownFeedback && (
+          <div
+            data-testid="ddl-time-edit"
+            ref={(el) => {
+              timeEditRef.current = el;
+              timeEditInertRef(el);
+            }}
+            className={cn(
+              "absolute bottom-full right-0 mb-1 w-44 bg-background border border-line-strong rounded-xl shadow-card p-2.5 space-y-2 z-40 origin-bottom-right transition-[opacity,transform]",
+              timeEditPresence.visible
+                ? "opacity-100 scale-100 translate-y-0 ease-[var(--ease-standard)] duration-[var(--motion-fast)]"
+                : "opacity-0 scale-[0.98] translate-y-[3px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
+            )}
+          >
+            <label className="block text-[10px] font-bold text-sandrift">
+              截止时间
+            </label>
+            <input
+              ref={timeInputRef}
+              type="time"
+              value={timeInput}
+              onChange={(e) => setTimeInput(e.target.value)}
+              className="w-full p-1.5 bg-background border border-line rounded-lg text-xs font-mono focus:outline-none"
+            />
+            <div className="flex justify-end space-x-1.5">
               <button
-                onClick={openTimeEdit}
-                className="text-[11px] font-semibold text-sandrift hover:text-charcoal transition-colors"
+                onClick={() => setTimeEditOpen(false)}
+                className="px-2 py-1 text-[11px] font-medium text-satin-grey bg-background border border-line rounded-lg hover:bg-alba"
               >
-                修改时间
+                取消
               </button>
               <button
-                onClick={handleUndoDDLMove}
-                className="text-[11px] font-bold text-charcoal bg-pastel-mint hover:bg-pastel-mint px-2.5 py-1 rounded-lg transition-colors"
+                onClick={saveTimeEdit}
+                className="px-2 py-1 text-[11px] font-bold text-white bg-charcoal hover:bg-black rounded-lg"
               >
-                撤销
+                保存
               </button>
             </div>
-
-            {/* 修改时间 Popover：贴近反馈区，Esc / click outside 关闭，对称进退 */}
-            {timeEditPresence.mounted && (
-              <div
-                ref={(el) => {
-                  timeEditRef.current = el;
-                  timeEditInertRef(el);
-                }}
-                className={cn(
-                  "absolute bottom-full right-0 mb-1 w-44 bg-background border border-line-strong rounded-xl shadow-card p-2.5 space-y-2 z-40 origin-bottom-right transition-[opacity,transform]",
-                  timeEditPresence.visible
-                    ? "opacity-100 scale-100 translate-y-0 ease-[var(--ease-standard)] duration-[var(--motion-fast)]"
-                    : "opacity-0 scale-[0.98] translate-y-[3px] pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
-                )}
-              >
-                <label className="block text-[10px] font-bold text-sandrift">
-                  截止时间
-                </label>
-                <input
-                  ref={timeInputRef}
-                  type="time"
-                  value={timeInput}
-                  onChange={(e) => setTimeInput(e.target.value)}
-                  className="w-full p-1.5 bg-background border border-line rounded-lg text-xs font-mono focus:outline-none"
-                />
-                <div className="flex justify-end space-x-1.5">
-                  <button
-                    onClick={() => setTimeEditOpen(false)}
-                    className="px-2 py-1 text-[11px] font-medium text-satin-grey bg-background border border-line rounded-lg hover:bg-alba"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={saveTimeEdit}
-                    className="px-2 py-1 text-[11px] font-bold text-white bg-charcoal hover:bg-black rounded-lg"
-                  >
-                    保存
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
-        </div>
-        ) : null}
-      </DisclosureRegion>
+        )}
+      </div>
     </div>
   );
 }

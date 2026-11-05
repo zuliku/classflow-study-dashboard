@@ -190,7 +190,7 @@ export function UpcomingDDL() {
           <div
             key={`${safePage}-${pageSize}-${density}-${cardHeight}`}
             // 行数变化：repeat 条数变化不可插值，过渡永不播；保留 ux-agenda-enter 入场 SEE
-            className="grid ux-agenda-enter"
+            className="grid grid-cols-1 ux-agenda-enter min-w-0"
             style={{ gridTemplateRows: `repeat(${pagedItems.length}, ${cardHeight}px)`, gap: `${metrics.gap}px` }}
           >
             {pagedItems.map((task) => {

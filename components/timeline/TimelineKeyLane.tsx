@@ -107,13 +107,15 @@ export function TimelineKeyLane({
     return map;
   }, [items]);
 
-  // 列宽测量（Semantic Geometry → px 视觉）：真实 widthRatio * colWidth
+  // 列宽测量（Semantic Geometry → px 视觉）：真实 widthRatio * colWidth。
+  // grid 含 56px 时间 gutter；必须先从总宽中扣除，否则 interval 整体右移并按比例放大。
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [colWidth, setColWidth] = useState(180);
   useLayoutEffect(() => {
     const el = gridRef.current;
     if (!el) return;
-    const measure = () => setColWidth(Math.max(el.clientWidth / weekDates.length, 40));
+    const measure = () =>
+      setColWidth(Math.max((el.clientWidth - 56) / weekDates.length, 40));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);

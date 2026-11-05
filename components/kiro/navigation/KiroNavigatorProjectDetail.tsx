@@ -85,7 +85,7 @@ export function KiroNavigatorProjectDetail({
           >
             <ChevronDown className="w-4 h-4" />
           </button>
-          <KiroMenuPanel open={menuOpen} placement="right-end" className="w-[160px]">
+          <KiroMenuPanel open={menuOpen} placement="bottom-end" className="w-[160px]">
             <KiroMenuItem
               label="编辑项目"
               onClick={() => {

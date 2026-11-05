@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ExternalLink, AlertTriangle, ChevronLeft, ChevronRight, MapPin, User, CalendarPlus, FileUp } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -104,6 +104,7 @@ export function TimetableGrid({
     dayOfWeek: number;
     dayStartMinutes: number;
     totalMinutes: number;
+    bodyHeight: number;
     timeToMinutes: (t: string) => number;
   }) => React.ReactNode;
   /** Timeline Workspace：课程卡右上角 overlay（如重叠 StudyBlock 的 Task Marker）。
@@ -274,7 +275,7 @@ export function TimetableGrid({
     isCompactDensity ? 0 : Number.POSITIVE_INFINITY
   );
   const [bodyHeight, setBodyHeight] = useState(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = gridBodyRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const measure = () => {
@@ -792,6 +793,7 @@ export function TimetableGrid({
                     dayOfWeek: wd.dayOfWeek,
                     dayStartMinutes,
                     totalMinutes,
+                    bodyHeight,
                     timeToMinutes: timeToMinutesSafe,
                   })}
                   {daySchedules.map((sched) => {
@@ -804,20 +806,29 @@ export function TimetableGrid({
 
                     const startM = timeToMinutesSafe(sched.startTime);
                     const endM = timeToMinutesSafe(sched.endTime);
+                    // 视觉几何 clamp 到 08:00–21:00：跨界线课程只绘制可见部分，
+                    // 否则 top 为负 / 底部越界会触发外层 overflow-x-auto 的纵向滚动条。
+                    const visualStartM = Math.max(startM, dayStartMinutes);
+                    const visualEndM = Math.min(endM, dayStartMinutes + totalMinutes);
+                    if (visualEndM <= visualStartM) return null;
                     const topPct =
-                      ((startM - dayStartMinutes) / totalMinutes) * 100;
+                      ((visualStartM - dayStartMinutes) / totalMinutes) * 100;
                     const heightPct =
-                      ((endM - startM) / totalMinutes) * 100;
+                      ((visualEndM - visualStartM) / totalMinutes) * 100;
                     // 分级信息恢复：先教师，再地点；矮卡优先保住课程名。
                     // 宽度门槛避免 1024/1280 再次出现碎片；高度门槛用真实像素，
                     // 避免同一 7.5% 在 800/1080 高窗口下得到完全不同的可读性。
                     // 1440（~97px/天）恢复教师 + 地点；1920（~143px/天）完整展示。
                     const cardHeightPx =
-                      (bodyHeight * Math.max(heightPct - 0.3, 7.5)) / 100;
-                    const showTeacherMeta =
-                      !compactCards || (dayWidth >= 88 && cardHeightPx >= 34);
-                    const showLocationMeta =
-                      !compactCards || (dayWidth >= 90 && cardHeightPx >= 56);
+                      (bodyHeight * Math.max(heightPct - 0.3, 1)) / 100;
+                    // 非 compact 也要按真实高度 gate：1440 的 1h 卡只有 ~39px，
+                    // 继续渲染地点行会被 overflow-hidden 裁掉。窄列另有宽度门槛。
+                    const showTeacherMeta = compactCards
+                      ? dayWidth >= 88 && cardHeightPx >= 34
+                      : cardHeightPx >= 44;
+                    const showLocationMeta = compactCards
+                      ? dayWidth >= 90 && cardHeightPx >= 56
+                      : cardHeightPx >= 54;
                     const cardTitle = [
                       course.name,
                       course.teacher,
@@ -842,7 +853,9 @@ export function TimetableGrid({
                         )}
                         style={{
                           top: `${topPct}%`,
-                          height: `${Math.max(heightPct - 0.3, 7.5)}%`,
+                          // 不再用 7.5% 最小高度：30min 课程真实仅 ~3.8%，
+                          // 放大到 7.5% 会向下覆盖下一节课。保留 1% 仅防 0 高度。
+                          height: `${Math.max(heightPct - 0.3, 1)}%`,
                         }}
                       >
                         <div
@@ -864,11 +877,17 @@ export function TimetableGrid({
                           onPointerCancel={cancelInteraction}
                           className={cn(
                             "absolute inset-0 rounded-xl shadow-subtle border flex flex-col overflow-hidden group select-none",
-                            compactCards ? "justify-center" : "justify-between",
+                            compactCards || !showLocationMeta ? "justify-center" : "justify-between",
                             // 只过渡实际会变化的属性（透明度/阴影/边框），避免无关属性建立 transition
                             "transition-[opacity,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
                             // 紧凑卡：更小的卡内边距，把宽度让给课程名
-                            compactCards ? "p-1" : isCompactDensity ? "p-1.5" : "p-1.5 sm:p-2",
+                            compactCards
+                              ? cardHeightPx < 26
+                                ? "p-0.5"
+                                : "p-1"
+                              : isCompactDensity
+                                ? "p-1.5"
+                                : "p-1.5 sm:p-2",
                             hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border",
                             // 当前正在上课：克制外框高亮（优先于 hover/其他，但让位于冲突提示）
                             !hasConflict && nowCourseSchedule?.id === sched.id && "kiro-now-course ring-2",
@@ -895,8 +914,12 @@ export function TimetableGrid({
                               className={cn(
                                 "font-extrabold tracking-tight leading-tight text-charcoal min-w-0 flex-1",
                                 compactCards
-                                  ? "text-[10.5px] leading-[1.25] line-clamp-2"
-                                  : "text-[11px] sm:text-xs truncate"
+                                  ? cardHeightPx < 26
+                                    ? "text-[9px] leading-none line-clamp-1"
+                                    : "text-[10.5px] leading-[1.25] line-clamp-2"
+                                  : cardHeightPx < 28
+                                    ? "text-[9px] leading-none truncate"
+                                    : "text-[11px] sm:text-xs truncate"
                               )}
                             >
                               {course.name}
@@ -961,18 +984,27 @@ export function TimetableGrid({
                                 </div>
                               )}
                             </>
-                          ) : (
+                          ) : showTeacherMeta ? (
                             <div className="flex items-center text-[10px] sm:text-[11px] opacity-85 space-x-1 font-medium leading-none">
                               <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
                               <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
+                              {!showLocationMeta && sched.location && (
+                                <span className="sr-only">，地点 {sched.location}</span>
+                              )}
                             </div>
+                          ) : (
+                            <span className="sr-only">
+                              {sched.source === "extra" ? "补课，" : ""}
+                              {course.teacher}
+                              {sched.location ? `，地点 ${sched.location}` : ""}
+                            </span>
                           )}
                         </div>
 
                         {/* Bottom Row: Extra Marker + Location Badge
                             非 compact 的底部地点行；compact 地点在标题下方单独一行（满足宽度/高度时），
                             不满足时进卡片 title / sr-only。 */}
-                        {!compactCards && (
+                        {!compactCards && showLocationMeta && (
                         <div className="flex items-center text-[10px] sm:text-[11px] opacity-90 pt-0.5 border-t border-black/5 font-medium leading-none mt-0.5">
                           {sched.source === "extra" && (
                             <span

@@ -113,7 +113,7 @@ export function FilePreviewModal() {
       overlayId="file-preview-modal"
       stackZ={50}
       aria-label="文件预览"
-      className="max-w-4xl h-[88dvh]"
+      className="max-w-4xl h-[88dvh] flex flex-col"
     >
         {/* Header（触及区 token 等价迁移：bg-background / border-line-soft） */}
         <div className="p-4 px-6 border-b border-line-soft bg-background flex items-center justify-between shrink-0">
@@ -165,7 +165,7 @@ export function FilePreviewModal() {
         </div>
 
         {/* Content Viewer Body（BUG-G6：状态切换淡入，key 驱动 ux-fade 重放） */}
-        <div className="flex-1 p-4 bg-charcoal flex items-center justify-center overflow-hidden relative">
+        <div className="flex-1 min-h-0 p-4 bg-charcoal flex items-center justify-center overflow-hidden relative">
           <div
             key={isLoading ? "loading" : loadFailed ? "failed" : displayUrl && isPdf ? "pdf" : displayUrl && isImage ? "image" : "fallback"}
             className="ux-fade w-full h-full flex items-center justify-center"

@@ -332,7 +332,7 @@ export function SettingsView({
       {/* 右侧 Workspace：Detail Pane（唯一主要滚动区） */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         {/* Detail Pane：唯一滚动区；所有 section 常驻挂载 */}
-        <div ref={detailRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-4 md:px-5 md:pb-5" data-testid="settings-detail">
+        <div ref={detailRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto [scrollbar-gutter:stable] p-4 md:pt-4 md:px-5 md:pb-5" data-testid="settings-detail">
           {searching ? (
             /* 搜索态进入淡入一次（key 静态——随 query 逐字重播会闪烁，故不用 query 做 key） */
             <div key="search-results" className="ux-fade" data-testid="settings-search-results">

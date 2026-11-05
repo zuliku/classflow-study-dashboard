@@ -317,7 +317,7 @@ export function KiroMemoryManager({
       }}
       aria-label="Kiro 记忆"
       data-testid="kiro-memory-manager"
-      className="max-w-lg max-h-[80dvh] border-line-strong rounded-2xl shadow-card"
+      className="max-w-lg max-h-[80dvh] flex flex-col border-line-strong rounded-2xl shadow-card"
     >
       {/* Header */}
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-line">

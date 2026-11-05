@@ -74,9 +74,9 @@ export function ComputerApprovalDialog({
       overlayId="kiro-computer-approval"
       stackZ={80}
       closeOnBackdrop={false}
-      className="max-w-md"
+      className="max-w-md max-h-[min(90dvh,calc(100dvh-var(--titlebar-h)-24px))] flex flex-col"
     >
-      <div data-testid="kiro-approval-dialog" className="p-4 space-y-3.5">
+      <div data-testid="kiro-approval-dialog" className="p-4 space-y-3.5 min-h-0 flex-1 overflow-y-auto">
         <div className="flex items-start gap-2.5">
           <span className="w-8 h-8 rounded-full bg-pastel-mint/60 flex items-center justify-center shrink-0">
             <ShieldAlert className="w-4 h-4 text-charcoal" aria-hidden="true" />

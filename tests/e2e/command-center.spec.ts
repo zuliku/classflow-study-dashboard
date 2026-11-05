@@ -238,3 +238,25 @@ test("事件统一：palette「新建任务」与 N 走同一入口（都打开�
   await expect(page.getByTestId("command-center")).toHaveCount(0);
   await page.keyboard.press("Escape");
 });
+
+test("快捷键指南：1024×680 下可滚动且不越出视口", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 680 });
+  await page.goto("/");
+  await waitForAppReady(page);
+  await page.keyboard.press("?");
+  const panel = page.getByTestId("command-center");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("键盘快捷键", { exact: true })).toBeVisible();
+
+  const metrics = await panel.evaluate((el) => {
+    const scroller = el.querySelector(".overflow-y-auto") as HTMLElement | null;
+    const rect = el.getBoundingClientRect();
+    return {
+      bottom: rect.bottom,
+      scrollHeight: scroller?.scrollHeight ?? 0,
+      clientHeight: scroller?.clientHeight ?? 0,
+    };
+  });
+  expect(metrics.bottom).toBeLessThanOrEqual(680);
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+});

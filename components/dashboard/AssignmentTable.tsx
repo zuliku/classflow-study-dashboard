@@ -667,7 +667,7 @@ export function AssignmentTable({
                 "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
                 isHighlighted
                   ? "opacity-100"
-                  : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  : "opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 transition-opacity"
               )}
               aria-label={`Kiro 拆解 ${task.title}`}
             >
@@ -678,7 +678,7 @@ export function AssignmentTable({
             onClick={(e) => handleEditClick(e, task.id)}
             className={cn(
               "p-1.5 rounded-lg text-sandrift hover:bg-alba hover:text-charcoal transition-colors",
-              isWorkspace && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
+              isWorkspace && "opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 transition-opacity"
             )}
             aria-label={`编辑任务 ${task.title}`}
           >
@@ -692,7 +692,7 @@ export function AssignmentTable({
             }}
             className={cn(
               "p-1.5 rounded-lg text-danger hover:bg-danger-bg transition-colors",
-              isWorkspace && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
+              isWorkspace && "opacity-0 pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 transition-opacity"
             )}
             aria-label={`删除任务 ${task.title}`}
           >

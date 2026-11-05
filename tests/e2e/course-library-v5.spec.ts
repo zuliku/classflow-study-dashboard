@@ -256,6 +256,14 @@ base("1024×900：两列紧凑排布（小屏不再单卡满宽）", async ({ pa
   // 内容区约 906px：两列后每张 ~445px（不再是 ~906px 的单卡）
   expect(box1.width).toBeGreaterThan(400);
   expect(box1.width).toBeLessThan(520);
+
+  // 长课程名在窄卡内单行 truncate，且不与上传按钮碰撞
+  const title = c1.getByRole("button", { name: "高级数据结构与算法设计及复杂度分析", exact: true });
+  const upload = c1.getByRole("button", { name: /上传《/ });
+  const titleBox = (await title.boundingBox())!;
+  const uploadBox = (await upload.boundingBox())!;
+  expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(uploadBox.x + 1);
+  expect(await title.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 });
 
 base("390×844：无横向 overflow；header/上传/待处理/资料可见；无 footer", async ({ page }) => {

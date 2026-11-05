@@ -114,6 +114,26 @@ test("1920 总览：宽列恢复教师 + 地点，不再只剩课程名", async 
   await expect(card.getByText("教二 201", { exact: true })).toBeVisible();
 });
 
+test("1280/1024 总览：临近 DDL 行不撑破卡片，右侧时间不被裁切", async ({ page }) => {
+  for (const width of [1280, 1024]) {
+    await openOverview(page, width, width === 1024 ? 768 : 900);
+    const metrics = await page.getByTestId("upcoming-ddl-card").evaluate((el) => {
+      const grid = el.querySelector(".ux-agenda-enter") as HTMLElement | null;
+      const row = grid?.firstElementChild as HTMLElement | null;
+      const cardRect = el.getBoundingClientRect();
+      const rowRect = row?.getBoundingClientRect();
+      return {
+        gridScrollWidth: grid?.scrollWidth ?? 0,
+        gridClientWidth: grid?.clientWidth ?? 0,
+        rowRight: rowRect?.right ?? 0,
+        cardRight: cardRect.right,
+      };
+    });
+    expect(metrics.gridScrollWidth).toBeLessThanOrEqual(metrics.gridClientWidth + 1);
+    expect(metrics.rowRight).toBeLessThanOrEqual(metrics.cardRight + 1);
+  }
+});
+
 test("1280/1024 总览：7 天全部可见，课程卡降级为摘要态且无横向滚动", async ({ page }) => {
   for (const width of [1280, 1024]) {
     await openOverview(page, width, 900);

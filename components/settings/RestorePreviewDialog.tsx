@@ -44,6 +44,7 @@ export function RestorePreviewDialog({
       }}
       aria-label="恢复备份"
       data-testid="restore-preview"
+      className="max-w-lg max-h-[min(90dvh,calc(100dvh-var(--titlebar-h)-24px))] flex flex-col"
     >
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-line-soft flex items-center justify-between shrink-0">
@@ -64,7 +65,7 @@ export function RestorePreviewDialog({
           </IconButton>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto text-xs">
+        <div className="p-5 space-y-4 overflow-y-auto min-h-0 flex-1 text-xs">
           {blocked ? (
             /* ---- Fatal：blocked ---- */
             <div className="space-y-3" data-testid="restore-blocked">

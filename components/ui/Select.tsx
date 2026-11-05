@@ -104,7 +104,10 @@ export function UISelect<T extends string | number>({
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const itemH = 36; // h-9
-    const estHeight = Math.min(options.length * itemH + 8, 280);
+    // searchable 的搜索栏本身约 42px；不计入会算出「1 个选项 → 44px」，
+    // 搜索栏吃掉全部高度，选项列表只剩 2px。上限同步放宽，避免长列表被挤。
+    const searchH = searchable ? 42 : 0;
+    const estHeight = Math.min(options.length * itemH + 8 + searchH, 280 + searchH);
     const gap = 6;
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
@@ -124,7 +127,7 @@ export function UISelect<T extends string | number>({
     activeScrollRef.current = "keyboard";
     setOpen(true);
     setActiveIndex(options.findIndex((o) => o.value === value));
-  }, [disabled, options, value]);
+  }, [disabled, options, value, searchable]);
 
   // 关闭：semantic close → usePresence 播放退出（exit-fast）后卸载；reduced motion 即时落位
   const closeMenu = useCallback(() => {

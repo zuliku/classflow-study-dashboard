@@ -41,6 +41,7 @@ function seedScript(monday: string, dow1: number) {
           { id: "b2", title: "一小时任务", date: "${dateStr(dow1)}", startTime: "19:00", endTime: "20:00", source: "manual" },
           { id: "b3", title: "跨边界任务", date: "${dateStr(dow1)}", startTime: "20:30", endTime: "21:30", source: "manual" },
           { id: "b4", title: "深夜任务", date: "${dateStr(dow1)}", startTime: "22:00", endTime: "23:00", source: "manual" },
+          { id: "b5", title: "半小时任务", date: "${dateStr(dow1)}", startTime: "15:00", endTime: "15:30", source: "manual" },
         ],
         assignmentTimeSlice: "all",
         preferences: { showWeekends: true, ddlWarningDays: 3, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "system", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable" },
@@ -138,4 +139,35 @@ base("Task 2B1：Timeline Filter/Create/More 统一浮层并保持 dismiss/互�
   await createButton.click();
   await page.getByRole("menu", { name: "新建" }).getByRole("menuitem", { name: "学习计划" }).click();
   await expect(page.getByTestId("timeline-arrange-sheet")).toBeVisible();
+});
+
+base("KeyLane interval x 与日列对齐（不把 56px gutter 算进列宽）", async ({ page }) => {
+  const { monday, dow1 } = dayAnchor();
+  await page.addInitScript(seedScript(monday, dow1));
+  await openTimeline(page);
+
+  const dayColumn = page.locator(`[data-timetable-day="${dow1}"]`).first();
+  const mark = page.getByRole("button", { name: /概率论期中考试/ }).first();
+  await expect(mark).toBeVisible();
+  const colBox = (await dayColumn.boundingBox())!;
+  const markBox = (await mark.boundingBox())!;
+  const expectedLeft = colBox.x + (14 / 24) * colBox.width;
+  expect(Math.abs(markBox.x - expectedLeft)).toBeLessThanOrEqual(2.5);
+});
+
+base("30min StudyBlock：标题在真实高度内可见（短块不裁切）", async ({ page }) => {
+  const { monday, dow1 } = dayAnchor();
+  await page.addInitScript(seedScript(monday, dow1));
+  await openTimeline(page);
+
+  const block = page
+    .locator('[data-testid="timeline-study-block"]')
+    .filter({ hasText: "半小时任务" })
+    .first();
+  await expect(block).toBeVisible();
+  const title = block.getByText("半小时任务", { exact: true });
+  await expect(title).toBeVisible();
+  const blockBox = (await block.boundingBox())!;
+  const titleBox = (await title.boundingBox())!;
+  expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(blockBox.y + blockBox.height + 0.5);
 });

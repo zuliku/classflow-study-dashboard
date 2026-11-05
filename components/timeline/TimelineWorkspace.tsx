@@ -692,6 +692,7 @@ export function TimelineWorkspace() {
     dayOfWeek: number;
     dayStartMinutes: number;
     totalMinutes: number;
+    bodyHeight: number;
     timeToMinutes: (t: string) => number;
   }) => {
     if (!filters.studyBlocks) return null;
@@ -723,8 +724,13 @@ export function TimelineWorkspace() {
           const durationMinutes = e - s;
           // 真实时间高度优先；跨界块不加 minimum（防突破 Grid 上下边界）
           const touchesEdge = s <= dayStart || e >= dayEnd;
-          // 高度不足的短块：只显示 Title，不放 duration / delete
-          const showMeta = heightPct >= 3.4;
+          // 短块按真实像素高度降级：30min 在 800 高窗口只有 ~16–20px，
+          // 原来的 py-0.5 + 10px 标题会被 overflow-hidden 纵向裁切。
+          const blockHeightPx = (heightPct / 100) * ctx.bodyHeight;
+          const denseBlock = blockHeightPx < 26;
+          const showBlockTitle = blockHeightPx >= 18;
+          // 高度不足：只显示色块（aria-label 仍可读），不放 duration / delete
+          const showMeta = heightPct >= 3.4 && !denseBlock;
           const isDraggingThis = studyDrag.type === "dragging" && studyDrag.origin.id === b.id;
           const isRebalanced = rebalanceMoveIds.has(b.id);
           // Workflow UX V10：execution anchor = startedAt 命中该 block 时间窗（唯一可信，
@@ -795,7 +801,7 @@ export function TimelineWorkspace() {
                 </span>
               )}
               <span className="truncate min-w-0 flex-1 text-[10px] font-semibold text-satin-grey">
-                {b.title}
+                {showBlockTitle ? b.title : null}
               </span>
               {validApprovalCount > 0 && (
                 <span
@@ -846,7 +852,8 @@ export function TimelineWorkspace() {
                 setStudyDrag(studyDragRef.current);
               }}
               className={cn(
-                "absolute left-1 right-1 rounded-lg border border-dashed border-line bg-pastel-mint/20 px-1.5 py-0.5 flex items-center gap-1 overflow-hidden group select-none",
+                "absolute left-1 right-1 rounded-lg border border-dashed border-line bg-pastel-mint/20 flex items-center overflow-hidden group select-none",
+                denseBlock ? "px-1 py-0 gap-0.5" : "px-1.5 py-0.5 gap-1",
                 "transition-[opacity,border-color,background-color] duration-[var(--motion-fast)]",
                  // Workflow UX V15：released 低侵入（弱化 + 低 z，允许与 active block 同屏不遮挡）
                  isReleasedBlock && "z-[1] opacity-55 bg-transparent",
@@ -926,7 +933,7 @@ export function TimelineWorkspace() {
           <div
             data-testid="study-block-ghost"
             className={cn(
-              "absolute left-1 right-1 z-[4] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
+              "absolute left-1 right-1 z-[6] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
               // 跟手 Ghost：top 逐帧更新必须 1:1（过渡会永远追赶+布局重排，发沉）；
               // 只过渡颜色/透明度（valid / overlap 切换）
               "transition-[background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
@@ -972,7 +979,7 @@ export function TimelineWorkspace() {
             <div
               data-testid="unscheduled-ghost"
               className={cn(
-                "absolute left-1 right-1 z-[4] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
+                "absolute left-1 right-1 z-[6] rounded-lg border-2 border-dashed px-1.5 py-0.5 flex items-center gap-1 overflow-hidden pointer-events-none",
                 // 跟手 Ghost：与 study-block-ghost 同模式，top 逐帧更新必须 1:1（过渡会永远追赶）
                 "transition-[background-color,border-color,opacity] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
                 !unscheduledDrag.valid

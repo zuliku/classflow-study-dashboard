@@ -97,6 +97,11 @@ test("Peek：Space 打开 → J 同步更新 → Esc 关闭", async ({ page }) =
   await page.keyboard.press("Space");
   const peek = page.getByTestId("assignment-peek");
   await expect(peek).toBeVisible();
+  // Peek 必须从 sticky ViewBar 下方开始，不能覆盖筛选/搜索
+  const viewTab = page.getByRole("button", { name: /全部/ }).first();
+  const viewTabBox = (await viewTab.boundingBox())!;
+  const peekBox = (await peek.boundingBox())!;
+  expect(peekBox.y).toBeGreaterThanOrEqual(viewTabBox.y + viewTabBox.height - 1);
   await expect(
     peek.getByRole("heading", { name: "计量经济学大作业（第3章）" })
   ).toBeVisible();

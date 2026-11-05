@@ -118,16 +118,32 @@ test("Quick Time Edit：拖到新日期后修改时间 21:00→21:30，保存后
   await openOverview(page);
   const source = dPlus(4);
   const target = dPlus(6);
+  const gridHeightBefore = (await page.getByTestId("calendar-grid-area").boundingBox())!.height;
 
   await selectDate(page, source);
   await dragToCell(page, DDL_CELL(page, "a3"), target);
   await expect(page.getByTestId("ddl-move-feedback")).toBeVisible();
+  // 反馈改为绝对浮层后，不应再压缩日历网格（此前 6 行月份会被压到只剩 ~3 行）
+  const gridHeightAfter = (await page.getByTestId("calendar-grid-area").boundingBox())!.height;
+  expect(gridHeightAfter).toBeGreaterThanOrEqual(gridHeightBefore - 2);
 
   await page.getByTestId("ddl-move-feedback").getByRole("button", { name: "修改时间" }).click();
-  const popover = page.getByTestId("ddl-move-feedback").locator("input[type='time']");
-  await expect(popover).toBeVisible();
-  await popover.fill("21:30");
-  await page.getByTestId("ddl-move-feedback").getByRole("button", { name: "保存" }).click();
+  const popover = page.getByTestId("ddl-time-edit");
+  const timeInput = popover.locator("input[type='time']");
+  await expect(timeInput).toBeVisible();
+  await page.waitForTimeout(250);
+  // 输入框必须真实可命中（此前被 DisclosureRegion overflow-hidden 裁切，
+  // boundingBox 存在但 elementFromPoint 落在日历上）
+  const hitTest = await page.evaluate(() => {
+    const input = document.querySelector('[data-testid="ddl-time-edit"] input[type="time"]') as HTMLElement | null;
+    if (!input) return false;
+    const r = input.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!hit && (hit === input || input.contains(hit));
+  });
+  expect(hitTest).toBe(true);
+  await timeInput.fill("21:30");
+  await popover.getByRole("button", { name: "保存" }).click();
 
   // 反馈更新时间
   await expect(page.getByTestId("ddl-move-feedback")).toContainText("· 21:30");

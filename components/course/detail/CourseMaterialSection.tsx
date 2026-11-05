@@ -51,7 +51,7 @@ export function CourseMaterialSection({
           loading={uploading}
           loadingLabel="上传中"
           onClick={onUploadClick}
-          className="h-6.5 px-2 text-[11px]"
+          className="h-7 px-2 text-[11px]"
         >
           <FileUp className="h-3 w-3" />
           上传资料
