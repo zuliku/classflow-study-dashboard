@@ -143,7 +143,9 @@ test("Kiro Mini V2：状态 / Plan / 低风险审批", async ({ page }) => {
   await expect(page.getByTestId("kiro-mini-header")).toContainText("计量经济学作业");
   await expect(page.getByTestId("kiro-mini-status")).toContainText("正在搜索网络");
   await expect(page.getByTestId("kiro-mini-plan")).toContainText("1/4");
-  await expect(page.getByTestId("kiro-mini-plan")).toContainText("整理数据");
+  // 审批待处理时计划卡进入单行紧凑态（当前步骤让位给审批）
+  await expect(page.getByTestId("kiro-mini-plan")).toHaveAttribute("data-compact", "true");
+  await expect(page.getByTestId("kiro-mini-plan")).toContainText("执行中");
   await expect(page.getByTestId("kiro-mini-approval")).toContainText("Kiro 准备修改");
   await expect(page.getByTestId("kiro-mini-approval")).toContainText("允许一次");
 

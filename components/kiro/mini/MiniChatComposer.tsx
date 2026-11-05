@@ -24,6 +24,8 @@ export function MiniChatComposer({
   onStop,
   sending,
   busy,
+  statusLabel,
+  elapsed,
   configured,
   transitioning,
   suggestions,
@@ -40,6 +42,8 @@ export function MiniChatComposer({
   onStop: () => void;
   sending: boolean;
   busy: boolean;
+  statusLabel: string;
+  elapsed: number;
   configured: boolean;
   transitioning: boolean;
   suggestions: string[];
@@ -76,19 +80,30 @@ export function MiniChatComposer({
         <button
           type="button"
           onClick={onFocusMain}
-          className="mb-1.5 w-full rounded-lg border border-line bg-alabaster/60 px-2 py-1.5 text-left text-[10px] font-semibold text-satin-grey hover:text-charcoal"
+          className="mb-1.5 flex h-8 w-full items-center rounded-lg border border-line bg-alabaster/60 px-2.5 text-left text-[11px] font-semibold text-satin-grey hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
         >
           未配置模型，去主窗口设置
         </button>
       )}
       {busy && (
-        <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] text-sandrift">
-          <span className="truncate">Kiro 正在处理当前对话</span>
+        <div className="mb-1.5 flex items-center justify-between gap-2 text-[10px] text-satin-grey">
+          <span
+            className="flex min-w-0 items-center gap-1.5"
+            data-testid="kiro-mini-status"
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-charcoal animate-pulse" aria-hidden="true" />
+            <span key={statusLabel} className="truncate kiro-status-swap">
+              {statusLabel || "Kiro 正在处理当前对话"}
+            </span>
+            {elapsed >= 2 && (
+              <span className="shrink-0 tabular-nums text-satin-grey">{elapsed}s</span>
+            )}
+          </span>
           <button
             type="button"
             aria-label="停止"
             onClick={onStop}
-            className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-charcoal px-2 text-[10px] font-bold text-white hover:opacity-90"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-charcoal px-2.5 text-[10px] font-bold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/20"
           >
             <Square className="h-2.5 w-2.5" />
             停止
@@ -104,7 +119,7 @@ export function MiniChatComposer({
               type="button"
               disabled={!configured || transitioning || sending}
               onClick={() => onQuickPrompt(prompt)}
-              className="mini-no-drag rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] text-satin-grey transition-colors hover:border-line-strong hover:text-charcoal disabled:opacity-40"
+              className="mini-no-drag h-7 rounded-full border border-line bg-surface px-2.5 text-[10px] text-satin-grey transition-colors hover:border-line-strong hover:text-charcoal disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
             >
               {prompt}
             </button>
@@ -120,16 +135,16 @@ export function MiniChatComposer({
                 key={`${file.name}-${file.size}-${file.lastModified}`}
                 className="inline-flex max-w-full items-center gap-1 rounded-lg border border-line bg-alabaster/50 py-0.5 pl-1.5 pr-1 text-[10px] animate-enter"
               >
-                <Paperclip className="h-3 w-3 shrink-0 text-sandrift" />
+                <Paperclip className="h-3 w-3 shrink-0 text-satin-grey" />
                 <span className="truncate max-w-[130px] font-semibold">{file.name}</span>
-                <span className="shrink-0 text-sandrift">{formatBytes(file.size)}</span>
+                <span className="shrink-0 text-satin-grey">{formatBytes(file.size)}</span>
                 <button
                   type="button"
                   aria-label={`移除附件 ${file.name}`}
-                  className="mini-no-drag flex h-3.5 w-3.5 items-center justify-center rounded text-sandrift hover:text-charcoal"
+                  className="mini-no-drag flex h-7 w-7 items-center justify-center rounded text-satin-grey hover:bg-alabaster hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
                   onClick={() => onRemoveFile(file)}
                 >
-                  <X className="h-2.5 w-2.5" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               </span>
             ))}
@@ -144,7 +159,7 @@ export function MiniChatComposer({
         placeholder={transitioning ? "正在切换对话…" : busy ? "等待回答完成…" : "问 Kiro…"}
         aria-label="迷你窗输入"
         disabled={transitioning}
-        className="max-h-28 w-full resize-none overflow-y-auto bg-transparent text-[13px] leading-relaxed placeholder-sandrift focus:outline-none disabled:opacity-50"
+        className="max-h-28 w-full resize-none overflow-y-auto bg-transparent text-[13px] leading-relaxed placeholder:text-satin-grey/70 focus:outline-none disabled:opacity-50"
         onChange={(event) => onInput(event.target.value)}
         onPaste={(event) => {
           const images = Array.from(event.clipboardData?.items ?? [])
@@ -168,14 +183,14 @@ export function MiniChatComposer({
       <div className="flex items-center justify-between pt-1">
         <div className="flex items-center gap-1">
           <label
-            className="mini-no-drag flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal"
+            className="mini-no-drag flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-satin-grey transition-colors hover:bg-alabaster hover:text-charcoal focus-within:ring-2 focus-within:ring-charcoal/15"
             aria-label="添加附件"
           >
             <Plus className="h-4 w-4" />
             <input type="file" multiple className="hidden" onChange={addPicked} />
           </label>
           {files.length > 0 && (
-            <span className="text-[9px] text-sandrift">
+            <span className="text-[9px] text-satin-grey">
               {files.length}/{MINI_MAX_FILES}
             </span>
           )}
@@ -187,8 +202,8 @@ export function MiniChatComposer({
             onClick={onSend}
             disabled={!canSend}
             className={cn(
-              "flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-opacity",
-              canSend ? "bg-charcoal text-white hover:opacity-90" : "cursor-not-allowed bg-alabaster text-sandrift"
+              "flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/20",
+              canSend ? "bg-charcoal text-white hover:opacity-90" : "cursor-not-allowed bg-alabaster text-satin-grey/70"
             )}
           >
             <SendHorizontal className="h-3 w-3" />

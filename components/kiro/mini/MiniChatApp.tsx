@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Copy, Plus } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Copy, Plus } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { getClassFlowDesktopMiniBridge } from "@/lib/desktop/bridge";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
@@ -229,6 +229,18 @@ export function MiniChatApp() {
     stickRef.current = atBottom;
     if (atBottom) setHasNew(false);
   }, []);
+
+  // 原生缩放/内容高度变化时，如果用户原本贴底，保持贴底（最后几行不被截掉）
+  useEffect(() => {
+    if (mode !== "expanded") return;
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (stickRef.current) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [mode]);
 
   const addFiles = useCallback((picked: File[]) => {
     if (picked.length === 0) return;
@@ -468,7 +480,7 @@ export function MiniChatApp() {
   if (!miniAvailable) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface p-6 text-center">
-        <p className="text-xs text-sandrift">迷你窗仅在桌面端可用。</p>
+        <p className="text-xs text-satin-grey">迷你窗仅在桌面端可用。</p>
       </div>
     );
   }
@@ -487,6 +499,7 @@ export function MiniChatApp() {
     return (
       <MiniChatCapsule
         statusLabel={statusLabel}
+        phase={snapshot?.phase ?? "idle"}
         busy={busy}
         unread={unread}
         onExpand={() => setMode("expanded")}
@@ -512,10 +525,9 @@ export function MiniChatApp() {
     >
       <MiniChatHeader
         title={title}
-        statusLabel={statusLabel}
-        statusDetail={elapsed >= 2 && busy ? `${elapsed}s` : undefined}
         busy={busyPresence.mounted}
         unread={unread}
+        menuOpen={menuOpen}
         onTop={onTop}
         onPin={togglePin}
         onCollapse={() => setMode("capsule")}
@@ -531,6 +543,7 @@ export function MiniChatApp() {
           activity={snapshot?.activity ?? null}
           approval={snapshot?.approval ?? null}
           sources={snapshot?.sources ?? []}
+          error={snapshot?.phase === "error"}
           approvalBusy={approvalBusy}
           onApprove={() => resolveApproval("allow-once")}
           onDeny={() => resolveApproval("deny")}
@@ -545,10 +558,10 @@ export function MiniChatApp() {
             data-testid="kiro-mini-messages"
           >
             {messages.length === 0 && (
-              <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center animate-enter">
-                <KiroMark size="sm" />
-                <p className="text-xs font-semibold">有什么要处理的？</p>
-                <p className="text-[10px] text-sandrift">直接问，或拖入文件</p>
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center animate-enter">
+                <KiroMark size="md" />
+                <p className="text-[13px] font-semibold">有什么要处理的？</p>
+                <p className="text-[11px] text-satin-grey">直接问，或拖入文件</p>
               </div>
             )}
             {messages.map((message, index) => {
@@ -580,7 +593,7 @@ export function MiniChatApp() {
                         <button
                           type="button"
                           onClick={() => void copyMessage(message.id, message.text)}
-                          className="mini-no-drag mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal"
+                          className="mini-no-drag mt-1 inline-flex h-7 items-center gap-1 rounded px-1.5 text-[10px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
                           aria-label="复制最后一条回答"
                         >
                           {copiedId === message.id ? (
@@ -620,15 +633,18 @@ export function MiniChatApp() {
         {noticePresence.mounted && (
           <ExitCollapse exiting={!noticePresence.visible}>
             <div
-              className="flex shrink-0 items-center gap-2 px-3 pb-1 text-[10px] font-semibold text-warning"
+              className="flex shrink-0 items-center gap-2 px-3 pb-1 text-[10px] font-semibold text-satin-grey"
               data-testid="kiro-mini-notice"
             >
-              <span className="min-w-0 flex-1 truncate">{shownNotice}</span>
+              <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                <span className="truncate">{shownNotice}</span>
+              </span>
               {syncError && (
                 <button
                   type="button"
                   onClick={() => void refreshState()}
-                  className="mini-no-drag shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold text-charcoal hover:bg-alabaster"
+                  className="mini-no-drag h-7 shrink-0 rounded-md px-2 text-[10px] font-bold text-satin-grey hover:bg-alabaster hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
                 >
                   重试
                 </button>
@@ -652,6 +668,8 @@ export function MiniChatApp() {
           }}
           sending={sending}
           busy={busy}
+          statusLabel={statusLabel}
+          elapsed={elapsed}
           configured={configured}
           transitioning={transitioning}
           suggestions={suggestions}
@@ -670,22 +688,26 @@ export function MiniChatApp() {
           />
           <div
             data-testid="kiro-mini-conversation-menu"
-            className="absolute inset-x-2 top-12 z-30 max-h-[62%] overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-card animate-enter"
+            role="menu"
+            aria-label="最近对话"
+            className="absolute inset-x-2 top-12 z-30 max-h-[62%] overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-card animate-enter focus:outline-none"
           >
             <div className="flex items-center justify-between px-2 py-1">
-              <span className="text-[10px] font-bold text-sandrift">最近对话</span>
+              <span className="text-[10px] font-bold text-satin-grey">最近对话</span>
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => focusMain(snapshot?.conversationId ?? undefined)}
-                className="text-[10px] font-semibold text-sandrift hover:text-charcoal"
+                className="h-7 rounded-md px-2 text-[10px] font-semibold text-satin-grey hover:bg-alabaster hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
               >
                 主窗口
               </button>
             </div>
             <button
               type="button"
+              role="menuitem"
               onClick={newChat}
-              className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold text-charcoal hover:bg-alabaster"
+              className="flex w-full items-center gap-1.5 rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-charcoal hover:bg-alabaster focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
             >
               <Plus className="h-3 w-3" />
               新对话
@@ -694,9 +716,11 @@ export function MiniChatApp() {
               <button
                 key={conversation.id}
                 type="button"
+                role="menuitem"
+                aria-current={conversation.id === snapshot?.conversationId ? "true" : undefined}
                 onClick={() => switchConversation(conversation)}
                 className={cn(
-                  "flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] hover:bg-alabaster",
+                  "flex w-full items-center gap-1.5 rounded-lg px-2 py-2 text-left text-[11px] hover:bg-alabaster focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15",
                   conversation.id === snapshot?.conversationId
                     ? "font-semibold text-charcoal"
                     : "text-satin-grey"
@@ -709,7 +733,7 @@ export function MiniChatApp() {
               </button>
             ))}
             {(snapshot?.conversations ?? []).length === 0 && (
-              <p className="px-2 py-3 text-center text-[10px] text-sandrift">暂无历史对话</p>
+              <p className="px-2 py-3 text-center text-[10px] text-satin-grey">暂无历史对话</p>
             )}
           </div>
         </>

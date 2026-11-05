@@ -261,6 +261,46 @@ describe("MiniChatApp", () => {
     expect(buttons).toContain("主窗口处理");
   });
 
+  it("错误状态显示错误卡并可回主窗口", async () => {
+    await renderApp();
+    await act(async () => {
+      stateListener?.({ ...SNAP, phase: "error", status: { label: "出错了" }, busy: false });
+    });
+    const error = q('[data-testid="kiro-mini-error"]');
+    expect(error).toBeTruthy();
+    expect(error!.textContent).toContain("本轮回答失败");
+    const viewMain = Array.from(error!.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("主窗口查看")
+    );
+    expect(viewMain).toBeTruthy();
+    await act(async () => {
+      viewMain!.click();
+    });
+    expect(focusMain).toHaveBeenCalledWith("c1");
+  });
+
+  it("审批卡显示剩余时间", async () => {
+    await renderApp();
+    await act(async () => {
+      stateListener?.({
+        ...SNAP,
+        phase: "waiting-approval",
+        busy: true,
+        approval: {
+          pending: true,
+          id: "approval-deadline",
+          title: "Kiro 准备修改",
+          primary: "report.docx",
+          canApproveInMini: true,
+          deadlineAt: Date.now() + 90_000,
+        },
+      });
+    });
+    const countdown = q('[data-testid="kiro-mini-approval-countdown"]');
+    expect(countdown).toBeTruthy();
+    expect(countdown!.textContent).toContain("剩余");
+  });
+
   it("胶囊模式：展开先进入轻量 morph 层，动画后再挂载聊天界面", async () => {
     windowMode = "capsule";
     await renderApp();

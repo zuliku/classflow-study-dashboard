@@ -3,7 +3,7 @@
 import React from "react";
 import { X } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
-import { MINI_CAPSULE_SIZE } from "@/lib/ai/miniChat/protocol";
+import { MINI_CAPSULE_SIZE, type MiniChatPhase } from "@/lib/ai/miniChat/protocol";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,18 +15,20 @@ import { cn } from "@/lib/utils";
  */
 export function MiniChatCapsule({
   statusLabel,
+  phase,
   busy,
   unread,
   onExpand,
   onHide,
 }: {
   statusLabel: string;
+  phase: MiniChatPhase;
   busy: boolean;
   unread: number;
   onExpand: () => void;
   onHide: () => void;
 }) {
-  const showStatus = busy || !!statusLabel;
+  const showStatus = busy || !!statusLabel || phase === "waiting-approval" || phase === "error";
   return (
     <div
       className="mini-drag-region group relative select-none overflow-hidden rounded-[20px] bg-surface"
@@ -57,7 +59,13 @@ export function MiniChatCapsule({
           aria-hidden="true"
           className={cn(
             "pointer-events-none absolute bottom-[13px] right-[13px] h-1.5 w-1.5 rounded-full transition-colors",
-            busy ? "bg-charcoal animate-pulse" : "bg-sandrift/80"
+            phase === "error"
+              ? "bg-danger"
+              : phase === "waiting-approval"
+                ? "bg-warning"
+                : busy
+                  ? "bg-charcoal animate-pulse"
+                  : "bg-satin-grey/80"
           )}
         />
       )}
@@ -74,10 +82,10 @@ export function MiniChatCapsule({
       <button
         type="button"
         aria-label="隐藏迷你窗"
-        className="mini-no-drag pointer-events-none absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full text-sandrift opacity-0 transition-opacity duration-[var(--motion-fast)] hover:text-charcoal focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
+        className="mini-no-drag pointer-events-none absolute left-0.5 top-0.5 flex h-7 w-7 items-center justify-center rounded-full text-satin-grey opacity-0 transition-opacity duration-[var(--motion-fast)] hover:text-charcoal focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
         onClick={onHide}
       >
-        <X className="h-2.5 w-2.5" />
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   );

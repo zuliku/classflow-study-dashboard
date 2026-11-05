@@ -51,6 +51,7 @@ export function MiniChatRelayHost() {
   const actions = useKiroSessionActions();
   const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
   const pendingQueueLength = useKiroComputerRuntimeStore((s) => s.pendingQueueLength);
+  const approvalDeadlineAt = useKiroComputerRuntimeStore((s) => s.approvalDeadlineAt);
   const [conversations, setConversations] = useState<MiniChatConversationSummary[]>([]);
   const liveRef = useRef({ chat, attachments, currentConversationId, conversationTransitioning, actions });
   liveRef.current = { chat, attachments, currentConversationId, conversationTransitioning, actions };
@@ -95,8 +96,9 @@ export function MiniChatRelayHost() {
       highRisk: presentation.highRisk,
       canApproveInMini: canApproveInMini(pendingApproval),
       queueLength: pendingQueueLength,
+      ...(approvalDeadlineAt != null ? { deadlineAt: approvalDeadlineAt } : {}),
     };
-  }, [pendingApproval, pendingQueueLength, currentConversationId]);
+  }, [pendingApproval, pendingQueueLength, approvalDeadlineAt, currentConversationId]);
 
   const busy = chat.turnInFlight || chat.streaming;
   const lastAssistant = [...chat.messages].reverse().find((m) => m.role === "assistant");

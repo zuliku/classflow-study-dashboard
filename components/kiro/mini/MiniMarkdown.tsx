@@ -36,12 +36,12 @@ function MiniCodeBlock({
   return (
     <div className="my-2 rounded-lg border border-line bg-alabaster/70 overflow-hidden">
       <div className="flex items-center justify-between px-2 py-1 border-b border-line bg-alabaster">
-        <span className="text-[9px] font-bold tracking-wide text-sandrift uppercase">{lang}</span>
+        <span className="text-[9px] font-bold tracking-wide text-satin-grey uppercase">{lang}</span>
         <button
           type="button"
           onClick={() => void onCopy()}
           aria-label="复制代码"
-          className="mini-no-drag inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-sandrift hover:text-charcoal"
+          className="mini-no-drag inline-flex h-6 items-center gap-1 rounded px-1.5 text-[10px] text-satin-grey hover:bg-alabaster hover:text-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
         >
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
           {copied ? "已复制" : "复制"}

@@ -74,6 +74,8 @@ export interface MiniChatApprovalSummary {
   /** 仅低风险、前台、allow-once 可用时为 true */
   canApproveInMini?: boolean;
   queueLength?: number;
+  /** 审批自动取消时间（unix ms；用于 Mini 倒计时；过期后主窗口会按拒绝处理） */
+  deadlineAt?: number;
 }
 
 export interface MiniChatConversationSummary {
