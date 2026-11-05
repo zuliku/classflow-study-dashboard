@@ -12,7 +12,6 @@ import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import {
   MINI_CAPSULE_SIZE,
-  MINI_DEFAULT_SUGGESTIONS,
   MINI_MAX_FILES,
   MINI_MAX_FILE_BYTES,
   MINI_MODE_ANIMATION_MS,
@@ -85,10 +84,6 @@ export function MiniChatApp() {
   const messages = snapshot?.messages ?? [];
   const lastMessageText = messages[messages.length - 1]?.text ?? "";
   const statusLabel = snapshot?.status?.label ?? "";
-  const suggestions =
-    snapshot?.suggestions && snapshot.suggestions.length > 0
-      ? snapshot.suggestions
-      : [...MINI_DEFAULT_SUGGESTIONS];
   const configured = snapshot?.configured ?? true;
   const transitioning = snapshot?.transitioning ?? false;
   const title = snapshot?.title ?? "Kiro Mini";
@@ -395,17 +390,6 @@ export function MiniChatApp() {
   const send = useCallback(() => {
     void sendRemote(input, files, true);
   }, [input, files, sendRemote]);
-
-  const quickSend = useCallback(
-    (prompt: string) => {
-      if (snapshot?.busy || transitioning) {
-        setNotice("Kiro 正在处理当前对话");
-        return;
-      }
-      void sendRemote(prompt, [], false);
-    },
-    [sendRemote, snapshot?.busy, transitioning]
-  );
 
   const settleTransition = useCallback((target: MiniChatWindowMode) => {
     if (modeTimerRef.current !== null) {
@@ -728,7 +712,6 @@ export function MiniChatApp() {
           onAddFiles={addFiles}
           onRemoveFile={(file) => setFiles((prev) => prev.filter((f) => f !== file))}
           onSend={send}
-          onQuickPrompt={quickSend}
           onStop={() => {
             try {
               getClassFlowDesktopMiniBridge()?.stopRemote();
@@ -740,7 +723,6 @@ export function MiniChatApp() {
           elapsed={elapsed}
           configured={configured}
           transitioning={transitioning}
-          suggestions={messages.length === 0 ? suggestions : []}
           onFocusMain={() => focusMain(snapshot?.conversationId ?? undefined)}
         />
 

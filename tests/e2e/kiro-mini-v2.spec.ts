@@ -4,7 +4,7 @@ import { test } from "./demoFixtures";
 /**
  * Kiro Mini（?mini=1）渲染在普通 Chromium 中通过 mock bridge 验证：
  * - 状态层 / Plan / 来源 / 低风险审批；
- * - 快捷 Prompt 直接发送；
+ * - 快捷 Prompt 已移除：小窗保持简洁输入；
  * - 胶囊态与展开态；
  * - 会话切换 / 打开主窗口命令。
  * 真实双窗口 IPC 由 main/preload contract 测试覆盖。
@@ -154,16 +154,13 @@ test("Kiro Mini V2：状态 / Plan / 低风险审批", async ({ page }) => {
     .toContainEqual({ type: "approval", id: "approval-1", decision: "allow-once" });
 });
 
-test("Kiro Mini V2：快捷 Prompt 点击直接发送", async ({ page }) => {
+test("Kiro Mini V2：不展示推荐提示词，保持输入区简洁", async ({ page }) => {
   await installMiniBridge(page, "expanded", IDLE_SNAPSHOT);
   await page.setViewportSize({ width: 380, height: 640 });
   await page.goto("/?mini=1");
-  await page.getByRole("button", { name: "今天要做什么" }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() => (window as unknown as { __miniCalls: { type: string; text?: string }[] }).__miniCalls)
-    )
-    .toContainEqual({ type: "sendRemote", text: "今天要做什么" });
+  await expect(page.getByTestId("kiro-mini-app")).toBeVisible();
+  await expect(page.getByTestId("kiro-mini-suggestions")).toHaveCount(0);
+  await expect(page.getByLabel("迷你窗输入")).toBeVisible();
 });
 
 test("Kiro Mini V2：胶囊态", async ({ page }) => {

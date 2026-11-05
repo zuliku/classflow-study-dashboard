@@ -205,26 +205,13 @@ describe("MiniChatApp", () => {
     expect(container!.textContent).toContain("迷你窗仅在桌面端可用");
   });
 
-  it("有消息时不再显示快捷 Prompt", async () => {
+  it("不展示快捷 Prompt（有消息 / 空会话均保持输入区简洁）", async () => {
     await renderApp();
     expect(q('[data-testid="kiro-mini-suggestions"]')).toBeNull();
-  });
-
-  it("快捷 Prompt 点击直接发送（空会话）", async () => {
-    await renderApp();
     await act(async () => {
       stateListener?.({ ...SNAP, messages: [] });
     });
-    const chip = Array.from(container!.querySelectorAll("button")).find(
-      (button) => button.textContent === "今天要做什么"
-    );
-    expect(chip).toBeTruthy();
-    await act(async () => {
-      chip!.click();
-    });
-    expect(sendRemote).toHaveBeenCalledTimes(1);
-    const payload = sendRemote.mock.calls[0][0] as { text: string };
-    expect(payload.text).toBe("今天要做什么");
+    expect(q('[data-testid="kiro-mini-suggestions"]')).toBeNull();
   });
 
   it("低风险审批：允许一次直接走 resolveApproval；高风险只保留主窗口入口", async () => {

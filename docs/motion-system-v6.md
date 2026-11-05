@@ -64,6 +64,9 @@ asymmetric transition）、Linear / Raycast（micro 快速、浮层从触发点�
 - **菜单级联**：`DropdownMenuPanel` / Mini 会话菜单加 `.ux-menu-stagger`。
   `role=menuitem` 以 `--motion-stagger-step: 18ms` 依次上浮 2px + 淡入；第 6 项起同延迟。
   reduced-motion 下 `animation: none`（不保留 delay，避免隐身后瞬显）。
+- **Analytics 页面 stage**：`.ux-analytics-enter` 一次进入（opacity .72→1 + 4px，200ms），
+  不再让 Summary / Momentum / Trend 按 40ms 阶梯分批出现；coverage notice 首帧直接占最终高度，
+  不做 0fr→1fr 高度展开（否则会把 top grid 向下推 190ms）。
 - **页面方向**：`ux-page-in-forward/backward` 位移 6px + opacity 0.92→1；220ms out-soft。
 - **Toast**：6px 上浮 + 淡入 160ms；退出 120ms 加速。
 - **按压**：`.ux-press:active` scale 0.97；`ux-press-transition` 中 transform 使用

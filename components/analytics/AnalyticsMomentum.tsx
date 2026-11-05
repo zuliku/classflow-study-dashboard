@@ -232,6 +232,53 @@ function MomentumCardHeatmap({
 }
 
 /**
+ * Card loading skeleton：几何与最终 card 内容同构（streak / 12 周热力 / 三统计），
+ * 避免 momentum 异步晚到时把整行撑高，导致 top grid 二次跳动。
+ */
+function MomentumCardSkeleton() {
+  return (
+    <div
+      data-testid="analytics-momentum-skeleton"
+      aria-label="动量加载中"
+      className="ux-skeleton flex min-w-0 flex-1 flex-col"
+    >
+      <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-stretch lg:flex-col lg:gap-0">
+        <div className="flex min-w-0 flex-1 flex-col md:max-w-[520px] lg:max-w-none">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="h-[14px] w-14 rounded bg-alabaster" />
+              <div className="mt-1 h-[26px] w-20 rounded bg-alabaster" />
+            </div>
+            <div className="mb-0.5 h-[14px] w-16 rounded bg-alabaster/80" />
+          </div>
+          <div className="mt-2.5">
+            <div className="grid auto-cols-fr grid-flow-col gap-1 pb-1">
+              {Array.from({ length: 13 }).map((_, i) => (
+                <span key={i} className="h-[14px] rounded bg-alabaster/70" />
+              ))}
+            </div>
+            <div className="grid auto-cols-fr grid-flow-col grid-rows-7 gap-1">
+              {Array.from({ length: 13 * 7 }).map((_, i) => (
+                <span key={i} className="h-2.5 w-full rounded-[2px] bg-alabaster" />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3 border-t border-line-soft pt-2.5 md:w-[200px] md:shrink-0 md:grid-cols-1 md:gap-2 md:self-center md:border-t-0 md:border-l md:pl-4 md:pt-0 lg:mt-auto lg:w-auto lg:grid-cols-3 lg:gap-3 lg:self-stretch lg:border-l-0 lg:border-t lg:border-line-soft lg:pl-0 lg:pt-2.5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="min-w-0">
+              <div className="h-4 w-12 rounded bg-alabaster" />
+              <div className="mt-1 h-[14px] w-16 rounded bg-alabaster/80" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/**
  * 学习动量（对标 GitHub contributions + Duolingo streak）：
  * 12 周热力 + 12 周专属四统计（连续 / 总专注 / 活跃天数 / 单日最佳）。
  * 统计口径均为 12 周独立查询结果（与本周 Strip 不重复：Strip 是本周，环已删除，
@@ -278,10 +325,10 @@ export function AnalyticsMomentum({ embedded = false, card = false }: { embedded
             </button>
           </div>
         ) : loading || !data ? (
-          <div className="ux-skeleton h-40 w-full rounded-xl bg-alabaster animate-pulse" aria-label="动量加载中" />
+          <MomentumCardSkeleton />
         ) : (
           <>
-            <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-stretch lg:flex-col lg:gap-0">
+            <div className="ux-fade flex flex-1 flex-col gap-4 md:flex-row md:items-stretch lg:flex-col lg:gap-0">
               <div className="flex min-w-0 flex-1 flex-col md:max-w-[520px] lg:max-w-none">
                 <div className="flex items-end justify-between gap-3">
                   <div>

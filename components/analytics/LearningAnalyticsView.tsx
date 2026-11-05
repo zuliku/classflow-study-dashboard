@@ -101,7 +101,7 @@ export function LearningAnalyticsView() {
   const { data, loading, error, refresh } = useLearningAnalytics(preset);
   const [outlookHorizon, setOutlookHorizon] = useState<StudyOutlookHorizon>(7);
   const outlook = useStudyOutlook(outlookHorizon);
-  // 趋势图动画：仅首次 meaningful load 播放；后续 Range 切换直接更新（外层 ux-settle 表达 continuity）
+  // 趋势图动画：仅首次 meaningful load 播放；后续 Range 切换直接更新（外层 stage 进入表达 continuity）
   const [trendAnimated, setTrendAnimated] = useState(true);
   useEffect(() => {
     if (data && !data.isEmpty) setTrendAnimated(false);
@@ -109,21 +109,9 @@ export function LearningAnalyticsView() {
 
   const courseNameById = Object.fromEntries(courses.map((c) => [c.id, c.name]));
 
-  // 历史分析 stage：preset / data state 变化时轻 settle（skeleton→data、empty→data、error→data 均有连续性）
+  // 历史分析 stage：preset / data state 变化时统一轻进入（skeleton→data、empty→data、error→data 同一节奏）
   const analyticsStageState = loading ? "loading" : error ? "error" : data ? (data.isEmpty ? "empty" : "data") : "idle";
   const analyticsStageKey = `${preset}|${analyticsStageState}`;
-  // 首个数据 stage 挂载一次性阶梯（0/40/80/120/160ms）：preset 切换重挂载不再阶梯
-  //（频繁切换跟手优先）；reduced-motion 下无延迟（全局时长守卫只压 duration，不压 delay）。
-  // render 期懒初始化（sanctioned lazy-init；并发丢弃时最多跳过阶梯，无副作用）。
-  const staggerKeyRef = useRef<string | null>(null);
-  const dataStage = !!data && !loading && !error && !data.isEmpty;
-  let staggerFirstData = false;
-  if (dataStage && staggerKeyRef.current === null) {
-    staggerKeyRef.current = analyticsStageKey;
-    staggerFirstData = true;
-  }
-  const staggerStyle = (i: number): React.CSSProperties | undefined =>
-    staggerFirstData && !reducedMotion ? { animationDelay: `${i * 40}ms` } : undefined;
 
   const navigate = (tab: "assignments" | "timetable" | "courses") => {
     setActiveTab(tab);
@@ -251,7 +239,7 @@ export function LearningAnalyticsView() {
           className="w-full max-w-none flex flex-col gap-4 workspace-gutter py-4 pb-24 md:py-5 md:pb-6 xl:px-8 xl:py-5 xl:pb-6"
         >
           {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle） */}
-          <div key={analyticsStageKey} className="ux-settle flex flex-col gap-4">
+          <div key={analyticsStageKey} className="ux-analytics-enter flex flex-col gap-4">
           {loading ? (
             <>
               <div className={ANALYTICS_TOP_GRID}>
@@ -298,7 +286,7 @@ export function LearningAnalyticsView() {
               {data.isEmpty ? (
                 <>
                   <EmptyState onNewTask={() => navigate("assignments")} onPlan={() => navigate("timetable")} />
-                  <section className={cn(ANALYTICS_CARD, "ux-settle")}>
+                  <section className={ANALYTICS_CARD}>
                     <AnalyticsCardHeader title="下一步" />
                     <div className="mt-3">{renderOutlookBlock()}</div>
                   </section>
@@ -314,8 +302,7 @@ export function LearningAnalyticsView() {
                   <div className={ANALYTICS_TOP_GRID}>
                     <section
                       data-testid="analytics-summary-card"
-                      style={staggerStyle(0)}
-                      className={cn(ANALYTICS_CARD, "ux-settle flex h-full flex-col justify-center")}
+                      className={cn(ANALYTICS_CARD, "flex h-full flex-col justify-center")}
                     >
                       <AnalyticsVerdict
                         verdict={buildAnalyticsVerdict({
@@ -346,8 +333,7 @@ export function LearningAnalyticsView() {
                       )}
                     </section>
                     <section
-                      style={staggerStyle(0)}
-                      className={cn(ANALYTICS_CARD, "ux-settle flex h-full flex-col")}
+                      className={cn(ANALYTICS_CARD, "flex h-full flex-col")}
                     >
                       <div className="flex items-center justify-between gap-3 pb-2">
                         <AnalyticsCardHeader title="学习动量" />
@@ -366,8 +352,7 @@ export function LearningAnalyticsView() {
                   {/* 2. 主分析：趋势（宽） / 值得注意（窄） */}
                   <div className={ANALYTICS_MAIN_GRID}>
                     <section
-                      style={staggerStyle(1)}
-                      className={cn(ANALYTICS_CARD, "flex h-full flex-col ux-settle")}
+                      className={cn(ANALYTICS_CARD, "flex h-full flex-col")}
                       data-testid="learning-trend-card"
                     >
                       <AnalyticsCardHeader title="学习趋势" />
@@ -380,8 +365,7 @@ export function LearningAnalyticsView() {
                       </div>
                     </section>
                     <section
-                      style={staggerStyle(1)}
-                      className={cn(ANALYTICS_CARD, "flex h-full flex-col ux-settle")}
+                      className={cn(ANALYTICS_CARD, "flex h-full flex-col")}
                       data-testid="analytics-signals-column"
                     >
                       <div className="min-h-0 flex-1">
@@ -401,7 +385,7 @@ export function LearningAnalyticsView() {
                   </div>
 
                   {/* 3. 分布与下一步：一个圆角块，内部左右分栏 */}
-                  <section style={staggerStyle(2)} className={cn(ANALYTICS_CARD, "ux-settle")}>
+                  <section className={ANALYTICS_CARD}>
                     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:divide-x xl:divide-line-soft">
                       <div className="min-w-0">
                         <AnalyticsCardHeader title="投入与节奏" />

@@ -641,6 +641,12 @@ html[data-motion-effective="reduced"] .ux-press:active:not(:disabled) {
     animation: ux-settle-in var(--motion-data) var(--ease-standard) both;
   }
 
+  /* Analytics 页面 stage 统一进入：骨架→数据/空态/错误一次性完成，不再让顶栏卡片分批弹出。
+     只动 opacity + 4px 上移，避免与新图表测量/布局相互抢帧。 */
+  .ux-analytics-enter {
+    animation: ux-analytics-enter var(--motion-base) var(--ease-standard) both;
+  }
+
   /* Kiro Project Panel 内部 view 切换：横向方向由 --motion-shift-x（±4px）控制 */
   .ux-kiro-view-enter {
     animation: ux-kiro-view-in var(--motion-fast) var(--ease-standard) both;
@@ -828,6 +834,17 @@ html[data-motion-effective="reduced"] .ux-press:active:not(:disabled) {
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes ux-analytics-enter {
+  from {
+    opacity: 0.72;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 

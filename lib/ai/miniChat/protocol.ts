@@ -153,7 +153,7 @@ export const MINI_MAX_TEXT_CHARS = 20000;
 export const MINI_MAX_FILES = 5;
 export const MINI_MAX_FILE_BYTES = 20 * 1024 * 1024;
 
-/** 无上下文时的通用快捷 Prompt（点击直接发送） */
+/** 主窗口 telemetry 的通用快捷 Prompt（Mini 窗口已不再展示；保留给 snapshot / 后续入口） */
 export const MINI_DEFAULT_SUGGESTIONS = [
   "今天要做什么",
   "这周还有什么 DDL",

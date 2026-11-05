@@ -28,8 +28,6 @@ export function MiniChatComposer({
   elapsed,
   configured,
   transitioning,
-  suggestions,
-  onQuickPrompt,
   onFocusMain,
 }: {
   input: string;
@@ -38,7 +36,6 @@ export function MiniChatComposer({
   onAddFiles: (files: File[]) => void;
   onRemoveFile: (file: File) => void;
   onSend: () => void;
-  onQuickPrompt: (prompt: string) => void;
   onStop: () => void;
   sending: boolean;
   busy: boolean;
@@ -46,7 +43,6 @@ export function MiniChatComposer({
   elapsed: number;
   configured: boolean;
   transitioning: boolean;
-  suggestions: string[];
   onFocusMain: () => void;
 }) {
   const taRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -108,22 +104,6 @@ export function MiniChatComposer({
             <Square className="h-2.5 w-2.5" />
             停止
           </button>
-        </div>
-      )}
-
-      {suggestions.length > 0 && !busy && (
-        <div className="mb-1.5 flex flex-wrap gap-1" data-testid="kiro-mini-suggestions">
-          {suggestions.slice(0, 3).map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              disabled={!configured || transitioning || sending}
-              onClick={() => onQuickPrompt(prompt)}
-              className="mini-no-drag h-7 rounded-full border border-line bg-surface px-2.5 text-[10px] text-satin-grey transition-colors hover:border-line-strong hover:text-charcoal disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-charcoal/15"
-            >
-              {prompt}
-            </button>
-          ))}
         </div>
       )}
 
