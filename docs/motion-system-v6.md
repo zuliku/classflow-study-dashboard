@@ -84,12 +84,13 @@ asymmetric transition）、Linear / Raycast（micro 快速、浮层从触发点�
 
 | tone | tint | blur |
 | --- | --- | --- |
-| standard | `rgba(240,235,225,0.62)` | 14px saturate 1.05 |
-| soft | `rgba(240,235,225,0.42)` | 8px saturate 1.02 |
-| strong | `rgba(247,245,245,0.78)` | 22px saturate 1.08 |
+| standard | `rgba(240,235,225,0.20)` | 10px saturate 1.03 |
+| soft | `rgba(240,235,225,0.10)` | 4px saturate 1.02 |
+| strong | `rgba(247,245,245,0.35)` | 14px saturate 1.05 |
 
 - 面板本身仍是 `bg-surface` + border/shadow；scrim 只负责“把背景洗成浅色磨砂”，不承担面板对比。
-- 无 backdrop-filter 时回退到 0.90/0.78/0.94 浅色纸面，保证背景仍被柔化。
+- tint 必须足够低：只柔化背景，不把底层内容完全洗平；当前标准档 0.20，强档 0.35。
+- 无 backdrop-filter 时回退到 0.55/0.40/0.75 浅色纸面（保留可读的背景轮廓）。
 
 ## 6. Reduced Motion
 

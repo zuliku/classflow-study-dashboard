@@ -31,11 +31,11 @@
 
 | 档位 | 背景（V6 浅色） | 模糊 | 使用场景 |
 | --- | --- | --- | --- |
-| `.ux-scrim` | `rgba(240,235,225,0.62)` | 14px / saturate 1.05 | Dialog / Drawer / CommandCenter / 导入预览 |
-| `.ux-scrim-soft` | `rgba(240,235,225,0.42)` | 8px / saturate 1.02 | ReminderCenter / Kiro 侧 sheet |
-| `.ux-scrim-strong` | `rgba(247,245,245,0.78)` | 22px / saturate 1.08 | 图片灯箱 / Markdown lightbox |
+| `.ux-scrim` | `rgba(240,235,225,0.20)` | 10px / saturate 1.03 | Dialog / Drawer / CommandCenter / 导入预览 |
+| `.ux-scrim-soft` | `rgba(240,235,225,0.10)` | 4px / saturate 1.02 | ReminderCenter / Kiro 侧 sheet |
+| `.ux-scrim-strong` | `rgba(247,245,245,0.35)` | 14px / saturate 1.05 | 图片灯箱 / Markdown lightbox |
 
-无 `backdrop-filter` 回退：0.90 / 0.78 / 0.94 不透明度浅色纸面。
+无 `backdrop-filter` 回退：0.55 / 0.40 / 0.75 浅色纸面（保留可读的背景轮廓）。
 全站统一浅色磨砂，不再使用深色 charcoal dim。
 
 原则：

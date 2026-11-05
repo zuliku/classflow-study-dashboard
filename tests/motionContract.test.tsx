@@ -677,10 +677,10 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
     const css = read("app/globals.css");
     expect(css).toContain(".ux-scrim {");
-    expect(css).toContain("backdrop-filter: blur(14px) saturate(1.05);");
-    expect(css).toMatch(/\.ux-scrim\s*\{[^}]*background-color:\s*rgba\(240, 235, 225, 0\.62\)/s);
-    expect(css).toMatch(/\.ux-scrim-soft\s*\{[^}]*background-color:\s*rgba\(240, 235, 225, 0\.42\)/s);
-    expect(css).toMatch(/\.ux-scrim-strong\s*\{[^}]*background-color:\s*rgba\(247, 245, 245, 0\.78\)/s);
+    expect(css).toContain("backdrop-filter: blur(10px) saturate(1.03);");
+    expect(css).toMatch(/\.ux-scrim\s*\{[^}]*background-color:\s*rgba\(240, 235, 225, 0\.2\)/s);
+    expect(css).toMatch(/\.ux-scrim-soft\s*\{[^}]*background-color:\s*rgba\(240, 235, 225, 0\.1\)/s);
+    expect(css).toMatch(/\.ux-scrim-strong\s*\{[^}]*background-color:\s*rgba\(247, 245, 245, 0\.35\)/s);
     // 统一浅色：不得再回到深色 dim
     expect(css).not.toMatch(/\.ux-scrim(?:\s|\{|,)[^{]*\{[^}]*rgba\((49, 48, 50|32, 31, 33)/s);
     const layer = read("components/ui/OverlayLayer.tsx");
