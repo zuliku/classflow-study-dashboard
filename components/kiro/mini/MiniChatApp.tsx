@@ -325,6 +325,15 @@ export function MiniChatApp() {
     [sendRemote, snapshot?.busy, transitioning]
   );
 
+  const settleTransition = useCallback((target: MiniChatWindowMode) => {
+    if (modeTimerRef.current !== null) {
+      window.clearTimeout(modeTimerRef.current);
+      modeTimerRef.current = null;
+    }
+    setModeState(target);
+    setTransitionTo(null);
+  }, []);
+
   const setMode = useCallback(
     (next: MiniChatWindowMode) => {
       if (next === mode || transitionTo !== null) return;
@@ -343,20 +352,24 @@ export function MiniChatApp() {
         } catch {}
         return;
       }
-      // 先挂轻量 morph 层（与胶囊同一视觉），窗口 bounds 动画期间不再渲染
-      // 完整聊天界面；窗口到位后再挂目标形态。
+      // 先挂轻量 morph 层（与胶囊同一视觉），原生窗口只瞬间改一次尺寸；
+      // 卡片形变由 CSS 完成，动画结束即挂载目标形态。
       setTransitionTo(next);
       try {
         mini?.setMode(next, false);
       } catch {}
+      // 兜底：animationend 未触发（窗口隐藏/动画被中断）时也能落地
       modeTimerRef.current = window.setTimeout(() => {
         modeTimerRef.current = null;
-        setModeState(next);
-        setTransitionTo(null);
-      }, MINI_MODE_ANIMATION_MS[next] + 20);
+        settleTransition(next);
+      }, MINI_MODE_ANIMATION_MS[next] + 40);
     },
-    [mode, reducedMotion, transitionTo]
+    [mode, reducedMotion, settleTransition, transitionTo]
   );
+
+  const handleMorphSettled = useCallback(() => {
+    if (transitionTo !== null) settleTransition(transitionTo);
+  }, [settleTransition, transitionTo]);
 
   useEffect(
     () => () => {
@@ -465,6 +478,7 @@ export function MiniChatApp() {
       <MiniChatMorph
         target={transitionTo}
         durationMs={MINI_MODE_ANIMATION_MS[transitionTo]}
+        onSettled={handleMorphSettled}
       />
     );
   }
@@ -483,7 +497,7 @@ export function MiniChatApp() {
 
   return (
     <div
-      className="relative flex h-screen flex-col overflow-hidden bg-surface text-charcoal"
+      className="relative flex h-screen flex-col overflow-hidden rounded-[20px] bg-surface text-charcoal ring-1 ring-inset ring-line-soft"
       data-testid="kiro-mini-app"
       onDragOver={(event) => {
         event.preventDefault();

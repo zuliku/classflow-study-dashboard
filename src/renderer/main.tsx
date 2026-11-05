@@ -49,6 +49,10 @@ if (!container) throw new Error("root 容器不存在");
 // Kiro Mini 常驻窗：同一包按 `?mini=1` 渲染瘦客户端（无 TitleBar/App，无聊天运行时；
 // 真相在主窗口，中继见 MiniChatRelayHost + src/main/miniChat.ts）。
 const miniMode = typeof window !== "undefined" && isMiniModeSearch(window.location.search);
+if (miniMode) {
+  // Mini 窗口是透明的：卡片形变在固定尺寸窗口内完成，卡片外的区域必须透出桌面。
+  document.documentElement.dataset.mini = "1";
+}
 
 createRoot(container).render(
   <React.StrictMode>

@@ -3,6 +3,7 @@
 import React from "react";
 import { X } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
+import { MINI_CAPSULE_SIZE } from "@/lib/ai/miniChat/protocol";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,7 +29,8 @@ export function MiniChatCapsule({
   const showStatus = busy || !!statusLabel;
   return (
     <div
-      className="mini-drag-region group relative h-screen w-screen select-none overflow-hidden rounded-[20px] bg-surface"
+      className="mini-drag-region group relative select-none overflow-hidden rounded-[20px] bg-surface"
+      style={{ width: MINI_CAPSULE_SIZE, height: MINI_CAPSULE_SIZE }}
       data-testid="kiro-mini-capsule"
       aria-label={statusLabel ? `Kiro Mini，${statusLabel}` : "Kiro Mini"}
     >

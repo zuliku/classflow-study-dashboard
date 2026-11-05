@@ -53,7 +53,7 @@ interface MiniBounds {
 let miniWindow: BrowserWindow | null = null;
 let latestSnapshot: MiniChatSnapshot | null = null;
 let boundsSaveTimer: NodeJS.Timeout | null = null;
-let boundsAnimationTimer: NodeJS.Timeout | null = null;
+let capsuleSettleTimer: NodeJS.Timeout | null = null;
 let tray: Tray | null = null;
 let shortcutRegistered = false;
 let displayListenersRegistered = false;
@@ -141,10 +141,9 @@ async function saveBoundsNow(): Promise<void> {
   if (!miniWindow || miniWindow.isDestroyed()) return;
   try {
     const [x, y] = miniWindow.getPosition();
-    const [width, height] = miniWindow.getSize();
-    if (currentMode === "expanded") {
-      expandedSize = clampSize(width, height);
-    }
+    // 窗口不可用户调整大小；expandedSize 是程序设定的逻辑尺寸。
+    // 不读取 getSize() 覆盖它——透明窗口在 Windows 下可能包含 1–2px
+    // 非客户区，反复展开会把尺寸越滚越大。
     const payload: MiniBounds = {
       x,
       y,
@@ -181,27 +180,25 @@ function miniLoadTarget(): string {
   return "app://bundle/index.html?mini=1";
 }
 
-function stopBoundsAnimation(): void {
-  if (boundsAnimationTimer) {
-    clearInterval(boundsAnimationTimer);
-    boundsAnimationTimer = null;
+/**
+ * 收起落地定时器：卡片 CSS 收缩期间原生窗口保持展开尺寸；收缩完成后再
+ * 瞬间缩到 72×72。此时可见卡片已经在窗口左上角 72×72，缩窗本身不可见。
+ */
+function clearCapsuleSettleTimer(): void {
+  if (capsuleSettleTimer) {
+    clearTimeout(capsuleSettleTimer);
+    capsuleSettleTimer = null;
   }
 }
 
-function applyModeConstraints(w: BrowserWindow): void {
-  const expanded = currentMode === "expanded";
+/** 原生窗口瞬间改尺寸（仅模式切换用，不参与逐帧动画） */
+function setWindowSize(w: BrowserWindow, width: number, height: number): void {
+  const [x, y] = w.getPosition();
+  const target = clampBounds({ x, y, width, height });
   try {
-    w.setResizable(expanded);
-    w.setMinimumSize(
-      expanded ? MINI_MIN_SIZE.width : MINI_CAPSULE_SIZE,
-      expanded ? MINI_MIN_SIZE.height : MINI_CAPSULE_SIZE
-    );
-    w.setMaximumSize(
-      expanded ? MINI_MAX_SIZE.width : MINI_CAPSULE_SIZE,
-      expanded ? MINI_MAX_SIZE.height : MINI_CAPSULE_SIZE
-    );
+    w.setBounds(target);
   } catch {
-    /* window 可能正在销毁 */
+    /* 窗口销毁竞态 */
   }
 }
 
@@ -219,133 +216,32 @@ function ensureWindowVisible(w: BrowserWindow): void {
   }
 }
 
-/** 窗口形变缓动：Material standard `cubic-bezier(0.4, 0, 0.2, 1)`。
- *  慢起 → 中段加速 → 长尾柔和收束；避免 easeOutCubic 首帧跳一大截的“弹一下”。 */
-const MODE_EASE = { x1: 0.4, y1: 0, x2: 0.2, y2: 1 } as const;
-
-function bezierValue(p1: number, p2: number, t: number): number {
-  const mt = 1 - t;
-  return 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t;
-}
-
-function bezierSlope(p1: number, p2: number, t: number): number {
-  const mt = 1 - t;
-  return 3 * mt * mt * p1 + 6 * mt * t * (p2 - p1) + 3 * t * t * (1 - p2);
-}
-
-/** 由时间进度 x 反解 bezier 参数，再取 y（Newton 迭代 5 次已足够 60fps 精度） */
-function easeModeProgress(progress: number): number {
-  if (progress <= 0) return 0;
-  if (progress >= 1) return 1;
-  let u = progress;
-  for (let i = 0; i < 5; i += 1) {
-    const error = bezierValue(MODE_EASE.x1, MODE_EASE.x2, u) - progress;
-    const slope = bezierSlope(MODE_EASE.x1, MODE_EASE.x2, u);
-    if (Math.abs(error) < 1e-4 || Math.abs(slope) < 1e-6) break;
-    u = Math.min(1, Math.max(0, u - error / slope));
-  }
-  return bezierValue(MODE_EASE.y1, MODE_EASE.y2, u);
-}
-
-function animateBounds(
-  w: BrowserWindow,
-  target: { x?: number; y?: number; width: number; height: number },
-  instant: boolean
-): void {
-  stopBoundsAnimation();
-  const start = w.getBounds();
-  const end = {
-    x: Math.round(target.x ?? start.x),
-    y: Math.round(target.y ?? start.y),
-    width: Math.round(target.width),
-    height: Math.round(target.height),
-  };
-  if (
-    start.x === end.x &&
-    start.y === end.y &&
-    start.width === end.width &&
-    start.height === end.height
-  ) {
-    applyModeConstraints(w);
-    return;
-  }
-  if (instant) {
-    try {
-      w.setBounds(end);
-    } catch {}
-    applyModeConstraints(w);
-    return;
-  }
-  // 动画期间只放宽尺寸约束：不切换 setResizable / frame——Windows 上会重建
-  // 非客户区并闪一下；结束后再恢复形态约束。
-  try {
-    w.setMinimumSize(1, 1);
-    w.setMaximumSize(MINI_MAX_SIZE.width, MINI_MAX_SIZE.height);
-  } catch {}
-  // 按真实经过时间插值（而不是按帧数）：主进程偶发掉帧时动画仍按固定
-  // 时长走完，不会出现忽快忽慢的“卡一下”。
-  const durationMs = MINI_MODE_ANIMATION_MS[currentMode];
-  const startedAt = Date.now();
-  let last = { ...start };
-  boundsAnimationTimer = setInterval(() => {
-    if (!w || w.isDestroyed()) {
-      stopBoundsAnimation();
-      return;
-    }
-    const t = Math.min(1, (Date.now() - startedAt) / durationMs);
-    const eased = easeModeProgress(t);
-    const next = {
-      x: Math.round(start.x + (end.x - start.x) * eased),
-      y: Math.round(start.y + (end.y - start.y) * eased),
-      width: Math.round(start.width + (end.width - start.width) * eased),
-      height: Math.round(start.height + (end.height - start.height) * eased),
-    };
-    // 同一像素不重复提交，减少无意义的重排。
-    if (
-      next.x !== last.x ||
-      next.y !== last.y ||
-      next.width !== last.width ||
-      next.height !== last.height
-    ) {
-      try {
-        w.setBounds(next);
-        last = next;
-      } catch {
-        stopBoundsAnimation();
-        return;
-      }
-    }
-    if (t >= 1) {
-      stopBoundsAnimation();
-      applyModeConstraints(w);
-    }
-  }, 16);
-}
-
 function setMiniMode(mode: MiniChatWindowMode, instant = false): void {
   const w = getMiniWindow();
   if (!w) return;
-  if (currentMode === mode) {
-    applyModeConstraints(w);
-    return;
-  }
-  if (currentMode === "expanded") {
-    const [width, height] = w.getSize();
-    expandedSize = clampSize(width, height);
-  }
+  if (currentMode === mode) return;
+  clearCapsuleSettleTimer();
   currentMode = mode;
-  const [x, y] = w.getPosition();
-  const target =
-    mode === "capsule"
-      ? clampBounds({ x, y, width: MINI_CAPSULE_SIZE, height: MINI_CAPSULE_SIZE })
-      : clampBounds({
-          x,
-          y,
-          width: expandedSize.width,
-          height: expandedSize.height,
-        });
-  animateBounds(w, target, instant);
-  scheduleSaveBounds();
+  if (mode === "expanded") {
+    // 原生窗口瞬间扩到展开尺寸：新增区域完全透明，用户看不到窗口变大；
+    // 卡片的形变全部由 renderer 的 CSS 完成（不逐帧 setBounds）。
+    setWindowSize(w, expandedSize.width, expandedSize.height);
+    scheduleSaveBounds();
+  } else if (instant) {
+    setWindowSize(w, MINI_CAPSULE_SIZE, MINI_CAPSULE_SIZE);
+    scheduleSaveBounds();
+  } else {
+    // 收起：窗口先保持展开尺寸，等卡片 CSS 收缩到 72×72 后再瞬间缩窗；
+    // 此时缩掉的是透明区域，视觉上无变化。
+    capsuleSettleTimer = setTimeout(() => {
+      capsuleSettleTimer = null;
+      if (currentMode !== "capsule") return;
+      const win = getMiniWindow();
+      if (!win) return;
+      setWindowSize(win, MINI_CAPSULE_SIZE, MINI_CAPSULE_SIZE);
+      scheduleSaveBounds();
+    }, MINI_MODE_ANIMATION_MS.capsule + 90);
+  }
   syncMainThrottling();
 }
 
@@ -375,12 +271,16 @@ async function ensureMiniWindow(opts: {
     minHeight: MINI_CAPSULE_SIZE,
     ...(initial.x !== undefined && initial.y !== undefined ? { x: initial.x, y: initial.y } : {}),
     show: false,
-    backgroundColor: "#F4F2EF",
+    // 透明窗口：模态切换时原生窗口瞬间变大/变小，透明区域不可见；
+    // 真正的形变动画由 renderer 的卡片 CSS 完成（不再逐帧 setBounds）。
+    // 透明窗口不做可调整大小（Electron 在 Windows 上对此有限制）。
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: false,
     autoHideMenuBar: true,
     title: "Kiro Mini",
-    // 无边框微型框：拖动走 renderer `-webkit-app-region: drag`，缩放走原生 thickFrame
     frame: false,
-    resizable: currentMode === "expanded",
+    resizable: false,
     minimizable: true,
     maximizable: false,
     fullscreenable: false,
@@ -422,7 +322,6 @@ async function ensureMiniWindow(opts: {
     }
   });
   w.on("ready-to-show", () => {
-    applyModeConstraints(w);
     ensureWindowVisible(w);
     w.show();
     // 重开即推最新快照（relay 可能在 mini 关闭期间持续 publish，缓存保证不空白）
@@ -441,7 +340,7 @@ async function ensureMiniWindow(opts: {
     }
   });
   w.on("closed", () => {
-    stopBoundsAnimation();
+    clearCapsuleSettleTimer();
     if (miniWindow === w) miniWindow = null;
     syncMainThrottling();
   });
@@ -794,7 +693,7 @@ export function registerMiniChatIpc(deps: MiniChatMainDeps): void {
 
 /** 主窗口关闭时调用：Mini 没有运行时，必须一起关闭，避免孤儿常驻窗。 */
 export function closeMiniWindow(): void {
-  stopBoundsAnimation();
+  clearCapsuleSettleTimer();
   for (const [requestId, pending] of pendingSends) {
     clearTimeout(pending.timer);
     pending.reject(new Error(JSON.stringify({ code: "MAIN_UNAVAILABLE", message: "主窗口已关闭。" })));

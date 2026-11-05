@@ -1761,64 +1761,76 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     -webkit-app-region: no-drag;
   }
 
-  /* Mini 展开/收起 morph：动画期间只有轻量表面 + Logo。
-     Logo 在「胶囊中心」与「展开态 Header 左上角」之间飞行（共享元素），
-     位移用 vw/vh 实时跟随窗口中心，纯 transform 合成；时间曲线与主进程
-     窗口动画保持一致（Material standard）。 */
-  .mini-morph-travel-to-header,
-  .mini-morph-travel-to-center,
-  .mini-morph-scale-to-header,
-  .mini-morph-scale-to-center {
+  /* Mini 展开/收起 morph（固定尺寸透明窗口内）：
+     原生窗口只在展开开始 / 收起结束瞬间改一次尺寸，新增区域透明不可见；
+     可见卡片在这里做纯 CSS 的 width/height 形变，Logo 用 transform 飞行。
+     这是避免 Windows 逐帧 setBounds 卡顿的关键。 */
+  .mini-morph-card {
+    will-change: width, height;
+  }
+  .mini-morph-card-expand {
+    animation: mini-morph-card-expand var(--mini-morph-ms, 220ms)
+      cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  .mini-morph-card-collapse {
+    animation: mini-morph-card-collapse var(--mini-morph-ms, 170ms)
+      cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  @keyframes mini-morph-card-expand {
+    from {
+      width: 72px;
+      height: 72px;
+    }
+    to {
+      width: 100%;
+      height: 100%;
+    }
+  }
+  @keyframes mini-morph-card-collapse {
+    from {
+      width: 100%;
+      height: 100%;
+    }
+    to {
+      width: 72px;
+      height: 72px;
+    }
+  }
+
+  .mini-morph-logo {
+    transform-origin: top left;
     will-change: transform;
+    /* 28px Logo 缩小到 20px 时，左上角仍与 Header 的 KiroMark 对齐 */
   }
-  .mini-morph-travel-to-header {
-    animation: mini-morph-travel-to-header var(--mini-morph-ms, 220ms)
+  .mini-morph-logo-to-header {
+    animation: mini-morph-logo-to-header var(--mini-morph-ms, 220ms)
       cubic-bezier(0.4, 0, 0.2, 1) both;
   }
-  .mini-morph-travel-to-center {
-    animation: mini-morph-travel-to-center var(--mini-morph-ms, 170ms)
+  .mini-morph-logo-to-center {
+    animation: mini-morph-logo-to-center var(--mini-morph-ms, 170ms)
       cubic-bezier(0.4, 0, 0.2, 1) both;
   }
-  @keyframes mini-morph-travel-to-header {
+  @keyframes mini-morph-logo-to-header {
     from {
-      transform: translate3d(0, 0, 0);
+      transform: translate3d(22px, 22px, 0) scale(1);
     }
     to {
-      transform: translate3d(calc(-50vw + 20px), calc(-50vh + 22px), 0);
+      transform: translate3d(10px, 12px, 0) scale(0.714);
     }
   }
-  @keyframes mini-morph-travel-to-center {
+  @keyframes mini-morph-logo-to-center {
     from {
-      transform: translate3d(calc(-50vw + 20px), calc(-50vh + 22px), 0);
+      transform: translate3d(10px, 12px, 0) scale(0.714);
     }
     to {
-      transform: translate3d(0, 0, 0);
+      transform: translate3d(22px, 22px, 0) scale(1);
     }
   }
-  .mini-morph-scale-to-header {
-    animation: mini-morph-scale-to-header var(--mini-morph-ms, 220ms)
-      cubic-bezier(0.4, 0, 0.2, 1) both;
-  }
-  .mini-morph-scale-to-center {
-    animation: mini-morph-scale-to-center var(--mini-morph-ms, 170ms)
-      cubic-bezier(0.4, 0, 0.2, 1) both;
-  }
-  @keyframes mini-morph-scale-to-header {
-    from {
-      transform: scale(1);
-    }
-    to {
-      /* 20 / 28：与 Header 的 KiroMark size="sm" 对齐 */
-      transform: scale(0.714);
-    }
-  }
-  @keyframes mini-morph-scale-to-center {
-    from {
-      transform: scale(0.714);
-    }
-    to {
-      transform: scale(1);
-    }
+
+  /* Mini 窗口是透明的，卡片外必须透出桌面 */
+  html[data-mini="1"] body,
+  html[data-mini="1"] #root {
+    background: transparent;
   }
 
   /* 展开完成后，Header 先就位（Logo 连续），下方内容快速淡入，避免整块闪入 */

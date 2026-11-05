@@ -134,8 +134,8 @@ export const MINI_CAPSULE_SIZE = 72;
  * 展开慢一点、更有呼吸感；收起更快、更利落。
  */
 export const MINI_MODE_ANIMATION_MS: Record<MiniChatWindowMode, number> = {
-  expanded: 220,
-  capsule: 170,
+  expanded: 260,
+  capsule: 200,
 };
 export interface MiniChatWindowState {
   mode: MiniChatWindowMode;
