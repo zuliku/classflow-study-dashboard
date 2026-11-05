@@ -16,9 +16,10 @@ import { cn } from "@/lib/utils";
  *   确需非阻塞行为时显式传 false（并自行保证背后不可达链路一致）；
  * - 无 scroll lock（body 锁定仅 KiroImagePreviewDialog 自持，见 S2-1 备注）
  *
- * Motion Contract：enter = --motion-overlay（220ms，与 Drawer/Command 同档）；
- * exit = --motion-exit-base（150ms）；presence unmount = MOTION_EXIT_MS.base —— 三者同源对应。
- * 弹窗语法统一为 opacity + scale(.985→1) + 4px 上移；退出 --ease-exit 加速离场。
+ * Motion Contract：enter = --motion-overlay（250ms，与 Drawer/Command 同档）；
+ * exit = --motion-exit-base（160ms）；presence unmount = MOTION_EXIT_MS.base —— 三者同源对应。
+ * V6：面板用 spatial spring（--ease-spatial）落位；opacity + scale(.98→1) + 4px 上移；
+ * 退出 --ease-exit 加速离场。
  */
 export interface DialogProps extends React.HTMLAttributes<HTMLDivElement> {
   open: boolean;
@@ -100,10 +101,10 @@ export function Dialog({
             }
             className={cn(
               "w-full max-w-md bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
-              // enter 220ms（scale .985→1 + 4px 上移归零）；exit 150ms（scale 1→.985 + 4px），exit < enter
+              // enter 250ms spatial spring（scale .98→1 + 4px 上移归零）；exit 160ms（scale 1→.98 + 4px），exit < enter
               visible
-                ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-overlay)]"
-                : "opacity-0 scale-[0.985] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]",
+                ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-spatial)]"
+                : "opacity-0 scale-[0.98] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]",
               className
             )}
             {...rest}

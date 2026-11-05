@@ -33,19 +33,24 @@
  * - Reduced Motion 不走这些常量：usePresence / useEffectiveReducedMotion 直接落最终态。
  */
 export const MOTION_MS = {
-  snap: 90,
-  fast: 140,
-  base: 180,
-  overlay: 220,
-  panel: 230,
-  page: 180,
-  data: 200,
+  snap: 100,
+  fast: 160,
+  base: 200,
+  overlay: 250,
+  panel: 260,
+  page: 220,
+  data: 220,
 } as const;
 
 export const MOTION_EXIT_MS = {
-  fast: 110,
-  base: 150,
-  panel: 160,
+  fast: 120,
+  base: 160,
+  panel: 190,
+} as const;
+
+/** V6：菜单/列表项编排步长（CSS --motion-stagger-step 同源） */
+export const MOTION_STAGGER_MS = {
+  menuItem: 18,
 } as const;
 
 /**
@@ -143,6 +148,25 @@ export const STAGGER_MS = {
   mentionStep: 24,
 } as const;
 
+/**
+ * Motion V6：语义角色表。CSS 侧仍是唯一执行真值；本表用于契约、测试与
+ * 需要 JS（WAAPI / Framer Motion）的少数场景，避免“角色 → 时长/曲线”再次漂移。
+ * - spatial（Dialog/Drawer）：spring-soft，零 overshoot，长尾 settle
+ * - popover / toast：out-strong，快速响应，锚定方向由 transform-origin 提供
+ * - page：out-soft，轻量方向切换
+ * - press：spring-snappy，仅用于按压回弹（≤1.1% overshoot）
+ */
+export const MOTION_ROLE = {
+  press: { duration: MOTION_MS.snap, ease: EASE.springSnappy },
+  popover: { enter: MOTION_MS.fast, exit: MOTION_EXIT_MS.fast, ease: EASE.standard },
+  overlay: { enter: MOTION_MS.overlay, exit: MOTION_EXIT_MS.base, ease: EASE.springSoft },
+  drawer: { enter: MOTION_MS.panel, exit: MOTION_EXIT_MS.panel, ease: EASE.springSoft },
+  page: { duration: MOTION_MS.page, ease: EASE.outSoft },
+  list: { enter: MOTION_MS.base, exit: MOTION_EXIT_MS.base, ease: EASE.standard },
+  toast: { enter: MOTION_MS.fast, exit: MOTION_EXIT_MS.fast, ease: EASE.standard },
+} as const;
+
+export type MotionRole = keyof typeof MOTION_ROLE;
 export type MotionTier = keyof typeof MOTION_MS;
 export type MotionExitTier = keyof typeof MOTION_EXIT_MS;
 export type KiroMotionTier = keyof typeof KIRO_MOTION_MS;

@@ -7,17 +7,21 @@ import { test } from "./demoFixtures";
 
 async function openPalette(page: Page) {
   // Ctrl+K 是 fire-and-forget 按键：若压在 hydration/快捷键挂载前会被吞，
-  // 按一次不等则补按（最多 3 次），最后一次走长等待断言
+  // 按一次不等则补按（最多 3 次）；一旦面板出现就停止重按（重按会 toggle 关闭）。
   for (let i = 0; i < 3; i++) {
     await page.keyboard.press("Control+k");
     try {
       await expect(page.getByTestId("command-center")).toBeVisible({ timeout: 2000 });
-      return;
+      break;
     } catch {
       /* 被吞则补按 */
     }
   }
   await expect(page.getByTestId("command-center")).toBeVisible();
+  // autoFocus 与进入动画解耦：等输入框真正拿到焦点后再输入，避免按键落到 body
+  await expect(page.getByRole("combobox", { name: "命令中心搜索" })).toBeFocused({
+    timeout: 5000,
+  });
 }
 
 // 应用就绪：侧栏渲染完成后再按键（hydration/快捷键挂载完成前按键会被吞，无报错极难查）
@@ -62,6 +66,7 @@ test("导航：Cmd+K 输入「课表」Enter → activeTab 切换为课表", asy
 test("实体搜索：输入「高等数学」Enter → 打开课程 Drawer", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await waitForAppReady(page);
   await openPalette(page);
 
   await page.keyboard.type("高等数学");

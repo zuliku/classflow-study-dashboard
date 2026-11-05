@@ -4,8 +4,8 @@ import { resolveDrawerAriaModal, resolveDrawerPresentation } from "@/components/
 /**
  * Drawer primitive 回归护栏（Motion Foundation V2 更新）：
  * 1. edge / floating 的 class 契约：几何不变，motion duration 全部走 CSS 变量
- *    （enter = --motion-overlay，exit = --motion-exit-panel —— 与 usePresence 的
- *    MOTION_EXIT_MS.panel 同源对应，消除 CSS 160ms / JS unmount 200ms 的历史漂移）
+ *    （V6：enter = --motion-panel + spatial spring，exit = --motion-exit-panel —— 与 usePresence 的
+ *    MOTION_EXIT_MS.panel 同源对应）
  *    overlay 只负责布局；dim/磨砂统一由 OverlayLayer scrimTone 提供。
  * 2. floating 是有界浮层（viewport inset + 470px + rounded + full border）
  * 3. 真模态：两种 presentation 均声明 aria-modal="true"；floating 背板柔和 dim + 拦截指针
@@ -21,8 +21,9 @@ describe("Drawer presentation class contract", () => {
     expect(enter.overlayClassName).not.toContain("bg-black");
     expect(enter.panelClassName).toContain("h-full w-full bg-surface shadow-drawer border-l border-line");
     expect(enter.panelClassName).toContain("translate-x-0 opacity-100");
-    // Motion Contract：enter = --motion-overlay（与 Dialog/floating 同档）
-    expect(enter.panelClassName).toContain("!duration-[var(--motion-overlay)]");
+    // Motion Contract：enter = --motion-panel（与 Dialog/floating 同档）+ spatial spring
+    expect(enter.panelClassName).toContain("!duration-[var(--motion-panel)]");
+    expect(enter.panelClassName).toContain("ease-[var(--ease-spatial)]");
 
     const exit = resolveDrawerPresentation("edge", false);
     expect(exit.panelClassName).toContain("translate-x-3 opacity-0");
@@ -58,11 +59,11 @@ describe("Drawer presentation class contract", () => {
     expect(enter.panelClassName).not.toMatch(/\bborder-l\b/);
   });
 
-  it("两种 presentation 共用同一生命周期语义（overlay enter / panel exit）", () => {
+  it("两种 presentation 共用同一生命周期语义（panel enter / panel exit）", () => {
     for (const presentation of ["edge", "floating"] as const) {
       const enter = resolveDrawerPresentation(presentation, true);
       const exit = resolveDrawerPresentation(presentation, false);
-      expect(enter.panelClassName).toContain("!duration-[var(--motion-overlay)]");
+      expect(enter.panelClassName).toContain("!duration-[var(--motion-panel)]");
       expect(exit.panelClassName).toContain("!duration-[var(--motion-exit-panel)]");
       expect(exit.panelClassName).toContain("opacity-0");
     }
@@ -76,10 +77,10 @@ describe("Drawer presentation class contract", () => {
     expect(exit.panelClassName).toContain("!duration-[var(--motion-exit-panel)]");
   });
 
-  it("floating enter 时长走 --motion-overlay（emphasized easing）", () => {
+  it("floating enter 时长走 --motion-panel（spatial spring）", () => {
     const enter = resolveDrawerPresentation("floating", true);
-    expect(enter.panelClassName).toContain("!duration-[var(--motion-overlay)]");
-    expect(enter.panelClassName).toContain("ease-[var(--ease-emphasized)]");
+    expect(enter.panelClassName).toContain("!duration-[var(--motion-panel)]");
+    expect(enter.panelClassName).toContain("ease-[var(--ease-spatial)]");
   });
 
   it("aria-modal：两种 presentation 均为真模态，声明 true", () => {

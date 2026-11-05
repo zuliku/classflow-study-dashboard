@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
  * 全局 Button primitive（UI Productization Task 2A + IM3B Action Feedback）。
  * feature-neutral；不读 Store；透传全部原生 button props（aria / data 属性、type、disabled、title、onClick）。
  *
- * Press cycle：ux-press（active scale 0.98）+ transition 覆盖 background/border/color/transform（--motion-snap）。
- * Loading（可选，feature-neutral）：loading=true → disabled + aria-busy；原内容 opacity-0 保留占位（无 layout shift），
- * absolute overlay 显示 spinner（+可选 loadingLabel）。Button 只知 idle/loading；success/error 归业务层（Toast/inline）。
+ * Press cycle：ux-press（active scale 0.97）+ ux-press-transition（颜色走 fast 档，
+ * transform 走 spring-snappy 回弹）。Loading（可选，feature-neutral）：loading=true → disabled + aria-busy；
+ * 原内容 opacity-0 保留占位（无 layout shift），absolute overlay 显示 spinner（+可选 loadingLabel）。Button 只知 idle/loading；success/error 归业务层（Toast/inline）。
  */
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "accent";
 export type ButtonSize = "sm" | "md";
@@ -54,8 +54,7 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        "ux-press relative inline-flex items-center justify-center gap-1.5 rounded-lg font-bold shrink-0",
-        "transition-[background-color,border-color,color,transform] duration-[var(--motion-snap)] ease-[var(--ease-standard)]",
+        "ux-press ux-press-transition relative inline-flex items-center justify-center gap-1.5 rounded-lg font-bold shrink-0",
         "focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-2",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         BUTTON_VARIANTS[variant],

@@ -1,5 +1,8 @@
 # Motion System V5 · 非线性缓动设计
 
+> **V6 已上线：时长阶梯、空间 spring、锚定浮层、按压回弹与菜单编排见 `docs/motion-system-v6.md`。**
+> 本文件的 V5 `linear()` easing 曲线族仍是底层真值；V6 只在其上增加角色/时长/编排。
+
 > 状态：**已全量上线（V5 默认）**。
 > `app/globals.css` / `lib/motion.ts` 直接输出 V5；不再有 dev 灰度开关。
 > legacy alias（standard / emphasized / enter / exit / spring）长期保留为兼容名称。

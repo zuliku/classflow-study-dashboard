@@ -186,7 +186,7 @@ export function KiroImagePreviewDialog({
       className={cn(
         "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] z-[80] flex items-center justify-center p-4 md:p-8 transition-opacity",
         shown
-          ? "opacity-100 duration-[var(--motion-overlay)] ease-[var(--ease-overlay)]"
+          ? "opacity-100 duration-[var(--motion-overlay)] ease-[var(--ease-out-soft)]"
           : "opacity-0 pointer-events-none !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
       )}
       role="dialog"
@@ -204,8 +204,8 @@ export function KiroImagePreviewDialog({
         className={cn(
           "relative flex flex-col w-[min(94vw,1080px)] max-h-[86dvh] ux-modal-panel",
           shown
-            ? "opacity-100 scale-100 translate-y-0 duration-[var(--motion-overlay)] ease-[var(--ease-overlay)]"
-            : "opacity-0 scale-[0.985] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
+            ? "opacity-100 scale-100 translate-y-0 duration-[var(--motion-overlay)] ease-[var(--ease-spatial)]"
+            : "opacity-0 scale-[0.98] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
         )}
       >
         {/* Header：名称 + Gallery 计数 + Close */}

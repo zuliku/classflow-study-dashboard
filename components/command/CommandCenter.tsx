@@ -151,14 +151,21 @@ export function CommandCenter() {
     };
   }, [isSearchModalOpen, setSearchModalOpen]);
 
-  // 打开时重置查询与高亮；切换视图时复位
+  // 打开时重置查询与高亮；切换视图时复位（focus 不在 semantic open 时抢，
+  // 要等 presence visible = true 且 inert 已释放后再聚焦；否则快速 close→reopen
+  // 会在 inert 面板里 focus 失败，输入落到 body）
   useEffect(() => {
     if (isSearchModalOpen) {
       setQuery("");
       setHighlighted(0);
-      if (searchModalView === "palette") inputRef.current?.focus();
     }
   }, [isSearchModalOpen, searchModalView]);
+
+  useEffect(() => {
+    if (!visible || !isSearchModalOpen || searchModalView !== "palette") return;
+    const raf = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(raf);
+  }, [visible, isSearchModalOpen, searchModalView]);
 
   const ctx: CommandContext = useMemo(
     () => ({
@@ -410,7 +417,7 @@ export function CommandCenter() {
       className={cn(
         // 统一暖色磨砂遮罩；blur 静态，仅随 opacity 淡入淡出（不逐帧重模糊）
         "fixed inset-0 z-50 ux-scrim flex items-start justify-center pt-16 md:pt-20 p-3 sm:p-4 ux-overlay",
-        // enter/exit 与 Dialog 同档（220 / 150）
+        // enter/exit 与 Dialog 同档（250 / 160，V6 spatial spring）
         visible ? "opacity-100" : "opacity-0 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]",
         !isSearchModalOpen && "pointer-events-none"
       )}
@@ -431,8 +438,8 @@ export function CommandCenter() {
           "w-full max-w-[680px] bg-surface rounded-2xl shadow-drawer border border-line overflow-hidden flex flex-col",
           "ux-modal-panel",
           visible
-            ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-overlay)]"
-            : "opacity-0 scale-[0.985] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
+            ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-spatial)]"
+            : "opacity-0 scale-[0.98] translate-y-1 !duration-[var(--motion-exit-base)] !ease-[var(--ease-exit)]"
         )}
         style={exitDurationStyle}
       >
@@ -518,7 +525,6 @@ export function CommandCenter() {
                 aria-autocomplete="list"
                 aria-activedescendant={displayItems.length > 0 ? `command-option-${highlighted}` : undefined}
                 className="w-full text-sm bg-transparent border-none focus:outline-none text-charcoal placeholder-sandrift"
-                autoFocus
               />
               <button
                 onClick={() => setSearchModalOpen(false)}

@@ -360,8 +360,8 @@ export function ReminderCenter() {
             panelMlClass,
             // Motion（三态非对称）：mobile 轻浮起（translateY）/ desktop 从 Sidebar 展开（translateX）；
             // entering 用 enter 偏移（-6px / 6px, scale .992/.985），exiting 用更轻的 exit 偏移
-            // （-4px / 4px, scale .994/.99）；enter ~200ms（standard），exit ~160ms 加速离场（exit）
-            "transition-[opacity,transform] ease-[var(--ease-emphasized)]",
+            // （-4px / 4px, scale .994/.99）；enter spatial spring，exit ~160ms 加速离场（exit）
+            "transition-[opacity,transform] ease-[var(--ease-spatial)]",
             isOpen
               ? visible
                 ? "opacity-100 translate-y-0 scale-100 md:translate-x-0 ![duration:var(--motion-overlay)]"

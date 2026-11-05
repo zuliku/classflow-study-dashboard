@@ -74,18 +74,20 @@
   --success-border: #C8D3C7;
 
   /* Motion tokens（与 lib/motion.ts MOTION_MS / MOTION_EXIT_MS 一一对应，勿单方面修改） */
-  --motion-fast: 140ms;
-  --motion-base: 180ms;
-  --motion-panel: 230ms;
-  --motion-page: 180ms;
-  --motion-data: 200ms;
-  --motion-snap: 90ms;
+  --motion-fast: 160ms;
+  --motion-base: 200ms;
+  --motion-panel: 260ms;
+  --motion-page: 220ms;
+  --motion-data: 220ms;
+  --motion-snap: 100ms;
   /* Overlay panel enter：Dialog/Drawer 共用（≠ --motion-panel——后者保留给 Sidebar App Chrome morph 域） */
-  --motion-overlay: 220ms;
+  --motion-overlay: 250ms;
   /* Exit durations（≈ 对应 enter 档位的 70–80%）：presence/unmount 与 CSS 退出过渡的唯一真值对 */
-  --motion-exit-fast: 110ms;
-  --motion-exit-base: 150ms;
-  --motion-exit-panel: 160ms;
+  --motion-exit-fast: 120ms;
+  --motion-exit-base: 160ms;
+  --motion-exit-panel: 190ms;
+  /* V6 编排步长：菜单/列表项 stagger（与 lib/motion.ts MOTION_STAGGER_MS 同源） */
+  --motion-stagger-step: 18ms;
   /* Motion V5 曲线族（全量默认）：21 点 linear() 采样，Chromium 原生插值；
      数值与 lib/motion.ts EASE_V5 一一对应。
      legacy alias（standard / emphasized / enter / exit / spring）长期保留为兼容名称。 */
@@ -440,14 +442,22 @@ button:disabled {
 /* 按下反馈：只对显式 .ux-press 的独立操作按钮做轻缩放。
    空间稳定型控件（日期格 / 导航 / 拖拽面 / Resize handle / 周月切换几何控件）一律不缩放。 */
 .ux-press:active:not(:disabled) {
-  transform: scale(0.985);
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion-preference="full"]) .ux-press:active:not(:disabled) {
+    transform: none;
+  }
+}
+html[data-motion-effective="reduced"] .ux-press:active:not(:disabled) {
+  transform: none;
 }
 
 /* 统一过渡与动效工具类 */
 @layer utilities {
   /* 遮罩：只过渡透明度；模糊在挂载期保持静态，避免进退场逐帧重算 backdrop-filter */
   .ux-overlay {
-    transition: opacity var(--motion-overlay) var(--ease-standard);
+    transition: opacity var(--motion-overlay) var(--ease-out-soft);
   }
 
   /* 统一弹窗磨砂背景（Apple/ChatGPT 风格）：暖炭色 dim + 静态环境模糊。
@@ -480,20 +490,21 @@ button:disabled {
     }
   }
 
-  /* Drawer 面板：右侧滑入 + 透明度 */
+  /* Drawer 面板：右侧滑入 + 透明度；V6 使用 spatial spring（零 overshoot 长尾 settle） */
   .ux-drawer-panel {
     will-change: opacity, transform;
     transition:
-      opacity var(--motion-panel) var(--ease-standard),
-      transform var(--motion-panel) var(--ease-standard);
+      opacity var(--motion-panel) var(--ease-spatial),
+      transform var(--motion-panel) var(--ease-spatial);
   }
 
-  /* Modal 面板：轻缩放 + 上移 + 透明度（enter 与 Dialog/Command 统一 220ms） */
+  /* Modal 面板：轻缩放 + 上移 + 透明度（enter 与 Dialog/Command 统一 --motion-overlay；
+     V6 spatial spring 让大表面“落位”而不是“急停”） */
   .ux-modal-panel {
     will-change: opacity, transform;
     transition:
-      opacity var(--motion-overlay) var(--ease-overlay),
-      transform var(--motion-overlay) var(--ease-overlay);
+      opacity var(--motion-overlay) var(--ease-spatial),
+      transform var(--motion-overlay) var(--ease-spatial);
   }
 
   /* 内联面板 / Dropdown：轻微位移 + 透明度 */
@@ -502,6 +513,42 @@ button:disabled {
     transition:
       opacity var(--motion-fast) var(--ease-standard),
       transform var(--motion-fast) var(--ease-standard);
+  }
+
+  /* 按压：颜色走 fast 档，transform 走 spring-snappy 回弹（仅独立操作按钮） */
+  .ux-press-transition {
+    transition:
+      background-color var(--motion-fast) var(--ease-standard),
+      border-color var(--motion-fast) var(--ease-standard),
+      color var(--motion-fast) var(--ease-standard),
+      transform var(--motion-snap) var(--ease-spring-snappy);
+  }
+
+  /* V6 菜单编排：面板打开时按 18ms 级联上浮，最多 5 档（第 6 项起同延迟）。
+     只作用于 menuitem，不影响 divider / 说明行；reduced-motion 下完全静态。 */
+  .ux-menu-stagger [role="menuitem"],
+  .ux-menu-stagger [role="menuitemradio"] {
+    animation: ux-menu-item-in var(--motion-fast) var(--ease-standard) both;
+  }
+  .ux-menu-stagger [role="menuitem"]:nth-of-type(2),
+  .ux-menu-stagger [role="menuitemradio"]:nth-of-type(2) {
+    animation-delay: var(--motion-stagger-step, 18ms);
+  }
+  .ux-menu-stagger [role="menuitem"]:nth-of-type(3),
+  .ux-menu-stagger [role="menuitemradio"]:nth-of-type(3) {
+    animation-delay: calc(var(--motion-stagger-step, 18ms) * 2);
+  }
+  .ux-menu-stagger [role="menuitem"]:nth-of-type(4),
+  .ux-menu-stagger [role="menuitemradio"]:nth-of-type(4) {
+    animation-delay: calc(var(--motion-stagger-step, 18ms) * 3);
+  }
+  .ux-menu-stagger [role="menuitem"]:nth-of-type(5),
+  .ux-menu-stagger [role="menuitemradio"]:nth-of-type(5) {
+    animation-delay: calc(var(--motion-stagger-step, 18ms) * 4);
+  }
+  .ux-menu-stagger [role="menuitem"]:nth-of-type(n + 6),
+  .ux-menu-stagger [role="menuitemradio"]:nth-of-type(n + 6) {
+    animation-delay: calc(var(--motion-stagger-step, 18ms) * 5);
   }
 
   /* BUG-071：Toast 入场（此前只有出场过渡，挂载即最终态硬现）。
@@ -662,6 +709,18 @@ button:disabled {
   }
 }
 
+/* V6 菜单项：2px 上浮 + 淡入；延迟由 .ux-menu-stagger nth-of-type 提供 */
+@keyframes ux-menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* 页面 Tab 切换：opacity-only（避免 translateY 在动画期产生 transient scroll overflow，
    与 scrollbar-gutter: stable 共同保证切换时 layout width 稳定） */
 @keyframes ux-page-in {
@@ -673,12 +732,13 @@ button:disabled {
   }
 }
 
-/* Workflow UX Motion Productization M1：MAIN workspace 方向性进入（±4px，极轻）
-   —— opacity 0.94 起步保持连续感；wrapper overflow-x: clip 防 scrollbar jank */
+/* Workflow UX Motion Productization M1：MAIN workspace 方向性进入（±6px，轻量）
+   —— opacity 0.92 起步保持连续感；wrapper overflow-x: clip 防 scrollbar jank。
+   V6：方向位移 4→6px，让“前进/后退”有更清晰的空间连续性。 */
 @keyframes ux-page-in-forward {
   from {
-    opacity: 0.94;
-    transform: translateX(4px);
+    opacity: 0.92;
+    transform: translateX(6px);
   }
   to {
     opacity: 1;
@@ -687,8 +747,8 @@ button:disabled {
 }
 @keyframes ux-page-in-backward {
   from {
-    opacity: 0.94;
-    transform: translateX(-4px);
+    opacity: 0.92;
+    transform: translateX(-6px);
   }
   to {
     opacity: 1;
@@ -775,7 +835,7 @@ button:disabled {
 @keyframes ux-toast-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -1012,6 +1072,19 @@ html[data-motion-effective="reduced"] *::after {
 }
 
 html[data-motion-effective="reduced"] .ux-channel-provider-enter {
+  animation: none !important;
+}
+
+/* V6 菜单级联在 reduced-motion 下必须直接落最终态：全局只压缩 duration，
+   不会清掉 animation-delay（otherwise 各 item 会按延迟保持 opacity 0）。 */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion-preference="full"]) .ux-menu-stagger [role="menuitem"],
+  html:not([data-motion-preference="full"]) .ux-menu-stagger [role="menuitemradio"] {
+    animation: none !important;
+  }
+}
+html[data-motion-effective="reduced"] .ux-menu-stagger [role="menuitem"],
+html[data-motion-effective="reduced"] .ux-menu-stagger [role="menuitemradio"] {
   animation: none !important;
 }
 

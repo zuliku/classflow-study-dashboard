@@ -63,7 +63,8 @@ export function resolveDrawerAriaModal(
  *  floating = 浮层位移 + 淡入（Workflow UX Motion M4：Stable Edge Exit——
  *  floating contextual panel 是右侧 detail surface，不做 Modal 式向心缩放；
  *  产品 Motion Grammar：Dialog → scale + fade；Drawer → translate + fade）
- * Motion V3：进入 --ease-emphasized（历史视觉不变），退出 --ease-exit（加速离场）。 */
+ * Motion V3：进入 --ease-emphasized（历史视觉不变），退出 --ease-exit（加速离场）。
+ * V6：进入改用 --ease-spatial（spring-soft 落位），退出保持 --ease-exit。 */
 export function resolveDrawerPresentation(
   presentation: DrawerPresentation,
   visible: boolean
@@ -78,11 +79,11 @@ export function resolveDrawerPresentation(
         // 有界浮层：宽度 min(470px, 100vw-32px)；高度 max calc(100dvh-32px)；圆角 + 完整边框 + shadow
         "w-full sm:w-[470px] h-full max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)]",
         "bg-surface rounded-2xl sm:rounded-[22px] border border-line-strong shadow-card",
-        "flex flex-col overflow-hidden ux-drawer-panel !ease-[var(--ease-emphasized)] pointer-events-auto",
-        // enter：translate-x 0 + 淡入（--motion-overlay 220ms）；
-        // exit：右侧轻移 + 淡出（--motion-exit-panel 160ms）；无 scale（M4 Stable Edge Exit）
+        "flex flex-col overflow-hidden ux-drawer-panel !ease-[var(--ease-spatial)] pointer-events-auto",
+        // enter：translate-x 0 + 淡入（--motion-panel 260ms，spatial spring）；
+        // exit：右侧轻移 + 淡出（--motion-exit-panel 190ms）；无 scale（M4 Stable Edge Exit）
         visible
-          ? "translate-x-0 opacity-100 !duration-[var(--motion-overlay)]"
+          ? "translate-x-0 opacity-100 !duration-[var(--motion-panel)]"
           : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
       ),
     };
@@ -91,10 +92,10 @@ export function resolveDrawerPresentation(
     overlayClassName: "fixed inset-x-0 bottom-0 top-[var(--titlebar-h)] flex justify-end overflow-hidden",
     panelClassName: cn(
       "h-full w-full bg-surface shadow-drawer border-l border-line flex flex-col overflow-hidden ux-drawer-panel",
-      // 右侧来源感：enter = --motion-overlay（220ms，12px 位移）+ emphasized；exit = --motion-exit-panel（160ms 更快）+ exit，
+      // 右侧来源感：enter = --motion-panel（260ms，12px 位移）+ spatial spring；exit = --motion-exit-panel（190ms 更快）+ exit，
       // 与 floating 同一生命周期语义；不像是从屏幕外飞入
       visible
-        ? "translate-x-0 opacity-100 !duration-[var(--motion-overlay)] !ease-[var(--ease-emphasized)]"
+        ? "translate-x-0 opacity-100 !duration-[var(--motion-panel)] !ease-[var(--ease-spatial)]"
         : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
     ),
   };

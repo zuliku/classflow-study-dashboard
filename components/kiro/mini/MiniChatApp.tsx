@@ -761,7 +761,7 @@ export function MiniChatApp() {
             role="menu"
             aria-label="最近对话"
             onKeyDown={handleMenuKeyDown}
-            className="absolute inset-x-2 top-12 z-30 max-h-[62%] overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-card animate-enter focus:outline-none"
+            className="ux-menu-stagger absolute inset-x-2 top-12 z-30 max-h-[62%] overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-card animate-enter focus:outline-none"
           >
             <div className="flex items-center justify-between px-2 py-1">
               <span className="text-[10px] font-bold text-satin-grey">最近对话</span>

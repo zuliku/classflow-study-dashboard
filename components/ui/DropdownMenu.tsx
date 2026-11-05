@@ -32,7 +32,7 @@ export function DropdownMenuPanel({ className, children, onKeyDown, ...props }: 
   return (
     <PopoverPanel
       role="menu"
-      className={cn("min-w-[190px] max-w-[300px] p-1 text-xs", className)}
+      className={cn("ux-menu-stagger min-w-[190px] max-w-[300px] p-1 text-xs", className)}
       onKeyDown={(e) => {
         onKeyDown?.(e);
         if (e.defaultPrevented) return;

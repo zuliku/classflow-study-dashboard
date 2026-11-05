@@ -19,7 +19,7 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   });
 }
 
-import { MOTION_MS, MOTION_EXIT_MS, EASE, EASE_V5, EASE_BEZIER, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
+import { MOTION_MS, MOTION_EXIT_MS, MOTION_ROLE, MOTION_STAGGER_MS, EASE, EASE_V5, EASE_BEZIER, KIRO_MOTION_MS, KIRO_MOTION_SIDECAR_MS, STAGGER_MS } from "@/lib/motion";
 import { usePresence } from "@/lib/usePresence";
 import { useAppStore } from "@/store/useAppStore";
 
@@ -148,11 +148,55 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
     expect(css).toMatch(/\.kiro-empty-title-intro\s*\{[^}]*var\(--ease-intro-text\)/s);
     expect(css).toMatch(/\.ux-page\s*\{[^}]*var\(--ease-page\)/s);
-    expect(css).toMatch(/\.ux-modal-panel\s*\{[^}]*var\(--ease-overlay\)/s);
+    expect(css).toMatch(/\.ux-modal-panel\s*\{[^}]*var\(--ease-spatial\)/s);
     expect(read("components/ui/SegmentedControl.tsx")).toContain("ease-[var(--ease-selection)]");
     expect(read("components/kiro/KiroModeCapsule.tsx")).toContain("kiro-mode-capsule-indicator");
     expect(read("components/kiro/navigation/KiroNavigator.tsx")).toContain("ease-[var(--ease-spatial)]");
     expect(read("components/kiro/sidecar/KiroSidecarShell.tsx")).toContain("ease-[var(--ease-spatial)]");
+  });
+
+  it("Motion V6：时长阶梯、spatial 大表面、锚定浮层、按压回弹与菜单编排", () => {
+    const read = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+    // 语义角色表：overlay/drawer 走 spring-soft；popover/toast 保持 out-strong；page 走 out-soft
+    expect(MOTION_ROLE.overlay.ease).toBe(EASE.springSoft);
+    expect(MOTION_ROLE.drawer.ease).toBe(EASE.springSoft);
+    expect(MOTION_ROLE.popover.ease).toBe(EASE.standard);
+    expect(MOTION_ROLE.toast.ease).toBe(EASE.standard);
+    expect(MOTION_ROLE.page.ease).toBe(EASE.outSoft);
+    // 时长阶梯：fast < base < overlay < panel；page/data 位于 base 与 overlay 之间
+    expect(MOTION_MS.fast).toBeLessThan(MOTION_MS.base);
+    expect(MOTION_MS.base).toBeLessThan(MOTION_MS.overlay);
+    expect(MOTION_MS.overlay).toBeLessThan(MOTION_MS.panel);
+
+    // 大表面 spatial spring
+    expect(read("components/ui/Dialog.tsx")).toMatch(/ease-\[var\(--ease-spatial\)\]/);
+    expect(read("components/ui/Drawer.tsx")).toMatch(/ease-\[var\(--ease-spatial\)\]/);
+    expect(css).toMatch(/\.ux-drawer-panel\s*\{[^}]*var\(--ease-spatial\)/s);
+    expect(css).toMatch(/\.ux-modal-panel\s*\{[^}]*var\(--ease-spatial\)/s);
+
+    // 浮层从触发点生长：default profile 也有 scale + placement origin
+    const popover = read("components/ui/Popover.tsx");
+    expect(popover).toContain("PLACEMENT_ORIGIN[placement]");
+    expect(popover).toMatch(/opacity-0 scale-\[0\.985\]/);
+    expect(popover).toMatch(/visible\s*\n?\s*\? "opacity-100 translate-x-0 translate-y-0 scale-100/s);
+
+    // 按压：0.97 + spring-snappy 回弹；Button 使用统一 transition
+    expect(css).toMatch(/\.ux-press:active:not\(:disabled\)\s*\{[^}]*scale\(0\.97\)/s);
+    expect(css).toMatch(/\.ux-press-transition\s*\{[^}]*--ease-spring-snappy/s);
+    expect(read("components/ui/Button.tsx")).toContain("ux-press-transition");
+
+    // 菜单编排：18ms step；reduced-motion 直接静态
+    expect(MOTION_STAGGER_MS.menuItem).toBe(18);
+    expect(css).toMatch(/--motion-stagger-step:\s*18ms/);
+    expect(css).toMatch(/\.ux-menu-stagger \[role="menuitem"\]/);
+    expect(css).toMatch(/html\[data-motion-effective="reduced"\] \.ux-menu-stagger/);
+    expect(read("components/ui/DropdownMenu.tsx")).toContain("ux-menu-stagger");
+    expect(read("components/kiro/mini/MiniChatApp.tsx")).toContain("ux-menu-stagger");
+
+    // 页面方向与 Toast 位移统一为 6px
+    expect(css).toMatch(/@keyframes ux-page-in-forward\s*\{[^}]*translateX\(6px\)/s);
+    expect(css).toMatch(/@keyframes ux-page-in-backward\s*\{[^}]*translateX\(-6px\)/s);
+    expect(css).toMatch(/@keyframes ux-toast-in\s*\{[^}]*translateY\(6px\)/s);
   });
 
   it("Motion V3：退出分支统一加速离场（--ease-exit），进入保持 overlay", () => {
@@ -167,7 +211,7 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     ]) {
       expect(read(f)).toMatch(/ease-\[var\(--ease-exit\)\]/);
     }
-    expect(read("components/ui/Dialog.tsx")).toMatch(/ease-\[var\(--ease-overlay\)\]/);
+    expect(read("components/ui/Dialog.tsx")).toMatch(/ease-\[var\(--ease-spatial\)\]/);
   });
 
   it("Motion V3 P1：staged/skeleton 工具 + reduced 守卫", () => {
@@ -382,7 +426,7 @@ describe("Motion Contract：CSS token ↔ JS 常量一致", () => {
     const drawer = read("components/ui/Drawer.tsx");
     expect(drawer).toContain("MOTION_EXIT_MS.panel");
     expect(drawer).toContain("!duration-[var(--motion-exit-panel)]");
-    expect(drawer).toMatch(/!duration-\[var\(--motion-overlay\)\]/g);
+    expect(drawer).toMatch(/!duration-\[var\(--motion-panel\)\]/);
     // PopoverPanel：default profile 走 fast 档
     const popover = read("components/ui/Popover.tsx");
     expect(popover).toContain("MOTION_EXIT_MS.fast");

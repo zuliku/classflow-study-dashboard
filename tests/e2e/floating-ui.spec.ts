@@ -108,10 +108,11 @@ base("Floating Detail：Interval hover → Popover；极短 Interval 为 16px ca
   await expect(floating.getByText("考试", { exact: true })).toBeVisible();
   await expect(floating.getByText(/14:00–16:00/)).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(page.getByTestId("floating-timeline-detail")).toHaveCount(0);
 
   // 极短 Interval（23:50-23:59）：真实宽度 < 16px → 16px capsule
   await page.getByRole("button", { name: /深夜极短活动/ }).hover();
-  const floating2 = page.getByTestId("floating-timeline-detail");
+  const floating2 = page.getByRole("dialog", { name: "深夜极短活动" });
   await expect(floating2).toBeVisible({ timeout: 3000 });
   // Tooltip 仍显示真实时间（不因 capsule 变长）
   await expect(floating2.getByText(/23:50–23:59/)).toBeVisible();
