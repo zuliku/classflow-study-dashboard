@@ -264,6 +264,26 @@ export function TimetableGrid({
     setInteraction(it);
   };
   const gridBodyRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 窄容器卡片降级：按「每天列宽」而不是 viewport 判断。
+   * Overview（density=compact）始终是摘要卡（~81–97px/天）；
+   * Timeline 在 <132px/天 时同样降级，1440 宽屏保留完整 teacher/location。
+   */
+  const [compactCards, setCompactCards] = useState(isCompactDensity);
+  useEffect(() => {
+    const el = gridBodyRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const dayWidth = el.clientWidth / Math.max(1, dayCount);
+      // Overview（density=compact）始终走摘要卡；Timeline 独立判定：
+      // <132px/天（1024–1280）进入摘要卡，1440（~154px）保留 teacher + location。
+      setCompactCards(isCompactDensity || dayWidth < 132);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dayCount, isCompactDensity]);
   const pendingRef = useRef<{
     origin: CourseSchedule;
     startX: number;
@@ -457,6 +477,9 @@ export function TimetableGrid({
   };
 
   const handleResizePointerMove = (e: React.PointerEvent, sched: CourseSchedule) => {
+    // 必须阻断冒泡：handle 在课程卡内部，卡片的 onPointerMove 会把 pending frame
+    // 覆盖成 "move"，导致 resize candidate 永远停在 pointerdown 的那一帧。
+    e.stopPropagation();
     schedulePointerFrame(e.clientX, e.clientY, sched, "resize");
   };
 
@@ -637,15 +660,17 @@ export function TimetableGrid({
             : undefined
         }
       >
-        {/* 内容最小宽度：窄容器内课表整体横向滚动，避免把课程信息压到不可读 */}
-        <div className="min-w-[640px] flex flex-col flex-1 min-h-0">
+        {/* 内容最小宽度：窄容器内课表整体横向滚动，避免把课程信息压到不可读；
+            560 允许 1024 桌面总览 7 天全部可见（卡片走 compactCards 降级）；
+            <1024 的 web/tablet 保持 640，横向滚动时列宽仍有 ~91px。 */}
+        <div className="min-w-[640px] lg:min-w-[560px] flex flex-col flex-1 min-h-0">
         {/* Weekday Header Row（列数随 showWeekends 5/7 天动态；Timeline 由外层提供，避免重复） */}
         {showWeekdayHeader && (
         <div
           className="grid border-b border-line pb-2 text-center text-xs shrink-0"
           style={{ gridTemplateColumns: `${TIMETABLE_GUTTER_PX}px repeat(${dayCount}, minmax(0, 1fr))` }}
         >
-          <div className="text-sandrift font-medium py-0.5 text-[11px]">时间</div>
+          <div className="sticky left-0 z-[9] bg-surface text-sandrift font-medium py-0.5 text-[11px]">时间</div>
           {weekdays.map((wd) => (
             <div
               key={wd.dayOfWeek}
@@ -667,15 +692,21 @@ export function TimetableGrid({
         <div
           className={cn(
             "relative flex-1 grid mt-1",
-            // Timeline embedded / Overview Hero fill：高度由外层容器分配（一屏完整展示）
-            (variant === "embedded" || fillAvailableHeight) ? "min-h-0" : "min-h-[520px]",
+            // Timeline embedded：高度由外层分配；
+            // Overview Hero：md+ 由外层 flex 撑满首屏，mobile 保留 520px 可读高度
+            // （fillAvailableHeight 曾让 390px 下课表塌成 ~300px，08:00–21:00 不可读）。
+            variant === "embedded"
+              ? "min-h-0"
+              : fillAvailableHeight
+                ? "min-h-0 max-md:min-h-[520px]"
+                : "min-h-[520px]",
             // Overview compact：md+ 压缩时间轴（每小时 ~33-35px），完整保留 08:00-21:00
             isCompactDensity && !fillAvailableHeight && "md:min-h-[440px]"
           )}
           style={{ gridTemplateColumns: `${TIMETABLE_GUTTER_PX}px repeat(${dayCount}, minmax(0, 1fr))` }}
         >
           {/* Time Labels Column */}
-          <div className="flex flex-col justify-between text-[10px] text-satin-grey font-mono border-r border-line-soft pr-1.5 py-0.5 h-full">
+          <div className="sticky left-0 z-[9] bg-surface flex flex-col justify-between text-[10px] text-satin-grey font-mono border-r border-line-soft pr-1.5 py-0.5 h-full">
             {TIME_SLOTS.map((time, idx) => (
               <div
                 key={time}
@@ -774,6 +805,17 @@ export function TimetableGrid({
                       ((startM - dayStartMinutes) / totalMinutes) * 100;
                     const heightPct =
                       ((endM - startM) / totalMinutes) * 100;
+                    // 窄列：只保留课程名；Overview（density=compact）列宽仅 81–97px，
+                    // 再塞 teacher/location 会碎成「王 教…」这类不可读片段，统一降为 sr-only + 卡片 title。
+                    const hideMeta = compactCards && (isCompactDensity || heightPct < 9);
+                    const cardTitle = [
+                      course.name,
+                      course.teacher,
+                      sched.location,
+                      sched.source === "extra" ? "补课" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
 
                     const isOrigin = interaction.type !== "idle" && interaction.scheduleId === sched.id;
 
@@ -795,6 +837,8 @@ export function TimetableGrid({
                       >
                         <div
                           data-testid="schedule-card"
+                          data-compact={compactCards || undefined}
+                          title={compactCards ? cardTitle : undefined}
                           onClick={() => {
                             // 拖动结束后浏览器仍会在 capture 目标上派发 click，需吞掉
                             if (wasDraggedRef.current) {
@@ -809,11 +853,12 @@ export function TimetableGrid({
                           onPointerUp={(e) => handleCardPointerUp(e, sched)}
                           onPointerCancel={cancelInteraction}
                           className={cn(
-                            "absolute inset-0 rounded-xl shadow-subtle border flex flex-col justify-between overflow-hidden group select-none",
+                            "absolute inset-0 rounded-xl shadow-subtle border flex flex-col overflow-hidden group select-none",
+                            compactCards ? "justify-center" : "justify-between",
                             // 只过渡实际会变化的属性（透明度/阴影/边框），避免无关属性建立 transition
                             "transition-[opacity,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
-                            // Overview compact：更紧凑的卡内边距（标题字号不变）
-                            isCompactDensity ? "p-1.5" : "p-1.5 sm:p-2",
+                            // 紧凑卡：更小的卡内边距，把宽度让给课程名
+                            compactCards ? "p-1" : isCompactDensity ? "p-1.5" : "p-1.5 sm:p-2",
                             hasConflict && "ring-2 ring-danger bg-danger-bg border-danger-border",
                             // 当前正在上课：克制外框高亮（优先于 hover/其他，但让位于冲突提示）
                             !hasConflict && nowCourseSchedule?.id === sched.id && "kiro-now-course ring-2",
@@ -835,38 +880,74 @@ export function TimetableGrid({
                               课表卡是信息密集的软件特性：课程名/教师/地点保留原生 title，
                               用于 hover 查看被 truncate 的完整文本（产品例外，见 nativeTitleContract）。 */}
                           <div className="flex items-start justify-between">
-                            <h4 title={course.name} className="font-extrabold text-[11px] sm:text-xs tracking-tight leading-tight text-charcoal truncate min-w-0 flex-1">
+                            <h4
+                              title={course.name}
+                              className={cn(
+                                "font-extrabold tracking-tight leading-tight text-charcoal min-w-0 flex-1",
+                                compactCards
+                                  ? "text-[10.5px] leading-[1.25] line-clamp-2"
+                                  : "text-[11px] sm:text-xs truncate"
+                              )}
+                            >
                               {course.name}
                             </h4>
                             {hasConflict && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const foundConf = conflicts.find(
-                                    (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
-                                  );
-                                  if (foundConf) {
-                                    setSelectedConflict(foundConf);
-                                    setConflictModalOpen(true);
-                                  }
-                                }}
-                                onPointerDown={(e) => e.stopPropagation()}
-                                className="text-[10px] bg-danger text-white px-1.5 py-0.5 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
-                              >
-                                冲突
-                              </button>
+                              compactCards ? (
+                                <span
+                                  role="img"
+                                  className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-danger ml-1"
+                                  aria-label="课程时间冲突"
+                                  title="课程时间冲突"
+                                />
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const foundConf = conflicts.find(
+                                      (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
+                                    );
+                                    if (foundConf) {
+                                      setSelectedConflict(foundConf);
+                                      setConflictModalOpen(true);
+                                    }
+                                  }}
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  className="text-[10px] bg-danger text-white px-1.5 py-0.5 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
+                                >
+                                  冲突
+                                </button>
+                              )
                             )}
                           </div>
 
-                          {/* 2. Teacher Info */}
-                          <div className="flex items-center text-[10px] sm:text-[11px] opacity-85 space-x-1 font-medium leading-none">
-                            <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                            <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
-                          </div>
+                          {/* 2. Teacher / Location Info
+                              compact：只保留教师一行（1024/1280 时间表列宽 117–131px，
+                              合并 teacher · location 会把两者都压成 1–2 字 + 省略号）；
+                              地点进卡片 title / sr-only。非 compact 保持 teacher + location 两行。 */}
+                          {compactCards ? (
+                            <div
+                              className={cn(
+                                "items-center gap-1 text-[9px] sm:text-[10px] opacity-85 font-medium leading-none min-w-0",
+                                hideMeta ? "sr-only" : "flex"
+                              )}
+                            >
+                              {sched.source === "extra" && (
+                                <span className="shrink-0 font-extrabold opacity-80" aria-hidden="true">+</span>
+                              )}
+                              <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                              <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
+                              {sched.location && <span className="sr-only">，地点 {sched.location}</span>}
+                            </div>
+                          ) : (
+                            <div className="flex items-center text-[10px] sm:text-[11px] opacity-85 space-x-1 font-medium leading-none">
+                              <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                              <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Bottom Row: Extra Marker + Location Badge（+ 必须是行内最左元素；
-                            仅 source === "extra" 的补课 occurrence 显示；moved/base 不显示） */}
+                        {/* Bottom Row: Extra Marker + Location Badge（compact 不渲染地点行，地点进卡片 title / sr-only） */}
+                        {!compactCards && (
                         <div className="flex items-center text-[10px] sm:text-[11px] opacity-90 pt-0.5 border-t border-black/5 font-medium leading-none mt-0.5">
                           {sched.source === "extra" && (
                             <span
@@ -879,6 +960,7 @@ export function TimetableGrid({
                           <MapPin className="w-2.5 h-2.5 mr-1 shrink-0 opacity-75" />
                           <span title={sched.location} className="truncate min-w-0">{sched.location}</span>
                         </div>
+                        )}
 
                         {/* Resize Handle：仅工作区显示（moved/extra 一次性 occurrence 不显示），hover/focus/拖拽中才明显 */}
                         {editingEnabled && (!(sched as { source?: string }).source || (sched as { source?: string }).source === "base") && (

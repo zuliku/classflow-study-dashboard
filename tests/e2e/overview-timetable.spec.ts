@@ -92,12 +92,73 @@ test("Full Timetable Workspace / Modal 不受 compact 影响", async ({ page }) 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: "时间表" }).first().click();
-  await expect(page.getByRole("heading", { name: /第 \d+ 周/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "时间表" })).toBeVisible();
 
-  // workspace 保持舒展：body min-h 520（未加 md:min-h-[440px]）
+  // workspace 随可用高度伸展：不应被 Overview 的 md:min-h-[440px] 压缩；
+  // 1440×900 下实际约 492px（旧断言的 520px 来自更早的固定高度实现）。
   const body = await page
     .getByTestId("timetable-card")
     .locator("div.relative.flex-1.grid")
     .evaluate((el) => el.getBoundingClientRect().height);
-  expect(body).toBeGreaterThanOrEqual(520);
+  expect(body).toBeGreaterThanOrEqual(440);
+});
+
+test("1280/1024 总览：7 天全部可见，课程卡降级为摘要态且无横向滚动", async ({ page }) => {
+  for (const width of [1280, 1024]) {
+    await openOverview(page, width, 900);
+
+    const metrics = await page.getByTestId("timetable-card").evaluate((el) => {
+      const scroller = el.querySelector("[class*='overflow-x-auto']") as HTMLElement | null;
+      const days = Array.from(el.querySelectorAll<HTMLElement>("[data-timetable-day]"));
+      const scrollerRect = scroller!.getBoundingClientRect();
+      return {
+        dayCount: days.length,
+        clientWidth: scroller!.clientWidth,
+        scrollWidth: scroller!.scrollWidth,
+        firstDayLeft: days[0].getBoundingClientRect().left,
+        lastDayRight: days[days.length - 1].getBoundingClientRect().right,
+        scrollerLeft: scrollerRect.left,
+        scrollerRight: scrollerRect.right,
+      };
+    });
+
+    // 7 天全部在容器内可见（不再出现“有滚动条但列仍被压扁”的组合）
+    expect(metrics.dayCount).toBe(7);
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+    expect(metrics.firstDayLeft).toBeGreaterThanOrEqual(metrics.scrollerLeft - 1);
+    expect(metrics.lastDayRight).toBeLessThanOrEqual(metrics.scrollerRight + 1);
+
+    const cards = page.getByTestId("schedule-card");
+    const count = await cards.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      await expect(cards.nth(i)).toHaveAttribute("data-compact", "true");
+      // 摘要卡不展示教师/地点，完整信息通过原生 title 兜底
+      expect(await cards.nth(i).getAttribute("title")).toMatch(/·/);
+    }
+  }
+});
+
+test("1280/1024 时间表：compact 卡优先显示完整课程名与教师名", async ({ page }) => {
+  for (const width of [1280, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "时间表" }).first().click();
+    await expect(page.getByTestId("timetable-card")).toBeVisible();
+    await page.waitForTimeout(400);
+
+    const cards = page.getByTestId("schedule-card");
+    const count = await cards.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      await expect(cards.nth(i)).toHaveAttribute("data-compact", "true");
+    }
+
+    // 教师名不再被地点挤成「王…」；地点保留在 title / sr-only
+    await expect(
+      page.getByTestId("timetable-card").getByText("王教授", { exact: true }).first()
+    ).toBeVisible();
+    const withLocation = cards.filter({ hasText: "王教授" }).first();
+    expect(await withLocation.getAttribute("title")).toContain("教二 201");
+  }
 });

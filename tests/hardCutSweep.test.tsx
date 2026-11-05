@@ -330,7 +330,10 @@ describe("硬切深筛源码契约", () => {
     const peek = read("components/assignment/AssignmentPeekPanel.tsx");
     expect(peek).toContain("renderedAssignment");
     const coverage = read("components/analytics/AnalyticsCoverageNotice.tsx");
-    expect(coverage).toContain("shownSummary");
+    // V3.1：coverage 改为从 facts 同步派生 summary（不再是 shownSummary 快照）；
+    // 保留“summary 缺失时安全返回 null”的退出契约。
+    expect(coverage).toContain("buildCoverageSummary(facts)");
+    expect(coverage).toContain("if (!summary) return null");
     const grid = read("components/dashboard/TimetableGrid.tsx");
     expect(grid).toContain("shownFirstConflict");
   });

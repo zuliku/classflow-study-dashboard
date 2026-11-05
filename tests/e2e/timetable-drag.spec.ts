@@ -153,7 +153,8 @@ test("Mobile <768：点击课程卡仍进入 Course Drawer，不触发拖动", a
     .first();
   await card.click();
   // Course Drawer 打开（无拖动发生，未出现调整提示）
-  await expect(page.getByRole("button", { name: "关闭" })).toBeVisible();
+  const panel = page.getByTestId("course-detail-panel");
+  await expect(panel.getByRole("button", { name: "关闭" })).toBeVisible();
   await expect(page.getByText("课程时间已调整")).toHaveCount(0);
 });
 

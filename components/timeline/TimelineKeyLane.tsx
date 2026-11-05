@@ -136,7 +136,7 @@ export function TimelineKeyLane({
         className="grid relative"
         style={{ gridTemplateColumns: `56px repeat(${weekDates.length}, minmax(0, 1fr))` }}
       >
-        <div className="relative self-stretch pr-1.5">
+        <div className="sticky left-0 z-[9] bg-surface self-stretch pr-1.5">
           <div
             className="absolute left-0 flex items-center gap-1"
             style={{ top: baselineTop, transform: "translateY(-50%)" }}

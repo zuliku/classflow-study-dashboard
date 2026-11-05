@@ -77,8 +77,9 @@ test("schedule manipulation：关闭 → 拖动不发生、点击正常；打开
   await expect(page.getByText("课程时间已调整")).toHaveCount(0);
   // 点击课程仍打开 Drawer
   await page.locator('[data-testid="schedule-card"]').filter({ hasText: "高等数学" }).first().click();
-  await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
-  await page.getByRole("button", { name: "关闭" }).first().click();
+  const coursePanel = page.getByTestId("course-detail-panel");
+  await expect(coursePanel.getByRole("button", { name: "关闭" })).toBeVisible();
+  await coursePanel.getByRole("button", { name: "关闭" }).click();
 
   // 打开：拖动恢复
   await openSettings(page);
@@ -124,8 +125,9 @@ test("DDL drag：关闭 → 拖动不发生、点击正常；打开 → 拖动�
   await expect(page.getByTestId("ddl-move-feedback")).toHaveCount(0);
   // 点击仍打开 Drawer
   await cell.click();
-  await expect(page.getByRole("button", { name: "关闭" }).first()).toBeVisible();
-  await page.getByRole("button", { name: "关闭" }).first().click();
+  const assignmentPanel = page.getByTestId("assignment-detail-panel");
+  await expect(assignmentPanel.getByRole("button", { name: "关闭" })).toBeVisible();
+  await assignmentPanel.getByRole("button", { name: "关闭" }).click();
 
   // 打开：拖动恢复
   await openSettings(page);
@@ -203,7 +205,7 @@ test("motionPreference：reduced → effective motion 生效且导航功能正�
   // 功能正常：切换 Tab + 命令中心
   await gotoOverview(page);
   await page.getByRole("button", { name: "课程资料" }).first().click();
-  await expect(page.getByRole("heading", { name: "课程资料" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "课程资料", exact: true })).toBeVisible();
   await page.keyboard.press("Control+k");
   await expect(page.getByTestId("command-center")).toBeVisible();
   await page.keyboard.press("Escape");

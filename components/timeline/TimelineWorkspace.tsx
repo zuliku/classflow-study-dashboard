@@ -1351,13 +1351,13 @@ export function TimelineWorkspace() {
         }
       >      {/* ---------- 主体：Weekday Header（唯一一份）+ Key Timeline + Course Grid ---------- */}
       <div className="flex-1 min-h-0 flex flex-col overflow-x-auto">
-        <div className="min-w-[640px] w-full flex flex-col flex-1 min-h-0 px-3 pt-2.5">
+        <div className="min-w-[640px] lg:min-w-[560px] w-full flex flex-col flex-1 min-h-0 px-3 pt-2.5">
           {/* Weekday Header（与 Key Lane / Grid 共用 56px 时间 gutter） */}
           <div
             className="grid border-b border-line-soft pb-1 text-center text-xs shrink-0"
             style={{ gridTemplateColumns: `56px repeat(${dayCount}, minmax(0, 1fr))` }}
           >
-            <div className="text-sandrift font-medium py-0.5 text-[11px]" />
+            <div className="sticky left-0 z-[9] bg-surface text-sandrift font-medium py-0.5 text-[11px]" />
             {weekDates.slice(0, dayCount).map((date, idx) => {
               const label = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][idx];
               return (
