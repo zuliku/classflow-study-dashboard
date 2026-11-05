@@ -15,6 +15,7 @@ import {
   MINI_DEFAULT_SUGGESTIONS,
   MINI_MAX_FILES,
   MINI_MAX_FILE_BYTES,
+  MINI_MODE_ANIMATION_MS,
   bytesToBase64,
   type MiniChatConversationSummary,
   type MiniChatSnapshot,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/ai/miniChat/protocol";
 import { MiniChatHeader } from "@/components/kiro/mini/MiniChatHeader";
 import { MiniChatCapsule } from "@/components/kiro/mini/MiniChatCapsule";
+import { MiniChatMorph } from "@/components/kiro/mini/MiniChatMorph";
 import { MiniChatStatusStrip } from "@/components/kiro/mini/MiniChatStatusStrip";
 import { MiniChatComposer } from "@/components/kiro/mini/MiniChatComposer";
 import { MiniMarkdown } from "@/components/kiro/mini/MiniMarkdown";
@@ -48,6 +50,8 @@ export function MiniChatApp() {
   const [mode, setModeState] = useState<MiniChatWindowMode>(
     initialCapsule ? "capsule" : "expanded"
   );
+  /** 非空 = 窗口正在形变；只渲染轻量 morph 层，避免 resize 期间重排聊天界面 */
+  const [transitionTo, setTransitionTo] = useState<MiniChatWindowMode | null>(null);
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [approvalBusy, setApprovalBusy] = useState(false);
@@ -118,8 +122,10 @@ export function MiniChatApp() {
       .getWindowState()
       .then((state) => {
         if (cancelled || !state) return;
-        setModeState(state.mode === "capsule" ? "capsule" : "expanded");
         setOnTop(state.onTop !== false);
+        // 用户已开始形态切换时尊重状态机，避免异步回包把动画中途打断。
+        if (modeTimerRef.current !== null) return;
+        setModeState(state.mode === "capsule" ? "capsule" : "expanded");
       })
       .catch(() => {
         void mini
@@ -321,35 +327,35 @@ export function MiniChatApp() {
 
   const setMode = useCallback(
     (next: MiniChatWindowMode) => {
+      if (next === mode || transitionTo !== null) return;
       if (modeTimerRef.current !== null) {
         window.clearTimeout(modeTimerRef.current);
         modeTimerRef.current = null;
       }
-      if (next === mode) return;
-      if (next === "expanded") {
-        setUnread(0);
-        setMenuOpen(false);
+      setMenuOpen(false);
+      if (next === "expanded") setUnread(0);
+      const mini = getClassFlowDesktopMiniBridge();
+      if (reducedMotion) {
+        setModeState(next);
+        setTransitionTo(null);
         try {
-          getClassFlowDesktopMiniBridge()?.setMode(next, reducedMotion);
+          mini?.setMode(next, true);
         } catch {}
-        if (reducedMotion) {
-          setModeState("expanded");
-        } else {
-          // 让胶囊随窗口一起放大，动画结束后再切完整布局，避免 72px 宽瞬间重排。
-          modeTimerRef.current = window.setTimeout(() => {
-            modeTimerRef.current = null;
-            setModeState("expanded");
-          }, 170);
-        }
         return;
       }
-      setModeState("capsule");
-      setMenuOpen(false);
+      // 先挂轻量 morph 层（与胶囊同一视觉），窗口 bounds 动画期间不再渲染
+      // 完整聊天界面；窗口到位后再挂目标形态。
+      setTransitionTo(next);
       try {
-        getClassFlowDesktopMiniBridge()?.setMode(next, reducedMotion);
+        mini?.setMode(next, false);
       } catch {}
+      modeTimerRef.current = window.setTimeout(() => {
+        modeTimerRef.current = null;
+        setModeState(next);
+        setTransitionTo(null);
+      }, MINI_MODE_ANIMATION_MS + 24);
     },
-    [mode, reducedMotion]
+    [mode, reducedMotion, transitionTo]
   );
 
   useEffect(
@@ -454,6 +460,10 @@ export function MiniChatApp() {
     );
   }
 
+  if (transitionTo !== null) {
+    return <MiniChatMorph target={transitionTo} />;
+  }
+
   if (mode === "capsule") {
     return (
       <MiniChatCapsule
@@ -468,7 +478,7 @@ export function MiniChatApp() {
 
   return (
     <div
-      className="relative flex h-screen flex-col overflow-hidden bg-surface text-charcoal"
+      className="relative flex h-screen animate-enter flex-col overflow-hidden bg-surface text-charcoal"
       data-testid="kiro-mini-app"
       onDragOver={(event) => {
         event.preventDefault();

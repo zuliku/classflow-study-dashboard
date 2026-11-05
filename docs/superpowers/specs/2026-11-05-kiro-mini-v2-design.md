@@ -15,10 +15,11 @@ Kiro Mini is a separate persistent `BrowserWindow` (`?mini=1`) that mirrors the 
 ## 2. Window model
 
 - Expanded: 340×560 default, 300×440 min, 560×900 max; frameless, resizable, always-on-top by default, skipTaskbar.
-- Capsule: 72×72, draggable, status dot + unread badge; center mark expands; top-right X hides.
+- Capsule: 72×72, draggable, single-layer surface: logo + one status dot (busy/waiting only) + optional unread pill; top-left hide control appears on hover. No nested card/button chrome.
 - Mode is persisted in `mini-chat-bounds.json`; expanded size is preserved separately.
-- Mode changes animate window bounds (~190ms, cubic ease-out); reduced motion switches instantly. Content crossfades / expands after the bounds animation.
-- Bounds are clamped to the current display work area; display removal / metric changes re-clamp.
+- Mode changes animate window bounds (180 ms, time-based cubic ease-out). While the window resizes, the renderer only mounts a lightweight morph layer (surface + centered logo), so the chat list is not re-laid out on every frame; the target layout mounts after the bounds settle.
+- Window constraints are loosened only for the animation; `resizable` / frame styles are not toggled mid-animation (avoids a Windows non-client flash).
+- Bounds are clamped to the current display work area on show, `ready-to-show`, display removal and metric changes.
 - `Ctrl/Cmd+Shift+K` toggles Mini.
 - Tray: show Mini / open ClassFlow / quit. Closing the main window closes Mini and quits.
 - While a turn is in flight, the main window's background throttling is disabled so streaming completes reliably even when the main window is minimized/hidden; it is restored when the turn settles.
@@ -72,7 +73,7 @@ Expanded layout:
 4. Composer: quick prompts (click sends immediately), attachment tray, paste image, auto-height textarea, send/stop.
 5. Conversation menu: recent conversations, new chat, open main.
 
-Capsule layout: 72×72 Kiro mark, busy pulse, unread count, drag area, expand/hide controls.
+Capsule layout: 72×72 single surface, centered Kiro mark, one status dot when busy/waiting, optional unread count, hover-revealed hide control; the rest of the surface is the native drag region.
 
 ## 7. Notifications / tray
 

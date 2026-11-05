@@ -95,6 +95,16 @@ describe("Main 侧（src/main/miniChat.ts + index.ts 接线）", () => {
     expect(src).toContain("MINI_CAPSULE_SIZE");
   });
 
+  it("形变动画：按真实时间插值 + 渲染端轻量 morph 层（resize 期间不重排聊天）", () => {
+    expect(src).toContain("MINI_MODE_ANIMATION_MS");
+    expect(src).toContain("Date.now() - startedAt");
+    const app = read("components/kiro/mini/MiniChatApp.tsx");
+    const morph = read("components/kiro/mini/MiniChatMorph.tsx");
+    expect(app).toContain("MiniChatMorph");
+    expect(app).toContain("transitionTo");
+    expect(morph).toContain("kiro-mini-morph");
+  });
+
   it("sender 校验 fail closed（id+URL 双门；send 必须来自 Mini 窗）", () => {
     expect(src).toContain("PERMISSION_DENIED");
     expect(src).toContain("isMiniWebContents(event.sender.id)");

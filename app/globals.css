@@ -1761,6 +1761,36 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
     -webkit-app-region: no-drag;
   }
 
+  /* Mini 展开/收起 morph：动画期间只有轻量表面 + Logo。
+     展开时 Logo 随窗口放大淡出，收起时快速淡入。 */
+  .mini-morph-logo-out {
+    animation: mini-morph-logo-out 180ms var(--ease-out-strong) both;
+  }
+  .mini-morph-logo-in {
+    animation: mini-morph-logo-in 120ms var(--ease-out-soft) both;
+  }
+  @keyframes mini-morph-logo-out {
+    0%,
+    55% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+  }
+  @keyframes mini-morph-logo-in {
+    from {
+      opacity: 0;
+      transform: scale(0.92);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
   /* Slash（/）菜单：指令弹出——从输入前缘（左下）弹出，
      位移 6px + scale .98，out-expo 收尾（浮层揭示，不是空间 morph；与 Mention 的中央柔附着区分） */
   .kiro-slash-enter {

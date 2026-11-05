@@ -9,7 +9,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MiniChatApp } from "@/components/kiro/mini/MiniChatApp";
-import type { MiniChatSnapshot } from "@/lib/ai/miniChat/protocol";
+import {
+  MINI_MODE_ANIMATION_MS,
+  type MiniChatSnapshot,
+} from "@/lib/ai/miniChat/protocol";
 
 const sendRemote = vi.fn(async () => ({ ok: true }));
 const stopRemote = vi.fn();
@@ -258,7 +261,7 @@ describe("MiniChatApp", () => {
     expect(buttons).toContain("主窗口处理");
   });
 
-  it("胶囊模式：渲染胶囊并在展开时请求 setMode", async () => {
+  it("胶囊模式：展开先进入轻量 morph 层，动画后再挂载聊天界面", async () => {
     windowMode = "capsule";
     await renderApp();
     expect(q('[data-testid="kiro-mini-capsule"]')).toBeTruthy();
@@ -266,7 +269,29 @@ describe("MiniChatApp", () => {
     await act(async () => {
       expand.click();
     });
-    expect(setMode).toHaveBeenCalledWith("expanded", expect.any(Boolean));
+    expect(setMode).toHaveBeenCalledWith("expanded", false);
+    // 窗口 resize 期间只有轻量 morph 层，不重排完整聊天界面
+    expect(q('[data-testid="kiro-mini-morph"]')).toBeTruthy();
+    expect(q('[data-testid="kiro-mini-app"]')).toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, MINI_MODE_ANIMATION_MS + 60));
+    });
+    expect(q('[data-testid="kiro-mini-app"]')).toBeTruthy();
+  });
+
+  it("收起：先进入 morph 层，动画结束后落到胶囊", async () => {
+    await renderApp();
+    const collapse = q('[aria-label="收起迷你窗"]') as HTMLButtonElement;
+    await act(async () => {
+      collapse.click();
+    });
+    expect(setMode).toHaveBeenCalledWith("capsule", false);
+    expect(q('[data-testid="kiro-mini-morph"]')).toBeTruthy();
+    expect(q('[data-testid="kiro-mini-app"]')).toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, MINI_MODE_ANIMATION_MS + 60));
+    });
+    expect(q('[data-testid="kiro-mini-capsule"]')).toBeTruthy();
   });
 });
 

@@ -25,6 +25,7 @@ import { join, dirname } from "node:path";
 import { promises as fs } from "node:fs";
 import {
   MINI_CAPSULE_SIZE,
+  MINI_MODE_ANIMATION_MS,
   type MiniChatSnapshot,
   type MiniChatWindowMode,
   type MiniChatWindowState,
@@ -36,7 +37,6 @@ const MINI_MIN_SIZE = { width: 300, height: 440 };
 const MINI_MAX_SIZE = { width: 560, height: 900 };
 const MINI_SEND_TIMEOUT_MS = 90_000;
 const BOUNDS_SAVE_DEBOUNCE_MS = 300;
-const MODE_ANIMATION_MS = 190;
 const MINI_SHORTCUT = "CommandOrControl+Shift+K";
 
 interface MiniBounds {
@@ -225,46 +225,66 @@ function animateBounds(
   instant: boolean
 ): void {
   stopBoundsAnimation();
+  const start = w.getBounds();
+  const end = {
+    x: Math.round(target.x ?? start.x),
+    y: Math.round(target.y ?? start.y),
+    width: Math.round(target.width),
+    height: Math.round(target.height),
+  };
+  if (
+    start.x === end.x &&
+    start.y === end.y &&
+    start.width === end.width &&
+    start.height === end.height
+  ) {
+    applyModeConstraints(w);
+    return;
+  }
   if (instant) {
     try {
-      w.setBounds(target);
+      w.setBounds(end);
     } catch {}
     applyModeConstraints(w);
     return;
   }
-  const start = w.getBounds();
-  const end = {
-    x: target.x ?? start.x,
-    y: target.y ?? start.y,
-    width: target.width,
-    height: target.height,
-  };
-  // 动画期间允许跨过 expanded min 尺寸；结束后再恢复约束。
+  // 动画期间只放宽尺寸约束：不切换 setResizable / frame——Windows 上会重建
+  // 非客户区并闪一下；结束后再恢复形态约束。
   try {
-    w.setResizable(false);
     w.setMinimumSize(1, 1);
     w.setMaximumSize(MINI_MAX_SIZE.width, MINI_MAX_SIZE.height);
   } catch {}
-  const steps = Math.max(1, Math.round(MODE_ANIMATION_MS / 16));
-  let step = 0;
+  // 按真实经过时间插值（而不是按帧数）：主进程偶发掉帧时动画仍按固定
+  // 时长走完，不会出现忽快忽慢的“卡一下”。
+  const startedAt = Date.now();
+  let last = { ...start };
   boundsAnimationTimer = setInterval(() => {
     if (!w || w.isDestroyed()) {
       stopBoundsAnimation();
       return;
     }
-    step += 1;
-    const t = Math.min(1, step / steps);
+    const t = Math.min(1, (Date.now() - startedAt) / MINI_MODE_ANIMATION_MS);
     const eased = 1 - Math.pow(1 - t, 3);
-    try {
-      w.setBounds({
-        x: Math.round(start.x + (end.x - start.x) * eased),
-        y: Math.round(start.y + (end.y - start.y) * eased),
-        width: Math.round(start.width + (end.width - start.width) * eased),
-        height: Math.round(start.height + (end.height - start.height) * eased),
-      });
-    } catch {
-      stopBoundsAnimation();
-      return;
+    const next = {
+      x: Math.round(start.x + (end.x - start.x) * eased),
+      y: Math.round(start.y + (end.y - start.y) * eased),
+      width: Math.round(start.width + (end.width - start.width) * eased),
+      height: Math.round(start.height + (end.height - start.height) * eased),
+    };
+    // 同一像素不重复提交，减少无意义的重排。
+    if (
+      next.x !== last.x ||
+      next.y !== last.y ||
+      next.width !== last.width ||
+      next.height !== last.height
+    ) {
+      try {
+        w.setBounds(next);
+        last = next;
+      } catch {
+        stopBoundsAnimation();
+        return;
+      }
     }
     if (t >= 1) {
       stopBoundsAnimation();
@@ -326,7 +346,7 @@ async function ensureMiniWindow(opts: {
     minHeight: MINI_CAPSULE_SIZE,
     ...(initial.x !== undefined && initial.y !== undefined ? { x: initial.x, y: initial.y } : {}),
     show: false,
-    backgroundColor: "#F7F5F5",
+    backgroundColor: "#F4F2EF",
     autoHideMenuBar: true,
     title: "Kiro Mini",
     // 无边框微型框：拖动走 renderer `-webkit-app-region: drag`，缩放走原生 thickFrame

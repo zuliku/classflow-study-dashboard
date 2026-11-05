@@ -129,6 +129,8 @@ export type MiniRemoteSendResult =
 /** Mini 窗口形态（主进程 / 渲染端共用） */
 export type MiniChatWindowMode = "expanded" | "capsule";
 export const MINI_CAPSULE_SIZE = 72;
+/** 展开/收起窗口 bounds 动画时长（Main 窗口动画与渲染端 morph 收尾共用） */
+export const MINI_MODE_ANIMATION_MS = 180;
 export interface MiniChatWindowState {
   mode: MiniChatWindowMode;
   onTop: boolean;
