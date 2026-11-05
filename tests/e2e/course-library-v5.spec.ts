@@ -240,6 +240,24 @@ base("V5.1：completed-only 课程 → 待处理 0 + 全部 2 项 → Popover �
   await expect(c1.getByText("全部 3 项", { exact: true })).toBeVisible();
 });
 
+base("1024×900：两列紧凑排布（小屏不再单卡满宽）", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openLibrary(page, 1024, 900);
+
+  const c1 = page.getByTestId("course-library-card-c1");
+  const c2 = page.getByTestId("course-library-card-c2");
+  const box1 = (await c1.boundingBox())!;
+  const box2 = (await c2.boundingBox())!;
+
+  // 同一行左右排布，而不是 1024 下仍单列满宽
+  expect(Math.abs(box1.y - box2.y)).toBeLessThanOrEqual(2);
+  expect(box2.x).toBeGreaterThan(box1.x + box1.width - 1);
+  // 内容区约 906px：两列后每张 ~445px（不再是 ~906px 的单卡）
+  expect(box1.width).toBeGreaterThan(400);
+  expect(box1.width).toBeLessThan(520);
+});
+
 base("390×844：无横向 overflow；header/上传/待处理/资料可见；无 footer", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));

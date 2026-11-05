@@ -183,7 +183,7 @@ export function CoursesWorkspace() {
             }
           />
         ) : (
-          <div className="ux-settle grid grid-cols-1 gap-4 xl:grid-cols-2 items-stretch">
+          <div className="ux-settle grid grid-cols-1 gap-4 lg:grid-cols-2 items-stretch">
             {retainedCourses.map(({ item: course, exiting }) => {
               const next = inTeachingWeek
                 ? deriveNextCourseSession(
