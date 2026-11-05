@@ -275,6 +275,7 @@ export const KiroComposer = React.memo(function KiroComposer({
   const scannedBlocked = needsScannedVision && !visionEnabled;
   // Task 14：Kiro Search（Workspace / Sidecar 共用同一 store，开关共享）
   const webSearchEnabled = useKiroPreferencesStore((s) => s.webSearchEnabled);
+  const sendKeyBehavior = useKiroPreferencesStore((s) => s.sendKeyBehavior);
   // @ mention 选项源（与 KiroContextListView 同一 Store 切片；实体变更低频，重渲染可接受）
   const mentionCourses = useAppStore((s) => s.courses);
   const mentionAssignments = useAppStore((s) => s.assignments);
@@ -577,6 +578,9 @@ export const KiroComposer = React.memo(function KiroComposer({
       }
     }
     if (e.key === "Enter" && !e.shiftKey) {
+      // 发送键位：默认 Enter 发送；Ctrl/Cmd+Enter 模式下普通 Enter 保留换行。
+      const isModEnter = e.ctrlKey || e.metaKey;
+      if (sendKeyBehavior === "ctrl-enter" && !isModEnter) return;
       e.preventDefault();
       submit();
     }

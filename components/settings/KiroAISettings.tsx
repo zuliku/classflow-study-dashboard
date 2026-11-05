@@ -104,6 +104,9 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
   // 2026-09：模型选择器范围（默认精选；打开显示全部已验证模型）
   const showAllModels = useKiroPreferencesStore((s) => s.showAllModels);
   const setShowAllModels = useKiroPreferencesStore((s) => s.setShowAllModels);
+  const sendKeyBehavior = useKiroPreferencesStore((s) => s.sendKeyBehavior);
+  const setSendKeyBehavior = useKiroPreferencesStore((s) => s.setSendKeyBehavior);
+  const resetSidecarGeometry = useKiroPreferencesStore((s) => s.resetSidecarGeometry);
   const resetKiroSettingsPreference = useKiroPreferencesStore((s) => s.resetKiroSettingsPreference);
 
   // V5A9：仅 Settings-facing Kiro preferences 参与 modified/reset；session key / Sidecar / permissions 排除。
@@ -116,6 +119,7 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
     webPdfVisionEnabled,
     webPdfVisionModel,
     showAllModels,
+    sendKeyBehavior,
   };
   const kiroSettingsModified = new Set(
     getModifiedKiroSettingsPreferenceKeys(kiroSettingsPreferences)
@@ -377,6 +381,15 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
           >
             <SettingsToggle checked={enabled} onChange={setEnabled} label="启用 Kiro" />
           </SettingsRow>
+          <SettingsRow
+            settingId="kiro-reset-panel"
+            title="Kiro 浮动面板"
+            description="重置浮动面板的位置与大小，恢复到默认布局。"
+          >
+            <SettingsButton variant="secondary" onClick={resetSidecarGeometry}>
+              重置面板
+            </SettingsButton>
+          </SettingsRow>
         </SettingsGroup>
 
         {/* ---- AI 服务：provider / credential / connection（让 Kiro 工作的基础配置，不进高级设置） ---- */}
@@ -492,52 +505,54 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
             title="API Key"
             description="仅本次会话有效。"
           >
-            <div className="relative w-full">
-              <SettingsInput
-                type={showKey ? "text" : "password"}
-                value={apiKeyInput}
-                onChange={handleApiKeyChange}
-                placeholder="oc_sk_..."
-                ariaLabel="API Key"
-                autoComplete="off"
-                spellCheck={false}
-                mono
-                className="pr-9"
-              />
-              <button
-                onClick={() => setShowKey((v) => !v)}
-                aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+            <div className="flex w-full min-w-0 flex-col gap-2">
+              <div className="relative w-full">
+                <SettingsInput
+                  type={showKey ? "text" : "password"}
+                  value={apiKeyInput}
+                  onChange={handleApiKeyChange}
+                  placeholder="oc_sk_..."
+                  ariaLabel="API Key"
+                  autoComplete="off"
+                  spellCheck={false}
+                  mono
+                  className="pr-9"
+                />
+                <button
+                  onClick={() => setShowKey((v) => !v)}
+                  aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-sandrift hover:text-charcoal hover:bg-alabaster transition-colors"
+                >
+                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {/* 连接测试与凭据同属一件事：直接放在 API Key 行内 */}
+              <div
+                data-setting-id="ai-connection-status"
+                className="flex flex-wrap items-center justify-end gap-2.5"
               >
-                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </SettingsRow>
-
-          {/* 连接状态 / 测试连接：只发送极小测试请求，不发送任何 ClassFlow 数据 */}
-          <SettingsRow settingId="ai-connection-status" title="连接状态">
-            <div className="flex flex-wrap items-center justify-end gap-2.5">
-              <SettingsButton
-                variant="accent"
-                onClick={runTest}
-                disabled={test.status === "testing" || !enabled}
-              >
-                {test.status === "testing" ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <PlugZap className="w-3.5 h-3.5" />
+                <SettingsButton
+                  variant="accent"
+                  onClick={runTest}
+                  disabled={test.status === "testing" || !enabled}
+                >
+                  {test.status === "testing" ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <PlugZap className="w-3.5 h-3.5" />
+                  )}
+                  测试连接
+                </SettingsButton>
+                {test.status === "success" && (
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
+                    <Check className="w-3.5 h-3.5" />
+                    连接成功
+                  </span>
                 )}
-                测试连接
-              </SettingsButton>
-              {test.status === "success" && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
-                  <Check className="w-3.5 h-3.5" />
-                  连接成功
-                </span>
-              )}
-              {test.status === "error" && (
-                <span className="text-[11px] font-semibold text-danger">{test.message}</span>
-              )}
+                {test.status === "error" && (
+                  <span className="text-[11px] font-semibold text-danger">{test.message}</span>
+                )}
+              </div>
             </div>
           </SettingsRow>
         </SettingsGroup>
@@ -585,19 +600,39 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
 
           <SettingsRow
             settingId="kiro-output-text-size"
-            title="输出字号"
+            title="Kiro 回复字号"
+            description="只影响回复内容，不改变界面字号。"
             modified={kiroSettingsModified.has("outputTextSize")}
             onReset={() => resetKiroSettingsPreference("outputTextSize")}
-            resetAriaLabel="将输出字号恢复默认"
+            resetAriaLabel="将 Kiro 回复字号恢复默认"
           >
             <SettingsSegmentedControl<KiroOutputTextSize>
               value={outputTextSize}
               onChange={setOutputTextSize}
-              ariaLabel="Kiro 输出字号"
+              ariaLabel="Kiro 回复字号"
               options={[
                 { value: "small", label: "小" },
                 { value: "standard", label: "标准" },
                 { value: "large", label: "大" },
+              ]}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="kiro-send-shortcut"
+            title="发送方式"
+            description="Shift+Enter 始终换行。"
+            modified={kiroSettingsModified.has("sendKeyBehavior")}
+            onReset={() => resetKiroSettingsPreference("sendKeyBehavior")}
+            resetAriaLabel="将发送方式恢复默认"
+          >
+            <SettingsSegmentedControl
+              value={sendKeyBehavior}
+              onChange={setSendKeyBehavior}
+              ariaLabel="发送方式"
+              options={[
+                { value: "enter", label: "Enter 发送" },
+                { value: "ctrl-enter", label: "Ctrl+Enter 发送" },
               ]}
             />
           </SettingsRow>
@@ -677,24 +712,6 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                 <DisclosureRegion open={searchSettingsOpen}>
                   <div className="pb-1">
                     <SettingsRow
-                      settingId="kiro-web-search-service"
-                      title="搜索服务"
-                      description={
-                        webSearchCredentialMode === "server"
-                          ? serverSearchConfigured === true
-                            ? "Tavily 增强搜索"
-                            : keylessSearchAvailable === false
-                              ? "基础搜索不可用"
-                              : "免 Key 基础搜索"
-                          : "自己的 Tavily Key"
-                      }
-                    >
-                      <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
-                        Kiro Search
-                      </span>
-                    </SettingsRow>
-
-                    <SettingsRow
                       settingId="kiro-web-search-credential"
                       title="凭据"
                       description={
@@ -710,18 +727,46 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                       onReset={() => resetKiroSettingsPreference("webSearchCredentialMode")}
                       resetAriaLabel="将搜索凭据恢复默认"
                     >
-                      <SettingsSegmentedControl<"server" | "byok">
-                        value={webSearchCredentialMode}
-                        onChange={(v) => {
-                          setWebSearchCredentialMode(v);
-                          setWebSearchTest({ status: "idle" });
-                        }}
-                        ariaLabel="Kiro Search 凭据"
-                        options={[
-                          { value: "server", label: "自动（推荐）" },
-                          { value: "byok", label: "自己的 Tavily Key" },
-                        ]}
-                      />
+                      <div className="flex w-full min-w-0 flex-col items-end gap-2">
+                        <SettingsSegmentedControl<"server" | "byok">
+                          value={webSearchCredentialMode}
+                          onChange={(v) => {
+                            setWebSearchCredentialMode(v);
+                            setWebSearchTest({ status: "idle" });
+                          }}
+                          ariaLabel="Kiro Search 凭据"
+                          options={[
+                            { value: "server", label: "自动（推荐）" },
+                            { value: "byok", label: "自己的 Tavily Key" },
+                          ]}
+                        />
+                        <div
+                          data-setting-id="kiro-web-search-test"
+                          className="flex flex-wrap items-center justify-end gap-2.5"
+                        >
+                          <SettingsButton variant="accent" onClick={runWebSearchTest} disabled={webSearchTest.status === "testing" || !webSearchEnabled}>
+                            {webSearchTest.status === "testing" ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Globe2 className="w-3.5 h-3.5" />
+                            )}
+                            测试连接
+                          </SettingsButton>
+                          {webSearchTest.status === "success" && (
+                            <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
+                              <Check className="w-3.5 h-3.5" />
+                              {webSearchTest.mode === "basic"
+                                ? "基础搜索可用"
+                                : webSearchTest.mode === "enhanced"
+                                  ? "增强搜索可用"
+                                  : "搜索服务可用"}
+                            </span>
+                          )}
+                          {webSearchTest.status === "error" && (
+                            <span className="text-[11px] font-semibold text-danger">{webSearchTest.message}</span>
+                          )}
+                        </div>
+                      </div>
                     </SettingsRow>
 
                   <DisclosureRegion open={webSearchCredentialMode === "byok"}>
@@ -788,44 +833,12 @@ export function KiroAISettings({ reveal }: { reveal?: { key: string; seq: number
                     </SettingsRow>
                   </DisclosureRegion>
 
-                  <SettingsRow
-                    settingId="kiro-web-search-test"
-                    title="测试搜索连接"
+                  <p
+                    data-setting-id="kiro-web-search-privacy"
+                    className="px-4 py-3 text-[10px] leading-relaxed text-sandrift border-t border-line-soft"
                   >
-                    <div className="flex flex-wrap items-center justify-end gap-2.5">
-                      <SettingsButton variant="accent" onClick={runWebSearchTest} disabled={webSearchTest.status === "testing" || !webSearchEnabled}>
-                        {webSearchTest.status === "testing" ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Globe2 className="w-3.5 h-3.5" />
-                        )}
-                        测试连接
-                      </SettingsButton>
-                      {webSearchTest.status === "success" && (
-                        <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
-                          <Check className="w-3.5 h-3.5" />
-                          {webSearchTest.mode === "basic"
-                            ? "基础搜索可用"
-                            : webSearchTest.mode === "enhanced"
-                              ? "增强搜索可用"
-                              : "搜索服务可用"}
-                        </span>
-                      )}
-                      {webSearchTest.status === "error" && (
-                        <span className="text-[11px] font-semibold text-danger">{webSearchTest.message}</span>
-                      )}
-                    </div>
-                  </SettingsRow>
-
-                  <SettingsRow
-                    settingId="kiro-web-search-privacy"
-                    title="隐私"
-                    description="只发送搜索关键词给当前使用的第三方搜索服务；不会发送对话全文、文件或本地数据。"
-                  >
-                    <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-                      按需发送
-                    </span>
-                  </SettingsRow>
+                    隐私：只发送搜索关键词给当前使用的第三方搜索服务；不会发送对话全文、文件或本地数据。
+                  </p>
                 </div>
                 </DisclosureRegion>
               </div>

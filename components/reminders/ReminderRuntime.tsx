@@ -78,12 +78,17 @@ export function ReminderRuntime() {
         end: prefs.doNotDisturbEnd,
         now: nowDate,
       });
-      if (!isDnd && prefs.reminderSoundEnabled) {
+      // 专注期间自动免打扰：只抑制提醒的侵入式通道；专注完成通知在会话结束后才发送。
+      const isFocusDnd =
+        prefs.focusAutoDoNotDisturbEnabled &&
+        useAppStore.getState().focusSessions.some((session) => session.status === "running");
+      const suppressIntrusive = isDnd || isFocusDnd;
+      if (!suppressIntrusive && prefs.reminderSoundEnabled) {
         try {
-          playReminderSound();
+          playReminderSound(prefs.reminderSoundVolume);
         } catch {}
       }
-      if (!isDnd && prefs.browserNotificationsEnabled) {
+      if (!suppressIntrusive && prefs.browserNotificationsEnabled) {
         const result = showBrowserReminderNotification({
           title: current.title,
           body: getReminderDeliverySubtitle(current),

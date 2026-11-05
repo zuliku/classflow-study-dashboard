@@ -17,9 +17,11 @@ const PREVIEW_COUNT = 5;
 export function CoursePaletteEditor({
   value,
   onChange,
+  disabled = false,
 }: {
   value: string[];
   onChange: (next: string[]) => void;
+  disabled?: boolean;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const preview = value.slice(0, PREVIEW_COUNT);
@@ -51,7 +53,8 @@ export function CoursePaletteEditor({
         size="sm"
         onClick={() => setDialogOpen(true)}
         aria-label="管理课程调色板"
-        className="h-7 px-2.5 text-[11px]"
+        disabled={disabled}
+        className="h-7 px-2.5 text-[11px] disabled:opacity-50"
       >
         管理
       </Button>

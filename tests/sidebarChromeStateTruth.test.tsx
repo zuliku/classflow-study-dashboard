@@ -4,7 +4,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { GeneralSettings } from "@/components/settings/GeneralSettings";
-import { useUIChromeStore } from "@/store/useUIChromeStore";
 
 if (typeof (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver === "undefined") {
   (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
@@ -31,19 +30,15 @@ if (!(window as unknown as { matchMedia?: unknown }).matchMedia) {
 }
 
 /**
- * V5A5：GeneralSettings 侧栏行绑定 useUIChromeStore 同一 truth。
- * Settings Switch 与 Sidebar collapse control 操作同一 state（源码级已验证双方均订阅
- * useUIChromeStore；此处验证 Settings 侧的文案真实性与即时同步）。
+ * V5A5：侧栏控制唯一事实来源是 Sidebar 自身（useUIChromeStore）。
+ * Settings 不再渲染重复的「侧栏收起状态」行，避免同一 state 两个入口。
  */
-describe("V5A5：GeneralSettings 侧栏行绑定同一 truth", () => {
+describe("V5A5：GeneralSettings 不再重复侧栏控制", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it("row 存在且文案真实（无“默认收起”承诺），Switch 直连 useUIChromeStore", async () => {
-    act(() => {
-      useUIChromeStore.setState({ sidebarCollapsed: false });
-    });
+  it("不存在 sidebar-default-collapsed 设置行", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -51,24 +46,10 @@ describe("V5A5：GeneralSettings 侧栏行绑定同一 truth", () => {
       root.render(<GeneralSettings />);
     });
     try {
-      const row = container.querySelector('[data-setting-id="sidebar-default-collapsed"]');
-      expect(row).toBeTruthy();
-      expect(row?.textContent).toContain("侧栏收起状态");
-      expect(row?.textContent).not.toContain("默认收起侧栏");
-      expect(row?.textContent).not.toContain("下次打开时默认收起");
-      const toggle = row?.querySelector('button[role="switch"]');
-      expect(toggle?.getAttribute("aria-label")).toBe("侧栏收起状态");
-      expect(toggle?.getAttribute("aria-checked")).toBe("false");
-      // 点击 Switch → 同一 store 立即翻转（Settings 与 Sidebar 共享，无双 state）
-      await act(async () => {
-        (toggle as HTMLButtonElement).click();
-      });
-      expect(useUIChromeStore.getState().sidebarCollapsed).toBe(true);
       expect(
-        container
-          .querySelector('[data-setting-id="sidebar-default-collapsed"] button[role="switch"]')
-          ?.getAttribute("aria-checked")
-      ).toBe("true");
+        container.querySelector('[data-setting-id="sidebar-default-collapsed"]')
+      ).toBeNull();
+      expect(container.textContent).not.toContain("侧栏收起状态");
     } finally {
       act(() => root.unmount());
       container.remove();

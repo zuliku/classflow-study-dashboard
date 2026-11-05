@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useEffect, useState } from "react";
-import { FolderOpen, HardDrive, ShieldAlert, Trash2, RefreshCw } from "lucide-react";
+import { FolderOpen, HardDrive, Trash2, RefreshCw } from "lucide-react";
 import { useKiroComputerStore } from "@/store/useKiroComputerStore";
 import { useConfirmStore } from "@/store/useConfirmStore";
 import { useToastStore } from "@/store/useToastStore";
@@ -635,16 +635,10 @@ export function KiroAgentSettings() {
           </div>
         </SettingsGroup>
 
-        <SettingsGroup title="权限与安全">
-          <SettingsRow
-            settingId="kiro-agent-permissions"
-            title="安全边界"
-          >
-            <span className="text-[11px] text-satin-grey shrink-0">
-              <ShieldAlert className="w-3.5 h-3.5 inline mr-1 text-sandrift" />
-              受限沙箱
-            </span>
-          </SettingsRow>
+        <SettingsGroup
+          title="权限与安全"
+          description="安全边界：高风险动作逐次确认；授权范围受限，不支持 Full Access。"
+        >
           {/* V3 Part 1：工作区知识（current Workspace 紧凑状态/动作） */}
           {activeWorkspace && <KiroWorkspaceKnowledgePanel workspaceId={activeWorkspace.id} />}
           {/* Part 3：Computer Audit（最近活动；只清 audit metadata） */}

@@ -6,7 +6,8 @@ import { useReminderPreferencesStore } from "@/store/useReminderPreferencesStore
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
-import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsInput } from "@/components/settings/SettingsControls";
+import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsInput, SettingsButton } from "@/components/settings/SettingsControls";
+import { SettingsSlider } from "@/components/settings/SettingsSlider";
 import { DDL_WARNING_DAYS, TASK_PRIORITIES, TASK_STATUSES, DEADLINE_REMINDER_MINUTES, DEADLINE_REMINDER_LABELS, DEFAULT_DEADLINE_REMINDER_MINUTES } from "@/lib/preferences";
 import { getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { PRIMARY_TASK_WORKSPACE_VIEWS } from "@/lib/tasks/taskViews";
@@ -24,6 +25,7 @@ import {
   describeBrowserNotificationPermission,
 } from "@/lib/reminders/browserNotifications";
 import { cn } from "@/lib/utils";
+import { playReminderSound } from "@/lib/reminders/reminderSound";
 
 const PRIORITY_LABELS: Record<string, string> = {
   low: "低",
@@ -56,6 +58,10 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
   const setMissedReminderWindowHours = useReminderPreferencesStore((s) => s.setMissedReminderWindowHours);
   const reminderSoundEnabled = useReminderPreferencesStore((s) => s.reminderSoundEnabled);
   const setReminderSoundEnabled = useReminderPreferencesStore((s) => s.setReminderSoundEnabled);
+  const reminderSoundVolume = useReminderPreferencesStore((s) => s.reminderSoundVolume);
+  const setReminderSoundVolume = useReminderPreferencesStore((s) => s.setReminderSoundVolume);
+  const focusAutoDoNotDisturbEnabled = useReminderPreferencesStore((s) => s.focusAutoDoNotDisturbEnabled);
+  const setFocusAutoDoNotDisturbEnabled = useReminderPreferencesStore((s) => s.setFocusAutoDoNotDisturbEnabled);
   const doNotDisturbEnabled = useReminderPreferencesStore((s) => s.doNotDisturbEnabled);
   const setDoNotDisturbEnabled = useReminderPreferencesStore((s) => s.setDoNotDisturbEnabled);
   const doNotDisturbStart = useReminderPreferencesStore((s) => s.doNotDisturbStart);
@@ -70,6 +76,8 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
     missedReminderPolicy,
     missedReminderWindowHours,
     reminderSoundEnabled,
+    reminderSoundVolume,
+    focusAutoDoNotDisturbEnabled,
     doNotDisturbEnabled,
     doNotDisturbStart,
     doNotDisturbEnd,
@@ -127,16 +135,17 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
         <SettingsGroup title="任务">
         <SettingsRow
           settingId="ddl-warning-days"
-          title="临近截止提醒"
+          title="临近截止范围"
+          description="仅影响总览与课表速览中显示哪些截止任务，不发送通知。"
           modified={modified.has("ddlWarningDays")}
           onReset={() => updatePreferences(resetPreferencePatch("ddlWarningDays"))}
-          resetAriaLabel="将临近截止提醒恢复默认"
+          resetAriaLabel="将临近截止范围恢复默认"
           highlighted={highlightedId === "ddl-warning-days"}
         >
           <SettingsSegmentedControl<number>
             value={preferences.ddlWarningDays}
             onChange={(v) => updatePreferences({ ddlWarningDays: v as 1 | 3 | 7 })}
-            ariaLabel="临近截止提醒"
+            ariaLabel="临近截止范围"
             options={DDL_WARNING_DAYS.map((d) => ({ value: d, label: `${d} 天` }))}
           />
         </SettingsRow>
@@ -208,7 +217,10 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
 
         </SettingsGroup>
 
-        <SettingsGroup title="提醒">
+        <SettingsGroup
+          title="通知与提醒"
+          description="站内提醒始终开启；可单独控制系统通知、声音与免打扰。"
+        >
           {/* P3：自动 DDL 提醒默认提前量（semantic action：修改后同步重算所有 scheduled auto；custom 不受影响） */}
           <SettingsRow
             settingId="deadline-default-reminder"
@@ -230,19 +242,12 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             />
           </SettingsRow>
 
-          {/* 应用内提醒：核心行为，始终开启（无底层开关，不伪造设置） */}
-          <SettingsRow
-            settingId="in-app-reminders"
-            title="应用内提醒"
-          >
-            <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">
-              始终开启
-            </span>
-          </SettingsRow>
+          {/* 应用内提醒始终开启：作为分组说明展示，不再占用可配置设置行 */}
 
           <SettingsRow
             settingId="browser-notifications"
             title="系统通知"
+            description="提醒到期与专注完成时发送；需系统权限。"
             modified={reminderModified.has("browserNotificationsEnabled")}
             onReset={() => resetReminderPreference("browserNotificationsEnabled")}
             resetAriaLabel="将系统通知恢复默认"
@@ -316,9 +321,39 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
           </SettingsRow>
 
           <SettingsRow
+            settingId="reminder-sound-volume"
+            title="提醒音量"
+            description="关闭提醒声音时不可调；可先试听再调整。"
+            modified={reminderModified.has("reminderSoundVolume")}
+            onReset={() => resetReminderPreference("reminderSoundVolume")}
+            resetAriaLabel="将提醒音量恢复默认"
+            highlighted={highlightedId === "reminder-sound-volume"}
+          >
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <SettingsSlider
+                value={reminderSoundVolume}
+                min={0}
+                max={100}
+                step={1}
+                onChange={(v) => setReminderSoundVolume(v)}
+                ariaLabel="提醒音量"
+                disabled={!reminderSoundEnabled}
+                formatValue={(v) => `${v}%`}
+              />
+              <SettingsButton
+                variant="secondary"
+                onClick={() => playReminderSound(reminderSoundVolume)}
+                disabled={!reminderSoundEnabled || reminderSoundVolume <= 0}
+              >
+                试听
+              </SettingsButton>
+            </div>
+          </SettingsRow>
+
+          <SettingsRow
             settingId="do-not-disturb"
             title="免打扰时段"
-            description="暂停系统通知与提醒声音；站内提醒不受影响。"
+            description="暂停提醒的系统通知与声音；站内提醒与专注完成提示不受影响。"
             modified={isDoNotDisturbModified(reminderPrefs)}
             onReset={() => resetDoNotDisturb()}
             resetAriaLabel="将免打扰时段恢复默认"
@@ -350,6 +385,22 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
                 </div>
               )}
             </div>
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="focus-auto-dnd"
+            title="专注期间自动免打扰"
+            description="专注进行中暂停提醒的系统通知与声音；专注完成提示不受影响。"
+            modified={reminderModified.has("focusAutoDoNotDisturbEnabled")}
+            onReset={() => resetReminderPreference("focusAutoDoNotDisturbEnabled")}
+            resetAriaLabel="将专注期间自动免打扰恢复默认"
+            highlighted={highlightedId === "focus-auto-dnd"}
+          >
+            <SettingsToggle
+              checked={focusAutoDoNotDisturbEnabled}
+              onChange={setFocusAutoDoNotDisturbEnabled}
+              label="专注期间自动免打扰"
+            />
           </SettingsRow>
         </SettingsGroup>
       </div>

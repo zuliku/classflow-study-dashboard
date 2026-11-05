@@ -1,7 +1,7 @@
 /**
  * Reminder 提示音（WebAudio 轻量实现）。
  * P2：模块单例 AudioContext + play 前 resume（此前每次 new Ctx，autoplay 策略下 suspended 即静默失败还返回 true）。
- * - 音量参数化（默认 0.16；后续接偏好设置）
+ * - 音量参数化（0–100；默认 100 保持既有 0.16 增益听感）
  * - 失败返回 false 由调用方降级（震动/无声），不再空吞
  */
 
@@ -21,8 +21,12 @@ function getSharedCtx(): AudioContext | null {
   }
 }
 
-export function playReminderSound(volume = 0.16): boolean {
+export function playReminderSound(volume = 100): boolean {
   try {
+    const percent = Math.max(0, Math.min(100, Number.isFinite(volume) ? volume : 100));
+    if (percent <= 0) return false;
+    // 保持默认 100% 与既有听感一致：0.16 是原固定增益。
+    const gainValue = 0.16 * (percent / 100);
     const ctx = getSharedCtx();
     if (!ctx) return false;
     // autoplay 拦截下 resume 后再播；仍 suspended 则诚实返回 false
@@ -37,7 +41,7 @@ export function playReminderSound(volume = 0.16): boolean {
     osc.frequency.setValueAtTime(880, now);
     osc.frequency.exponentialRampToValueAtTime(1040, now + 0.08);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(volume, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(gainValue, now + 0.015);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);

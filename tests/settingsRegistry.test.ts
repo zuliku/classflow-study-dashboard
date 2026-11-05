@@ -60,7 +60,6 @@ describe("settingsRegistry 搜索", () => {
       "kiro-web-search-byok-key",
       "kiro-web-search-test",
       "kiro-web-search-privacy",
-      "kiro-web-search-service",
       "kiro-web-pdf-vision-enabled",
       "kiro-web-pdf-vision-model",
       "kiro-web-pdf-vision-key",
@@ -92,7 +91,7 @@ describe("settingsRegistry 搜索", () => {
     expect(byId.get("missed-reminder-window")?.gate).toEqual([
       { control: "missed-reminder-policy", requiresValue: "recent-only" },
     ]);
-    expect(byId.get("kiro-web-search-service")?.gate).toEqual([
+    expect(byId.get("kiro-web-search-credential")?.gate).toEqual([
       { control: "kiro-web-search-enabled", requiresValue: true },
     ]);
     expect(byId.get("kiro-web-search-byok-key")?.gate).toEqual([
@@ -112,7 +111,7 @@ describe("settingsRegistry 搜索", () => {
   it("输入「截止」→ 任务相关的两个设置", () => {
     const r = searchSettings("截止");
     const titles = r.map((s) => s.title);
-    expect(titles).toContain("临近截止提醒");
+    expect(titles).toContain("临近截止范围");
     expect(titles).toContain("默认截止时间");
   });
 

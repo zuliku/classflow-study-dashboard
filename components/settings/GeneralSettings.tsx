@@ -2,7 +2,6 @@
 
 import React from "react";
 import { useAppStore } from "@/store/useAppStore";
-import { useUIChromeStore } from "@/store/useUIChromeStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
@@ -38,8 +37,6 @@ const STARTUP_VIEW_LABELS: Record<StartupView, string> = {
 export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
-  const sidebarCollapsed = useUIChromeStore((s) => s.sidebarCollapsed);
-  const setSidebarCollapsed = useUIChromeStore((s) => s.setSidebarCollapsed);
   const modified = new Set(getModifiedPreferenceKeys(preferences));
 
   return (
@@ -154,21 +151,6 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           </SettingsRow>
 
           <SettingsRow
-            settingId="sidebar-default-collapsed"
-            title="侧栏收起状态"
-            modified={sidebarCollapsed}
-            onReset={() => setSidebarCollapsed(false)}
-            resetAriaLabel="将侧栏收起状态恢复默认"
-            highlighted={highlightedId === "sidebar-default-collapsed"}
-          >
-            <SettingsToggle
-              checked={sidebarCollapsed}
-              onChange={setSidebarCollapsed}
-              label="侧栏收起状态"
-            />
-          </SettingsRow>
-
-          <SettingsRow
             settingId="course-auto-palette"
             title="课程自动配色"
             description="关闭时使用灰色。"
@@ -187,7 +169,11 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
           <SettingsRow
             settingId="course-palette"
             title="课程调色板"
-            description="按顺序取色。"
+            description={
+              preferences.courseAutoPalette
+                ? "新建课程按此顺序取色。"
+                : "课程自动配色已关闭，调色板暂不参与新课程取色。"
+            }
             modified={modified.has("coursePalette")}
             onReset={() => updatePreferences(resetPreferencePatch("coursePalette"))}
             resetAriaLabel="将课程调色板恢复默认"
@@ -196,6 +182,7 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
             <CoursePaletteEditor
               value={preferences.coursePalette}
               onChange={(coursePalette) => updatePreferences({ coursePalette })}
+              disabled={!preferences.courseAutoPalette}
             />
           </SettingsRow>
         </SettingsGroup>

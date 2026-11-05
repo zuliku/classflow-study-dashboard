@@ -443,14 +443,13 @@ describe("V5A5：useAppStore 不再暴露 active sidebar API", () => {
 });
 
 describe("V5A5：Registry/Search 与真实语义一致", () => {
-  it("sidebar 仍可搜到，且标题为真实语义", async () => {
+  it("侧栏重复设置行已移除，不再以 Registry 假设置出现", async () => {
     const { searchSettings } = await import("@/lib/settingsRegistry");
-    const hits = searchSettings("侧栏");
-    const hit = hits.find((s) => s.id === "sidebar-default-collapsed");
-    expect(hit).toBeDefined();
-    expect(hit?.section).toBe("general");
-    expect(hit?.title).toBe("侧栏收起状态");
-    expect(hit?.title).not.toContain("默认");
-    expect(searchSettings("收起").some((s) => s.id === "sidebar-default-collapsed")).toBe(true);
+    expect(
+      searchSettings("侧栏").some((s) => s.id === "sidebar-default-collapsed")
+    ).toBe(false);
+    expect(
+      searchSettings("收起").some((s) => s.id === "sidebar-default-collapsed")
+    ).toBe(false);
   });
 });

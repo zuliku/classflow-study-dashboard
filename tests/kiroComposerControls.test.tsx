@@ -650,3 +650,40 @@ describe("Kiro Composer — @ mention（对标 Slash）", () => {
     );
   });
 });
+
+describe("Kiro Composer — 发送键位", () => {
+  async function typeText(value: string) {
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(ta, value);
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flush();
+  }
+
+  async function press(key: string, init: KeyboardEventInit = {}) {
+    const ta = q('[aria-label="Ask Kiro"]') as HTMLTextAreaElement;
+    await act(async () => {
+      ta.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
+    });
+    await flush();
+  }
+
+  it("Enter 发送模式下 Enter 直接发送", async () => {
+    useKiroPreferencesStore.setState({ sendKeyBehavior: "enter" });
+    await renderComposer();
+    await typeText("你好");
+    await press("Enter");
+    expect(handlers.onSend).toHaveBeenCalledWith("你好");
+  });
+
+  it("Ctrl+Enter 模式下普通 Enter 不发送，Ctrl+Enter 发送", async () => {
+    useKiroPreferencesStore.setState({ sendKeyBehavior: "ctrl-enter" });
+    await renderComposer();
+    await typeText("你好");
+    await press("Enter");
+    expect(handlers.onSend).not.toHaveBeenCalled();
+    await press("Enter", { ctrlKey: true });
+    expect(handlers.onSend).toHaveBeenCalledWith("你好");
+  });
+});

@@ -319,8 +319,8 @@ export function KiroNavigator() {
       <KiroMenuItem icon={Copy} label="复制全部对话" disabled={!meta.hasMessages} onClick={copyAll} />
       <KiroMenuItem icon={FileDown} label="导出 Markdown" disabled={!meta.hasMessages} onClick={exportMarkdown} />
       <KiroMenuDivider />
-      <div className="px-2.5 py-2 space-y-1.5" role="group" aria-label="Kiro 输出字号">
-        <p className="text-[10px] font-semibold text-sandrift">输出字号</p>
+      <div className="px-2.5 py-2 space-y-1.5" role="group" aria-label="Kiro 回复字号">
+        <p className="text-[10px] font-semibold text-sandrift">回复字号</p>
         <div className="flex items-center gap-0.5 bg-[#F7F5F5] p-0.5 rounded-lg w-fit" role="group" aria-label="字号选项">
           {(Object.keys(KIRO_OUTPUT_TEXT_SIZE_LABELS) as KiroOutputTextSize[]).map((size) => {
             const active = outputTextSize === size;

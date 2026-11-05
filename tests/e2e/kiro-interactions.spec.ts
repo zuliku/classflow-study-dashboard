@@ -1,4 +1,4 @@
-import { expect, Page } from "@playwright/test";
+﻿import { expect, Page } from "@playwright/test";
 import { test } from "./demoFixtures";
 
 /**
@@ -61,19 +61,19 @@ test("Task 7D：输出字号 - Rail More 与 Settings 实时同步（同一 stor
 
   // Rail Collapsed More（对话更多操作）→ 输出字号 segmented（默认 标准）
   await page.getByLabel("对话更多操作").click();
-  const railGroup = page.getByRole("group", { name: "Kiro 输出字号" });
+  const railGroup = page.getByTestId("kiro-navigator-shell").getByRole("group", { name: "Kiro 回复字号" });
   await expect(railGroup).toBeVisible();
-  await expect(railGroup.getByRole("button", { name: "标准字号" })).toHaveAttribute("aria-pressed", "true");
+  await expect(railGroup.getByRole("menuitemradio", { name: "标准字号" })).toHaveAttribute("aria-checked", "true");
 
   // 选「大」→ 菜单不关闭（可连续比较）
-  await railGroup.getByRole("button", { name: "大字号" }).click();
-  await expect(railGroup.getByRole("button", { name: "大字号" })).toHaveAttribute("aria-pressed", "true");
+  await railGroup.getByRole("menuitemradio", { name: "大字号" }).click();
+  await expect(railGroup.getByRole("menuitemradio", { name: "大字号" })).toHaveAttribute("aria-checked", "true");
   await expect(railGroup).toBeVisible();
 
   // Settings → Kiro → 输出字号 = 大（同一 useKiroPreferencesStore）
   await page.locator("aside").first().getByRole("button", { name: "设置" }).click();
   await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "Kiro" }).click();
-  const settingsGroup = page.getByRole("group", { name: "Kiro 输出字号" });
+  const settingsGroup = page.getByTestId("settings-kiro").getByRole("group", { name: "Kiro 回复字号" });
   await expect(settingsGroup).toBeVisible();
   await expect(settingsGroup.getByRole("button", { name: "大", exact: true })).toHaveAttribute("aria-pressed", "true");
 
@@ -83,8 +83,8 @@ test("Task 7D：输出字号 - Rail More 与 Settings 实时同步（同一 stor
   await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "关闭" }).click();
 
   await page.getByLabel("对话更多操作").click();
-  const railGroup2 = page.getByRole("group", { name: "Kiro 输出字号" });
-  await expect(railGroup2.getByRole("button", { name: "小字号" })).toHaveAttribute("aria-pressed", "true");
+  const railGroup2 = page.getByTestId("kiro-navigator-shell").getByRole("group", { name: "Kiro 回复字号" });
+  await expect(railGroup2.getByRole("menuitemradio", { name: "小字号" })).toHaveAttribute("aria-checked", "true");
 });
 
 test("Share：无消息时 disabled；发消息后可打开并复制对话", async ({ page }) => {

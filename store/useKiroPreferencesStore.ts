@@ -42,6 +42,8 @@ import {
  */
 
 /** V5A9：Settings 中真实可修改/恢复默认的 Kiro preference 数据切片。 */
+export type KiroSendKeyBehavior = "enter" | "ctrl-enter";
+
 export interface KiroSettingsPreferences {
   outputTextSize: KiroOutputTextSize;
   /** Task 7E：自动环境上下文（auto/entry 中的 auto 部分；manual @ 不受影响） */
@@ -56,6 +58,8 @@ export interface KiroSettingsPreferences {
   webPdfVisionModel: string;
   /** 2026-09：模型选择器显示全部已验证模型（OpenCode Go；默认关闭 = 精选列表） */
   showAllModels: boolean;
+  /** 发送键位：Enter 发送（默认）/ Ctrl+Enter 发送；Shift+Enter 始终换行 */
+  sendKeyBehavior: KiroSendKeyBehavior;
 }
 
 export type KiroSettingsPreferenceKey = keyof KiroSettingsPreferences;
@@ -73,6 +77,7 @@ export const DEFAULT_KIRO_SETTINGS_PREFERENCES: KiroSettingsPreferences = {
   webPdfVisionEnabled: true,
   webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
   showAllModels: false,
+  sendKeyBehavior: "enter",
 };
 
 /** 当前与 canonical defaults 不同的 Kiro Settings preference keys。 */
@@ -112,6 +117,9 @@ interface KiroPreferencesState extends KiroSettingsPreferences {
   setWebPdfVisionEnabled: (enabled: boolean) => void;
   setWebPdfVisionModel: (model: string) => void;
   setShowAllModels: (enabled: boolean) => void;
+  setSendKeyBehavior: (behavior: KiroSendKeyBehavior) => void;
+  /** 恢复浮动面板到默认位置与尺寸（不影响任何 Settings preference） */
+  resetSidecarGeometry: () => void;
   /** V5A9：只允许 reset Settings-facing Kiro preferences。 */
   resetKiroSettingsPreference: (key: KiroSettingsPreferenceKey) => void;
   /** 整库恢复首次使用（含 Sidecar 几何与隐私提示；仅全局清除调用，行级 reset 不走这里） */
@@ -145,6 +153,14 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
       // Store 内永远不保存任意 model id（非法 → 默认 mimo-v2.5）
       setWebPdfVisionModel: (model) => set({ webPdfVisionModel: normalizeWebPdfVisionModel(model) }),
       setShowAllModels: (enabled) => set({ showAllModels: enabled }),
+      setSendKeyBehavior: (behavior) =>
+        set({ sendKeyBehavior: behavior === "ctrl-enter" ? "ctrl-enter" : "enter" }),
+      resetSidecarGeometry: () =>
+        set({
+          sidecarSize: SIDECAR_DEFAULT_SIZE,
+          sidecarPosition: SIDECAR_DEFAULT_POSITION,
+          sidecarMinimizedPosition: DEFAULT_SIDECAR_MINIMIZED_POSITION,
+        }),
       resetKiroSettingsPreference: (key) => set(resetKiroSettingsPreferencePatch(key)),
       resetToDefaults: () =>
         set({
@@ -189,6 +205,8 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
         webPdfVisionModel: state.webPdfVisionModel,
         // 2026-09：模型选择器范围（精选 / 全部）
         showAllModels: state.showAllModels,
+        // 发送键位
+        sendKeyBehavior: state.sendKeyBehavior,
         // Sidecar UX V2：尺寸持久化（刷新后保留；不进 URL / IndexedDB）
         sidecarSize: state.sidecarSize,
         // Sidecar Move V1：浮动位置持久化（top/right；key 不变，不建 v2）
@@ -236,6 +254,10 @@ export const useKiroPreferencesStore = create<KiroPreferencesState>()(
             typeof p?.showAllModels === "boolean"
               ? p.showAllModels
               : DEFAULT_KIRO_SETTINGS_PREFERENCES.showAllModels,
+          sendKeyBehavior:
+            p?.sendKeyBehavior === "ctrl-enter"
+              ? "ctrl-enter"
+              : DEFAULT_KIRO_SETTINGS_PREFERENCES.sendKeyBehavior,
           // Sidecar UX V2：旧持久化无字段 → 默认尺寸；非法值 → 结构归一
           sidecarSize: normalizeSidecarSize(p?.sidecarSize),
           // Sidecar Move V1：旧持久化无字段 → 默认右上 24px；非法值 → 归一

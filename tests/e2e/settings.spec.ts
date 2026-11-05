@@ -62,7 +62,7 @@ test("Settings Search：Cmd+F → 输入「截止」→ 跳转默认截止时间
 
   // 搜索结果：默认截止时间
   await expect(page.getByTestId("settings-search-results")).toContainText("默认截止时间");
-  await expect(page.getByTestId("settings-search-results")).toContainText("临近截止提醒");
+  await expect(page.getByTestId("settings-search-results")).toContainText("临近截止范围");
 
   // 点击「默认截止时间」→ 跳到任务 section + 搜索清空 + target row 存在
   await page.getByTestId("settings-search-results").getByText("默认截止时间", { exact: true }).click();

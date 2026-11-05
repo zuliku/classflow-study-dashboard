@@ -295,11 +295,11 @@ test("Agent 与权限：用户语言覆盖（无 Computer Agent / 默认权限�
   await expect(agent.getByText("当前工作区", { exact: true })).toBeVisible();
   await expect(agent.getByText("可访问的位置", { exact: true })).toBeVisible();
   await expect(agent.getByText("权限与安全", { exact: true })).toBeVisible();
-  await expect(agent.getByText("安全边界", { exact: true })).toBeVisible();
+  await expect(agent.getByText(/安全边界/)).toBeVisible();
   await expect(agent.getByText("仅规划", { exact: true })).toBeVisible();
   await expect(agent.getByText("每次确认", { exact: true })).toBeVisible();
   await expect(agent.getByText("授权范围内自动", { exact: true })).toBeVisible();
-  await expect(agent.getByRole("button", { name: "添加本地位置" })).toBeVisible();
+  await expect(agent.getByRole("button", { name: "添加本地文件夹" })).toBeVisible();
   await expect(agent.getByRole("button", { name: "使用 Kiro 内置工作区" })).toBeVisible();
 
   // 工程术语不再出现（settings 内）

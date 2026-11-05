@@ -19,9 +19,22 @@ describe("V5A2 Registry Truth", () => {
   it("General 新增设置已登记", () => {
     const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
     const generalValues = new Set(Object.values(SETTING_IDS.general));
-    for (const id of ["ui-font", "ui-font-scale", "sidebar-default-collapsed", "course-auto-palette", "course-palette", "shortcuts-overview"]) {
+    for (const id of ["ui-font", "ui-font-scale", "course-auto-palette", "course-palette", "shortcuts-overview"]) {
       expect(ids.has(id), `General missing ${id}`).toBe(true);
       expect(generalValues.has(id), `SETTING_IDS.general missing ${id}`).toBe(true);
+    }
+  });
+
+  it("已移除重复/只读设置不再出现在 Registry", () => {
+    const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
+    for (const id of [
+      "sidebar-default-collapsed",
+      "in-app-reminders",
+      "focus-tracking",
+      "kiro-web-search-service",
+      "kiro-agent-permissions",
+    ]) {
+      expect(ids.has(id), `stale setting ${id}`).toBe(false);
     }
   });
 
@@ -38,22 +51,29 @@ describe("V5A2 Registry Truth", () => {
 
   it("Focus 当前设置已登记，dead 已清理", () => {
     const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
-    for (const id of ["focus-default-minutes", "focus-sound-enabled", "focus-sound-volume", "focus-tracking"]) {
+    for (const id of ["focus-default-minutes", "focus-sound-enabled", "focus-sound-volume"]) {
       expect(ids.has(id), `Focus missing ${id}`).toBe(true);
     }
-    for (const dead of ["focus-completion-notification", "focus-kiro-duration"]) {
+    for (const dead of ["focus-completion-notification", "focus-kiro-duration", "focus-tracking"]) {
       expect(ids.has(dead), `dead ${dead} should be removed`).toBe(false);
     }
-    // Focus registry should be exactly 4
+    // Focus registry should be exactly 3
     const focusIds = SETTINGS_REGISTRY.filter((s) => s.section === "focus").map((s) => s.id);
-    expect(focusIds).toEqual(expect.arrayContaining(["focus-default-minutes", "focus-sound-enabled", "focus-sound-volume", "focus-tracking"]));
-    expect(focusIds).toHaveLength(4);
+    expect(focusIds).toEqual(expect.arrayContaining(["focus-default-minutes", "focus-sound-enabled", "focus-sound-volume"]));
+    expect(focusIds).toHaveLength(3);
   });
 
   it("Task 新设置已登记", () => {
     const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
-    for (const id of ["reminder-sound", "do-not-disturb"]) {
+    for (const id of ["reminder-sound", "reminder-sound-volume", "focus-auto-dnd", "do-not-disturb"]) {
       expect(ids.has(id), `Task missing ${id}`).toBe(true);
+    }
+  });
+
+  it("Kiro 新设置已登记", () => {
+    const ids = new Set(SETTINGS_REGISTRY.map((s) => s.id));
+    for (const id of ["kiro-send-shortcut", "kiro-reset-panel"]) {
+      expect(ids.has(id), `Kiro missing ${id}`).toBe(true);
     }
   });
 
@@ -75,16 +95,16 @@ describe("V5A2 Registry Truth", () => {
   it("所有 intended-searchable Registry item 都有 DOM target（findMissingDomTargets 为空）", () => {
     // 构造包含所有当前真实 DOM id 的容器（基于实际 components/settings 枚举）
     const expectedDomIds = [
-      // general 12
-      "startup-view","content-density","motion-preference","ui-font","ui-font-scale","sidebar-default-collapsed","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-overview",
+      // general 11
+      "startup-view","content-density","motion-preference","ui-font","ui-font-scale","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-overview",
       // profile 6
       "profile-avatar","profile-name","profile-student-id","profile-college","profile-grade","profile-credits",
       // semester 3
       "show-weekends","semester-overview","bell-schedule",
-      // tasks 12（V5A3：assignment-time-slice 已移除，非 Settings preference）
-      "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","deadline-default-reminder","in-app-reminders","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","do-not-disturb",
-      // focus 4
-      "focus-default-minutes","focus-sound-enabled","focus-sound-volume","focus-tracking",
+      // tasks 13
+      "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","deadline-default-reminder","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","reminder-sound-volume","focus-auto-dnd","do-not-disturb",
+      // focus 3
+      "focus-default-minutes","focus-sound-enabled","focus-sound-volume",
       // kiro, kiro-agent, extensions, data are also in DOM but we test core drift for V5A2; ensure missing is 0 for those we enumerate
     ];
     const container = document.createElement("div");
@@ -112,11 +132,11 @@ describe("V5A2 Registry Truth", () => {
     const registryIds = new Set(SETTINGS_REGISTRY.map((s) => s.id));
     // 构造包含上述 expectedDomIds 的 DOM
     const expectedDomIds = [
-      "startup-view","content-density","motion-preference","ui-font","ui-font-scale","sidebar-default-collapsed","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-overview",
+      "startup-view","content-density","motion-preference","ui-font","ui-font-scale","course-auto-palette","course-palette","schedule-direct-manipulation","ddl-direct-manipulation","single-key-shortcuts","shortcuts-overview",
       "profile-avatar","profile-name","profile-student-id","profile-college","profile-grade","profile-credits",
       "show-weekends","semester-overview","bell-schedule",
-      "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","deadline-default-reminder","in-app-reminders","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","do-not-disturb",
-      "focus-default-minutes","focus-sound-enabled","focus-sound-volume","focus-tracking",
+      "ddl-warning-days","default-ddl-time","default-task-priority","default-task-status","default-task-workspace-view","deadline-default-reminder","browser-notifications","missed-reminder-policy","missed-reminder-window","reminder-sound","reminder-sound-volume","focus-auto-dnd","do-not-disturb",
+      "focus-default-minutes","focus-sound-enabled","focus-sound-volume",
     ];
     for (const id of expectedDomIds) {
       const el = document.createElement("div");
@@ -133,12 +153,15 @@ describe("V5A2 Registry Truth", () => {
     expect(searchSettings("提示音量").some((s) => s.id === "focus-sound-volume")).toBe(true);
     expect(searchSettings("字号").some((s) => s.id === "ui-font-scale")).toBe(true);
     expect(searchSettings("字体").some((s) => s.id === "ui-font")).toBe(true);
-    expect(searchSettings("侧栏").some((s) => s.id === "sidebar-default-collapsed")).toBe(true);
+    expect(searchSettings("侧栏").some((s) => s.id === "sidebar-default-collapsed")).toBe(false);
     expect(searchSettings("调色板").some((s) => s.id === "course-palette")).toBe(true);
     expect(searchSettings("快捷键").some((s) => s.id === "shortcuts-overview")).toBe(true);
     expect(searchSettings("快捷键说明").some((s) => s.id === "shortcuts-overview")).toBe(true);
     expect(searchSettings("提醒声音").some((s) => s.id === "reminder-sound")).toBe(true);
+    expect(searchSettings("提醒音量").some((s) => s.id === "reminder-sound-volume")).toBe(true);
     expect(searchSettings("免打扰").some((s) => s.id === "do-not-disturb")).toBe(true);
+    expect(searchSettings("发送方式").some((s) => s.id === "kiro-send-shortcut")).toBe(true);
+    expect(searchSettings("浮动面板").some((s) => s.id === "kiro-reset-panel")).toBe(true);
     expect(searchSettings("作息方案").some((s) => s.id === "bell-schedule")).toBe(true);
   });
 

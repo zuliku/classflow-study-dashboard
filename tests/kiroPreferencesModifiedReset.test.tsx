@@ -60,6 +60,7 @@ const CANONICAL: KiroSettingsPreferences = {
   webPdfVisionEnabled: true,
   webPdfVisionModel: DEFAULT_WEB_PDF_VISION_MODEL,
   showAllModels: false,
+  sendKeyBehavior: "enter",
 };
 
 function alternateVisionModel(): string {
@@ -70,13 +71,14 @@ function alternateVisionModel(): string {
 }
 
 describe("V5A9 A：canonical Kiro Settings preference truth", () => {
-  it("canonical defaults 只包含 8 个 Settings-facing preference", () => {
+  it("canonical defaults 只包含 9 个 Settings-facing preference", () => {
     expect(DEFAULT_KIRO_SETTINGS_PREFERENCES).toEqual(CANONICAL);
     expect(Object.keys(DEFAULT_KIRO_SETTINGS_PREFERENCES).sort()).toEqual(
       [
         "autoContextEnabled",
         "outputTextSize",
         "responsePreference",
+        "sendKeyBehavior",
         "showAllModels",
         "webPdfVisionEnabled",
         "webPdfVisionModel",
@@ -101,6 +103,7 @@ describe("V5A9 B：逐字段 modified/reset semantics", () => {
     ["webPdfVisionEnabled", { ...CANONICAL, webPdfVisionEnabled: false }],
     ["webPdfVisionModel", { ...CANONICAL, webPdfVisionModel: "non-default-model" }],
     ["showAllModels", { ...CANONICAL, showAllModels: true }],
+    ["sendKeyBehavior", { ...CANONICAL, sendKeyBehavior: "ctrl-enter" }],
   ] as const)("%s 偏离 → 仅该字段 modified", (key, preferences) => {
     expect(getModifiedKiroSettingsPreferenceKeys(preferences)).toEqual([key]);
   });
@@ -114,6 +117,7 @@ describe("V5A9 B：逐字段 modified/reset semantics", () => {
     ["webPdfVisionEnabled", true],
     ["webPdfVisionModel", DEFAULT_WEB_PDF_VISION_MODEL],
     ["showAllModels", false],
+    ["sendKeyBehavior", "enter"],
   ] as const)("resetKiroSettingsPreferencePatch(%s) → canonical", (key, value) => {
     expect(resetKiroSettingsPreferencePatch(key)).toEqual({ [key]: value });
   });
@@ -185,13 +189,14 @@ describe("V5A9 C：store reset boundary / hydrate compatibility", () => {
 describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
   const RESET_LABELS: Record<string, string> = {
     "kiro-response-preference": "将回答偏好恢复默认",
-    "kiro-output-text-size": "将输出字号恢复默认",
+    "kiro-output-text-size": "将 Kiro 回复字号恢复默认",
     "kiro-auto-context": "将自动环境上下文恢复默认",
     "kiro-web-search-enabled": "将联网搜索恢复默认",
     "kiro-web-search-credential": "将搜索凭据恢复默认",
     "kiro-web-pdf-vision-enabled": "将扫描 PDF 识别恢复默认",
     "kiro-web-pdf-vision-model": "将 Vision 模型恢复默认",
     "kiro-show-all-models": "将模型范围恢复默认",
+    "kiro-send-shortcut": "将发送方式恢复默认",
   };
 
   function resetButton(container: HTMLElement, settingId: string): HTMLButtonElement | null {
@@ -319,6 +324,43 @@ describe("V5A9 D：KiroAISettings consumer modified/reset wiring", () => {
       await act(async () => resetButton(container, "kiro-show-all-models")!.click());
       expect(store.getState().showAllModels).toBe(false);
       expect(resetButton(container, "kiro-show-all-models")).toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("发送方式：切到 Ctrl+Enter 出现 reset，点击恢复 Enter", async () => {
+    const { container, root } = await mountKiroSettings();
+    const store = useKiroPreferencesStore;
+    try {
+      expect(resetButton(container, "kiro-send-shortcut")).toBeNull();
+      act(() => store.getState().setSendKeyBehavior("ctrl-enter"));
+      expect(resetButton(container, "kiro-send-shortcut")).toBeTruthy();
+      await act(async () => resetButton(container, "kiro-send-shortcut")!.click());
+      expect(store.getState().sendKeyBehavior).toBe("enter");
+      expect(resetButton(container, "kiro-send-shortcut")).toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("Kiro 面板 reset 只恢复几何，不影响 Settings preference", async () => {
+    const { container, root } = await mountKiroSettings();
+    const store = useKiroPreferencesStore;
+    try {
+      const beforeOutputSize = store.getState().outputTextSize;
+      store.getState().setSidecarSize({ width: 500, height: 600 });
+      store.getState().setSidecarPosition({ top: 100, right: 100 });
+      const button = Array.from(container.querySelectorAll("button")).find(
+        (item) => item.textContent === "重置面板"
+      );
+      expect(button).toBeTruthy();
+      await act(async () => button!.click());
+      expect(store.getState().sidecarSize).toEqual({ width: 620, height: 760 });
+      expect(store.getState().sidecarPosition).toEqual({ top: 40, right: 24 });
+      expect(store.getState().outputTextSize).toBe(beforeOutputSize);
     } finally {
       act(() => root.unmount());
       container.remove();

@@ -17,7 +17,10 @@ export function FocusSettings({ highlightedId }: { highlightedId?: string }) {
   return (
     <SettingsSection title="专注与学习">
       <div className="text-xs space-y-4" data-testid="settings-focus">
-        <SettingsGroup title="专注会话">
+        <SettingsGroup
+          title="专注会话"
+          description="专注计时始终记录真实时长；暂停不计入。"
+        >
           <SettingsRow
             settingId="focus-default-minutes"
             title="默认专注时长"
@@ -72,10 +75,6 @@ export function FocusSettings({ highlightedId }: { highlightedId?: string }) {
               disabled={!preferences.focusSoundEnabled}
               formatValue={(v) => `${v}%`}
             />
-          </SettingsRow>
-
-          <SettingsRow settingId="focus-tracking" title="实时专注计时">
-            <span className="px-2 py-0.5 rounded-full bg-pastel-mint text-[10px] font-bold text-charcoal shrink-0">已启用</span>
           </SettingsRow>
         </SettingsGroup>
       </div>

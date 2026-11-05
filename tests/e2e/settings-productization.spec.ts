@@ -15,15 +15,16 @@ async function openSettings(page: Page) {
   await expect(page.getByTestId("settings-view")).toBeVisible();
 }
 
-test("任务与提醒：应用内提醒始终开启，浏览器通知权限状态真实反映", async ({ page }) => {
+test("任务与提醒：站内提醒始终开启，浏览器通知权限状态真实反映", async ({ page }) => {
   // 授权通知权限（浏览器侧真实权限）：开关才能实际生效
   await page.context().grantPermissions(["notifications"]);
   await openSettings(page);
   await page.getByTestId("settings-view").getByRole("button", { name: "任务与提醒", exact: true }).click();
 
-  // 应用内提醒：静态真实状态（无伪造开关）
-  await expect(page.getByTestId("settings-tasks").getByText("应用内提醒", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("settings-tasks").getByText("始终开启", { exact: true })).toBeVisible();
+  // 站内提醒始终开启：作为分组说明展示，不再占用可配置行
+  await expect(
+    page.getByTestId("settings-tasks").getByText(/站内提醒始终开启/)
+  ).toBeVisible();
 
   // 浏览器通知权限：状态行反映真实浏览器状态（granted 后显示「已授权」）
   const permissionState = page.getByTestId("notification-permission-state");
@@ -34,7 +35,7 @@ test("任务与提醒：应用内提醒始终开启，浏览器通知权限状�
   expect(realStates.some((s) => text.includes(s)), text).toBe(true);
 
   // 开关与真实权限状态一致：已授权才可切换；未授权时保持关闭（真实权限门控，不伪造已开启）
-  const toggle = page.getByRole("switch", { name: "浏览器系统通知" });
+  const toggle = page.getByRole("switch", { name: "系统通知" });
   if (text.includes("已授权")) {
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
@@ -46,14 +47,15 @@ test("任务与提醒：应用内提醒始终开启，浏览器通知权限状�
   }
 });
 
-test("专注与学习：section 展示真实行为说明，无伪造开关", async ({ page }) => {
+test("专注与学习：计时始终开启作为说明，完成提示音是唯一开关", async ({ page }) => {
   await openSettings(page);
   await page.getByTestId("settings-view").getByRole("button", { name: "专注与学习", exact: true }).click();
   await expect(page.getByTestId("settings-focus")).toBeVisible();
-  await expect(page.getByTestId("settings-focus").getByText("实时专注计时", { exact: true })).toBeVisible();
-  await expect(page.getByTestId("settings-focus").getByText("已启用", { exact: true })).toBeVisible();
-  // 无伪造开关：专注页不应出现 switch
-  await expect(page.getByTestId("settings-focus").getByRole("switch")).toHaveCount(0);
+  await expect(
+    page.getByTestId("settings-focus").getByText(/专注计时始终记录真实时长/)
+  ).toBeVisible();
+  await expect(page.getByTestId("settings-focus").getByRole("switch", { name: "完成提示音" })).toBeVisible();
+  await expect(page.getByTestId("settings-focus").getByRole("switch")).toHaveCount(1);
 });
 
 test("Kiro：AI 服务基础配置在主区域直接可见；能力/回答分组齐全；高级设置默认折叠", async ({ page }) => {
@@ -84,7 +86,7 @@ test("Kiro：AI 服务基础配置在主区域直接可见；能力/回答分组
   await expect(kiro.locator('[data-setting-id="ai-connection-status"]')).toBeVisible();
 
   // 输出字号 segmented（同一 useKiroPreferencesStore，Rail 菜单同步）
-  const textSize = kiro.getByRole("group", { name: "Kiro 输出字号" });
+  const textSize = kiro.getByRole("group", { name: "Kiro 回复字号" });
   await expect(textSize).toBeVisible();
   await textSize.getByRole("button", { name: "大" }).click();
   await expect(textSize.getByRole("button", { name: "大" })).toHaveAttribute("aria-pressed", "true");

@@ -22,6 +22,10 @@ export interface ReminderPreferences {
   missedReminderPolicy: MissedReminderPolicy;
   missedReminderWindowHours: MissedReminderWindowHours;
   reminderSoundEnabled: boolean;
+  /** 提醒音量：0–100（映射到提示音实际增益；默认 100 保持既有听感） */
+  reminderSoundVolume: number;
+  /** 专注进行中自动暂停提醒的系统通知与声音 */
+  focusAutoDoNotDisturbEnabled: boolean;
   doNotDisturbEnabled: boolean;
   doNotDisturbStart: string; // "HH:mm"
   doNotDisturbEnd: string; // "HH:mm"
@@ -34,6 +38,8 @@ interface ReminderPreferencesState extends ReminderPreferences {
   setMissedReminderPolicy: (policy: MissedReminderPolicy) => void;
   setMissedReminderWindowHours: (hours: MissedReminderWindowHours) => void;
   setReminderSoundEnabled: (enabled: boolean) => void;
+  setReminderSoundVolume: (volume: number) => void;
+  setFocusAutoDoNotDisturbEnabled: (enabled: boolean) => void;
   setDoNotDisturbEnabled: (enabled: boolean) => void;
   setDoNotDisturbStart: (time: string) => void;
   setDoNotDisturbEnd: (time: string) => void;
@@ -55,6 +61,8 @@ export const DEFAULT_REMINDER_PREFERENCES: ReminderPreferences = {
   missedReminderPolicy: "deliver",
   missedReminderWindowHours: 6,
   reminderSoundEnabled: true,
+  reminderSoundVolume: 100,
+  focusAutoDoNotDisturbEnabled: false,
   doNotDisturbEnabled: false,
   doNotDisturbStart: "22:00",
   doNotDisturbEnd: "07:00",
@@ -104,6 +112,14 @@ export const useReminderPreferencesStore = create<ReminderPreferencesState>()(
       setMissedReminderPolicy: (policy) => set({ missedReminderPolicy: policy }),
       setMissedReminderWindowHours: (hours) => set({ missedReminderWindowHours: hours }),
       setReminderSoundEnabled: (enabled) => set({ reminderSoundEnabled: enabled }),
+      setReminderSoundVolume: (volume) =>
+        set({
+          reminderSoundVolume: Math.max(
+            0,
+            Math.min(100, Math.round(Number.isFinite(volume) ? volume : DEFAULT_REMINDER_PREFERENCES.reminderSoundVolume))
+          ),
+        }),
+      setFocusAutoDoNotDisturbEnabled: (enabled) => set({ focusAutoDoNotDisturbEnabled: enabled }),
       setDoNotDisturbEnabled: (enabled) => set({ doNotDisturbEnabled: enabled }),
       setDoNotDisturbStart: (time) => set({ doNotDisturbStart: time }),
       setDoNotDisturbEnd: (time) => set({ doNotDisturbEnd: time }),
@@ -129,6 +145,8 @@ export const useReminderPreferencesStore = create<ReminderPreferencesState>()(
         missedReminderPolicy: state.missedReminderPolicy,
         missedReminderWindowHours: state.missedReminderWindowHours,
         reminderSoundEnabled: state.reminderSoundEnabled,
+        reminderSoundVolume: state.reminderSoundVolume,
+        focusAutoDoNotDisturbEnabled: state.focusAutoDoNotDisturbEnabled,
         doNotDisturbEnabled: state.doNotDisturbEnabled,
         doNotDisturbStart: state.doNotDisturbStart,
         doNotDisturbEnd: state.doNotDisturbEnd,
@@ -149,6 +167,14 @@ export const useReminderPreferencesStore = create<ReminderPreferencesState>()(
             typeof p?.reminderSoundEnabled === "boolean"
               ? p.reminderSoundEnabled
               : DEFAULT_REMINDER_PREFERENCES.reminderSoundEnabled,
+          reminderSoundVolume:
+            typeof p?.reminderSoundVolume === "number" && Number.isFinite(p.reminderSoundVolume)
+              ? Math.max(0, Math.min(100, Math.round(p.reminderSoundVolume)))
+              : DEFAULT_REMINDER_PREFERENCES.reminderSoundVolume,
+          focusAutoDoNotDisturbEnabled:
+            typeof p?.focusAutoDoNotDisturbEnabled === "boolean"
+              ? p.focusAutoDoNotDisturbEnabled
+              : DEFAULT_REMINDER_PREFERENCES.focusAutoDoNotDisturbEnabled,
           doNotDisturbEnabled:
             typeof p?.doNotDisturbEnabled === "boolean"
               ? p.doNotDisturbEnabled

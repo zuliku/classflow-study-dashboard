@@ -38,6 +38,8 @@ const CANONICAL: ReminderPreferences = {
   missedReminderPolicy: "deliver",
   missedReminderWindowHours: 6,
   reminderSoundEnabled: true,
+  reminderSoundVolume: 100,
+  focusAutoDoNotDisturbEnabled: false,
   doNotDisturbEnabled: false,
   doNotDisturbStart: "22:00",
   doNotDisturbEnd: "07:00",
@@ -59,6 +61,8 @@ describe("V5A7 B：逐字段 modified semantics", () => {
     ["missedReminderPolicy", { ...CANONICAL, missedReminderPolicy: "recent-only" }],
     ["missedReminderWindowHours", { ...CANONICAL, missedReminderWindowHours: 24 }],
     ["reminderSoundEnabled", { ...CANONICAL, reminderSoundEnabled: false }],
+    ["reminderSoundVolume", { ...CANONICAL, reminderSoundVolume: 40 }],
+    ["focusAutoDoNotDisturbEnabled", { ...CANONICAL, focusAutoDoNotDisturbEnabled: true }],
     ["doNotDisturbEnabled", { ...CANONICAL, doNotDisturbEnabled: true }],
     ["doNotDisturbStart", { ...CANONICAL, doNotDisturbStart: "23:00" }],
     ["doNotDisturbEnd", { ...CANONICAL, doNotDisturbEnd: "08:00" }],
@@ -85,6 +89,8 @@ describe("V5A7 C/G：reset truth 与 DND composite semantics", () => {
     ["missedReminderPolicy", "deliver"],
     ["missedReminderWindowHours", 6],
     ["reminderSoundEnabled", true],
+    ["reminderSoundVolume", 100],
+    ["focusAutoDoNotDisturbEnabled", false],
     ["doNotDisturbEnabled", false],
     ["doNotDisturbStart", "22:00"],
     ["doNotDisturbEnd", "07:00"],
@@ -142,6 +148,8 @@ describe("V5A7 store：初始化 / hydrate 兼容 / reset actions", () => {
     expect(s.missedReminderPolicy).toBe("deliver");
     expect(s.missedReminderWindowHours).toBe(6);
     expect(s.reminderSoundEnabled).toBe(true);
+    expect(s.reminderSoundVolume).toBe(100);
+    expect(s.focusAutoDoNotDisturbEnabled).toBe(false);
     expect(s.doNotDisturbEnabled).toBe(false);
     expect(s.doNotDisturbStart).toBe("22:00");
     expect(s.doNotDisturbEnd).toBe("07:00");
@@ -156,6 +164,8 @@ describe("V5A7 store：初始化 / hydrate 兼容 / reset actions", () => {
           missedReminderPolicy: "sometimes",
           missedReminderWindowHours: 99,
           reminderSoundEnabled: 1,
+          reminderSoundVolume: 999,
+          focusAutoDoNotDisturbEnabled: "yes",
           doNotDisturbEnabled: "no",
           doNotDisturbStart: "25:00",
           doNotDisturbEnd: "bad",
@@ -168,6 +178,8 @@ describe("V5A7 store：初始化 / hydrate 兼容 / reset actions", () => {
     expect(s.missedReminderPolicy).toBe("deliver");
     expect(s.missedReminderWindowHours).toBe(6);
     expect(s.reminderSoundEnabled).toBe(true);
+    expect(s.reminderSoundVolume).toBe(100);
+    expect(s.focusAutoDoNotDisturbEnabled).toBe(false);
     expect(s.doNotDisturbEnabled).toBe(false);
     expect(s.doNotDisturbStart).toBe("22:00");
     expect(s.doNotDisturbEnd).toBe("07:00");
@@ -183,6 +195,18 @@ describe("V5A7 store：初始化 / hydrate 兼容 / reset actions", () => {
     expect(store.getState().missedReminderWindowHours).toBe(24);
     store.getState().resetReminderPreference("missedReminderWindowHours");
     expect(store.getState().missedReminderWindowHours).toBe(6);
+
+    store.getState().setReminderSoundVolume(20);
+    store.getState().setFocusAutoDoNotDisturbEnabled(true);
+    store.getState().resetReminderPreference("reminderSoundVolume");
+    store.getState().resetReminderPreference("focusAutoDoNotDisturbEnabled");
+    expect(store.getState().reminderSoundVolume).toBe(100);
+    expect(store.getState().focusAutoDoNotDisturbEnabled).toBe(false);
+
+    store.getState().setReminderSoundVolume(150);
+    expect(store.getState().reminderSoundVolume).toBe(100);
+    store.getState().setReminderSoundVolume(-5);
+    expect(store.getState().reminderSoundVolume).toBe(0);
   });
 });
 
@@ -192,6 +216,8 @@ describe("V5A7 consumer：TaskSettings modified/reset wiring", () => {
     "missed-reminder-policy": "将错过提醒处理恢复默认",
     "missed-reminder-window": "将补发时间范围恢复默认",
     "reminder-sound": "将提醒声音恢复默认",
+    "reminder-sound-volume": "将提醒音量恢复默认",
+    "focus-auto-dnd": "将专注期间自动免打扰恢复默认",
     "do-not-disturb": "将免打扰时段恢复默认",
   };
 
@@ -281,6 +307,35 @@ describe("V5A7 consumer：TaskSettings modified/reset wiring", () => {
       });
       expect(store.getState().reminderSoundEnabled).toBe(true);
       expect(resetButton(container, "reminder-sound")).toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("F2：提醒音量 / 专注期间自动免打扰 modified/reset", async () => {
+    const { container, root, store } = await mountTaskSettings();
+    try {
+      act(() => {
+        store.getState().resetReminderPreference("reminderSoundVolume");
+        store.getState().resetReminderPreference("focusAutoDoNotDisturbEnabled");
+      });
+      expect(resetButton(container, "reminder-sound-volume")).toBeNull();
+      expect(resetButton(container, "focus-auto-dnd")).toBeNull();
+      act(() => {
+        store.getState().setReminderSoundVolume(35);
+        store.getState().setFocusAutoDoNotDisturbEnabled(true);
+      });
+      expect(resetButton(container, "reminder-sound-volume")).toBeTruthy();
+      expect(resetButton(container, "focus-auto-dnd")).toBeTruthy();
+      await act(async () => {
+        resetButton(container, "reminder-sound-volume")!.click();
+        resetButton(container, "focus-auto-dnd")!.click();
+      });
+      expect(store.getState().reminderSoundVolume).toBe(100);
+      expect(store.getState().focusAutoDoNotDisturbEnabled).toBe(false);
+      expect(resetButton(container, "reminder-sound-volume")).toBeNull();
+      expect(resetButton(container, "focus-auto-dnd")).toBeNull();
     } finally {
       act(() => root.unmount());
       container.remove();

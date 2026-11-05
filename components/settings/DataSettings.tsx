@@ -6,7 +6,6 @@ import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { SettingsSection } from "@/components/settings/SettingsSection";
 import { SettingsGroup } from "@/components/settings/SettingsGroup";
-import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsActionRow } from "@/components/settings/SettingsActionRow";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { DataOverview } from "@/components/settings/DataOverview";
@@ -168,22 +167,40 @@ export function DataSettings() {
         </SettingsGroup>
 
         {/* 隐私：本地优先的数据边界（真实行为说明，非虚构承诺） */}
-        <SettingsGroup title="隐私">
-          <SettingsRow settingId="kiro-privacy-local" title="本地优先">
-            <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-              本地存储
-            </span>
-          </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-api-key" title="API Key">
-            <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-              会话级
-            </span>
-          </SettingsRow>
-          <SettingsRow settingId="kiro-privacy-context" title="上下文发送">
-            <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
-              按需发送
-            </span>
-          </SettingsRow>
+        <SettingsGroup title="隐私" contentClassName="px-4 py-1">
+          <div className="py-3 border-b border-line-soft last:border-b-0" data-setting-id="kiro-privacy-local">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-bold text-charcoal">本地优先</p>
+              <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
+                本地存储
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-sandrift">
+              课程、任务、记忆与聊天记录存放在当前设备；附件正文存本地。
+            </p>
+          </div>
+          <div className="py-3 border-b border-line-soft last:border-b-0" data-setting-id="kiro-privacy-api-key">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-bold text-charcoal">API Key</p>
+              <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
+                会话级
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-sandrift">
+              主 AI 服务 Key 仅保存在本次会话；Tavily Key 可使用本机安全存储。
+            </p>
+          </div>
+          <div className="py-3" data-setting-id="kiro-privacy-context">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-bold text-charcoal">上下文发送</p>
+              <span className="px-2 py-0.5 rounded-full bg-alabaster border border-line text-[10px] font-bold text-satin-grey shrink-0">
+                按需发送
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-sandrift">
+              仅发送当前对话、必要的上下文与所选资料内容。
+            </p>
+          </div>
         </SettingsGroup>
 
         {/* 危险操作 */}
