@@ -14,7 +14,7 @@ import { registerSkillIpc } from "./skills/skillIpc";
 import { registerMcpIpc } from "./mcp/ipc";
 import { registerInvocationIpc } from "./security/invocationIpc";
 import { registerChannelIpc } from "./channels/ipc";
-import { isMiniWebContents, registerMiniChatIpc } from "./miniChat";
+import { closeMiniWindow, disposeMiniChat, isMiniWebContents, registerMiniChatIpc } from "./miniChat";
 import { installLocalApiCapabilityInjector } from "./security/localApiCapability";
 import { isTrustedRendererUrl, isValidAppBundleRequestUrl } from "@/lib/security/rendererOrigin";
 import { configureRuntimeProfile, getRuntimeProfileDiagnostic } from "./runtimeProfile";
@@ -35,6 +35,10 @@ const runtimeProfile = configureRuntimeProfile(app, {
 });
 const runtimeProfileDiagnostic = getRuntimeProfileDiagnostic(runtimeProfile);
 console.info(`[classflow] runtime profile=${runtimeProfileDiagnostic.profile} userDataPolicy=${runtimeProfileDiagnostic.userDataPolicy}`);
+if (process.platform === "win32") {
+  // Windows toast / 任务栏身份（与 electron-builder appId 对齐）
+  app.setAppUserModelId("com.classflow.desktop");
+}
 
 const RENDERER_DIR = join(__dirname, "../renderer");
 
@@ -126,6 +130,11 @@ function createWindow(apiBase: string, apiCapability: string): void {
   mainWindow.on("unmaximize", () => mainWindow?.webContents.send("window:maximized-changed", false));
 
   mainWindow.on("ready-to-show", () => mainWindow?.show());
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+    // Mini 没有独立运行时；主窗口关闭后必须一起关闭，避免孤儿常驻窗。
+    closeMiniWindow();
+  });
   mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) =>
     console.error(`[classflow] did-fail-load code=${code} desc=${desc} url=${url}`)
   );
@@ -418,6 +427,9 @@ app.on("before-quit", async (event) => {
   isQuitting = true;
   event.preventDefault();
   console.info("[classflow] before-quit cleanup");
+  try {
+    disposeMiniChat();
+  } catch {}
   try {
     const { cancelAllTerminalExecutions } = await import("./desktopBridge");
     await withQuitTimeout("terminal-executions", cancelAllTerminalExecutions());

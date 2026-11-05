@@ -118,6 +118,7 @@ const INVOKE_TIMEOUTS_MS: Record<string, number> = {
   // mini（send 的 Main 侧上限 90s；其余秒级）
   "mini:send": 120_000,
   "mini:is-always-on-top": 30_000,
+  "mini:get-window-state": 30_000,
   "mini:get-state": 30_000,
 };
 
@@ -364,8 +365,19 @@ const miniBridge = {
   toggle: () => ipcRenderer.send("mini:toggle"),
   setAlwaysOnTop: (onTop: boolean) => ipcRenderer.send("mini:set-always-on-top", { onTop }),
   isAlwaysOnTop: (): Promise<{ onTop: boolean }> => ipcRenderer.invoke("mini:is-always-on-top"),
+  setMode: (mode: "expanded" | "capsule", instant?: boolean) =>
+    ipcRenderer.send("mini:set-mode", { mode, instant: instant === true }),
+  getWindowState: (): Promise<{ mode: "expanded" | "capsule"; onTop: boolean }> =>
+    ipcRenderer.invoke("mini:get-window-state"),
   sendRemote: (payload: unknown) => invokeBridge("mini:send", payload),
   stopRemote: () => ipcRenderer.send("mini:stop"),
+  newChat: () => ipcRenderer.send("mini:new-chat"),
+  switchConversation: (conversationId: string) =>
+    ipcRenderer.send("mini:switch-conversation", { conversationId }),
+  focusMain: (conversationId?: string) =>
+    ipcRenderer.send("mini:focus-main", conversationId ? { conversationId } : {}),
+  resolveApproval: (approvalId: string, decision: "deny" | "allow-once") =>
+    ipcRenderer.send("mini:approve", { approvalId, decision }),
   publishState: (snapshot: unknown) => ipcRenderer.send("mini:publish-state", snapshot),
   getState: (): Promise<unknown> => ipcRenderer.invoke("mini:get-state"),
   onState: (callback: (snapshot: unknown) => void): (() => void) => {
@@ -383,6 +395,39 @@ const miniBridge = {
     const handler = () => callback();
     ipcRenderer.on("mini:remote-stop", handler);
     return () => ipcRenderer.removeListener("mini:remote-stop", handler);
+  },
+  onRemoteNewChat: (callback: () => void): (() => void) => {
+    const handler = () => callback();
+    ipcRenderer.on("mini:remote-new-chat", handler);
+    return () => ipcRenderer.removeListener("mini:remote-new-chat", handler);
+  },
+  onRemoteSwitchConversation: (callback: (conversationId: string) => void): (() => void) => {
+    const handler = (_e: unknown, payload: { conversationId?: unknown } | null) => {
+      if (typeof payload?.conversationId === "string") callback(payload.conversationId);
+    };
+    ipcRenderer.on("mini:remote-switch-conversation", handler);
+    return () => ipcRenderer.removeListener("mini:remote-switch-conversation", handler);
+  },
+  onRemoteFocusConversation: (callback: (conversationId: string) => void): (() => void) => {
+    const handler = (_e: unknown, payload: { conversationId?: unknown } | null) => {
+      if (typeof payload?.conversationId === "string") callback(payload.conversationId);
+    };
+    ipcRenderer.on("mini:remote-focus-conversation", handler);
+    return () => ipcRenderer.removeListener("mini:remote-focus-conversation", handler);
+  },
+  onRemoteApproval: (
+    callback: (payload: { approvalId: string; decision: "deny" | "allow-once" }) => void
+  ): (() => void) => {
+    const handler = (
+      _e: unknown,
+      payload: { approvalId?: unknown; decision?: unknown } | null
+    ) => {
+      if (typeof payload?.approvalId !== "string") return;
+      const decision = payload.decision === "deny" ? "deny" : "allow-once";
+      callback({ approvalId: payload.approvalId, decision });
+    };
+    ipcRenderer.on("mini:remote-approval", handler);
+    return () => ipcRenderer.removeListener("mini:remote-approval", handler);
   },
 };
 

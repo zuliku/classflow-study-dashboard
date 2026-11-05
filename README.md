@@ -51,6 +51,7 @@ TAVILY_API_KEY=            # 可选：Kiro 联网搜索的 Tavily 增强凭据
 - QQ / 邮件 remote-channel 也允许联网搜索，但额度收紧为每轮 1 次搜索 / 1 次读取，写入类工具仍被 invocation allowlist 拒绝。
 - Kiro Agent 支持可见执行计划（Plan）、结构化澄清（Ask）、多角度深度检索（Deep Research）与只读子代理（Subagents）：计划/问题卡片随会话持久化；`web_research` 与 `web_search` 共享每轮搜索额度（本地 5 次搜索 / 3 次读取），结果继续走可信来源与引用链。子代理用于并行研究/规划/审查，结果作为辅助摘要回填，主 Agent 仍需自行核实关键事实。
 - Kiro 流式输出采用 Live Turn 状态层：思考 / 当前工具动作 / 回答阶段有稳定状态与计时；回答开始时自动收起执行轨迹；caret 跟随真实文本末尾；用户上滑阅读时只提示新内容，不抢滚动位置。
+- Kiro Mini 常驻小窗支持展开/胶囊、实时状态与 Plan/来源/低风险审批、快捷 Prompt、会话切换、系统通知与托盘。
 - 真实 `TAVILY_API_KEY` / `GOOGLE_OAUTH` 等凭据**严禁**写入源码或 `.env.production`，仅通过系统环境变量或桌面端 `SecretVault`（`bridge:credential:*`）注入。
 - `process.env.NEXT_PUBLIC_APP_VERSION` 仍沿用 Next 前缀，仅为兼容 `lib/version.ts`，构建时由 `electron.vite.config.ts` 从 `package.json` 注入。
 

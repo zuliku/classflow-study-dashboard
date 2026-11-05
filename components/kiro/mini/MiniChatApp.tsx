@@ -1,35 +1,43 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { X, Pin, PinOff, Plus, Square, SendHorizontal, Paperclip } from "lucide-react";
+import { Check, ChevronDown, Copy, Plus } from "lucide-react";
 import { KiroMark } from "@/components/kiro/KiroHeader";
 import { getClassFlowDesktopMiniBridge } from "@/lib/desktop/bridge";
+import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { copyTextToClipboard } from "@/lib/ai/share";
 import { usePresence } from "@/lib/usePresence";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { MOTION_EXIT_MS } from "@/lib/motion";
-import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { cn } from "@/lib/utils";
 import {
+  MINI_CAPSULE_SIZE,
+  MINI_DEFAULT_SUGGESTIONS,
   MINI_MAX_FILES,
   MINI_MAX_FILE_BYTES,
   bytesToBase64,
+  type MiniChatConversationSummary,
   type MiniChatSnapshot,
+  type MiniChatWindowMode,
 } from "@/lib/ai/miniChat/protocol";
-import { cn } from "@/lib/utils";
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
+import { MiniChatHeader } from "@/components/kiro/mini/MiniChatHeader";
+import { MiniChatCapsule } from "@/components/kiro/mini/MiniChatCapsule";
+import { MiniChatStatusStrip } from "@/components/kiro/mini/MiniChatStatusStrip";
+import { MiniChatComposer } from "@/components/kiro/mini/MiniChatComposer";
+import { MiniMarkdown } from "@/components/kiro/mini/MiniMarkdown";
 
 /**
  * Kiro Mini 窗（`?mini=1` 独立 BrowserWindow 根；瘦客户端，无聊天运行时）：
- * - 只读快照展示（最近消息 + busy）+ 文本/附件发送意图（经主进程中继到主窗口执行）；
- * -  frameless：头部为原生拖动区（mini-drag-region），按钮均为 mini-no-drag；
- * -  文件拖入/选择：本地 File → base64 → mini:send；附件管线（解析/预算）复用主窗口。
+ * - 只读快照展示（消息 / 状态 / Plan / 来源 / 审批）+ 文本/附件发送意图；
+ * - 主窗口执行；Mini 不直连模型、不执行工具、不写数据；
+ * - 支持展开态 / 胶囊态、会话切换、系统通知由 Main 负责；
+ * - 低风险审批只允许 deny / allow-once，且由主窗口二次校验。
  */
 export function MiniChatApp() {
   const miniAvailable = getClassFlowDesktopMiniBridge() !== null;
+  const reducedMotion = useEffectiveReducedMotion();
+  const initialCapsule =
+    typeof window !== "undefined" && window.innerWidth <= MINI_CAPSULE_SIZE + 8;
   const [snapshot, setSnapshot] = useState<MiniChatSnapshot | null>(null);
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -37,389 +45,642 @@ export function MiniChatApp() {
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [onTop, setOnTop] = useState(true);
+  const [mode, setModeState] = useState<MiniChatWindowMode>(
+    initialCapsule ? "capsule" : "expanded"
+  );
+  const [unread, setUnread] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [syncError, setSyncError] = useState(false);
+  const [hasNew, setHasNew] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const listRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
-  const taRef = useRef<HTMLTextAreaElement | null>(null);
-  // 常驻窗动效：拖拽/附件/提示对称进退，时长全部走 Contract 常量。
-  const dragPresence = usePresence(dragOver, MOTION_EXIT_MS.fast);
-  const noticePresence = usePresence(notice !== null, MOTION_EXIT_MS.panel);
-  // busy 由快照驱动（early return 之前只能读 snapshot，不能读派生 busy）。
-  const busyPresence = usePresence(snapshot?.busy ?? false, MOTION_EXIT_MS.fast);
-  // 附件 chip 原位退出（Composer 同模式；发送清空直接过滤，不过渡）。
-  const reducedMotion = useEffectiveReducedMotion();
-  const [leavingFileKeys, setLeavingFileKeys] = useState<ReadonlySet<string>>(new Set());
-  const leavingTimersRef = useRef<number[]>([]);
-  useEffect(
-    () => () => {
-      leavingTimersRef.current.forEach((t) => window.clearTimeout(t));
-      leavingTimersRef.current = [];
-    },
-    []
-  );
-  const fileKey = (f: File, i: number) => `${f.name}-${f.size}-${f.lastModified}-${i}`;
-  // 按对象标识删除（下标在并发删除时会漂移；leaving key 用渲染期下标，快照级一致即可）。
-  const removeFile = useCallback(
-    (key: string, file: File) => {
-      if (leavingFileKeys.has(key)) return;
-      if (reducedMotion) {
-        setFiles((prev) => prev.filter((f) => f !== file));
-        return;
-      }
-      setLeavingFileKeys((prev) => new Set(prev).add(key));
-      const timer = window.setTimeout(() => {
-        leavingTimersRef.current = leavingTimersRef.current.filter((t) => t !== timer);
-        setLeavingFileKeys((prev) => {
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
-        setFiles((prev) => prev.filter((f) => f !== file));
-      }, MOTION_EXIT_MS.panel);
-      leavingTimersRef.current.push(timer);
-    },
-    [leavingFileKeys, reducedMotion]
-  );
-  // 删最后一个文件时整架与 chip 并行收（Composer shelf 同语义）：open 判定排除 leaving，
-  // 落库与卸载同 tick 且已零高度，避免“chip 先收、落库后盒子再折”的两段割裂
-  const trayPresence = usePresence(
-    files.some((f, i) => !leavingFileKeys.has(fileKey(f, i))),
-    MOTION_EXIT_MS.panel
-  );
+  const busySinceRef = useRef<number | null>(null);
+  const previousBusyRef = useRef(false);
+  const modeTimerRef = useRef<number | null>(null);
 
-  // 初始快照 + 订阅推送（无 bridge 即 fallback，不抛错）
+  const busy = snapshot?.busy ?? false;
+  const messages = snapshot?.messages ?? [];
+  const lastMessageText = messages[messages.length - 1]?.text ?? "";
+  const statusLabel = snapshot?.status?.label ?? "";
+  const suggestions =
+    snapshot?.suggestions && snapshot.suggestions.length > 0
+      ? snapshot.suggestions
+      : [...MINI_DEFAULT_SUGGESTIONS];
+  const configured = snapshot?.configured ?? true;
+  const transitioning = snapshot?.transitioning ?? false;
+  const title = snapshot?.title ?? "Kiro Mini";
+  const noticeText = syncError
+    ? "主窗口未连接"
+    : transitioning
+      ? "正在切换对话…"
+      : notice;
+  const noticePresence = usePresence(!!noticeText, MOTION_EXIT_MS.panel);
+  const busyPresence = usePresence(busy && !!statusLabel, MOTION_EXIT_MS.fast);
+  const lastNoticeRef = useRef<string | null>(null);
+  if (noticeText) lastNoticeRef.current = noticeText;
+  const shownNotice = noticeText ?? lastNoticeRef.current;
+
+  const refreshState = useCallback(async () => {
+    const mini = getClassFlowDesktopMiniBridge();
+    if (!mini) return;
+    try {
+      const state = await mini.getState();
+      if (state && typeof state === "object") {
+        setSnapshot(state as MiniChatSnapshot);
+        setSyncError(false);
+      }
+    } catch {
+      setSyncError(true);
+    }
+  }, []);
+
+  // 初始快照 + 窗口状态 + 推送订阅（无 bridge 即 fallback，不抛错）
   useEffect(() => {
     const mini = getClassFlowDesktopMiniBridge();
     if (!mini) return;
     let cancelled = false;
+    const refresh = async () => {
+      try {
+        const state = await mini.getState();
+        if (!cancelled && state && typeof state === "object") {
+          setSnapshot(state as MiniChatSnapshot);
+          setSyncError(false);
+        }
+      } catch {
+        if (!cancelled) setSyncError(true);
+      }
+    };
+    void refresh();
     mini
-      .getState()
-      .then((s) => {
-        if (!cancelled && s && typeof s === "object") setSnapshot(s as MiniChatSnapshot);
-      })
-      // 首屏快照失败必须可见：否则空白 + 状态错且无感知
-      .catch(() => {
-        if (!cancelled) setNotice("迷你窗状态同步失败，显示可能不是最新，可关闭重开。");
-      });
-    mini
-      .isAlwaysOnTop()
-      .then((r) => {
-        if (!cancelled) setOnTop((r as { onTop?: boolean })?.onTop !== false);
+      .getWindowState()
+      .then((state) => {
+        if (cancelled || !state) return;
+        setModeState(state.mode === "capsule" ? "capsule" : "expanded");
+        setOnTop(state.onTop !== false);
       })
       .catch(() => {
-        if (!cancelled) setNotice("迷你窗置顶状态读取失败，可手动调整。");
+        void mini
+          .isAlwaysOnTop()
+          .then((r) => {
+            if (!cancelled) setOnTop((r as { onTop?: boolean })?.onTop !== false);
+          })
+          .catch(() => {});
       });
-    const off = mini.onState((s) => {
-      if (s && typeof s === "object") setSnapshot(s as MiniChatSnapshot);
+    const off = mini.onState((state) => {
+      if (state && typeof state === "object") {
+        setSnapshot(state as MiniChatSnapshot);
+        setSyncError(false);
+      }
     });
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    const onFocus = () => {
+      setUnread(0);
+      void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
       off();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 
-  // 新消息：贴底时跟随到底（用户上翻时不抢滚动）
+  // busy 计时（只作为 Header 的轻量 detail；不参与状态推导）
   useEffect(() => {
+    if (!busy) {
+      busySinceRef.current = null;
+      return;
+    }
+    if (busySinceRef.current === null) busySinceRef.current = Date.now();
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
+  const elapsed =
+    busy && busySinceRef.current
+      ? Math.max(0, Math.floor((now - busySinceRef.current) / 1000))
+      : 0;
+
+  // 完成未读：Mini 隐藏/失焦时，turn busy→false → 未读点
+  useEffect(() => {
+    if (busy) {
+      previousBusyRef.current = true;
+      return;
+    }
+    if (previousBusyRef.current) {
+      previousBusyRef.current = false;
+      if (document.hidden || !document.hasFocus()) {
+        setUnread((n) => Math.min(99, n + 1));
+      }
+    }
+  }, [busy]);
+
+  // 审批状态变化后解除本地 busy
+  useEffect(() => {
+    if (!snapshot?.approval?.pending) setApprovalBusy(false);
+  }, [snapshot?.approval?.pending, snapshot?.approval?.id]);
+
+  // 主窗口回执丢失时不要永久禁用审批按钮
+  useEffect(() => {
+    if (!approvalBusy) return;
+    const timer = window.setTimeout(() => setApprovalBusy(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, [approvalBusy]);
+
+  // 新消息：贴底时跟随；用户上翻时不抢滚动
+  const scrollToBottom = useCallback((smooth = false) => {
     const el = listRef.current;
-    if (!el || !stickRef.current) return;
-    el.scrollTop = el.scrollHeight;
-  }, [snapshot?.messages.length, snapshot?.updatedAt]);
+    if (!el) return;
+    stickRef.current = true;
+    setHasNew(false);
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: smooth && !reducedMotion ? "smooth" : "auto",
+    });
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    if (stickRef.current) {
+      const el = listRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+      setHasNew(false);
+    } else if (busy || messages.length > 0) {
+      setHasNew(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, lastMessageText.length, snapshot?.phase]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
-    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 64;
+    stickRef.current = atBottom;
+    if (atBottom) setHasNew(false);
   }, []);
 
-  const addPickedFiles = useCallback((picked: File[]) => {
+  const addFiles = useCallback((picked: File[]) => {
     if (picked.length === 0) return;
     setNotice(null);
     setFiles((prev) => {
       const merged = [...prev];
-      for (const f of picked) {
+      for (const file of picked) {
         if (merged.length >= MINI_MAX_FILES) {
-          setNotice(`附件最多 ${MINI_MAX_FILES} 个，多余的已忽略。`);
+          setNotice(`附件最多 ${MINI_MAX_FILES} 个`);
           break;
         }
-        if (f.size <= 0 || f.size > MINI_MAX_FILE_BYTES) {
-          setNotice(`「${f.name}」超出大小限制（20MB），已忽略。`);
+        if (file.size <= 0 || file.size > MINI_MAX_FILE_BYTES) {
+          setNotice(`「${file.name}」超过 20MB`);
           continue;
         }
-        merged.push(f);
+        merged.push(file);
       }
       return merged;
     });
   }, []);
 
-  const send = useCallback(async () => {
-    const mini = getClassFlowDesktopMiniBridge();
-    if (!mini || sending) return;
-    const text = input.trim();
-    if (!text && files.length === 0) return;
-    if (snapshot?.busy) {
-      setNotice("主窗口正在对话，请稍候。");
-      return;
-    }
-    setSending(true);
-    setNotice(null);
-    try {
-      const payloadFiles = await Promise.all(
-        files.map(async (f) => ({
-          name: f.name,
-          type: f.type,
-          size: f.size,
-          dataBase64: bytesToBase64(new Uint8Array(await f.arrayBuffer())),
-        }))
-      );
-      const result = (await mini.sendRemote({
-        requestId:
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `mini_${Date.now().toString(36)}`,
-        text,
-        files: payloadFiles,
-      })) as { ok?: boolean; code?: string; message?: string; droppedFiles?: string[] };
-      if (!result || result.ok !== true) {
-        setNotice(result?.message ?? "发送失败，请重试。");
+  const sendRemote = useCallback(
+    async (text: string, outgoingFiles: File[], clearComposer: boolean) => {
+      const mini = getClassFlowDesktopMiniBridge();
+      if (!mini || sending) return false;
+      const trimmed = text.trim();
+      if (!trimmed && outgoingFiles.length === 0) return false;
+      if (snapshot?.busy) {
+        setNotice("Kiro 正在处理当前对话");
+        return false;
+      }
+      if (snapshot && snapshot.configured === false) {
+        setNotice("未配置模型，去主窗口设置");
+        return false;
+      }
+      setSending(true);
+      setNotice(null);
+      try {
+        const payloadFiles = await Promise.all(
+          outgoingFiles.map(async (file) => ({
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            dataBase64: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+          }))
+        );
+        const result = (await mini.sendRemote({
+          requestId:
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `mini_${Date.now().toString(36)}`,
+          text: trimmed,
+          files: payloadFiles,
+        })) as { ok?: boolean; code?: string; message?: string; droppedFiles?: string[] };
+        if (!result || result.ok !== true) {
+          setNotice(result?.message ?? "发送失败");
+          return false;
+        }
+        if (result.droppedFiles && result.droppedFiles.length > 0) {
+          setNotice(`部分附件被忽略：${result.droppedFiles.join("、")}`);
+        }
+        if (clearComposer) {
+          setInput("");
+          setFiles([]);
+        }
+        stickRef.current = true;
+        requestAnimationFrame(() => {
+          const el = listRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+        return true;
+      } catch {
+        setNotice("发送失败（主窗口无响应）");
+        return false;
+      } finally {
+        setSending(false);
+      }
+    },
+    [sending, snapshot?.busy, snapshot?.configured]
+  );
+
+  const send = useCallback(() => {
+    void sendRemote(input, files, true);
+  }, [input, files, sendRemote]);
+
+  const quickSend = useCallback(
+    (prompt: string) => {
+      if (snapshot?.busy || transitioning) {
+        setNotice("Kiro 正在处理当前对话");
         return;
       }
-      if (result.droppedFiles && result.droppedFiles.length > 0) {
-        setNotice(`部分附件被忽略：${result.droppedFiles.join("、")}`);
-      }
-      setInput("");
-      setFiles([]);
-      stickRef.current = true;
-      requestAnimationFrame(() => taRef.current?.focus());
-    } catch {
-      setNotice("发送失败（主窗口无响应），请重试。");
-    } finally {
-      setSending(false);
-    }
-  }, [files, input, sending, snapshot?.busy]);
+      void sendRemote(prompt, [], false);
+    },
+    [sendRemote, snapshot?.busy, transitioning]
+  );
 
-  const stop = useCallback(() => {
+  const setMode = useCallback(
+    (next: MiniChatWindowMode) => {
+      if (modeTimerRef.current !== null) {
+        window.clearTimeout(modeTimerRef.current);
+        modeTimerRef.current = null;
+      }
+      if (next === mode) return;
+      if (next === "expanded") {
+        setUnread(0);
+        setMenuOpen(false);
+        try {
+          getClassFlowDesktopMiniBridge()?.setMode(next, reducedMotion);
+        } catch {}
+        if (reducedMotion) {
+          setModeState("expanded");
+        } else {
+          // 让胶囊随窗口一起放大，动画结束后再切完整布局，避免 72px 宽瞬间重排。
+          modeTimerRef.current = window.setTimeout(() => {
+            modeTimerRef.current = null;
+            setModeState("expanded");
+          }, 170);
+        }
+        return;
+      }
+      setModeState("capsule");
+      setMenuOpen(false);
+      try {
+        getClassFlowDesktopMiniBridge()?.setMode(next, reducedMotion);
+      } catch {}
+    },
+    [mode, reducedMotion]
+  );
+
+  useEffect(
+    () => () => {
+      if (modeTimerRef.current !== null) window.clearTimeout(modeTimerRef.current);
+    },
+    []
+  );
+
+  const hide = useCallback(() => {
     try {
-      getClassFlowDesktopMiniBridge()?.stopRemote();
+      getClassFlowDesktopMiniBridge()?.hide();
     } catch {}
   }, []);
 
+  const togglePin = useCallback(() => {
+    const next = !onTop;
+    setOnTop(next);
+    try {
+      getClassFlowDesktopMiniBridge()?.setAlwaysOnTop(next);
+    } catch {}
+  }, [onTop]);
+
+  const focusMain = useCallback((conversationId?: string) => {
+    try {
+      getClassFlowDesktopMiniBridge()?.focusMain(conversationId);
+    } catch {}
+    setMenuOpen(false);
+  }, []);
+
+  const copyMessage = useCallback(async (id: string, text: string) => {
+    const ok = await copyTextToClipboard(text);
+    if (!ok) return;
+    setCopiedId(id);
+    window.setTimeout(() => {
+      setCopiedId((current) => (current === id ? null : current));
+    }, 1200);
+  }, []);
+
+  const newChat = useCallback(() => {
+    if (busy || transitioning) {
+      setNotice("先停止当前回答");
+      return;
+    }
+    setMenuOpen(false);
+    try {
+      getClassFlowDesktopMiniBridge()?.newChat();
+    } catch {}
+  }, [busy, transitioning]);
+
+  const switchConversation = useCallback(
+    (conversation: MiniChatConversationSummary) => {
+      if (busy || transitioning) {
+        setNotice("先停止当前回答");
+        return;
+      }
+      if (conversation.id === snapshot?.conversationId) {
+        setMenuOpen(false);
+        return;
+      }
+      setMenuOpen(false);
+      try {
+        getClassFlowDesktopMiniBridge()?.switchConversation(conversation.id);
+      } catch {}
+    },
+    [busy, transitioning, snapshot?.conversationId]
+  );
+
+  const resolveApproval = useCallback(
+    (decision: "deny" | "allow-once") => {
+      const approval = snapshot?.approval;
+      if (!approval?.id || approvalBusy) return;
+      setApprovalBusy(true);
+      try {
+        getClassFlowDesktopMiniBridge()?.resolveApproval(approval.id, decision);
+      } catch {
+        setApprovalBusy(false);
+      }
+    },
+    [approvalBusy, snapshot?.approval]
+  );
+
+  // Esc：菜单优先关闭；否则隐藏 Mini
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (menuOpen) {
+        setMenuOpen(false);
+        return;
+      }
+      hide();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hide, menuOpen]);
+
   if (!miniAvailable) {
     return (
-      <div className="h-screen flex items-center justify-center bg-surface p-6 text-center">
+      <div className="flex h-screen items-center justify-center bg-surface p-6 text-center">
         <p className="text-xs text-sandrift">迷你窗仅在桌面端可用。</p>
       </div>
     );
   }
 
-  const busy = snapshot?.busy ?? false;
-  const messages = snapshot?.messages ?? [];
-  const canSend = (input.trim().length > 0 || files.length > 0) && !sending && !busy;
+  if (mode === "capsule") {
+    return (
+      <MiniChatCapsule
+        statusLabel={statusLabel}
+        busy={busy}
+        unread={unread}
+        onExpand={() => setMode("expanded")}
+        onHide={hide}
+      />
+    );
+  }
 
   return (
     <div
-      className="h-screen flex flex-col bg-surface text-charcoal overflow-hidden"
+      className="relative flex h-screen flex-col overflow-hidden bg-surface text-charcoal"
       data-testid="kiro-mini-app"
-      onDragOver={(e) => {
-        e.preventDefault();
+      onDragOver={(event) => {
+        event.preventDefault();
         setDragOver(true);
       }}
       onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
+      onDrop={(event) => {
+        event.preventDefault();
         setDragOver(false);
-        addPickedFiles(Array.from(e.dataTransfer.files ?? []));
+        addFiles(Array.from(event.dataTransfer.files ?? []));
       }}
     >
-      {/* 头部：原生拖动区（-webkit-app-region: drag；按钮 no-drag） */}
-      <div
-        className="mini-drag-region shrink-0 flex items-center gap-2 pl-3 pr-1.5 h-11 border-b border-line bg-surface select-none"
-        data-testid="kiro-mini-header"
-      >
-        <KiroMark size="sm" />
-        <span className="text-[13px] font-bold flex-1 truncate">Kiro Mini</span>
-        {busyPresence.mounted && (
-          <span
-            className={cn(
-              "flex items-center gap-1 text-[10px] font-semibold text-sandrift transition-[opacity,transform]",
-              busyPresence.visible
-                ? "opacity-100 duration-[var(--motion-fast)]"
-                : "opacity-0 pointer-events-none duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
-            )}
-            data-testid="kiro-mini-busy"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-sandrift animate-pulse" />
-            对话中
-          </span>
-        )}
-        <button
-          type="button"
-          aria-label={onTop ? "取消置顶" : "置顶显示"}
-          className="mini-no-drag w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-          onClick={() => {
-            const next = !onTop;
-            setOnTop(next);
-            try {
-              getClassFlowDesktopMiniBridge()?.setAlwaysOnTop(next);
-            } catch {}
-          }}
-        >
-            <span key={String(onTop)} className="ux-fade inline-flex">
-              {onTop ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-            </span>
-        </button>
-        <button
-          type="button"
-          aria-label="隐藏迷你窗"
-          className="mini-no-drag w-7 h-7 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors"
-          onClick={() => {
-            try {
-              getClassFlowDesktopMiniBridge()?.hide();
-            } catch {}
-          }}
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <MiniChatHeader
+        title={title}
+        statusLabel={statusLabel}
+        statusDetail={elapsed >= 2 && busy ? `${elapsed}s` : undefined}
+        busy={busyPresence.mounted}
+        unread={unread}
+        onTop={onTop}
+        onPin={togglePin}
+        onCollapse={() => setMode("capsule")}
+        onHide={hide}
+        onNewChat={newChat}
+        onOpenConversations={() => setMenuOpen((v) => !v)}
+      />
 
-      {/* 消息区（只读；富卡片保留在主窗口） */}
-      <div ref={listRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto px-3 py-2.5 space-y-2" data-testid="kiro-mini-messages">
-        {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center animate-enter">
-            <KiroMark size="sm" />
-            <p className="text-xs font-semibold">在主窗口继续，或直接在这里问</p>
-            <p className="text-[11px] text-sandrift">文件可直接拖入输入框作为附件</p>
-          </div>
-        )}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={cn(
-              "max-w-full rounded-xl px-2.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap break-words animate-enter",
-              m.role === "user" ? "ml-6 bg-alabaster/70" : "mr-6 bg-surface-soft border border-line-soft"
-            )}
-          >
-            <div className="text-[10px] font-bold text-sandrift pb-0.5">{m.role === "user" ? "你" : "Kiro"}</div>
-            <div>{m.text}</div>
-          </div>
-        ))}
-      </div>
+      <MiniChatStatusStrip
+        plan={snapshot?.plan ?? null}
+        activity={snapshot?.activity ?? null}
+        approval={snapshot?.approval ?? null}
+        sources={snapshot?.sources ?? []}
+        approvalBusy={approvalBusy}
+        onApprove={() => resolveApproval("allow-once")}
+        onDeny={() => resolveApproval("deny")}
+        onFocusMain={() => focusMain(snapshot?.conversationId ?? undefined)}
+      />
 
-      {dragPresence.mounted && (
+      <div className="relative min-h-0 flex-1">
         <div
-          className={cn(
-            "mx-2.5 mb-1.5 rounded-xl border-2 border-dashed border-line-strong bg-alabaster/60 px-3 py-2 text-center text-[11px] font-bold pointer-events-none transition-[opacity,transform]",
-            dragPresence.visible
-              ? "opacity-100 duration-[var(--motion-fast)]"
-              : "opacity-0 scale-[0.99] duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]"
-          )}
+          ref={listRef}
+          onScroll={handleScroll}
+          className="h-full space-y-2 overflow-y-auto px-3 py-2.5"
+          data-testid="kiro-mini-messages"
         >
+          {messages.length === 0 && (
+            <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center animate-enter">
+              <KiroMark size="sm" />
+              <p className="text-xs font-semibold">有什么要处理的？</p>
+              <p className="text-[10px] text-sandrift">直接问，或拖入文件</p>
+            </div>
+          )}
+          {messages.map((message, index) => {
+            if (message.role === "assistant" && !message.text) return null;
+            const isLast = index === messages.length - 1;
+            return (
+              <div
+                key={message.id}
+                data-testid="kiro-mini-message"
+                className={cn(
+                  "max-w-full text-[13px] leading-relaxed animate-enter",
+                  message.role === "user"
+                    ? "ml-6 rounded-xl bg-alabaster/70 px-2.5 py-2 whitespace-pre-wrap break-words"
+                    : "mr-2"
+                )}
+              >
+                {message.role === "assistant" ? (
+                  <>
+                    <MiniMarkdown
+                      text={message.text}
+                      streaming={
+                        isLast &&
+                        busy &&
+                        snapshot?.phase === "answering" &&
+                        message.streaming === true
+                      }
+                    />
+                    {isLast && !busy && message.text && (
+                      <button
+                        type="button"
+                        onClick={() => void copyMessage(message.id, message.text)}
+                        className="mini-no-drag mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal"
+                        aria-label="复制最后一条回答"
+                      >
+                        {copiedId === message.id ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        {copiedId === message.id ? "已复制" : "复制"}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  message.text
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {hasNew && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom(true)}
+            className="mini-no-drag absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-line bg-surface px-2 py-1 text-[10px] font-semibold text-satin-grey shadow-subtle animate-enter"
+          >
+            <ChevronDown className="h-3 w-3" />
+            新内容
+          </button>
+        )}
+      </div>
+
+      {dragOver && (
+        <div className="pointer-events-none mx-2.5 mb-1.5 rounded-xl border-2 border-dashed border-line-strong bg-alabaster/60 px-3 py-2 text-center text-[11px] font-bold animate-enter">
           释放以添加附件
         </div>
       )}
 
-      {/* 本地待发送附件：整架对称进退，单 chip 原位 collapse 后删除 */}
-      {trayPresence.mounted && (
-        <ExitCollapse exiting={!trayPresence.visible}>
-          <div className="shrink-0 px-2.5 pb-1 flex flex-wrap gap-1" data-testid="kiro-mini-files">
-            {files.map((f, i) => {
-              const key = fileKey(f, i);
-              return (
-                <ExitCollapse key={key} axis="horizontal" exiting={leavingFileKeys.has(key)} className="shrink-0">
-                  <span className="inline-flex items-center gap-1 max-w-full rounded-lg border border-line bg-alabaster/50 pl-1.5 pr-1 py-0.5 text-[11px]">
-                    <Paperclip className="w-3 h-3 text-sandrift shrink-0" />
-                    <span className="truncate max-w-[140px] font-semibold">{f.name}</span>
-                    <span className="text-sandrift shrink-0">{formatBytes(f.size)}</span>
-                    <button
-                      type="button"
-                      aria-label={`移除附件 ${f.name}`}
-                      className="mini-no-drag w-4 h-4 flex items-center justify-center rounded text-sandrift hover:text-charcoal"
-                      onClick={() => removeFile(key, f)}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                </ExitCollapse>
-              );
-            })}
-          </div>
-        </ExitCollapse>
-      )}
-
       {noticePresence.mounted && (
         <ExitCollapse exiting={!noticePresence.visible}>
-          <div className="shrink-0 px-3 pb-1 text-[11px] font-semibold text-warning" data-testid="kiro-mini-notice">
-            {notice}
+          <div
+            className="flex shrink-0 items-center gap-2 px-3 pb-1 text-[10px] font-semibold text-warning"
+            data-testid="kiro-mini-notice"
+          >
+            <span className="min-w-0 flex-1 truncate">{shownNotice}</span>
+            {syncError && (
+              <button
+                type="button"
+                onClick={() => void refreshState()}
+                className="mini-no-drag shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold text-charcoal hover:bg-alabaster"
+              >
+                重试
+              </button>
+            )}
           </div>
         </ExitCollapse>
       )}
 
-      {/* 输入区 */}
-      <div className="shrink-0 border-t border-line p-2">
-        <textarea
-          ref={taRef}
-          value={input}
-          rows={2}
-          placeholder="问 Kiro…（Enter 发送，Shift+Enter 换行）"
-          aria-label="迷你窗输入"
-          className="w-full resize-none bg-transparent text-[13px] leading-relaxed placeholder-sandrift focus:outline-none max-h-28"
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return;
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-        />
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-1">
-            <label
-              className="mini-no-drag w-8 h-8 flex items-center justify-center rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors cursor-pointer"
-              aria-label="添加附件"
+      <MiniChatComposer
+        input={input}
+        onInput={setInput}
+        files={files}
+        onAddFiles={addFiles}
+        onRemoveFile={(file) => setFiles((prev) => prev.filter((f) => f !== file))}
+        onSend={send}
+        onQuickPrompt={quickSend}
+        onStop={() => {
+          try {
+            getClassFlowDesktopMiniBridge()?.stopRemote();
+          } catch {}
+        }}
+        sending={sending}
+        busy={busy}
+        configured={configured}
+        transitioning={transitioning}
+        suggestions={suggestions}
+        onFocusMain={() => focusMain(snapshot?.conversationId ?? undefined)}
+      />
+
+      {menuOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="关闭对话菜单"
+            className="absolute inset-0 z-20 cursor-default bg-transparent"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div
+            data-testid="kiro-mini-conversation-menu"
+            className="absolute inset-x-2 top-12 z-30 max-h-[62%] overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-card animate-enter"
+          >
+            <div className="flex items-center justify-between px-2 py-1">
+              <span className="text-[10px] font-bold text-sandrift">最近对话</span>
+              <button
+                type="button"
+                onClick={() => focusMain(snapshot?.conversationId ?? undefined)}
+                className="text-[10px] font-semibold text-sandrift hover:text-charcoal"
+              >
+                主窗口
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={newChat}
+              className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold text-charcoal hover:bg-alabaster"
             >
-              <Plus className="w-4 h-4" />
-              <input
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  addPickedFiles(Array.from(e.target.files ?? []));
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            {snapshot && snapshot.attachments.length > 0 && (
-              <span className="text-[10px] text-sandrift">
-                主窗口附件 {snapshot.attachments.length} 个
-              </span>
+              <Plus className="h-3 w-3" />
+              新对话
+            </button>
+            {(snapshot?.conversations ?? []).map((conversation) => (
+              <button
+                key={conversation.id}
+                type="button"
+                onClick={() => switchConversation(conversation)}
+                className={cn(
+                  "flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] hover:bg-alabaster",
+                  conversation.id === snapshot?.conversationId
+                    ? "font-semibold text-charcoal"
+                    : "text-satin-grey"
+                )}
+              >
+                <span className="truncate">{conversation.title}</span>
+                {conversation.id === snapshot?.conversationId && (
+                  <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-charcoal" />
+                )}
+              </button>
+            ))}
+            {(snapshot?.conversations ?? []).length === 0 && (
+              <p className="px-2 py-3 text-center text-[10px] text-sandrift">暂无历史对话</p>
             )}
           </div>
-          {busy ? (
-            <button
-              type="button"
-              aria-label="停止"
-              onClick={stop}
-              className="h-8 px-3 rounded-lg bg-charcoal text-white text-xs font-bold flex items-center gap-1.5 hover:opacity-90"
-            >
-              <Square className="w-3 h-3" />
-              停止
-            </button>
-          ) : (
-            <button
-              type="button"
-              aria-label="发送"
-              onClick={() => void send()}
-              disabled={!canSend}
-              className={cn(
-                "h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-opacity",
-                canSend ? "bg-charcoal text-white hover:opacity-90" : "bg-alabaster text-sandrift cursor-not-allowed"
-              )}
-            >
-              <SendHorizontal className="w-3 h-3" />
-              {sending ? "发送中" : "发送"}
-            </button>
-          )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

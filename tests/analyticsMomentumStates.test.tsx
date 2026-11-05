@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "@testing-library/react";
+import { KiroPendingIndicator } from "@/components/kiro/KiroWorklog";
 
 const hookState = vi.hoisted(() => ({
   data: null as null | { days: never[]; streakDays: number; activeToday: boolean; totalMinutes: number; activeDays: number; bestDay: null },
@@ -73,7 +74,6 @@ describe("AnalyticsMomentum 三态（N1）", () => {
 
 describe("KiroPendingIndicator 心跳（N2）", () => {
   it("3 秒后显示已等待秒数（首 token 前存活感）", async () => {
-    const { KiroPendingIndicator } = await import("@/components/kiro/KiroWorklog");
     // 用 fake timers + 系统时间：该组件按 Date.now() 计算秒数，真实 3.3s 等待在
     // full-suite 并行时会被事件循环拖到 20s 测试超时（曾多次误报）。
     vi.useFakeTimers();

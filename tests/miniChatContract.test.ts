@@ -36,7 +36,7 @@ describe("Main 侧（src/main/miniChat.ts + index.ts 接线）", () => {
     expect(src).toContain("?mini=1");
   });
 
-  it("IPC 全集：show/hide/toggle/send/stop/publish-state/get-state/置顶 + send 回执关联", () => {
+  it("IPC 全集：show/hide/toggle/send/stop/publish-state/get-state/置顶/模式/会话命令/审批 + send 回执关联", () => {
     for (const ch of [
       "mini:show",
       "mini:hide",
@@ -47,13 +47,51 @@ describe("Main 侧（src/main/miniChat.ts + index.ts 接线）", () => {
       "mini:get-state",
       "mini:set-always-on-top",
       "mini:is-always-on-top",
+      "mini:set-mode",
+      "mini:get-window-state",
+      "mini:new-chat",
+      "mini:switch-conversation",
+      "mini:focus-main",
+      "mini:approve",
       "mini:remote-send",
       "mini:remote-send:done",
       "mini:remote-stop",
+      "mini:remote-new-chat",
+      "mini:remote-switch-conversation",
+      "mini:remote-focus-conversation",
+      "mini:remote-approval",
       "mini:state",
     ]) {
       expect(src, ch).toContain(ch);
     }
+  });
+
+  it("低风险审批：Mini 只允许 deny / allow-once，主窗口二次校验", () => {
+    expect(src).toContain("approval.canApproveInMini");
+    const relay = read("components/kiro/mini/MiniChatRelayHost.tsx");
+    const approval = read("lib/ai/miniChat/approval.ts");
+    expect(relay).toContain("canApproveInMini");
+    expect(relay).toContain('p.decision === "deny" ? "deny" : "allow-once"');
+    expect(approval).toContain("background === true");
+    expect(approval).toContain('allowedDecisions.includes("allow-once")');
+    expect(approval).toContain("highRisk");
+  });
+
+  it("系统通知 + 托盘：完成通知 / 托盘显示 Mini / 打开主窗口", () => {
+    expect(src).toContain("Notification");
+    expect(src).toContain("Tray");
+    expect(src).toContain("Kiro 已回答");
+    expect(src).toContain("显示 Kiro Mini");
+    expect(src).toContain("打开 ClassFlow");
+  });
+
+  it("常驻/后台/多显示器：主窗口关闭联动 + 后台不节流 + bounds clamp + 快捷键", () => {
+    expect(index).toContain("closeMiniWindow");
+    expect(index).toContain("disposeMiniChat");
+    expect(src).toContain("setBackgroundThrottling");
+    expect(src).toContain("getDisplayMatching");
+    expect(src).toContain("globalShortcut");
+    expect(src).toContain("MINI_CAPSULE_SIZE");
   });
 
   it("sender 校验 fail closed（id+URL 双门；send 必须来自 Mini 窗）", () => {
@@ -110,6 +148,12 @@ describe("Preload + 类型 + 访问器", () => {
     expect(src).toContain("mini:state");
     expect(src).toContain("mini:remote-send");
     expect(src).toContain("mini:remote-stop");
+    expect(src).toContain("mini:remote-new-chat");
+    expect(src).toContain("mini:remote-switch-conversation");
+    expect(src).toContain("mini:remote-focus-conversation");
+    expect(src).toContain("mini:remote-approval");
+    expect(src).toContain("mini:set-mode");
+    expect(src).toContain("mini:get-window-state");
   });
 
   it("types.ts：mini 为 optional capability；bridge.ts 有渐进检测", () => {
@@ -141,13 +185,18 @@ describe("Renderer 接线", () => {
 
   it("Mini App：拖动区 + 文件拖入 + 发送/停止 + 快照订阅", () => {
     const src = read("components/kiro/mini/MiniChatApp.tsx");
-    expect(src).toContain("mini-drag-region");
+    const header = read("components/kiro/mini/MiniChatHeader.tsx");
+    const capsule = read("components/kiro/mini/MiniChatCapsule.tsx");
     expect(src).toContain("mini-no-drag");
     expect(src).toContain("dataTransfer.files");
     expect(src).toContain("sendRemote");
     expect(src).toContain("stopRemote");
     expect(src).toContain("onState");
     expect(src).toContain("kiro-mini-app");
+    expect(header).toContain("mini-drag-region");
+    expect(capsule).toContain("mini-drag-region");
+    expect(src).toContain("setMode");
+    expect(src).toContain("resolveApproval");
   });
 
   it("Sidecar 头部有弹出入口（桌面端才渲染）", () => {

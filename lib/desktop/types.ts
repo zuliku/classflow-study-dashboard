@@ -130,14 +130,26 @@ export interface ClassFlowDesktopMiniBridge {
   toggle: () => void;
   setAlwaysOnTop: (onTop: boolean) => void;
   isAlwaysOnTop: () => Promise<{ onTop: boolean }>;
+  setMode: (mode: "expanded" | "capsule", instant?: boolean) => void;
+  getWindowState: () => Promise<{ mode: "expanded" | "capsule"; onTop: boolean }>;
   sendRemote: (payload: unknown) => Promise<unknown>;
   stopRemote: () => void;
+  newChat: () => void;
+  switchConversation: (conversationId: string) => void;
+  focusMain: (conversationId?: string) => void;
+  resolveApproval: (approvalId: string, decision: "deny" | "allow-once") => void;
   publishState: (snapshot: unknown) => void;
   getState: () => Promise<unknown>;
   onState: (callback: (snapshot: unknown) => void) => () => void;
   onRemoteSend: (callback: (payload: unknown) => void) => () => void;
   completeRemoteSend: (result: unknown) => void;
   onRemoteStop: (callback: () => void) => () => void;
+  onRemoteNewChat: (callback: () => void) => () => void;
+  onRemoteSwitchConversation: (callback: (conversationId: string) => void) => () => void;
+  onRemoteFocusConversation: (callback: (conversationId: string) => void) => () => void;
+  onRemoteApproval: (
+    callback: (payload: { approvalId: string; decision: "deny" | "allow-once" }) => void
+  ) => () => void;
 }
 
 export interface ClassFlowDesktopBridgeV1 {

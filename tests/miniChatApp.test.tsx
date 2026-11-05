@@ -15,17 +15,33 @@ const sendRemote = vi.fn(async () => ({ ok: true }));
 const stopRemote = vi.fn();
 const hide = vi.fn();
 const setAlwaysOnTop = vi.fn();
+const setMode = vi.fn();
+const newChat = vi.fn();
+const switchConversation = vi.fn();
+const focusMain = vi.fn();
+const resolveApproval = vi.fn();
+let windowMode: "expanded" | "capsule" = "expanded";
 let stateListener: ((s: unknown) => void) | null = null;
 
 const SNAP: MiniChatSnapshot = {
-  version: 1,
+  version: 2,
   conversationId: "c1",
+  title: "测试对话",
   messages: [
     { id: "m1", role: "user", text: "你好" },
     { id: "m2", role: "assistant", text: "在的" },
   ],
   busy: false,
   streaming: false,
+  phase: "idle",
+  status: null,
+  plan: null,
+  activity: null,
+  sources: [],
+  approval: null,
+  suggestions: ["今天要做什么", "这周还有什么 DDL", "总结当前对话"],
+  conversations: [{ id: "c1", title: "测试对话", updatedAt: "2026-11-05T10:00:00.000Z" }],
+  transitioning: false,
   attachments: [],
   configured: true,
   updatedAt: 1,
@@ -56,8 +72,14 @@ function installBridge(snapshot: MiniChatSnapshot | null = SNAP) {
       toggle: vi.fn(),
       setAlwaysOnTop,
       isAlwaysOnTop: async () => ({ onTop: true }),
+      setMode,
+      getWindowState: async () => ({ mode: windowMode, onTop: true }),
       sendRemote,
       stopRemote,
+      newChat,
+      switchConversation,
+      focusMain,
+      resolveApproval,
       publishState: vi.fn(),
       getState: async () => snapshot,
       onState: (cb: (s: unknown) => void) => {
@@ -69,6 +91,10 @@ function installBridge(snapshot: MiniChatSnapshot | null = SNAP) {
       onRemoteSend: vi.fn(() => () => {}),
       completeRemoteSend: vi.fn(),
       onRemoteStop: vi.fn(() => () => {}),
+      onRemoteNewChat: vi.fn(() => () => {}),
+      onRemoteSwitchConversation: vi.fn(() => () => {}),
+      onRemoteFocusConversation: vi.fn(() => () => {}),
+      onRemoteApproval: vi.fn(() => () => {}),
     },
   };
 }
@@ -95,6 +121,7 @@ function q(sel: string): HTMLElement | null {
 beforeEach(() => {
   vi.clearAllMocks();
   stateListener = null;
+  windowMode = "expanded";
   installBridge();
 });
 
@@ -173,6 +200,73 @@ describe("MiniChatApp", () => {
     delete (window as unknown as { classflowDesktop?: unknown }).classflowDesktop;
     await renderApp();
     expect(container!.textContent).toContain("迷你窗仅在桌面端可用");
+  });
+
+  it("快捷 Prompt 点击直接发送", async () => {
+    await renderApp();
+    const chip = Array.from(container!.querySelectorAll("button")).find(
+      (button) => button.textContent === "今天要做什么"
+    );
+    expect(chip).toBeTruthy();
+    await act(async () => {
+      chip!.click();
+    });
+    expect(sendRemote).toHaveBeenCalledTimes(1);
+    const payload = sendRemote.mock.calls[0][0] as { text: string };
+    expect(payload.text).toBe("今天要做什么");
+  });
+
+  it("低风险审批：允许一次直接走 resolveApproval；高风险只保留主窗口入口", async () => {
+    await renderApp();
+    await act(async () => {
+      stateListener?.({
+        ...SNAP,
+        approval: {
+          pending: true,
+          id: "approval-1",
+          title: "Kiro 准备修改",
+          primary: "report.docx",
+          highRisk: false,
+          canApproveInMini: true,
+        },
+      });
+    });
+    const allow = Array.from(container!.querySelectorAll("button")).find(
+      (button) => button.textContent === "允许一次"
+    );
+    expect(allow).toBeTruthy();
+    await act(async () => {
+      allow!.click();
+    });
+    expect(resolveApproval).toHaveBeenCalledWith("approval-1", "allow-once");
+
+    await act(async () => {
+      stateListener?.({
+        ...SNAP,
+        approval: {
+          pending: true,
+          id: "approval-2",
+          title: "Kiro 准备删除",
+          primary: "report.docx",
+          highRisk: true,
+          canApproveInMini: false,
+        },
+      });
+    });
+    const buttons = Array.from(container!.querySelectorAll("button")).map((b) => b.textContent);
+    expect(buttons).not.toContain("允许一次");
+    expect(buttons).toContain("主窗口处理");
+  });
+
+  it("胶囊模式：渲染胶囊并在展开时请求 setMode", async () => {
+    windowMode = "capsule";
+    await renderApp();
+    expect(q('[data-testid="kiro-mini-capsule"]')).toBeTruthy();
+    const expand = q('[aria-label="展开 Kiro Mini"]') as HTMLButtonElement;
+    await act(async () => {
+      expand.click();
+    });
+    expect(setMode).toHaveBeenCalledWith("expanded", expect.any(Boolean));
   });
 });
 

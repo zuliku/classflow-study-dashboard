@@ -67,6 +67,38 @@ describe("buildMiniSnapshot（只读快照裁剪）", () => {
     // structured-clone 安全：纯 plain 数据
     expect(() => structuredClone(snap)).not.toThrow();
   });
+
+  it("V2：标题 / 状态 / Plan / 快捷 Prompt / 会话摘要 通过快照透传", () => {
+    const snap = buildMiniSnapshot({
+      conversationId: "c1",
+      title: "计量经济学",
+      messages: [{ id: "a1", role: "assistant", content: "回答" }],
+      busy: true,
+      streaming: true,
+      phase: "answering",
+      status: { label: "正在回答" },
+      plan: { title: "作业", completed: 1, total: 3, status: "approved", currentStep: "写报告" },
+      activity: { label: "搜索网络", done: 1, total: 2 },
+      sources: [{ id: "web-1", title: "公告", domain: "example.edu" }],
+      approval: { pending: true, id: "a1", canApproveInMini: true },
+      suggestions: ["今天要做什么"],
+      conversations: [{ id: "c1", title: "计量经济学", updatedAt: "2026-11-05T10:00:00.000Z" }],
+      transitioning: false,
+      attachments: [],
+      configured: true,
+      now: 5,
+    });
+    expect(snap.version).toBe(2);
+    expect(snap.title).toBe("计量经济学");
+    expect(snap.phase).toBe("answering");
+    expect(snap.plan?.completed).toBe(1);
+    expect(snap.activity?.label).toBe("搜索网络");
+    expect(snap.sources[0].domain).toBe("example.edu");
+    expect(snap.approval?.canApproveInMini).toBe(true);
+    expect(snap.suggestions).toEqual(["今天要做什么"]);
+    expect(snap.conversations[0].id).toBe("c1");
+    expect(snap.messages[0].streaming).toBe(true);
+  });
 });
 
 describe("sanitizeMiniSend（执行前最后一道门）", () => {

@@ -1,15 +1,27 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef } from "react";
-import { useKiroRuntime, useKiroSessionMeta } from "@/components/kiro/KiroSessionProvider";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useKiroRuntime,
+  useKiroSessionActions,
+  useKiroSessionMeta,
+} from "@/components/kiro/KiroSessionProvider";
 import { getClassFlowDesktopMiniBridge } from "@/lib/desktop/bridge";
 import {
   base64ToBytes,
   buildMiniSnapshot,
   sanitizeMiniSend,
+  type MiniChatApprovalSummary,
+  type MiniChatConversationSummary,
   type MiniChatSnapshot,
   type MiniRemoteSendRequest,
 } from "@/lib/ai/miniChat/protocol";
+import { deriveMiniTelemetry } from "@/lib/ai/miniChat/telemetry";
+import { canApproveInMini } from "@/lib/ai/miniChat/approval";
+import { listConversations } from "@/lib/ai/history/db";
+import { useKiroComputerRuntimeStore } from "@/store/useKiroComputerRuntimeStore";
+import { getComputerApprovalPresentation } from "@/lib/ai/ui/computerApprovalPresentation";
+import type { ComputerApprovalDecision } from "@/lib/ai/computer/approval";
 
 /** 快照推送节流（streaming token 按 ~150ms 合并；settle 由 messages 变化立即触发下一拍） */
 const PUBLISH_THROTTLE_MS = 150;
@@ -22,31 +34,134 @@ const READY_TIMEOUT_MS = 30_000;
  * - 只读快照节流 publish（`mini:publish-state`；Main 缓存 + 转推 Mini）；
  * - 远端发送：sanitize → base64 重建 File → 同一 attachments.addFiles →
  *   等就绪（bounded）→ 同一 chat.send（Composer onSend 同一入口，全管线复用）；
- * - 远端停止：同一 chat.stop。
+ * - 远端停止：同一 chat.stop；
+ * - 会话命令：new chat / switch / focus（走同一 Session transition）；
+ * - 低风险审批：Mini 只允许 deny / allow-once，且必须通过当前请求的 risk/后台/权限二次校验。
  */
 export function MiniChatRelayHost() {
   const { chat, attachments } = useKiroRuntime();
-  const { currentConversationId } = useKiroSessionMeta();
-  const liveRef = useRef({ chat, attachments, currentConversationId });
-  liveRef.current = { chat, attachments, currentConversationId };
+  const {
+    currentConversationId,
+    conversationTitle,
+    conversationTransitioning,
+    historyVersion,
+    suggestionsKind,
+    currentTurnSources,
+  } = useKiroSessionMeta();
+  const actions = useKiroSessionActions();
+  const pendingApproval = useKiroComputerRuntimeStore((s) => s.pendingApproval);
+  const pendingQueueLength = useKiroComputerRuntimeStore((s) => s.pendingQueueLength);
+  const [conversations, setConversations] = useState<MiniChatConversationSummary[]>([]);
+  const liveRef = useRef({ chat, attachments, currentConversationId, conversationTransitioning, actions });
+  liveRef.current = { chat, attachments, currentConversationId, conversationTransitioning, actions };
+
+  // 最近会话（低频；Mini 只展示标题/时间，不直读 DB）
+  useEffect(() => {
+    let alive = true;
+    void listConversations()
+      .then((list) => {
+        if (!alive) return;
+        setConversations(
+          list.slice(0, 8).map((c) => ({
+            id: c.id,
+            title: c.title,
+            updatedAt: c.updatedAt,
+          }))
+        );
+      })
+      .catch(() => {
+        if (alive) setConversations([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [historyVersion]);
+
+  const approval: MiniChatApprovalSummary | null = useMemo(() => {
+    if (!pendingApproval) return null;
+    if (
+      pendingApproval.conversationId != null &&
+      pendingApproval.conversationId !== currentConversationId
+    ) {
+      return null;
+    }
+    const presentation = getComputerApprovalPresentation(pendingApproval);
+    return {
+      pending: true,
+      id: pendingApproval.id,
+      title: presentation.title,
+      primary: presentation.primary,
+      warnings: presentation.warnings,
+      highRisk: presentation.highRisk,
+      canApproveInMini: canApproveInMini(pendingApproval),
+      queueLength: pendingQueueLength,
+    };
+  }, [pendingApproval, pendingQueueLength, currentConversationId]);
+
+  const busy = chat.turnInFlight || chat.streaming;
+  const lastAssistant = [...chat.messages].reverse().find((m) => m.role === "assistant");
+  const answerStarted = !!lastAssistant?.content?.trim();
+  const telemetry = useMemo(
+    () =>
+      deriveMiniTelemetry({
+        busy,
+        streaming: chat.streaming,
+        answerStarted,
+        waitingApproval: !!approval,
+        error: !!chat.error,
+        activity: chat.activity,
+        plans: chat.executionPlans,
+        sources: currentTurnSources,
+        suggestionsKind,
+      }),
+    [
+      busy,
+      chat.streaming,
+      answerStarted,
+      approval,
+      chat.error,
+      chat.activity,
+      chat.executionPlans,
+      currentTurnSources,
+      suggestionsKind,
+    ]
+  );
 
   const snapshot: MiniChatSnapshot = useMemo(
     () =>
       buildMiniSnapshot({
         conversationId: currentConversationId,
+        title:
+          conversationTitle ??
+          ([...chat.messages].reverse().find((m) => m.role === "user")?.content?.trim().slice(0, 24) ||
+            null),
         messages: chat.messages,
-        busy: chat.turnInFlight || chat.streaming,
+        busy,
         streaming: chat.streaming,
+        phase: telemetry.phase,
+        status: telemetry.status,
+        plan: telemetry.plan,
+        activity: telemetry.activity,
+        sources: telemetry.sources,
+        approval: approval ?? telemetry.approval,
+        suggestions: telemetry.suggestions,
+        conversations,
+        transitioning: conversationTransitioning,
         attachments: attachments.views.map((a) => ({ id: a.id, name: a.name, status: a.status })),
         configured: chat.configured,
       }),
     [
       currentConversationId,
+      conversationTitle,
       chat.messages,
-      chat.turnInFlight,
+      busy,
       chat.streaming,
-      chat.configured,
+      telemetry,
+      approval,
+      conversations,
+      conversationTransitioning,
       attachments.views,
+      chat.configured,
     ]
   );
 
@@ -78,7 +193,7 @@ export function MiniChatRelayHost() {
     };
   }, [snapshot]);
 
-  // 远端发送/停止：只订阅一次（回调经 liveRef 读最新运行时）
+  // 远端发送/停止/会话命令/低风险审批：只订阅一次（回调经 liveRef / store 读最新运行时）
   useEffect(() => {
     const mini = getClassFlowDesktopMiniBridge();
     if (!mini) return;
@@ -151,10 +266,47 @@ export function MiniChatRelayHost() {
         liveRef.current.chat.stop();
       } catch {}
     });
+    const offNewChat = mini.onRemoteNewChat(() => {
+      const live = liveRef.current;
+      if (live.chat.turnInFlight || live.chat.streaming || live.conversationTransitioning) return;
+      live.actions.newChat();
+    });
+    const offSwitch = mini.onRemoteSwitchConversation((id) => {
+      const live = liveRef.current;
+      if (live.chat.turnInFlight || live.chat.streaming || live.conversationTransitioning) return;
+      if (typeof id !== "string" || !id || id === live.currentConversationId) return;
+      live.actions.loadConversation(id);
+    });
+    const offFocus = mini.onRemoteFocusConversation((id) => {
+      const live = liveRef.current;
+      if (typeof id !== "string" || !id || id === live.currentConversationId) return;
+      if (live.chat.turnInFlight || live.chat.streaming || live.conversationTransitioning) return;
+      live.actions.loadConversation(id);
+    });
+    const offApproval = mini.onRemoteApproval((payload) => {
+      const p = (payload ?? {}) as { approvalId?: unknown; decision?: unknown };
+      const approvalId = typeof p.approvalId === "string" ? p.approvalId : "";
+      const decision: ComputerApprovalDecision =
+        p.decision === "deny" ? "deny" : "allow-once";
+      if (!approvalId) return;
+      const current = useKiroComputerRuntimeStore.getState().pendingApproval;
+      if (!current || current.id !== approvalId) return;
+      if (decision === "allow-once") {
+        if (!canApproveInMini(current)) return;
+      }
+      void liveRef.current.chat.resolveApproval(approvalId, decision);
+    });
+
     return () => {
       offSend();
       offStop();
+      offNewChat();
+      offSwitch();
+      offFocus();
+      offApproval();
     };
+    // liveTransitioning 是低频 boolean；仅作为闭包最新值保护，避免频繁重订阅。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return null;

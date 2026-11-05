@@ -217,10 +217,12 @@ describe("硬切深筛源码契约", () => {
     const terminal = read("components/kiro/computer/KiroTerminalBlock.tsx");
     expect(terminal).toContain("transition-[max-height]");
     const mini = read("components/kiro/mini/MiniChatApp.tsx");
-    expect(mini).toContain("trayPresence.mounted");
+    const miniComposer = read("components/kiro/mini/MiniChatComposer.tsx");
     expect(mini).toContain("noticePresence.mounted");
-    expect(mini).toContain("leavingFileKeys");
     expect(mini).toContain("busyPresence.mounted");
+    expect(miniComposer).toContain("fileTrayPresence.mounted");
+    expect(miniComposer).toContain("ExitCollapse");
+    expect(miniComposer).toContain("animate-enter");
     // Batch4 唯一增量（其余与 Batch1/motionContract 重复，已并入此处，Batch4 整 it 已删）
     const artifacts = read("components/kiro/computer/KiroRecentArtifactsPopover.tsx");
     expect(artifacts).toContain("panelPresence.mounted");
