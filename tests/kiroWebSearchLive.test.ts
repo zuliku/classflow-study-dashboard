@@ -98,7 +98,7 @@ describe.skipIf(!LIVE)("Kiro keyless web search live", () => {
       expect(new Set(ids).size).toBe(ids.length);
       for (const id of ids) expect(id).toMatch(/^web-\d+$/);
       for (const r of result.data!.results) expect(r.url).toMatch(/^https?:\/\//);
-      expect(state.remainingSearchAttempts).toBe(1);
+      expect(state.remainingSearchAttempts).toBe(3);
       router.reset();
     },
     35_000

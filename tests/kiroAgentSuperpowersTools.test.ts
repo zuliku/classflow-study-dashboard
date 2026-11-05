@@ -3,7 +3,12 @@ import { KIRO_TOOLS } from "@/lib/ai/tools";
 import { KIRO_SYSTEM_PROMPT } from "@/lib/ai/prompts/kiroSystemPrompt";
 import { KIRO_UPDATE_AGENT_PLAN_TOOL_NAME } from "@/lib/ai/agent/plan";
 import { KIRO_ASK_USER_TOOL_NAME } from "@/lib/ai/agent/ask";
+import {
+  KIRO_DELEGATE_SUBAGENT_TOOL_NAME,
+  normalizeSubagentRequest,
+} from "@/lib/ai/agent/subagent";
 import { kiroAskUserSeen } from "@/lib/ai/tools/finalAnswer";
+import { filterKiroToolsForInvocation } from "@/lib/ai/tools/invocationFilter";
 
 describe("Agent Superpowers tool registration", () => {
   it("update_agent_plan：Server execute 归一化 plan（零 IO）", async () => {
@@ -70,5 +75,31 @@ describe("Agent Superpowers tool registration", () => {
       ])
     ).toBe(true);
     expect(kiroAskUserSeen([{ toolCalls: [{ toolName: "web_search" }] }])).toBe(false);
+  });
+
+  it("delegate_subagent：client-side tool（无 server execute），remote 不暴露", () => {
+    const tool = KIRO_TOOLS[KIRO_DELEGATE_SUBAGENT_TOOL_NAME] as unknown as { execute?: unknown };
+    expect(tool).toBeTruthy();
+    expect(tool.execute).toBeUndefined();
+    expect(normalizeSubagentRequest({ role: "researcher", task: "研究 A" })).toMatchObject({
+      role: "researcher",
+    });
+
+    const remote = filterKiroToolsForInvocation({
+      tools: KIRO_TOOLS,
+      origin: "remote-channel",
+    }) as Record<string, unknown>;
+    expect(remote[KIRO_DELEGATE_SUBAGENT_TOOL_NAME]).toBeUndefined();
+    const local = filterKiroToolsForInvocation({
+      tools: KIRO_TOOLS,
+      origin: "local-user",
+    }) as Record<string, unknown>;
+    expect(local[KIRO_DELEGATE_SUBAGENT_TOOL_NAME]).toBeTruthy();
+  });
+
+  it("System Prompt 包含子代理边界", () => {
+    expect(KIRO_SYSTEM_PROMPT).toContain("## 子代理（delegate_subagent）");
+    expect(KIRO_SYSTEM_PROMPT).toContain("同一轮最多 3 个子代理");
+    expect(KIRO_SYSTEM_PROMPT).toContain("子代理结果是**辅助摘要**");
   });
 });

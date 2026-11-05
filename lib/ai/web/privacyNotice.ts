@@ -9,6 +9,12 @@ export function hasUsedWebSearch(messages: unknown[]): boolean {
       if (!part || typeof part !== "object") continue;
       const type = (part as { type?: unknown }).type;
       if (type === "tool-web_search" || type === "tool-web_research") return true;
+      if (type === "tool-delegate_subagent") {
+        const output = (part as { output?: unknown }).output as
+          | { ok?: boolean; data?: { webUsed?: boolean } }
+          | null;
+        if (output?.ok === true && output.data?.webUsed === true) return true;
+      }
     }
   }
   return false;

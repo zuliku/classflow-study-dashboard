@@ -7,6 +7,8 @@ import { bumpStreamPerf, bumpStreamPerfKeyed } from "@/lib/ai/perf/streamPerf";
 import { hasMeaningfulKiroToolDetails } from "@/lib/ai/presentation/toolActivityDetails";
 import { KiroAssistantShell } from "@/components/kiro/KiroAssistantShell";
 import { KiroTerminalBlock } from "@/components/kiro/computer/KiroTerminalBlock";
+import { KiroSubagentInlineCard } from "@/components/kiro/run/KiroSubagentInlineCard";
+import { KIRO_DELEGATE_SUBAGENT_TOOL_NAME } from "@/lib/ai/agent/subagent";
 import { useTerminalActivityStore } from "@/store/useTerminalActivityStore";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { cn } from "@/lib/utils";
@@ -207,6 +209,13 @@ export const KiroWorklogTimeline = React.memo(function KiroWorklogTimeline({
             >
               {block.text}
             </p>
+          ) : block.toolName === KIRO_DELEGATE_SUBAGENT_TOOL_NAME ? (
+            <KiroSubagentInlineCard
+              key={block.id}
+              toolCallId={block.toolCallId}
+              fallbackLabel={block.headline ?? block.label}
+              fallbackStatus={block.status}
+            />
           ) : (
             <KiroToolRow key={block.id} block={block} />
           )

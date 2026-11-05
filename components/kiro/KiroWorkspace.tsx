@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useKiroSession } from "@/components/kiro/KiroSessionProvider";
 import { KiroHeader } from "@/components/kiro/KiroHeader";
 import { KiroChatSurface } from "@/components/kiro/KiroChatSurface";
 import { KiroHistoryPanel } from "@/components/kiro/KiroHistoryPanel";
 import { KiroNavigator } from "@/components/kiro/navigation/KiroNavigator";
 import { KiroInspector } from "@/components/kiro/inspector/KiroInspector";
+import { useKiroSubagentStore } from "@/store/useKiroSubagentStore";
 
 /** Kiro Inspector 快捷键（参考 Codex 的右侧面板 toggle；Workspace 作用域） */
 export const KIRO_INSPECTOR_SHORTCUT = { key: "i", shift: false } as const;
@@ -25,6 +26,24 @@ export function KiroWorkspace() {
   // Kiro Inspector：ephemeral presentation state（不建全局 Store；默认关闭，非常驻）
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const session = useKiroSession();
+  const hasRunningSubagent = useKiroSubagentStore((s) =>
+    s.order.some((id) => {
+      const run = s.runs[id];
+      return run?.status === "running" && run.conversationId === session.currentConversationId;
+    })
+  );
+  const subagentAutoOpenedRef = useRef(false);
+
+  // 子代理启动时自动展开右侧 Inspector（xl+ 可见；用户在本轮内手动关闭后不反复弹开）
+  useEffect(() => {
+    if (!hasRunningSubagent) {
+      subagentAutoOpenedRef.current = false;
+      return;
+    }
+    if (subagentAutoOpenedRef.current) return;
+    subagentAutoOpenedRef.current = true;
+    setInspectorOpen(true);
+  }, [hasRunningSubagent]);
 
   // Cmd/Ctrl+I：切换 Inspector（与 Navigator 的 Cmd/Ctrl+Shift+H 同族；输入焦点内不拦截）
   useEffect(() => {

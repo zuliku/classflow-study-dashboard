@@ -135,17 +135,19 @@ export type KiroWebEvidenceOutcome =
   | { ok: false; code: KiroWebSearchErrorCode; message: string };
 
 /** 一个 User Turn 内 web_search 最多调用次数（跨 client tool HTTP roundtrip 仍生效） */
-export const MAX_WEB_SEARCHES_PER_TURN = 3;
+export const MAX_WEB_SEARCHES_PER_TURN = 5;
 /** QQ / 邮件等 remote-channel：更低额度，避免外部渠道滥用免费搜索 */
 export const MAX_REMOTE_WEB_SEARCHES_PER_TURN = 1;
 /** Deep Research：一次调用最多查询方向数（每个 query 消耗 1 次搜索预算） */
-export const MAX_WEB_RESEARCH_QUERIES = 3;
+export const MAX_WEB_RESEARCH_QUERIES = 5;
 /** Deep Research：本次 Tool 返回的结果总数上限 */
-export const MAX_WEB_RESEARCH_RESULTS = 10;
+export const MAX_WEB_RESEARCH_RESULTS = 12;
 /** Deep Research：每个 query 最多保留的结果数（共享域名多样性后） */
 export const MAX_WEB_RESEARCH_RESULTS_PER_QUERY = 4;
+/** Deep Research：并发 query 数（避免 keyless 免费通道并发过高触发 429） */
+export const MAX_WEB_RESEARCH_CONCURRENCY = 3;
 /** Deep Research：一次调用的总超时（并发搜索共享） */
-export const WEB_RESEARCH_TIMEOUT_MS = 15_000;
+export const WEB_RESEARCH_TIMEOUT_MS = 20_000;
 /** 每次搜索返回结果上限（ClassFlow 成本边界，LLM 不能覆盖） */
 export const MAX_WEB_RESULTS = 6;
 /** 单次搜索超时 */
@@ -159,13 +161,13 @@ export const MAX_WEB_RESULTS_PER_DOMAIN = 2;
 /** Task 16A：一次 read_web_source 最多读取的 source 数 */
 export const MAX_WEB_SOURCES_PER_READ = 2;
 /** Task 16A：一个 User Turn 最多执行 read_web_source 次数（与 search limit 独立） */
-export const MAX_WEB_READS_PER_TURN = 2;
+export const MAX_WEB_READS_PER_TURN = 3;
 /** QQ / 邮件等 remote-channel：网页正文读取同样收紧 */
 export const MAX_REMOTE_WEB_READS_PER_TURN = 1;
 /** Task 16A：单 source evidence 字符预算 */
 export const MAX_WEB_EVIDENCE_CHARS_PER_SOURCE = 5_000;
 /** Task 16A：单 Turn evidence 字符总预算 */
-export const MAX_WEB_EVIDENCE_CHARS_PER_TURN = 10_000;
+export const MAX_WEB_EVIDENCE_CHARS_PER_TURN = 14_000;
 /** Task 17A：单 chunk 字符上限（所有 Provider chunks 与 fallback 切分统一经过） */
 export const MAX_WEB_EVIDENCE_CHUNK_CHARS = 1_800;
 

@@ -317,6 +317,10 @@ export function assembleKiroToolsForRequest(input: {
   access?: KiroWebSearchAccess | null;
   /** remote-channel（QQ/邮件）使用更低的搜索/读取额度；缺省 local-user */
   origin?: "local-user" | "remote-channel";
+  /** 可选的更紧搜索预算（子代理等嵌套运行使用；缺省按 origin 常量） */
+  maxSearchAttempts?: number;
+  /** 可选的更紧读取预算（子代理等嵌套运行使用；缺省按 origin 常量） */
+  maxReadAttempts?: number;
   /** Task 19C2：已由 validateAIChatBody 归一化的 Vision 配置（enabled/model/apiKey） */
   webPdfVisionConfig?: { enabled: boolean; model: string; apiKey?: string };
   messages: unknown[];
@@ -342,7 +346,10 @@ export function assembleKiroToolsForRequest(input: {
       ? { mode: access.mode, userApiKey: access.apiKey }
       : input.credential;
   const remote = input.origin === "remote-channel";
-  const maxSearchAttempts = remote ? MAX_REMOTE_WEB_SEARCHES_PER_TURN : MAX_WEB_SEARCHES_PER_TURN;
+  const maxSearchAttempts =
+    input.maxSearchAttempts ?? (remote ? MAX_REMOTE_WEB_SEARCHES_PER_TURN : MAX_WEB_SEARCHES_PER_TURN);
+  const maxReadAttempts =
+    input.maxReadAttempts ?? (remote ? MAX_REMOTE_WEB_READS_PER_TURN : MAX_WEB_READS_PER_TURN);
   // web_search / web_research 共享同一请求内预算、sourceId 游标与去重集合
   const webTurnState = createKiroWebTurnState({
     attemptsSoFar: searchState.attempts,
@@ -376,7 +383,7 @@ export function assembleKiroToolsForRequest(input: {
       webPdfVisionConfig: input.webPdfVisionConfig,
       credential: effectiveCredential,
       attemptsSoFar: evidenceState.attempts,
-      maxAttempts: remote ? MAX_REMOTE_WEB_READS_PER_TURN : MAX_WEB_READS_PER_TURN,
+      maxAttempts: maxReadAttempts,
       trustedSources: resolveCurrentTurnWebSources(input.messages),
       readSourceIds: evidenceState.readSourceIds,
       evidenceCharsUsed: evidenceState.evidenceCharsUsed,

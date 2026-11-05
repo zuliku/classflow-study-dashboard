@@ -35,6 +35,34 @@ describe("web search first-use privacy notice", () => {
         { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r1" }] },
       ])
     ).toBe(false);
+    expect(
+      hasUsedWebSearch([
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-delegate_subagent",
+              toolCallId: "d1",
+              output: { ok: true, data: { webUsed: true } },
+            },
+          ],
+        },
+      ])
+    ).toBe(true);
+    expect(
+      hasUsedWebSearch([
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-delegate_subagent",
+              toolCallId: "d2",
+              output: { ok: true, data: { webUsed: false } },
+            },
+          ],
+        },
+      ])
+    ).toBe(false);
   });
 
   it("提示条文案与「知道了」dismiss", () => {

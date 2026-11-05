@@ -148,8 +148,18 @@ test("Agent Superpowers：Plan Card 进度 + Ask Card 选择作为下一轮输�
   await expect(plan).toContainText("准备计量经济学作业");
   await expect(plan).toContainText("1/4");
   await expect(plan.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
-  // Plan / Ask 是独立卡片，不进入 Worklog Tool Row
+  // Plan 是独立卡片，不进入 Worklog Tool Row
   await expect(page.getByTestId("kiro-worklog").getByText("update_agent_plan")).toHaveCount(0);
+
+  // 展开/收起：收起态只保留当前步骤，展开态显示全部步骤
+  await expect(plan).toHaveAttribute("data-expanded", "true");
+  await plan.getByTestId("kiro-agent-plan-toggle").click();
+  await expect(plan).toHaveAttribute("data-expanded", "false");
+  await expect(plan).toContainText("当前：整理数据");
+  await expect(plan.getByText("检查引用")).toHaveCount(0);
+  await plan.getByTestId("kiro-agent-plan-toggle").click();
+  await expect(plan).toHaveAttribute("data-expanded", "true");
+  await expect(plan.getByText("检查引用")).toBeVisible();
 
   const option = ask.getByRole("button", { name: /先整理数据/ });
   await expect(option).toBeEnabled({ timeout: 10000 });

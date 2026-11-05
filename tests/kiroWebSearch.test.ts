@@ -375,18 +375,18 @@ describe("Kiro Search tool + turn state", () => {
     expect(r.data.results.map((x) => x.sourceId)).toEqual(["web-1", "web-2"]);
   });
 
-  it("已 3 次 web_search → 第 4 次返回 WEB_SEARCH_LIMIT_REACHED（不调用 provider）", async () => {
+  it("已 5 次 web_search → 第 6 次返回 WEB_SEARCH_LIMIT_REACHED（不调用 provider）", async () => {
     const provider = fakeProvider();
-    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: 3, nextSourceIndex: 10, successfulQueries: [], seenUrls: [] });
+    const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: 5, nextSourceIndex: 10, successfulQueries: [], seenUrls: [] });
     const r = (await webTool.execute?.({ query: "again" }, {} as never)) as { ok: false; code: string };
     expect(r.ok).toBe(false);
     expect(r.code).toBe("WEB_SEARCH_LIMIT_REACHED");
     expect(provider.search).not.toHaveBeenCalled();
   });
 
-  it("Case A：失败也算 attempt——success+timeout+429 后第 4 次 LIMIT_REACHED 且不再请求 Provider", async () => {
+  it("Case A：失败也算 attempt——5 次尝试后第 6 次 LIMIT_REACHED 且不再请求 Provider", async () => {
     const provider = fakeProvider();
-    // 已发生 3 次（2 成功 1 失败）
+    // 已发生 5 次（1 成功 4 失败）
     const s = inspectCurrentTurnWebSearchState([
       { role: "user", parts: [{ type: "text", text: "hi" }] },
       {
@@ -395,12 +395,14 @@ describe("Kiro Search tool + turn state", () => {
           { type: "tool-web_search", toolCallId: "c1", output: { ok: true, data: { results: [{ sourceId: "web-1" }] } } },
           { type: "tool-web_search", toolCallId: "c2", output: { ok: false, code: "WEB_SEARCH_TIMEOUT" } },
           { type: "tool-web_search", toolCallId: "c3", output: { ok: false, code: "WEB_SEARCH_RATE_LIMITED" } },
+          { type: "tool-web_search", toolCallId: "c4", output: { ok: false, code: "WEB_SEARCH_FAILED" } },
+          { type: "tool-web_search", toolCallId: "c5", output: { ok: false, code: "WEB_SEARCH_TIMEOUT" } },
         ],
       },
     ]);
-    expect(s.attempts).toBe(3);
+    expect(s.attempts).toBe(5);
     const webTool = createKiroWebSearchTool({ provider, credential: { mode: "server" }, attemptsSoFar: s.attempts, nextSourceIndex: s.nextSourceIndex, successfulQueries: s.successfulQueries, seenUrls: s.seenUrls });
-    const r = (await webTool.execute?.({ query: "fourth" }, {} as never)) as { ok: false; code: string };
+    const r = (await webTool.execute?.({ query: "sixth" }, {} as never)) as { ok: false; code: string };
     expect(r.code).toBe("WEB_SEARCH_LIMIT_REACHED");
     expect(provider.search).not.toHaveBeenCalled();
   });

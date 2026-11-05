@@ -17,6 +17,7 @@ function timingSafeCapability(incoming: string | undefined, expected: string): b
 }
 import { canonicalRendererOrigin } from "@/lib/security/rendererOrigin";
 import { handleChat } from "@/app/api/ai/chat/route";
+import { handleSubagent } from "@/app/api/ai/subagent/route";
 import { handleCompact } from "@/app/api/ai/compact/route";
 import { handleTest } from "@/app/api/ai/test/route";
 import { handleModels } from "@/app/api/ai/models/route";
@@ -37,6 +38,7 @@ type Handler = (req: Request) => Promise<Response>;
 
 const ROUTES: { method: string; path: string; handler: Handler }[] = [
   { method: "POST", path: "/api/ai/chat", handler: handleChat },
+  { method: "POST", path: "/api/ai/subagent", handler: handleSubagent },
   { method: "POST", path: "/api/ai/compact", handler: handleCompact },
   { method: "POST", path: "/api/ai/test", handler: handleTest },
   { method: "GET", path: "/api/ai/models", handler: handleModels },

@@ -76,8 +76,11 @@ export function KiroAgentRun({
   );
   const userToggledRef = useRef(false);
 
-  // 审批决策后折叠退出（此前整段瞬时卸载，Timeline/Final Answer 上收跳变）；
-  // presence 必须与 ExitCollapse 的 --motion-exit-panel（160ms）同源，否则折叠尾段被提前卸载截断。
+  // Plan 退出 presence：plan 被新状态替换/清空时仍播放收起，不硬切顶起 Final Answer。
+  const planPresence = usePresence(!!assistantTurn.plan, MOTION_EXIT_MS.panel);
+  const lastPlanRef = useRef(assistantTurn.plan);
+  if (assistantTurn.plan) lastPlanRef.current = assistantTurn.plan;
+
   // P0 hooks order：usePresence / useRef 必须在 `if (!hasWorklog) return null` 之前，
   // 否则「历史无 worklog → live 出现 worklog」时 hooks 数量变化会整页崩溃
   // （Rendered fewer hooks than expected；长历史恢复后继续对话可复现）。
@@ -86,7 +89,8 @@ export function KiroAgentRun({
   if (approval) lastApprovalRef.current = approval;
   const shownApproval = approval ?? (approvalPresence.mounted ? lastApprovalRef.current : null);
 
-  if (!hasWorklog) return null;
+  // plan 退出期间仍保留 Run 外壳，直到 ExitCollapse 播完。
+  if (!hasWorklog && !planPresence.mounted) return null;
 
   const status = resolveKiroAgentRunStatus({
     turnInFlight,
@@ -125,8 +129,10 @@ export function KiroAgentRun({
         onStop={onStop}
       />
 
-      {assistantTurn.plan && (
-        <KiroAgentPlanCard plan={assistantTurn.plan} running={turnInFlight} />
+      {planPresence.mounted && lastPlanRef.current && (
+        <ExitCollapse exiting={!planPresence.visible}>
+          <KiroAgentPlanCard plan={lastPlanRef.current} running={turnInFlight} />
+        </ExitCollapse>
       )}
 
       <KiroWorklogTimeline

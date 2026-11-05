@@ -39,14 +39,14 @@ function makeTool(provider: KiroWebSearchProvider, state = createKiroWebTurnStat
 }
 
 describe("normalizeResearchQueries", () => {
-  it("queries 省略 → topic；去重/trim；最多 3 个", () => {
+  it("queries 省略 → topic；去重/trim；最多 5 个", () => {
     expect(normalizeResearchQueries({ topic: "  AI   agents  " })).toEqual(["AI agents"]);
     expect(
       normalizeResearchQueries({
         topic: "ignored",
-        queries: [" a ", "A", "b", "c", "d"],
+        queries: [" a ", "A", "b", "c", "d", "e", "f"],
       })
-    ).toEqual(["a", "b", "c"]);
+    ).toEqual(["a", "b", "c", "d", "e"]);
   });
 });
 
@@ -71,7 +71,7 @@ describe("web_research tool", () => {
     ]);
     expect(r.data.results.map((x) => x.sourceId)).toEqual(["web-1", "web-2", "web-3"]);
     expect(state.nextSourceIndex).toBe(4);
-    expect(state.remainingSearchAttempts).toBe(1);
+    expect(state.remainingSearchAttempts).toBe(3);
     expect(r.data.skippedQueries).toEqual([]);
   });
 
@@ -107,15 +107,17 @@ describe("web_research tool", () => {
       ok: false;
       code: string;
       message: string;
+      data?: { attempts: number };
     };
     expect(r.ok).toBe(false);
     expect(r.code).toBe("WEB_SEARCH_FAILED");
     expect(r.message).not.toContain("RAW PROVIDER");
+    expect(r.data?.attempts).toBe(2);
   });
 
   it("共享搜索预算：只剩 1 次时只执行 1 个 query，其余 skipped", async () => {
     const provider = providerOf({ q1: [result("https://a.dev/1", "a.dev")], q2: [], q3: [] });
-    const state = createKiroWebTurnState({ attemptsSoFar: 2, nextSourceIndex: 1 });
+    const state = createKiroWebTurnState({ attemptsSoFar: 4, nextSourceIndex: 1 });
     const { tool } = makeTool(provider, state);
     const r = (await tool.execute?.({ topic: "t", queries: ["q1", "q2", "q3"] }, {} as never)) as {
       ok: true;
@@ -137,7 +139,7 @@ describe("web_research tool", () => {
     expect(r.ok).toBe(false);
     expect(r.code).toBe("WEB_SEARCH_DUPLICATE_QUERY");
     expect(provider.search).not.toHaveBeenCalled();
-    expect(state.remainingSearchAttempts).toBe(3);
+    expect(state.remainingSearchAttempts).toBe(5);
   });
 });
 

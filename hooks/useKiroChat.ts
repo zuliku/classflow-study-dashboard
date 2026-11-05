@@ -129,6 +129,16 @@ import { actionToastMessage, toolLabel } from "@/lib/ai/tools/formatters";
 import { executeChangeSet } from "@/lib/ai/transactions/executor";
 import { useKiroMemory } from "@/hooks/useKiroMemory";
 import { apiUrl } from "@/lib/desktop/apiBase";
+import {
+  KIRO_DELEGATE_SUBAGENT_TOOL_NAME,
+  MAX_SUBAGENT_CALLS_PER_TURN,
+  MAX_SUBAGENT_CONCURRENCY,
+  SUBAGENT_TIMEOUT_MS,
+  normalizeSubagentRequest,
+  truncateSubagentSummary,
+} from "@/lib/ai/agent/subagent";
+import { consumeKiroSubagentStream } from "@/lib/ai/agent/subagentStream";
+import { useKiroSubagentStore } from "@/store/useKiroSubagentStore";
 import { hasExplicitMemoryIntent } from "@/lib/ai/memory/manager";
 import { searchMemoriesTwoStage } from "@/lib/ai/memory/rerank";
 import { KIRO_MEMORY_TOOL_NAMES, KIRO_MEMORY_TOOL_SCHEMAS } from "@/lib/ai/memory/tools";
@@ -681,6 +691,7 @@ export interface KiroTurnIntentSnapshot {
     enabled: boolean;
     credentialMode: string;
     apiKey?: string;
+    credentialRef?: string;
   };
   webPdfVision: {
     enabled: boolean;
@@ -1125,6 +1136,9 @@ export function useKiroChat({
   }, []);
   // Kiro Computer Agent V1：每 Turn 独立的 Computer 调用限制（read <= 12 / mutation <= 6）
   const computerCountersRef = useRef({ readCount: 0, mutationCount: 0, terminalCount: 0 });
+  // Agent Superpowers：每 Turn 子代理调用计数 + 可取消的 AbortController（toolCallId → controller）
+  const subagentCounterRef = useRef(0);
+  const subagentControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   // ---- Computer Agent Task Runtime（Part 3）：Task 绑定 owning assistant message 的 toolCallIds ----
   const [tasksState, setTasksState] = useState<Map<string, KiroAgentTask>>(new Map());
@@ -1290,6 +1304,189 @@ export function useKiroChat({
       // ---- 循环保护 ----
       if (limitReachedRef.current) {
         failOutput("READ_TOOL_LIMIT_REACHED", "已达到本轮操作上限，请换个问法。");
+        return;
+      }
+
+      // ---- 子代理（Agent Superpowers）：独立只读 stream，主 Agent 等待摘要 ----
+      if (toolName === KIRO_DELEGATE_SUBAGENT_TOOL_NAME) {
+        const request = normalizeSubagentRequest(input);
+        if (!request) {
+          failOutput("INVALID_INPUT", "子代理任务无效。");
+          return;
+        }
+        if (subagentCounterRef.current >= MAX_SUBAGENT_CALLS_PER_TURN) {
+          failOutput("SUBAGENT_LIMIT_REACHED", "本轮子代理数量已达上限（最多 3 个）。");
+          return;
+        }
+        const conversationId = conversationIdRef.current;
+        const runningCount = Object.values(useKiroSubagentStore.getState().runs).filter(
+          (r) => r.status === "running" && r.conversationId === conversationId
+        ).length;
+        if (runningCount >= MAX_SUBAGENT_CONCURRENCY) {
+          failOutput("SUBAGENT_CONCURRENCY_LIMIT", "同时运行的子代理已达上限，请等待一个完成。");
+          return;
+        }
+
+        const snap = turnSnapshotRef.current;
+        const provider =
+          typeof snap?.provider === "string" ? (snap.provider as AIProviderId) : null;
+        const modelName = typeof snap?.model === "string" ? snap.model : "";
+        const apiKey = provider ? getSessionApiKey(provider) : "";
+        const customConfig =
+          snap?.customConfig && typeof snap.customConfig === "object"
+            ? (snap.customConfig as AICustomConfig)
+            : custom;
+        const invocationId = activeInvocationIdRef.current;
+        if (!provider || !modelName || !apiKey) {
+          failOutput("INVALID_API_KEY", "缺少 API Key，无法启动子代理。");
+          return;
+        }
+        if (!invocationId) {
+          failOutput("INVOCATION_REQUIRED", "缺少 Invocation，无法启动子代理。");
+          return;
+        }
+
+        const snapWeb = (snap?.webSearchConfig ?? {}) as {
+          enabled?: boolean;
+          credentialMode?: string;
+          apiKey?: string;
+          credentialRef?: string;
+        };
+        const webSearchConfig: {
+          enabled: boolean;
+          credentialMode: string;
+          credentialRef?: string;
+          apiKey?: string;
+        } = {
+          enabled: snapWeb.enabled === true,
+          credentialMode: snapWeb.credentialMode === "byok" ? "byok" : "server",
+          ...(snapWeb.credentialRef ? { credentialRef: snapWeb.credentialRef } : {}),
+          ...(snapWeb.apiKey ? { apiKey: snapWeb.apiKey } : {}),
+        };
+        // 兼容旧 snapshot（无 credentialRef）：使用当前 live ref / session key
+        if (
+          webSearchConfig.enabled &&
+          webSearchConfig.credentialMode === "byok" &&
+          !webSearchConfig.credentialRef &&
+          !webSearchConfig.apiKey
+        ) {
+          if (webSearchCredentialRef) webSearchConfig.credentialRef = webSearchCredentialRef;
+          else {
+            const sessionKey = getSessionWebSearchApiKey();
+            if (sessionKey) webSearchConfig.apiKey = sessionKey;
+          }
+        }
+
+        subagentCounterRef.current += 1;
+        const store = useKiroSubagentStore.getState();
+        const controller = new AbortController();
+        subagentControllersRef.current.set(toolCallId, controller);
+        const timeout = window.setTimeout(() => {
+          controller.abort(new DOMException("timeout", "TimeoutError"));
+        }, SUBAGENT_TIMEOUT_MS);
+        store.start({
+          id: toolCallId,
+          conversationId,
+          role: request.role,
+          task: request.task,
+          webUsed: webSearchConfig.enabled && request.role === "researcher",
+        });
+
+        void (async () => {
+          try {
+            const response = await fetch(apiUrl("/api/ai/subagent"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                provider,
+                model: modelName,
+                apiKey,
+                customConfig,
+                invocationId,
+                messages: [
+                  {
+                    id: `subagent-${toolCallId}`,
+                    role: "user",
+                    parts: [{ type: "text", text: request.task }],
+                  },
+                ],
+                subagent: request,
+                webSearchConfig,
+                reasoningEffort: "default",
+              }),
+              signal: controller.signal,
+            });
+            const streamOk = await consumeKiroSubagentStream(response, {
+              onText: (delta) => useKiroSubagentStore.getState().appendText(toolCallId, delta),
+              onStep: (step) => useKiroSubagentStore.getState().upsertStep(toolCallId, step),
+              onError: (message) => useKiroSubagentStore.getState().fail(toolCallId, message),
+            });
+            // Stop / Unmount / 超时可能发生在流正常收尾之前：保持取消态，不覆盖为 completed
+            if (controller.signal.aborted) {
+              const reason = controller.signal.reason;
+              const timedOut =
+                reason instanceof DOMException && reason.name === "TimeoutError";
+              const message = timedOut
+                ? "子代理超时，未返回完整结果。"
+                : "子代理已停止。";
+              if (timedOut) useKiroSubagentStore.getState().fail(toolCallId, message);
+              else useKiroSubagentStore.getState().cancel(toolCallId);
+              emitToolOutput(toolName, toolCallId, {
+                ok: false,
+                code: timedOut ? "SUBAGENT_TIMEOUT" : "SUBAGENT_CANCELLED",
+                message,
+              } as ToolOutput);
+              return;
+            }
+            const run = useKiroSubagentStore.getState().runs[toolCallId];
+            if (!streamOk || !run || run.status === "failed") {
+              const message = run?.error ?? "子代理执行失败。";
+              useKiroSubagentStore.getState().fail(toolCallId, message);
+              emitToolOutput(toolName, toolCallId, {
+                ok: false,
+                code: "SUBAGENT_FAILED",
+                message,
+              } as ToolOutput);
+              return;
+            }
+            const summary = truncateSubagentSummary((run.text ?? "").trim());
+            if (!summary) {
+              const message = "子代理没有返回有效内容。";
+              useKiroSubagentStore.getState().fail(toolCallId, message);
+              emitToolOutput(toolName, toolCallId, {
+                ok: false,
+                code: "SUBAGENT_EMPTY",
+                message,
+              } as ToolOutput);
+              return;
+            }
+            useKiroSubagentStore.getState().complete(toolCallId, summary, run.webUsed);
+            emitToolOutput(toolName, toolCallId, {
+              ok: true,
+              data: { role: request.role, summary, webUsed: run.webUsed },
+            } as ToolOutput);
+          } catch (err) {
+            const reason = controller.signal.reason;
+            const timedOut =
+              reason instanceof DOMException && reason.name === "TimeoutError";
+            const cancelled = controller.signal.aborted && !timedOut;
+            const message = timedOut
+              ? "子代理超时，未返回完整结果。"
+              : cancelled
+                ? "子代理已停止。"
+                : "子代理执行失败。";
+            if (cancelled) useKiroSubagentStore.getState().cancel(toolCallId);
+            else useKiroSubagentStore.getState().fail(toolCallId, message);
+            emitToolOutput(toolName, toolCallId, {
+              ok: false,
+              code: timedOut ? "SUBAGENT_TIMEOUT" : cancelled ? "SUBAGENT_CANCELLED" : "SUBAGENT_FAILED",
+              message,
+            } as ToolOutput);
+          } finally {
+            window.clearTimeout(timeout);
+            subagentControllersRef.current.delete(toolCallId);
+          }
+        })();
         return;
       }
 
@@ -2941,6 +3138,11 @@ export function useKiroChat({
   // Unmount：清除 stale approvals（approval 不能在新会话继续执行）
   useEffect(() => {
     return () => {
+      for (const controller of subagentControllersRef.current.values()) {
+        controller.abort(new DOMException("unmounted", "AbortError"));
+      }
+      subagentControllersRef.current.clear();
+      useKiroSubagentStore.getState().cancelRunning(conversationIdRef.current);
       pendingExecutionsRef.current.clear();
       setPendingApproval(null);
       clearPendingApprovalSnapshot();
@@ -3122,6 +3324,7 @@ export function useKiroChat({
       readCounterRef.current = 0;
       documentReadCounterRef.current = 0;
       writeCounterRef.current = 0;
+      subagentCounterRef.current = 0;
       limitReachedRef.current = false;
       resetDocumentFailureFuse();
       visionPagesRef.current = [];
@@ -3734,6 +3937,7 @@ export function useKiroChat({
     readCounterRef.current = 0;
     documentReadCounterRef.current = 0;
     writeCounterRef.current = 0;
+    subagentCounterRef.current = 0;
     limitReachedRef.current = false;
     resetDocumentFailureFuse();
     // Retry 重新铸造 invocation：旧 turn 的 invocation 在 settle 时已清空（或超过 TTL），
@@ -3812,6 +4016,7 @@ export function useKiroChat({
     readCounterRef.current = 0;
     documentReadCounterRef.current = 0;
     writeCounterRef.current = 0;
+    subagentCounterRef.current = 0;
     limitReachedRef.current = false;
     undoRegistryRef.current.clear();
     snapshotQueueRef.current = [];
@@ -3901,6 +4106,7 @@ export function useKiroChat({
       readCounterRef.current = 0;
       documentReadCounterRef.current = 0;
       writeCounterRef.current = 0;
+      subagentCounterRef.current = 0;
       limitReachedRef.current = false;
       undoRegistryRef.current.clear();
       snapshotQueueRef.current = [];
@@ -4165,6 +4371,12 @@ export function useKiroChat({
     preflightGenerationRef.current += 1;
     // P0：武装 Stop 哨兵（不依赖消息落盘；id 守卫保留作 fast-path，哨兵兜底首 token 未到窗口）
     userStopFlagRef.current = true;
+    // Agent Superpowers：Stop 立即取消所有子代理（fetch abort + store 状态）
+    for (const controller of subagentControllersRef.current.values()) {
+      controller.abort(new DOMException("cancelled", "AbortError"));
+    }
+    subagentControllersRef.current.clear();
+    useKiroSubagentStore.getState().cancelRunning(conversationIdRef.current);
     pendingExecutionsRef.current.clear();
     // plan-approve 偏离门：Stop 遗弃未决策 deviation 标记（不记偏离）
     pendingDeviationApprovalsRef.current.clear();

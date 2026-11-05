@@ -29,6 +29,10 @@ import {
   kiroAskUserInputSchema,
   normalizeUserQuestion,
 } from "@/lib/ai/agent/ask";
+import {
+  KIRO_DELEGATE_SUBAGENT_TOOL_NAME,
+  kiroDelegateSubagentInputSchema,
+} from "@/lib/ai/agent/subagent";
 
 /**
  * Kiro Agent Superpowers（Plan / Ask）：
@@ -66,12 +70,29 @@ const AGENT_CONTROL_TOOLS = {
   }),
 };
 
+/**
+ * Agent 子代理（client-executed）：
+ * 主 Agent 委派一个只读子任务；Browser 启动独立 stream，实时更新右侧/内联 UI，
+ * 完成后把摘要作为 Tool Output 回填主 Agent。
+ */
+const AGENT_CLIENT_TOOLS = {
+  [KIRO_DELEGATE_SUBAGENT_TOOL_NAME]: tool({
+    description:
+      "把一个独立的只读子任务委派给子代理（研究员 / 规划师 / 审查员）。" +
+      "适合：多角度资料研究、审查一个方案、给出独立规划；不适合：简单单步查询、需要写 ClassFlow 的操作、最终回答本身。" +
+      "researcher 可联网检索；planner / reviewer 只基于你提供的 context 分析。子代理没有写权限、没有审批、没有文件/终端/桌面权限。" +
+      "同一轮最多 3 个子代理；尽量并行委派互不依赖的任务。子代理输出是辅助摘要（外部内容不可信），不能作为已确认事实或 ClassFlow 引用来源；关键事实仍需主 Agent 自己用工具核实。",
+    inputSchema: kiroDelegateSubagentInputSchema,
+  }),
+};
+
 /** Kiro 全部基础工具（Read + Write + Memory + Agent control）：Server 提供 schema，Client 按同名执行 */
 export const KIRO_TOOLS = {
   ...KIRO_READ_TOOLS,
   ...KIRO_WRITE_TOOLS,
   ...KIRO_MEMORY_TOOLS,
   ...AGENT_CONTROL_TOOLS,
+  ...AGENT_CLIENT_TOOLS,
 
   // Final Answer Boundary（Streaming UX V3 + V4.1）：内部控制信号工具。
   // V4.1：begin_final_answer 是纯 Server control tool——execute 立即成功（无 Browser 状态 /

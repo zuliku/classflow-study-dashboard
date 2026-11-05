@@ -8,7 +8,7 @@ Date: 2026-11-05
 
 1. **Plan Board（执行计划）**：复杂任务先提交可见 checklist，并在执行中更新状态。
 2. **Ask User（结构化澄清）**：信息不足时给出 2–4 个具体选项，用户点选后作为下一轮输入，而不是猜测。
-3. **Deep Research（多角度检索）**：一次调用并发执行 2–3 个检索方向，统一去重、域名多样性、来源编号与引用。
+3. **Deep Research（多角度检索）**：一次调用并发执行 2–5 个检索方向，统一去重、域名多样性、来源编号与引用。
 
 三者都是控制/只读能力，不扩大写权限，不绕过现有 invocation trust / approval / privacy 边界。
 
@@ -65,9 +65,9 @@ Date: 2026-11-05
 `web_research({ topic, queries?, timeRange?, includeDomains?, excludeDomains? })`
 
 - 仅在联网搜索可用时暴露。
-- `queries` 省略时使用 `topic`；最多 3 个查询；与 `web_search` 共享每轮搜索预算（每个查询消耗 1 次）。
+- `queries` 省略时使用 `topic`；最多 5 个查询；与 `web_search` 共享每轮搜索预算（每个查询消耗 1 次，本地每轮 5 次）。
 - 并发执行（`Promise.allSettled`），单查询失败不影响其他查询；全部失败才返回错误。
-- 统一 canonical URL 去重、单域最多 2 条、总数最多 10 条。
+- 统一 canonical URL 去重、单域最多 2 条、总数最多 12 条。
 - sourceId 继续使用 `web-N`，由 `web_search` / `web_research` 共享分配器分配；`read_web_source`、citation、source tray 全部复用现有可信来源链。
 - remote-channel：沿用收紧后的 1 次预算（即最多 1 个 query）。
 
@@ -85,6 +85,35 @@ Date: 2026-11-05
 - 所有新工具在 remote-channel 中按 allowlist 过滤；plan/ask 不暴露给远程渠道，research 仅保留只读与低额度。
 - Prompt 明确禁止通过这些工具提升权限或绕过 approval。
 
+## V1.2 增强（2026-11-05）
+
+### Plan Board UI
+
+- 收起态只显示标题 / 状态 / 进度 / 当前步骤；展开态用 measured-height `DisclosureRegion` 平滑展开全部步骤。
+- 容器宽度 < 360（Sidecar / 窄 Dock）自动收起长计划；用户手动展开后不再被自动折叠。
+- 出现有 enter 动画；plan 被清空时由 `KiroAgentRun` 的 `ExitCollapse` 播放退出折叠。
+- 状态 pill：进行中 / 已完成 / 待继续；当前步骤在收起态与展开态都可见。
+
+### Deep Research 预算
+
+- 本地每轮 web_search 上限 3 → 5；web_read 上限 2 → 3；evidence 字符预算 10k → 14k。
+- `web_research` 单次最多 5 个 query、最多 12 条结果；并发上限 3（keyless 通道避免 429）；总超时 15s → 20s。
+- remote-channel 仍保持 1 次搜索 / 1 次读取。
+
+### Subagents（V1.2）
+
+- 新工具 `delegate_subagent`（client-executed）：`role` = researcher / planner / reviewer，`task` + 可选 `context`。
+- 研究员可使用 server-side web tools；规划师 / 审查员只做纯文本推理。子代理没有 ClassFlow 写权限、审批、文件/终端/桌面/MCP。
+- 新 endpoint `/api/ai/subagent`：local-user invocation 才允许；复用 provider/model/API Key/SecretVault/联网搜索配置；返回 AI SDK UI message stream。
+- Browser 端独立消费子代理 stream：实时 text-delta + tool steps 写入 ephemeral `useKiroSubagentStore`，完成后把摘要作为主 Agent Tool Output 回填。
+- UI：
+  - Worklog 内 `KiroSubagentInlineCard` 实时显示角色、任务、步骤、流式正文；完成后保留摘要。
+  - 右侧 Inspector 新增「子代理」栏目（按当前会话过滤，可展开完整摘要）；子代理启动时自动展开 Inspector（xl+）。
+  - Sidecar 无 Inspector，以内联卡片承担实时展示。
+- 限制：每轮最多 3 个子代理，同时最多 3 个；单次 120s 超时；Stop 会取消所有子代理。
+- 子代理输出是辅助摘要（外部内容不可信），不能作为已确认事实或 ClassFlow 引用来源；主 Agent 必须自行核实关键事实。
+
+
 ## Tests
 
 - 纯函数：plan/question normalize、research query cap/去重/预算。
@@ -93,4 +122,5 @@ Date: 2026-11-05
 - Research：并发查询、部分失败、共享 sourceId、read_web_source 可信来源、引用注册。
 - Prompt 契约：包含三类能力的使用边界。
 - E2E：Plan Card 进度 + Ask Card 选择作为下一轮输入（server-executed `providerExecuted` 语义）。
+- E2E：子代理内联流式输出 + 右侧 Inspector + 主 Agent 继续。
 - 受影响的 typecheck / vitest / build。

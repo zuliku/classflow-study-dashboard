@@ -104,14 +104,15 @@ describe("Case B：arbitrary URL impossible", () => {
 });
 
 describe("Case C：read limit", () => {
-  it("当前 Turn 已两次 read → 第三次 WEB_READ_LIMIT_REACHED，Provider 不调用", async () => {
+  it("当前 Turn 已三次 read → 第四次 WEB_READ_LIMIT_REACHED，Provider 不调用", async () => {
     const msgs = searchMessages(CURRENT_TURN_SOURCES);
     msgs.push(
       { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r1", output: { ok: true, data: { sources: [] } } }] },
-      { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r2", output: { ok: false, code: "X" } }] }
+      { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r2", output: { ok: false, code: "X" } }] },
+      { role: "assistant", parts: [{ type: "tool-read_web_source", toolCallId: "r3", output: { ok: true, data: { sources: [] } } }] }
     );
     const state = inspectCurrentTurnWebEvidenceState(msgs);
-    expect(state.attempts).toBe(2);
+    expect(state.attempts).toBe(3);
     const cfg = readToolConfig({ attemptsSoFar: state.attempts });
     const readTool = createKiroWebReadTool(cfg);
     const r = (await readTool.execute?.({ sourceIds: ["web-3"] }, {} as never)) as { ok: false; code: string };
@@ -192,8 +193,8 @@ describe("Case F：evidence budget", () => {
       extract: vi.fn().mockResolvedValue({
         ok: true,
         sources: [
-          { sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "c".repeat(7000) }], truncated: false },
-          { sourceId: "web-4", title: "", url: "https://b.dev/4", domain: "", chunks: [{ text: "d".repeat(7000) }], truncated: false },
+          { sourceId: "web-3", title: "", url: "https://a.dev/3", domain: "", chunks: [{ text: "c".repeat(9000) }], truncated: false },
+          { sourceId: "web-4", title: "", url: "https://b.dev/4", domain: "", chunks: [{ text: "d".repeat(9000) }], truncated: false },
         ],
       }),
     };

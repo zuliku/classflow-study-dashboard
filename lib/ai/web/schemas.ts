@@ -75,7 +75,7 @@ export const kiroWebResearchInputSchema = z.object({
   topic: z.string().trim().min(2, "研究主题至少 2 个字符").max(200, "研究主题过长"),
   queries: z
     .array(z.string().trim().min(2).max(WEB_SEARCH_QUERY_MAX))
-    .max(3, "最多 3 个检索方向")
+    .max(5, "最多 5 个检索方向")
     .optional(),
   topicType: z.enum(["general", "news"]).optional(),
   timeRange: z.enum(["day", "week", "month", "year"]).optional(),

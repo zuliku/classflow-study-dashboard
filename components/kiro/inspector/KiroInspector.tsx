@@ -4,6 +4,7 @@ import React from "react";
 import { usePresence } from "@/lib/usePresence";
 import { KIRO_MOTION_MS } from "@/lib/motion";
 import { KiroInspectorOutputs } from "@/components/kiro/inspector/KiroInspectorOutputs";
+import { KiroInspectorSubagents } from "@/components/kiro/inspector/KiroInspectorSubagents";
 import { KiroInspectorSources } from "@/components/kiro/inspector/KiroInspectorSources";
 import { KiroInspectorDivider } from "@/components/kiro/inspector/KiroInspectorSection";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,8 @@ export function KiroInspector({ open }: { open: boolean }) {
           >
             <div className="min-h-0 overflow-y-auto">
               <KiroInspectorOutputs />
+              <KiroInspectorDivider />
+              <KiroInspectorSubagents />
               <KiroInspectorDivider />
               <KiroInspectorSources />
             </div>
