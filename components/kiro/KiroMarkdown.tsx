@@ -208,7 +208,7 @@ function KiroCodeBlock({ children, className }: { children?: React.ReactNode; cl
 
   const label = lang ? lang.toUpperCase() : "CODE";
   return (
-    <div className="my-[0.85em] rounded-xl border border-line bg-alabaster overflow-hidden">
+    <div className="kiro-content-settle my-[0.85em] rounded-xl border border-line bg-alabaster overflow-hidden">
       <div className="flex items-center justify-between px-3 py-1.5 bg-alabaster border-b border-line">
         <span className="text-[10px] font-bold tracking-wide text-sandrift uppercase bg-white border border-line rounded-md px-1.5 py-0.5">{label}</span>
         <button

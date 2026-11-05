@@ -49,8 +49,10 @@ function statusTone(run: KiroSubagentRun): string {
 }
 
 function stepIcon(status: KiroSubagentStepStatus) {
-  if (status === "done") return <Check className="w-3 h-3 text-success shrink-0" aria-hidden="true" />;
-  if (status === "error") return <AlertCircle className="w-3 h-3 text-danger shrink-0" aria-hidden="true" />;
+  if (status === "done")
+    return <Check className="w-3 h-3 text-success shrink-0 kiro-check-settle" aria-hidden="true" />;
+  if (status === "error")
+    return <AlertCircle className="w-3 h-3 text-danger shrink-0" aria-hidden="true" />;
   return <Loader2 className="w-3 h-3 text-charcoal animate-spin shrink-0" aria-hidden="true" />;
 }
 
@@ -141,11 +143,13 @@ function SubagentRow({
           </span>
           <span
             className={cn(
-              "shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold leading-none",
+              "shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold leading-none transition-colors duration-[var(--motion-fast)]",
               statusTone(run)
             )}
           >
-            {statusLabel(run)}
+            <span key={run.status} className="inline-block kiro-status-swap">
+              {statusLabel(run)}
+            </span>
           </span>
           <span className="ml-auto shrink-0 text-[9px] tabular-nums text-sandrift">{duration}</span>
           <ChevronDown

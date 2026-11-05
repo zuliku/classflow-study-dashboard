@@ -17,8 +17,10 @@ function useElapsedSeconds(startedAt: number, active: boolean): number {
 }
 
 function stepIcon(status: KiroSubagentStepStatus) {
-  if (status === "done") return <Check className="w-3 h-3 text-success shrink-0" aria-hidden="true" />;
-  if (status === "error") return <AlertCircle className="w-3 h-3 text-danger shrink-0" aria-hidden="true" />;
+  if (status === "done")
+    return <Check className="w-3 h-3 text-success shrink-0 kiro-check-settle" aria-hidden="true" />;
+  if (status === "error")
+    return <AlertCircle className="w-3 h-3 text-danger shrink-0" aria-hidden="true" />;
   return <Loader2 className="w-3 h-3 text-charcoal animate-spin shrink-0" aria-hidden="true" />;
 }
 
@@ -101,11 +103,13 @@ export function KiroSubagentInlineCard({
         </span>
         <span
           className={cn(
-            "ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold leading-none",
+            "ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold leading-none transition-colors duration-[var(--motion-fast)]",
             statusTone(run)
           )}
         >
-          {statusLabel(run)}
+          <span key={run.status} className="inline-block kiro-status-swap">
+            {statusLabel(run)}
+          </span>
         </span>
         <span className="shrink-0 text-[9px] tabular-nums text-sandrift">
           {run.status === "running" ? `${elapsed}s` : run.completedAt ? `${Math.max(0, Math.round((run.completedAt - run.startedAt) / 1000))}s` : ""}
@@ -115,7 +119,7 @@ export function KiroSubagentInlineCard({
       {shownSteps.length > 0 && (
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
           {shownSteps.map((step) => (
-            <span key={step.id} className="flex items-center gap-1 min-w-0 text-[10px] text-satin-grey">
+            <span key={step.id} className="flex items-center gap-1 min-w-0 text-[10px] text-satin-grey animate-enter">
               {stepIcon(step.status)}
               <span className="truncate max-w-[220px]">{step.label}</span>
               {step.detail && <span className="text-sandrift truncate max-w-[180px]">· {step.detail}</span>}

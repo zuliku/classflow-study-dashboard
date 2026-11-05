@@ -88,3 +88,14 @@ When the turn enters the answer lane (`composing` after `begin_final_answer`, or
 - E2E: reasoning → commentary → boundary → final answer; final answer is visible, worklog is collapsed, caret appears while streaming and disappears when settled.
 - E2E: user scrolls up during streaming; new content surfaces the jump-to-bottom dot without moving the reading position.
 - Run affected Vitest files, typecheck, and the new E2E spec.
+
+## 6. V5.1 Motion Polish (same day)
+
+The first V5 pass removed the largest state cuts; a second pass targets remaining visual hard cuts:
+
+- **Status swaps**: header icon/label use keyed `kiro-status-swap` (opacity 0.45 + 1px translate, 140ms) instead of instant text/icon replacement. The live region wrapper stays mounted so announcements remain stable.
+- **Skeleton → first token**: skeleton exits via presence + opacity while content enters with `kiro-content-settle`; no keyed sibling swap and no blank frame.
+- **Code / display math / canonical fallback**: code blocks and KaTeX display math get a one-shot settle when the fallback representation hands over; canonical re-render is keyed + faded instead of an in-place hard swap.
+- **Plan / subagent / terminal status**: status pills crossfade text and transition colors; step icon changes settle instead of blinking; new steps fade in.
+- **No layout animation**: new motion is opacity + 1–2px translate only; height changes remain owned by `DisclosureRegion`/`ExitCollapse`.
+- **Reduced motion / forced colors**: global reduced-motion guards collapse all new animation; forced-colors falls back to system text colors.

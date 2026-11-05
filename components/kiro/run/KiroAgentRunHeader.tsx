@@ -26,7 +26,10 @@ function KiroAgentRunElapsed({ active }: { active: boolean }) {
   const secs = Math.max(0, Math.floor((now - startedAtRef.current) / 1000));
   if (secs < 2) return null;
   return (
-    <span aria-hidden="true" className="shrink-0 text-[10px] tabular-nums text-sandrift">
+    <span
+      aria-hidden="true"
+      className="shrink-0 text-[10px] tabular-nums text-sandrift kiro-status-swap"
+    >
       · {secs}s
     </span>
   );
@@ -104,14 +107,24 @@ export function KiroAgentRunHeader({
 
   const statusContent = (
     <>
-      {indicator}
+      {indicator && (
+        <span
+          key={`icon-${status}-${reasoning ? "r" : ""}-${answering ? "a" : ""}`}
+          className="inline-flex shrink-0 kiro-status-swap"
+          aria-hidden="true"
+        >
+          {indicator}
+        </span>
+      )}
       <span
-        className={cn("truncate", active && "kiro-stream-shimmer")}
+        className="truncate"
         role="status"
         aria-live="polite"
         aria-atomic="true"
       >
-        {label}
+        <span key={label} className="inline-block max-w-full kiro-status-swap">
+          <span className={active ? "kiro-stream-shimmer" : undefined}>{label}</span>
+        </span>
       </span>
       <KiroAgentRunElapsed active={active} />
       {collapsible && (

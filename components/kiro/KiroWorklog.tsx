@@ -36,7 +36,7 @@ function WorkingElapsed() {
   const secs = Math.max(0, Math.round((now - startedRef.current) / 1000));
   if (secs < 5) return null;
   return (
-    <span className="shrink-0 text-[10px] tabular-nums text-sandrift">
+    <span className="shrink-0 text-[10px] tabular-nums text-sandrift kiro-status-swap">
       {secs > 30 ? `仍在进行 · ${secs}s` : `${secs}s`}
     </span>
   );
@@ -66,7 +66,9 @@ const KiroToolRow = React.memo(function KiroToolRow({ block }: { block: ToolBloc
   const rowBody = (
     <>
       {icon}
-      <span className="truncate">{block.headline ?? block.label}</span>
+      <span className="truncate transition-colors duration-[var(--motion-fast)]">
+        {block.headline ?? block.label}
+      </span>
       {working && <WorkingElapsed />}
       {expandable && (
         <ChevronDown

@@ -77,11 +77,13 @@ export function KiroAgentPlanCard({
         </span>
         <span
           className={cn(
-            "shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold leading-none",
+            "shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold leading-none transition-colors duration-[var(--motion-fast)]",
             statusTone
           )}
         >
-          {statusLabel}
+          <span key={statusLabel} className="inline-block kiro-status-swap">
+            {statusLabel}
+          </span>
         </span>
         <span className="ml-auto shrink-0 text-[10px] tabular-nums text-sandrift">
           {summary.completed}/{summary.total}
@@ -120,13 +122,25 @@ export function KiroAgentPlanCard({
 
       {!expanded && (
         <div className="mt-2 flex items-start gap-1.5 min-w-0">
-          {allCompleted ? (
-            <Check className="w-3 h-3 mt-[2px] shrink-0 text-success" aria-hidden="true" />
-          ) : summary.nextStep?.status === "in_progress" ? (
-            <Loader2 className="w-3 h-3 mt-[2px] shrink-0 animate-spin text-charcoal" aria-hidden="true" />
-          ) : (
-            <Circle className="w-3 h-3 mt-[2px] shrink-0 text-sandrift/70" aria-hidden="true" />
-          )}
+          <span
+            key={
+              allCompleted
+                ? "done"
+                : summary.nextStep?.status === "in_progress"
+                  ? "active"
+                  : "pending"
+            }
+            className="inline-flex shrink-0 mt-[2px] kiro-status-swap"
+            aria-hidden="true"
+          >
+            {allCompleted ? (
+              <Check className="w-3 h-3 text-success" />
+            ) : summary.nextStep?.status === "in_progress" ? (
+              <Loader2 className="w-3 h-3 animate-spin text-charcoal" />
+            ) : (
+              <Circle className="w-3 h-3 text-sandrift/70" />
+            )}
+          </span>
           <span className="text-[11px] leading-relaxed text-satin-grey min-w-0 truncate">
             {allCompleted
               ? "全部步骤已完成"
@@ -143,17 +157,23 @@ export function KiroAgentPlanCard({
             const completed = step.status === "completed";
             const active = step.status === "in_progress";
             return (
-              <li key={step.id} className="flex items-start gap-1.5 min-w-0">
-                {completed ? (
-                  <Check className="w-3 h-3 mt-[2px] shrink-0 text-success" aria-hidden="true" />
-                ) : active ? (
-                  <Loader2 className="w-3 h-3 mt-[2px] shrink-0 animate-spin text-charcoal" aria-hidden="true" />
-                ) : (
-                  <Circle className="w-3 h-3 mt-[2px] shrink-0 text-sandrift/70" aria-hidden="true" />
-                )}
+              <li key={step.id} className="flex items-start gap-1.5 min-w-0 animate-enter">
+                <span
+                  key={completed ? "done" : active ? "active" : "pending"}
+                  className="inline-flex shrink-0 mt-[2px] kiro-status-swap"
+                  aria-hidden="true"
+                >
+                  {completed ? (
+                    <Check className="w-3 h-3 text-success kiro-check-settle" />
+                  ) : active ? (
+                    <Loader2 className="w-3 h-3 animate-spin text-charcoal" />
+                  ) : (
+                    <Circle className="w-3 h-3 text-sandrift/70" />
+                  )}
+                </span>
                 <span
                   className={cn(
-                    "text-[11px] leading-relaxed break-words min-w-0",
+                    "text-[11px] leading-relaxed break-words min-w-0 transition-colors duration-[var(--motion-fast)]",
                     completed && "text-sandrift line-through",
                     active && "text-charcoal font-semibold",
                     !completed && !active && "text-satin-grey"
@@ -162,7 +182,7 @@ export function KiroAgentPlanCard({
                   {step.title}
                 </span>
                 {active && (
-                  <span className="ml-auto shrink-0 text-[9px] font-bold text-charcoal/70">
+                  <span className="ml-auto shrink-0 text-[9px] font-bold text-charcoal/70 animate-enter">
                     进行中
                   </span>
                 )}

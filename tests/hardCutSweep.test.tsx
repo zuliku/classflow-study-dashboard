@@ -364,7 +364,8 @@ describe("硬切深筛源码契约", () => {
     expect(conversation).toContain("SCROLL_STICK_DISTANCE_PX");
     expect(conversation).toContain("DisclosureRegion");
     const streaming = read("components/kiro/KiroStreamingMarkdown.tsx");
-    expect(streaming).toContain("ux-fade");
+    expect(streaming).toContain("kiro-content-settle");
+    expect(streaming).toContain("data-kiro-stream-cursor");
   });
 
   it("深度 Batch9：退出期 inert 安全网（pointer-events 拦不住键盘）", () => {

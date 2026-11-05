@@ -36,7 +36,7 @@ function statusMeta(activity: TerminalActivity): { icon: React.ReactNode; label:
       };
     case "completed":
       return {
-        icon: <Check className="w-3.5 h-3.5 text-success shrink-0" aria-hidden="true" />,
+        icon: <Check className="w-3.5 h-3.5 text-success shrink-0 kiro-check-settle" aria-hidden="true" />,
         label: "已完成",
         tone: "text-satin-grey",
       };
@@ -225,8 +225,10 @@ export const KiroTerminalBlock = React.memo(function KiroTerminalBlock({
             activity.waitingForInput && "animate-pulse font-bold"
           )}
         >
-          {meta.icon}
-          {meta.label}
+          <span key={activity.status} className="inline-flex items-center gap-1.5 kiro-status-swap">
+            {meta.icon}
+            {meta.label}
+          </span>
         </span>
         {/* P0：终态显示 exitCode（此前只参与 memo 比较从未渲染，失败无从下手） */}
         {!running && activity.exitCode !== null && activity.exitCode !== 0 && (

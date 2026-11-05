@@ -159,6 +159,11 @@ export function KiroMessage({
   );
   const showComposingSkeleton =
     assistantTurn?.phase === "composing" && !content && !assistantTurn.answerStreaming;
+  // V5.1：骨架退出与首 token 交叉淡出（不再 key 切换导致 140ms 空窗硬切）
+  const composingSkeletonPresence = usePresence(
+    showComposingSkeleton === true,
+    MOTION_EXIT_MS.fast
+  );
 
   const copyMarkdownSource = async () => {
     const ok = await copyTextToClipboard(citationsToReadableText(content ?? "", sources));
@@ -198,22 +203,31 @@ export function KiroMessage({
           onStop={onStop}
         />
       )}
-        {(content || showComposingSkeleton) ? (
-          // 骨架→首 token 同槽位淡入（key 切换触发挂载动画；流式中 content 常驻不重播）
-          <div key={content ? "content" : "skeleton"} className="ux-fade">
-            {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（同语义 Markdown） */}
+        {(content || composingSkeletonPresence.mounted) ? (
+          // V5.1：骨架淡出 + 首 token settle 交叉进行；不再 key 切换造成空窗
+          <div className="relative">
             {content ? (
-              <KiroStreamingMarkdown
-                content={content}
-                streaming={!!streaming}
-                sources={sources}
-                showCursor={showStreamingCursor === true}
-              />
-            ) : (
+              <div key="content" className="kiro-content-settle">
+                {/* Worklog V2 Task 4：Stable Blocks（React.memo 缓存）+ Active Tail（同语义 Markdown） */}
+                <KiroStreamingMarkdown
+                  content={content}
+                  streaming={!!streaming}
+                  sources={sources}
+                  showCursor={showStreamingCursor === true}
+                />
+              </div>
+            ) : null}
+            {composingSkeletonPresence.mounted && (
               <div
                 data-testid="kiro-composing-skeleton"
                 aria-hidden="true"
-                className="ux-skeleton space-y-1.5 py-1"
+                className={cn(
+                  "ux-skeleton space-y-1.5 py-1 transition-opacity duration-[var(--motion-exit-fast)] ease-[var(--ease-exit)]",
+                  content && "absolute inset-x-0 top-0",
+                  composingSkeletonPresence.visible
+                    ? "opacity-100"
+                    : "opacity-0 pointer-events-none"
+                )}
               >
                 <div className="h-3 w-3/4 rounded bg-alabaster animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />
                 <div className="h-3 w-1/2 rounded bg-alabaster/70 animate-pulse" style={{ animationDuration: reducedMotion ? "0s" : undefined }} />

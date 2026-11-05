@@ -829,6 +829,43 @@ button:disabled {
 }
 
 /* ============ Streaming UX V5 — Live status & inline caret ============ */
+/* V5.1 Status/Content settle：用于状态文字/图标换挡、骨架→首 token、code/math 闭合后接管。
+   只动 opacity + 1–2px translate，不触发布局；reduced-motion 由全局 0.01ms 守卫收敛。 */
+.kiro-status-swap {
+  animation: kiro-status-swap var(--motion-fast) var(--ease-out-soft) both;
+}
+
+@keyframes kiro-status-swap {
+  from {
+    opacity: 0.45;
+    transform: translateY(1px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.kiro-content-settle {
+  animation: kiro-content-settle var(--motion-base) var(--ease-out-soft) both;
+}
+
+@keyframes kiro-content-settle {
+  from {
+    opacity: 0.65;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Display math 在 settle 后从原文占位切换为 KaTeX：一次轻 settle，避免硬替换 */
+.kiro-markdown .katex-display {
+  animation: kiro-content-settle var(--motion-base) var(--ease-out-soft) both;
+}
+
 /* 状态文字微光：暖中性（sandrift → charcoal），只用于“正在思考/正在搜索”等低频状态，
    不进入 token 正文。reduced-motion 下静态。 */
 .kiro-stream-shimmer {

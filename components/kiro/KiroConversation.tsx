@@ -424,7 +424,7 @@ export function KiroConversation({
             <span
               data-testid="kiro-scroll-new-indicator"
               aria-hidden="true"
-              className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-charcoal ring-2 ring-surface animate-pulse"
+              className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-charcoal ring-2 ring-surface animate-pulse kiro-status-swap"
             />
           )}
           <ChevronDown className="w-4 h-4" />
