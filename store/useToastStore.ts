@@ -13,6 +13,8 @@ export interface Toast {
   duration?: number;
   /** 提示自动消失（未撤销）时回调，用于延迟清理（如 IndexedDB Blob） */
   onDismiss?: () => void;
+  /** 队列超限被挤出：ToastViewport 播放高度折叠后再真正移除 */
+  retiring?: boolean;
 }
 
 interface ToastState {
@@ -26,30 +28,49 @@ export const useToastStore = create<ToastState>((set) => ({
   pushToast: (toast) => {
     const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     set((state) => {
-      // 同文案 2s 内去重，避免批量操作刷屏
+      // 同文案 2s 内去重，避免批量操作刷屏（正在退出的不参与）
       const now = Date.now();
       const lastSame = [...state.toasts]
         .reverse()
-        .find((t) => t.message === toast.message && t.type === (toast.type ?? "success"));
+        .find(
+          (t) =>
+            !t.retiring &&
+            t.message === toast.message &&
+            t.type === (toast.type ?? "success")
+        );
       if (lastSame) {
         const ts = Number(lastSame.id.split("_")[1]);
         if (!Number.isNaN(ts) && now - ts < 2000) return state;
       }
-      const next = [...state.toasts, { ...toast, type: toast.type ?? "success", id }];
-      // 队列上限 3：优先挤最旧的非紧急（success/info），error/warning 关键信息不被随后 success 顶掉；
-      // 全是紧急时才动最旧紧急；挤掉时补调 onDismiss，避免 Blob 清理泄漏
-      if (next.length > 3) {
-        const victimIdx = next.findIndex((t) => t.id !== id && t.type !== "error" && t.type !== "warning");
-        const idx = victimIdx >= 0 ? victimIdx : 0;
-        const [evicted] = next.splice(idx, 1);
+
+      const retiring = state.toasts.filter((t) => t.retiring);
+      // 极端 burst 防无界：最多保留一条正在退出的 Toast，更早的直接清理。
+      const dropped = retiring.slice(0, -1);
+      for (const t of dropped) {
         try {
-          evicted?.onDismiss?.();
+          t.onDismiss?.();
         } catch {
           /* 忽略清理回调异常 */
         }
-        return { toasts: next.slice(-3) };
       }
-      return { toasts: next };
+      const keepRetiring = retiring.slice(-1);
+      const active = state.toasts.filter((t) => !t.retiring);
+      const next = [...active, { ...toast, type: toast.type ?? "success", id }];
+
+      // 队列上限 3：优先挤最旧的非紧急（success/info），error/warning 关键信息不被随后 success 顶掉；
+      // 挤出不再直接 splice，而是标记 retiring，让 ToastViewport 播放高度折叠后再移除。
+      if (next.length > 3) {
+        const victimIdx = next.findIndex(
+          (t) =>
+            t.id !== id &&
+            !t.retiring &&
+            t.type !== "error" &&
+            t.type !== "warning"
+        );
+        const idx = victimIdx >= 0 ? victimIdx : next.findIndex((t) => t.id !== id && !t.retiring);
+        if (idx >= 0) next[idx] = { ...next[idx], retiring: true };
+      }
+      return { toasts: [...keepRetiring, ...next] };
     });
   },
   removeToast: (id) =>

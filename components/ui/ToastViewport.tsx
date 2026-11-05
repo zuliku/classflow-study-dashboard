@@ -5,6 +5,7 @@ import { CheckCircle2, AlertTriangle, Info, XCircle, X } from "lucide-react";
 import { useToastStore, ToastType } from "@/store/useToastStore";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { cn } from "@/lib/utils";
 
 // accent 走 semantic color class（= token 值：success/warning/danger/sandrift），不再散落 HEX
@@ -16,12 +17,11 @@ const TYPE_META: Record<ToastType, { icon: React.ElementType; accentClass: strin
 };
 
 /**
- * Motion Contract：toast 视觉退出走 ux-inline（--motion-exit-fast），
- * EXIT_MS = MOTION_EXIT_MS.fast 与之同源——动画结束即移除，不空等也不截断。
- * Motion V3：退出加速（--ease-exit），进入保持 --ease-standard。
- * （此前误用 MOTION_MS.fast 140ms，与 Reminder 110ms 退场脱节 30ms。）
+ * Motion Contract：toast 视觉退出先走 120ms opacity/translate，外层 ExitCollapse
+ * 同步做 190ms 高度折叠；卸载等待取 panel 档，保证退出尾段不被截断。
+ * 这样关闭一条 Toast 时，其余 Toast 会随折叠平滑上移，而不是硬跳。
  */
-const EXIT_MS = MOTION_EXIT_MS.fast;
+const EXIT_MS = MOTION_EXIT_MS.panel;
 
 export function ToastViewport() {
   const toasts = useToastStore((s) => s.toasts);
@@ -31,13 +31,18 @@ export function ToastViewport() {
   // action 单发守卫：按钮在退出动画期间仍可点击，双击会把「撤销」执行两次
   //（restoreSchedule 曾因此插入重复 id 实体）。点击一次后立即禁用。
   const actionTakenRef = useRef<Set<string>>(new Set());
+  /** 退出窗口内防重复：关闭按钮/自动计时器可能同时触发 dismiss。 */
+  const dismissingRef = useRef<Set<string>>(new Set());
   const toastsRef = useRef(toasts);
   toastsRef.current = toasts;
 
   const dismiss = (id: string) => {
+    if (dismissingRef.current.has(id)) return;
+    dismissingRef.current.add(id);
     const toast = toastsRef.current.find((t) => t.id === id);
     // reduced-motion 下 CSS 过渡已近即时：跳过退出等待，直接移除（usePresence reduced 语义）
     if (reducedMotion) {
+      dismissingRef.current.delete(id);
       removeToast(id);
       toast?.onDismiss?.();
       return;
@@ -53,6 +58,7 @@ export function ToastViewport() {
         next.delete(id);
         return next;
       });
+      dismissingRef.current.delete(id);
       removeToast(id);
       toast?.onDismiss?.();
     }, EXIT_MS);
@@ -102,6 +108,15 @@ export function ToastViewport() {
     scheduleDismiss(id, remaining);
   };
 
+  // 队列超限：store 只标记 retiring；这里统一走 exit 折叠，折叠完成后再真正移除。
+  useEffect(() => {
+    for (const toast of toasts) {
+      if (toast.retiring) dismiss(toast.id);
+    }
+    // dismiss 内部用 dismissingRef 防重复；只需对 toasts 变化响应
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toasts]);
+
   if (toasts.length === 0) return null;
 
   return (
@@ -111,51 +126,54 @@ export function ToastViewport() {
     >
       {toasts.map((toast) => {
         const { icon: Icon, accentClass } = TYPE_META[toast.type];
-        const isExiting = exiting.has(toast.id);
+        const isExiting = exiting.has(toast.id) || toast.retiring === true;
         return (
-          <div
-            key={toast.id}
-            onMouseEnter={() => pauseDismiss(toast.id)}
-            onMouseLeave={() => resumeDismiss(toast.id)}
-            onFocus={() => pauseDismiss(toast.id)}
-            onBlur={() => resumeDismiss(toast.id)}
-            className={cn(
-              "pointer-events-auto w-full sm:w-auto sm:max-w-sm bg-surface border border-line rounded-xl shadow-card p-3 flex items-start gap-2.5",
-              // BUG-071：入场用一次性 animation（挂载即播），出场仍走 ux-inline 过渡
-              "ux-toast-enter ux-inline",
-              isExiting
-                ? "opacity-0 translate-y-1 !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
-                : "opacity-100 translate-y-0"
-            )}
-            role={toast.type === "error" || toast.type === "warning" ? "alert" : "status"}
-          >
-            <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", accentClass)} />
-            <p className="flex-1 text-xs text-charcoal font-medium leading-relaxed min-w-0">
-              {toast.message}
-            </p>
-            {toast.actionLabel && (
-              <button
-                disabled={actionTakenRef.current.has(toast.id)}
-                aria-label={toast.actionAriaLabel ?? `${toast.actionLabel}：${toast.message}`}
-                onClick={() => {
-                  if (actionTakenRef.current.has(toast.id)) return;
-                  actionTakenRef.current.add(toast.id);
-                  toast.onAction?.();
-                  dismiss(toast.id);
-                }}
-                className="shrink-0 px-1.5 py-0.5 -m-0.5 rounded-lg text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors duration-[var(--motion-fast)] disabled:opacity-40 disabled:pointer-events-none"
-              >
-                {toast.actionLabel}
-              </button>
-            )}
-            <button
-              onClick={() => dismiss(toast.id)}
-              className="shrink-0 p-0.5 text-sandrift hover:text-charcoal rounded transition-colors duration-[var(--motion-fast)]"
-              aria-label="关闭提示"
+          <ExitCollapse key={toast.id} exiting={isExiting} className="w-full sm:w-auto">
+            <div
+              data-testid="toast-item"
+              onMouseEnter={() => pauseDismiss(toast.id)}
+              onMouseLeave={() => resumeDismiss(toast.id)}
+              onFocus={() => pauseDismiss(toast.id)}
+              onBlur={() => resumeDismiss(toast.id)}
+              className={cn(
+                "pointer-events-auto w-full sm:w-auto sm:max-w-sm bg-surface border border-line rounded-xl shadow-card p-3 flex items-start gap-2.5",
+                // BUG-071：入场用一次性 animation（挂载即播）；退出 opacity 120ms，
+                // 外层 ExitCollapse 同步折叠高度（190ms），其余 Toast 平滑上移。
+                "ux-toast-enter ux-inline",
+                isExiting
+                  ? "opacity-0 translate-y-1 !duration-[var(--motion-exit-fast)] !ease-[var(--ease-exit)]"
+                  : "opacity-100 translate-y-0"
+              )}
+              role={toast.type === "error" || toast.type === "warning" ? "alert" : "status"}
             >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
+              <Icon className={cn("w-4 h-4 shrink-0 mt-0.5", accentClass)} />
+              <p className="flex-1 text-xs text-charcoal font-medium leading-relaxed min-w-0">
+                {toast.message}
+              </p>
+              {toast.actionLabel && (
+                <button
+                  disabled={actionTakenRef.current.has(toast.id)}
+                  aria-label={toast.actionAriaLabel ?? `${toast.actionLabel}：${toast.message}`}
+                  onClick={() => {
+                    if (actionTakenRef.current.has(toast.id)) return;
+                    actionTakenRef.current.add(toast.id);
+                    toast.onAction?.();
+                    dismiss(toast.id);
+                  }}
+                  className="shrink-0 px-1.5 py-0.5 -m-0.5 rounded-lg text-[11px] font-bold text-charcoal hover:bg-alabaster transition-colors duration-[var(--motion-fast)] disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  {toast.actionLabel}
+                </button>
+              )}
+              <button
+                onClick={() => dismiss(toast.id)}
+                className="shrink-0 p-0.5 text-sandrift hover:text-charcoal rounded transition-colors duration-[var(--motion-fast)]"
+                aria-label="关闭提示"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </ExitCollapse>
         );
       })}
     </div>

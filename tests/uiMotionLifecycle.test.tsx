@@ -508,7 +508,7 @@ describe("UISelect lifecycle（共享 usePresence）", () => {
 });
 
 describe("ToastViewport lifecycle", () => {
-  it("dismiss → exit 窗口内可见 → fast(140ms) 后移除且 store 清理", () => {
+  it("dismiss → exit 窗口内可见 → panel 退出折叠后移除且 store 清理", () => {
     useToastStore.setState({
       toasts: [{ id: "t1", type: "info", message: "保存成功", duration: 60_000 }],
     });
@@ -520,7 +520,7 @@ describe("ToastViewport lifecycle", () => {
     expect(screen.getByText("保存成功")).toBeTruthy();
 
     act(() => {
-      vi.advanceTimersByTime(MOTION_MS.fast);
+      vi.advanceTimersByTime(MOTION_EXIT_MS.panel);
     });
     expect(screen.queryByText("保存成功")).toBeNull();
     expect(useToastStore.getState().toasts.find((t) => t.id === "t1")).toBeUndefined();

@@ -197,8 +197,8 @@ export function MiniChatStatusStrip({
           </div>
           <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-line-soft">
             <div
-              className="h-full rounded-full bg-charcoal/60 transition-[width] duration-[var(--motion-base)]"
-              style={{ width: `${plan.total > 0 ? (plan.completed / plan.total) * 100 : 0}%` }}
+              className="h-full w-full origin-left rounded-full bg-charcoal/60 transition-transform duration-[var(--motion-base)]"
+              style={{ transform: `scaleX(${plan.total > 0 ? plan.completed / plan.total : 0})` }}
             />
           </div>
           {plan.currentStep && (

@@ -287,8 +287,8 @@ export function KiroComposerReasoningControl({
               <span
                 aria-hidden="true"
                 data-testid="kiro-composer-reasoning-fill"
-                className="absolute inset-y-0 left-0 bg-pastel-mint transition-[width] duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
-                style={{ width: `${fillPercent}%` }}
+                className="absolute inset-y-0 left-0 w-full origin-left bg-pastel-mint transition-transform duration-[var(--kiro-motion-control,var(--motion-fast))] ease-[var(--ease-standard)]"
+                style={{ transform: `scaleX(${fillPercent / 100})` }}
               />
               {/* 最高档流动彩条：与底填充同宽同位，opacity 500ms 柔光晕染进出
                   （显隐比几何过渡慢半拍以上，变色不生硬）；内层 200% 宽彩带做 translateX 位移

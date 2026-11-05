@@ -1925,7 +1925,7 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
 
   /* 展开完成后，Header 先就位（Logo 连续），下方内容快速淡入，避免整块闪入 */
   .mini-content-enter {
-    animation: mini-content-in 140ms var(--ease-out-soft) both;
+    animation: mini-content-in var(--motion-fast) var(--ease-out-soft) both;
   }
   @keyframes mini-content-in {
     from {
@@ -2193,7 +2193,7 @@ div[data-geometry-interacting] {
   }
 }
 .kiro-mode-swap {
-  animation: kiro-mode-swap 260ms var(--ease-standard);
+  animation: kiro-mode-swap var(--motion-panel) var(--ease-standard);
 }
 @keyframes kiro-mode-flash {
   0% {
@@ -2204,6 +2204,7 @@ div[data-geometry-interacting] {
   }
 }
 .kiro-mode-flash {
+  /* deliberate exception：380ms attention flash，非标准 tier；保留单一来源注释，避免误改成 hover 档 */
   animation: kiro-mode-flash 380ms var(--ease-standard);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2223,6 +2224,7 @@ div[data-geometry-interacting] {
   }
 }
 .kiro-citation-flash {
+  /* deliberate exception：1.2s citation attention，非标准 tier；只用于引用定位后的短暂高亮 */
   animation: kiro-citation-flash 1.2s var(--ease-standard);
   border-radius: 6px;
 }

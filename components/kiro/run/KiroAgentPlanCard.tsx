@@ -115,8 +115,8 @@ export function KiroAgentPlanCard({
         aria-label="计划完成进度"
       >
         <div
-          className="h-full rounded-full bg-charcoal/70 transition-[width] duration-[var(--motion-base)] ease-[var(--ease-standard)]"
-          style={{ width: `${summary.progressPercent}%` }}
+          className="h-full w-full origin-left rounded-full bg-charcoal/70 transition-transform duration-[var(--motion-base)] ease-[var(--ease-standard)]"
+          style={{ transform: `scaleX(${summary.progressPercent / 100})` }}
         />
       </div>
 

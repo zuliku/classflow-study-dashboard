@@ -82,7 +82,7 @@ export function MiniChatCapsule({
       <button
         type="button"
         aria-label="隐藏迷你窗"
-        className="mini-no-drag pointer-events-none absolute left-0.5 top-0.5 flex h-7 w-7 items-center justify-center rounded-full text-satin-grey opacity-0 transition-opacity duration-[var(--motion-fast)] hover:text-charcoal focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
+        className="mini-no-drag pointer-events-none absolute left-0.5 top-0.5 flex h-7 w-7 items-center justify-center rounded-full text-satin-grey opacity-0 transition-opacity duration-[var(--motion-fast)] hover:text-charcoal focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
         onClick={onHide}
       >
         <X className="h-3.5 w-3.5" />

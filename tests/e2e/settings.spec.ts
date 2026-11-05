@@ -155,6 +155,21 @@ test("Profile dirty：修改姓名 → 未保存 → 放弃更改 → 恢复原�
   await expect(page.getByRole("button", { name: "放弃更改" })).toHaveCount(0);
 });
 
+test("Settings：切换分区回到顶部（不继承上一页滚动深度）", async ({ page }) => {
+  await openSettings(page);
+  const detail = page.getByTestId("settings-detail");
+  const nav = page.getByRole("navigation", { name: "设置导航" });
+
+  await detail.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  const before = await detail.evaluate((el) => el.scrollTop);
+  expect(before).toBeGreaterThan(0);
+
+  await nav.getByRole("button", { name: "Kiro", exact: true }).click();
+  await expect.poll(() => detail.evaluate((el) => el.scrollTop)).toBe(0);
+});
+
 test("Settings Layout：侧栏搜索常驻 + 左栏导航稳定且不与内容重叠", async ({ page }) => {
   await openSettings(page);
 

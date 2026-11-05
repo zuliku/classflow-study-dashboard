@@ -46,14 +46,20 @@ export function SettingsRow({
         )}
       </div>
       <div className="flex max-w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 ml-auto">
-        {modified && onReset && (
-          <button
-            onClick={onReset}
-            aria-label={resetAriaLabel ?? `将${title}恢复默认`}
-            className="p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors opacity-70 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-charcoal/30 shrink-0"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
+        {onReset && (
+          // 固定 reset slot：修改状态切换时控件不横移/不换行；
+          // 未修改时只占位不渲染按钮（保持现有 DOM/测试语义）。
+          <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center" aria-hidden={!modified}>
+            {modified && (
+              <button
+                onClick={onReset}
+                aria-label={resetAriaLabel ?? `将${title}恢复默认`}
+                className="ux-fade p-1 rounded-lg text-sandrift hover:bg-alabaster hover:text-charcoal transition-colors opacity-70 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-charcoal/30 shrink-0"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </span>
         )}
         {children}
       </div>

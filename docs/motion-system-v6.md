@@ -71,6 +71,11 @@ asymmetric transition）、Linear / Raycast（micro 快速、浮层从触发点�
 - **Toast**：6px 上浮 + 淡入 160ms；退出 120ms 加速。
 - **按压**：`.ux-press:active` scale 0.97；`ux-press-transition` 中 transform 使用
   100ms `spring-snappy`，颜色仍走 160ms standard。
+- **Toast 栈**：opacity/translate 120ms exit + 外层 `ExitCollapse` 190ms 高度折叠；
+  关闭/挤出时其余 Toast 随高度连续上移，不再硬跳。
+- **默认 transition**：`tailwind.config.cjs` 将 `transitionDuration.DEFAULT` /
+  `transitionTimingFunction.DEFAULT` 映射到 `--motion-fast` / `--ease-standard`；
+  未显式写时长的 `transition-colors` / `transition-transform` 不再落 Tailwind 默认曲线。
 - **大表面**：Dialog scale .98 + 4px；Drawer 12px 位移；均使用 spatial spring 落位。
 
 ## 5. 性能规则

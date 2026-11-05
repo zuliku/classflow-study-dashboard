@@ -901,7 +901,7 @@ export function TimelineWorkspace() {
                     pushToast({ message: "已删除学习计划" });
                   }}
                   aria-label={`删除学习计划 ${b.title}`}
-                  className="relative z-[2] ml-auto p-0.5 rounded text-sandrift hover:text-danger transition-colors shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                  className="relative z-[2] ml-auto p-0.5 rounded text-sandrift hover:text-danger transition-colors shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                 >
                   <X className="w-2.5 h-2.5" />
                 </button>

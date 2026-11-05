@@ -127,4 +127,9 @@ describe("Token Contract：tailwind 派生与 :root 同值", () => {
     expect(tailwind).toMatch(/xl:\s*"0\.875rem"/);
     expect(tailwind).toMatch(/"2xl":\s*"1\.125rem"/);
   });
+
+  it("transition 默认值必须落 Motion Contract token", () => {
+    expect(tailwind).toMatch(/transitionDuration:\s*\{[^}]*DEFAULT:\s*"var\(--motion-fast\)"/s);
+    expect(tailwind).toMatch(/transitionTimingFunction:\s*\{[^}]*DEFAULT:\s*"var\(--ease-standard\)"/s);
+  });
 });

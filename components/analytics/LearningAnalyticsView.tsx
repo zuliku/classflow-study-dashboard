@@ -99,6 +99,7 @@ export function LearningAnalyticsView() {
   const setSelectedAssignmentId = useAppStore((s) => s.setSelectedAssignmentId);
   const courses = useAppStore((s) => s.courses);
   const { data, loading, error, refresh } = useLearningAnalytics(preset);
+  const refreshing = loading && !!data;
   const [outlookHorizon, setOutlookHorizon] = useState<StudyOutlookHorizon>(7);
   const outlook = useStudyOutlook(outlookHorizon);
   // 趋势图动画：仅首次 meaningful load 播放；后续 Range 切换直接更新（外层 stage 进入表达 continuity）
@@ -110,8 +111,9 @@ export function LearningAnalyticsView() {
   const courseNameById = Object.fromEntries(courses.map((c) => [c.id, c.name]));
 
   // 历史分析 stage：preset / data state 变化时统一轻进入（skeleton→data、empty→data、error→data 同一节奏）
-  const analyticsStageState = loading ? "loading" : error ? "error" : data ? (data.isEmpty ? "empty" : "data") : "idle";
-  const analyticsStageKey = `${preset}|${analyticsStageState}`;
+  // 有旧数据刷新时保持 data stage，不重播入场；只在首次无数据时显示骨架。
+  const analyticsStageState = loading && !data ? "loading" : error ? "error" : data ? (data.isEmpty ? "empty" : "data") : "idle";
+  const analyticsStageKey = analyticsStageState;
 
   const navigate = (tab: "assignments" | "timetable" | "courses") => {
     setActiveTab(tab);
@@ -226,6 +228,7 @@ export function LearningAnalyticsView() {
           onPresetChange={changePreset}
           reviewExpanded={reviewExpanded}
           onWeeklyReviewToggle={toggleWeeklyReview}
+          refreshing={refreshing}
           innerClassName="w-full max-w-none xl:px-8"
         />
       </div>
@@ -234,9 +237,14 @@ export function LearningAnalyticsView() {
       <div className="flex-1 min-h-0">
         <div
           data-testid="analytics-body"
+          aria-busy={refreshing || undefined}
           // 水平 gutter 单一来源（workspace-gutter 16/24）+ intentional xl:px-8 大屏档；
           // S4-1：gutter 已入 components 层，utilities 的 xl:px-8 自然覆盖，不再需要 !important
-          className="w-full max-w-none flex flex-col gap-4 workspace-gutter py-4 pb-24 md:py-5 md:pb-6 xl:px-8 xl:py-5 xl:pb-6"
+          className={cn(
+            "w-full max-w-none flex flex-col gap-4 workspace-gutter py-4 pb-24 md:py-5 md:pb-6 xl:px-8 xl:py-5 xl:pb-6",
+            "transition-opacity duration-[var(--motion-fast)]",
+            refreshing && "opacity-70"
+          )}
         >
           {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle） */}
           <div key={analyticsStageKey} className="ux-analytics-enter flex flex-col gap-4">

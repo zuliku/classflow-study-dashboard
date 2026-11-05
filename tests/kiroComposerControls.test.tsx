@@ -345,7 +345,7 @@ describe("Kiro Composer — Reasoning / Model", () => {
     await renderComposer(); // reasoningEffort: "high" = 最高档（ADJUSTABLE 的最后一档）
     await click('[data-testid="kiro-composer-reasoning"]');
     const fill = q('[data-testid="kiro-composer-reasoning-fill"]')!;
-    expect(fill.style.width).toBe("100%");
+    expect(fill.style.transform).toBe("scaleX(1)");
     const knob = q('[data-testid="kiro-composer-reasoning-knob"]')!;
     expect(knob.style.left).toBe("calc(100% - 16px)");
     expect(knob.className).toContain("w-8");
@@ -375,8 +375,8 @@ describe("Kiro Composer — Reasoning / Model", () => {
     const strip = q('[data-testid="kiro-composer-reasoning-flow-strip"]')!;
     expect(strip.className).toContain("kiro-reasoning-flow");
     expect(strip.className).toContain("w-[200%]");
-    // 底填充保留 width 过渡（档位滑动不断）
-    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-[width]");
+    // 底填充保留 transform 过渡（档位滑动不断；width → scaleX 避免布局）
+    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-transform");
   });
 
   it("非最高档：流动层隐藏（opacity-0），底填充正常", async () => {
@@ -425,7 +425,7 @@ describe("Kiro Composer — Reasoning / Model", () => {
     expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("medium");
     // 仅按下不算拖动；单击/拖动都保留 knob/fill 过渡（档位间平滑滑动）
     expect(track.getAttribute("data-dragging")).toBeNull();
-    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-[width]");
+    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-transform");
 
     await act(async () => {
       firePointer("pointermove", 320); // 第 4 段 → 高（进入拖动）
@@ -433,7 +433,7 @@ describe("Kiro Composer — Reasoning / Model", () => {
     expect(handlers.onSetReasoningEffort).toHaveBeenCalledWith("high");
     expect(track.getAttribute("data-dragging")).toBe("true");
     // 拖动过程中动画不缺失
-    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-[width]");
+    expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).toContain("transition-transform");
     expect(q('[data-testid="kiro-composer-reasoning-fill"]')!.className).not.toContain("transition-none");
     expect(q('[data-testid="kiro-composer-reasoning-knob"]')!.className).toContain("transition-[left]");
 

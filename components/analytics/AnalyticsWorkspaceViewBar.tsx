@@ -18,38 +18,51 @@ export function AnalyticsWorkspaceViewBar({
   onPresetChange,
   reviewExpanded,
   onWeeklyReviewToggle,
+  refreshing = false,
   innerClassName,
 }: {
   preset: AnalyticsRangePreset;
   onPresetChange: (preset: AnalyticsRangePreset) => void;
   reviewExpanded: boolean;
   onWeeklyReviewToggle: () => void;
+  /** 有旧数据时的后台刷新：保留内容，只给一个低干扰状态点 */
+  refreshing?: boolean;
   innerClassName?: string;
 }) {
   const primary = <AnalyticsRangeSelector value={preset} onChange={onPresetChange} />;
 
   const secondary = (
-    <button
-      type="button"
-      aria-pressed={reviewExpanded}
-      aria-expanded={reviewExpanded}
-      onClick={onWeeklyReviewToggle}
-      data-testid="weekly-review-action"
-      className={cn(
-        "shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
-        reviewExpanded
-          ? "text-sandrift bg-alabaster border border-line-strong"
-          : "text-sandrift bg-transparent border border-line hover:text-charcoal hover:border-line-strong"
-      )}
-    >
-      {reviewExpanded ? "收起周回顾" : "周回顾"}
-      <ChevronRight
+    <div className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        data-testid="analytics-refreshing"
         className={cn(
-          "w-3 h-3 transition-transform duration-[var(--motion-fast)]",
-          reviewExpanded && "rotate-90"
+          "h-1.5 w-1.5 rounded-full bg-sandrift transition-opacity duration-[var(--motion-fast)]",
+          refreshing ? "opacity-100 animate-pulse" : "opacity-0"
         )}
       />
-    </button>
+      <button
+        type="button"
+        aria-pressed={reviewExpanded}
+        aria-expanded={reviewExpanded}
+        onClick={onWeeklyReviewToggle}
+        data-testid="weekly-review-action"
+        className={cn(
+          "shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors duration-[var(--motion-fast)]",
+          reviewExpanded
+            ? "text-sandrift bg-alabaster border border-line-strong"
+            : "text-sandrift bg-transparent border border-line hover:text-charcoal hover:border-line-strong"
+        )}
+      >
+        {reviewExpanded ? "收起周回顾" : "周回顾"}
+        <ChevronRight
+          className={cn(
+            "w-3 h-3 transition-transform duration-[var(--motion-fast)]",
+            reviewExpanded && "rotate-90"
+          )}
+        />
+      </button>
+    </div>
   );
 
   return (

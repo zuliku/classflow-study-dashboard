@@ -102,10 +102,10 @@ export function SidebarProfileCard({ collapsed }: { collapsed: boolean }) {
               <span className="block w-full bg-pastel-mint rounded-full h-1.5 overflow-hidden mt-1">
                 <span
                   className={cn(
-                    "block bg-sandrift h-1.5 rounded-full",
-                    "transition-[width] duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
+                    "block h-1.5 w-full origin-left rounded-full bg-sandrift",
+                    "transition-transform duration-[var(--motion-data)] ease-[var(--ease-emphasized)]"
                   )}
-                  style={{ width: `${todayProgress.percentage}%` }}
+                  style={{ transform: `scaleX(${todayProgress.percentage / 100})` }}
                 />
               </span>
             </span>

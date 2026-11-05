@@ -127,7 +127,9 @@ export function SettingsModal() {
       className={cn(
         "w-full h-full max-w-none flex flex-col",
         "md:w-[min(1040px,calc(100vw-48px))] md:h-[min(740px,calc(100dvh-48px))]",
-        "rounded-none md:rounded-2xl"
+        "rounded-none md:rounded-2xl",
+        // Mobile 是全屏 surface：取消 Dialog 默认 scale(.98)/translate，避免边缘露出与“悬浮卡片”错觉。
+        "max-md:!scale-100 max-md:!translate-y-0"
       )}
     >
       {/* Modal Header：设置标题 + 关闭 */}

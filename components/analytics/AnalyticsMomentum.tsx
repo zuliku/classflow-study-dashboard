@@ -291,6 +291,7 @@ function MomentumCardSkeleton() {
 export function AnalyticsMomentum({ embedded = false, card = false }: { embedded?: boolean; card?: boolean }) {
   const [open, setOpen] = useState(true);
   const { data, loading, error, refresh } = useStudyMomentum();
+  const refreshing = loading && !!data;
   const columns = useHeatColumns(data?.days ?? []);
   // 每列月份刻度（与前列同月则省略，保持 GitHub 式稀疏标注）
   const monthLabels = useMemo(
@@ -324,11 +325,16 @@ export function AnalyticsMomentum({ embedded = false, card = false }: { embedded
               重试
             </button>
           </div>
-        ) : loading || !data ? (
+        ) : !data ? (
           <MomentumCardSkeleton />
         ) : (
           <>
-            <div className="ux-fade flex flex-1 flex-col gap-4 md:flex-row md:items-stretch lg:flex-col lg:gap-0">
+            <div
+              className={cn(
+                "ux-fade flex flex-1 flex-col gap-4 transition-opacity duration-[var(--motion-fast)] md:flex-row md:items-stretch lg:flex-col lg:gap-0",
+                refreshing && "opacity-70"
+              )}
+            >
               <div className="flex min-w-0 flex-1 flex-col md:max-w-[520px] lg:max-w-none">
                 <div className="flex items-end justify-between gap-3">
                   <div>

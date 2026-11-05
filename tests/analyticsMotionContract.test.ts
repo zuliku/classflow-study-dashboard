@@ -26,6 +26,16 @@ describe("Learning Analytics open motion contract", () => {
     expect(momentum).toContain("ux-fade flex flex-1 flex-col gap-4");
   });
 
+  it("有旧数据刷新时不闪回整页骨架", () => {
+    const view = read("components/analytics/LearningAnalyticsView.tsx");
+    expect(view).toContain("const refreshing = loading && !!data");
+    expect(view).toContain('loading && !data ? "loading"');
+    expect(view).toContain("ux-analytics-enter");
+    const momentum = read("components/analytics/AnalyticsMomentum.tsx");
+    expect(momentum).toContain("const refreshing = loading && !!data");
+    expect(momentum).toContain(") : !data ? (");
+  });
+
   it("全局 token 驱动，不写裸 duration", () => {
     const css = read("app/globals.css");
     expect(css).toContain("@keyframes ux-analytics-enter");

@@ -86,6 +86,14 @@ module.exports = {
         reminder: "var(--z-reminder)",
         titlebar: "var(--z-titlebar)",
       },
+      // Motion Contract：未显式写 duration/ease 的 transition-* 也必须落在
+      // --motion-fast / --ease-standard，禁止 Tailwind 默认 150ms 曲线绕过 token。
+      transitionDuration: {
+        DEFAULT: "var(--motion-fast)",
+      },
+      transitionTimingFunction: {
+        DEFAULT: "var(--ease-standard)",
+      },
     },
   },
   plugins: [],

@@ -892,7 +892,7 @@ export function TimetableGrid({
                             onClick={(e) => e.stopPropagation()}
                             className={cn(
                               "absolute bottom-0.5 left-1/2 -translate-x-1/2 w-8 h-3.5 flex items-center justify-center rounded-md",
-                              "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                              "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100",
                               "transition-opacity duration-[var(--motion-fast)]",
                               interaction.type === "resize" &&
                                 interaction.scheduleId === sched.id &&

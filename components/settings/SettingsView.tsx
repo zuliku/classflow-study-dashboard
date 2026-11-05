@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { SettingsSection } from "@/types";
 import { SettingsNav, SETTINGS_NAV, ABOUT_NAV } from "@/components/settings/SettingsNav";
@@ -81,6 +81,7 @@ export function SettingsView({
 }: SettingsViewProps) {
   const [section, setSection] = useState<SettingsSection>("general");
   const viewRootRef = useRef<HTMLDivElement | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
 
   // 稳定的 per-section dirty 上报回调：Profile/Semester 的 dirty effect 以 onDirtyChange 为依赖，
   // inline 箭头会在每次 render 时产生新引用并重触发上报链（Maximum update depth）。
@@ -185,6 +186,14 @@ export function SettingsView({
     [searchQuery]
   );
   const searching = searchQuery.trim().length > 0;
+
+  // Section / 搜索态切换：同一 detail 滚动容器会被复用；不重置会让 Kiro/Agent 等长分区
+  // 从上一页的滚动深度打开（实测 General 滚到底 → Kiro 仍停在 240px）。
+  // 搜索跳转有 pendingTarget，交给后面的 scrollIntoView 处理，不能抢先归零。
+  useLayoutEffect(() => {
+    if (pendingTargetRef.current) return;
+    detailRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [section, searching]);
 
   // 开发期自动校验：Registry ID ↔ 真实 DOM（全部 section 常驻挂载，一次校验全量；只查 Settings 根）
   React.useEffect(() => {
@@ -323,7 +332,7 @@ export function SettingsView({
       {/* 右侧 Workspace：Detail Pane（唯一主要滚动区） */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         {/* Detail Pane：唯一滚动区；所有 section 常驻挂载 */}
-        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-4 md:px-5 md:pb-5" data-testid="settings-detail">
+        <div ref={detailRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:pt-4 md:px-5 md:pb-5" data-testid="settings-detail">
           {searching ? (
             /* 搜索态进入淡入一次（key 静态——随 query 逐字重播会闪烁，故不用 query 做 key） */
             <div key="search-results" className="ux-fade" data-testid="settings-search-results">
