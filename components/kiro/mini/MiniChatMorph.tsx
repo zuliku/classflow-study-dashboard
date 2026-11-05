@@ -9,23 +9,40 @@ import type { MiniChatWindowMode } from "@/lib/ai/miniChat/protocol";
  *
  * 为什么需要它：窗口每一帧 resize 都会触发布局；如果此时仍挂载完整聊天
  * 界面（消息列表 + Markdown），每帧都会重排一次，表现为明显卡顿。
- * 这里只保留「表面 + 居中 Logo」，与胶囊态视觉一致，动画结束后再挂载
- * 目标形态。
+ *
+ * 共享元素：Logo 在「胶囊中心」与「展开态 Header 左上角」之间飞行，
+ * 尺寸同步 28px ↔ 20px。窗口到位后目标形态挂载，Logo 位置/尺寸完全对齐，
+ * 切换不可见。飞行轨迹用 `vw/vh` 跟随窗口实时中心，纯 transform 合成。
  */
-export function MiniChatMorph({ target }: { target: MiniChatWindowMode }) {
+export const MiniChatMorph = React.memo(function MiniChatMorph({
+  target,
+  durationMs,
+}: {
+  target: MiniChatWindowMode;
+  durationMs: number;
+}) {
+  const toHeader = target === "expanded";
   return (
     <div
       className="mini-drag-region relative h-screen w-screen select-none overflow-hidden rounded-[20px] bg-surface"
       data-testid="kiro-mini-morph"
+      data-target={target}
       aria-hidden="true"
+      style={{ "--mini-morph-ms": `${durationMs}ms` } as React.CSSProperties}
     >
       <span className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-line-soft" />
       <div className="flex h-full w-full items-center justify-center">
-        <KiroMark
-          size="md"
-          className={target === "expanded" ? "mini-morph-logo-out" : "mini-morph-logo-in"}
-        />
+        <div
+          className={
+            toHeader ? "mini-morph-travel-to-header" : "mini-morph-travel-to-center"
+          }
+        >
+          <KiroMark
+            size="md"
+            className={toHeader ? "mini-morph-scale-to-header" : "mini-morph-scale-to-center"}
+          />
+        </div>
       </div>
     </div>
   );
-}
+});

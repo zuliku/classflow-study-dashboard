@@ -353,7 +353,7 @@ export function MiniChatApp() {
         modeTimerRef.current = null;
         setModeState(next);
         setTransitionTo(null);
-      }, MINI_MODE_ANIMATION_MS + 24);
+      }, MINI_MODE_ANIMATION_MS[next] + 20);
     },
     [mode, reducedMotion, transitionTo]
   );
@@ -461,7 +461,12 @@ export function MiniChatApp() {
   }
 
   if (transitionTo !== null) {
-    return <MiniChatMorph target={transitionTo} />;
+    return (
+      <MiniChatMorph
+        target={transitionTo}
+        durationMs={MINI_MODE_ANIMATION_MS[transitionTo]}
+      />
+    );
   }
 
   if (mode === "capsule") {
@@ -478,7 +483,7 @@ export function MiniChatApp() {
 
   return (
     <div
-      className="relative flex h-screen animate-enter flex-col overflow-hidden bg-surface text-charcoal"
+      className="relative flex h-screen flex-col overflow-hidden bg-surface text-charcoal"
       data-testid="kiro-mini-app"
       onDragOver={(event) => {
         event.preventDefault();
@@ -505,137 +510,141 @@ export function MiniChatApp() {
         onOpenConversations={() => setMenuOpen((v) => !v)}
       />
 
-      <MiniChatStatusStrip
-        plan={snapshot?.plan ?? null}
-        activity={snapshot?.activity ?? null}
-        approval={snapshot?.approval ?? null}
-        sources={snapshot?.sources ?? []}
-        approvalBusy={approvalBusy}
-        onApprove={() => resolveApproval("allow-once")}
-        onDeny={() => resolveApproval("deny")}
-        onFocusMain={() => focusMain(snapshot?.conversationId ?? undefined)}
-      />
+      {/* Header 先就位（Logo 与 morph 共享元素对齐），其余内容快速淡入 */}
+      <div className="mini-content-enter flex min-h-0 flex-1 flex-col">
+        <MiniChatStatusStrip
+          plan={snapshot?.plan ?? null}
+          activity={snapshot?.activity ?? null}
+          approval={snapshot?.approval ?? null}
+          sources={snapshot?.sources ?? []}
+          approvalBusy={approvalBusy}
+          onApprove={() => resolveApproval("allow-once")}
+          onDeny={() => resolveApproval("deny")}
+          onFocusMain={() => focusMain(snapshot?.conversationId ?? undefined)}
+        />
 
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={listRef}
-          onScroll={handleScroll}
-          className="h-full space-y-2 overflow-y-auto px-3 py-2.5"
-          data-testid="kiro-mini-messages"
-        >
-          {messages.length === 0 && (
-            <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center animate-enter">
-              <KiroMark size="sm" />
-              <p className="text-xs font-semibold">有什么要处理的？</p>
-              <p className="text-[10px] text-sandrift">直接问，或拖入文件</p>
-            </div>
-          )}
-          {messages.map((message, index) => {
-            if (message.role === "assistant" && !message.text) return null;
-            const isLast = index === messages.length - 1;
-            return (
-              <div
-                key={message.id}
-                data-testid="kiro-mini-message"
-                className={cn(
-                  "max-w-full text-[13px] leading-relaxed animate-enter",
-                  message.role === "user"
-                    ? "ml-6 rounded-xl bg-alabaster/70 px-2.5 py-2 whitespace-pre-wrap break-words"
-                    : "mr-2"
-                )}
-              >
-                {message.role === "assistant" ? (
-                  <>
-                    <MiniMarkdown
-                      text={message.text}
-                      streaming={
-                        isLast &&
-                        busy &&
-                        snapshot?.phase === "answering" &&
-                        message.streaming === true
-                      }
-                    />
-                    {isLast && !busy && message.text && (
-                      <button
-                        type="button"
-                        onClick={() => void copyMessage(message.id, message.text)}
-                        className="mini-no-drag mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal"
-                        aria-label="复制最后一条回答"
-                      >
-                        {copiedId === message.id ? (
-                          <Check className="h-3 w-3" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                        {copiedId === message.id ? "已复制" : "复制"}
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  message.text
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {hasNew && (
-          <button
-            type="button"
-            onClick={() => scrollToBottom(true)}
-            className="mini-no-drag absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-line bg-surface px-2 py-1 text-[10px] font-semibold text-satin-grey shadow-subtle animate-enter"
-          >
-            <ChevronDown className="h-3 w-3" />
-            新内容
-          </button>
-        )}
-      </div>
-
-      {dragOver && (
-        <div className="pointer-events-none mx-2.5 mb-1.5 rounded-xl border-2 border-dashed border-line-strong bg-alabaster/60 px-3 py-2 text-center text-[11px] font-bold animate-enter">
-          释放以添加附件
-        </div>
-      )}
-
-      {noticePresence.mounted && (
-        <ExitCollapse exiting={!noticePresence.visible}>
+        <div className="relative min-h-0 flex-1">
           <div
-            className="flex shrink-0 items-center gap-2 px-3 pb-1 text-[10px] font-semibold text-warning"
-            data-testid="kiro-mini-notice"
+            ref={listRef}
+            onScroll={handleScroll}
+            className="h-full space-y-2 overflow-y-auto px-3 py-2.5"
+            data-testid="kiro-mini-messages"
           >
-            <span className="min-w-0 flex-1 truncate">{shownNotice}</span>
-            {syncError && (
-              <button
-                type="button"
-                onClick={() => void refreshState()}
-                className="mini-no-drag shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold text-charcoal hover:bg-alabaster"
-              >
-                重试
-              </button>
+            {messages.length === 0 && (
+              <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center animate-enter">
+                <KiroMark size="sm" />
+                <p className="text-xs font-semibold">有什么要处理的？</p>
+                <p className="text-[10px] text-sandrift">直接问，或拖入文件</p>
+              </div>
             )}
+            {messages.map((message, index) => {
+              if (message.role === "assistant" && !message.text) return null;
+              const isLast = index === messages.length - 1;
+              return (
+                <div
+                  key={message.id}
+                  data-testid="kiro-mini-message"
+                  className={cn(
+                    "max-w-full text-[13px] leading-relaxed animate-enter",
+                    message.role === "user"
+                      ? "ml-6 rounded-xl bg-alabaster/70 px-2.5 py-2 whitespace-pre-wrap break-words"
+                      : "mr-2"
+                  )}
+                >
+                  {message.role === "assistant" ? (
+                    <>
+                      <MiniMarkdown
+                        text={message.text}
+                        streaming={
+                          isLast &&
+                          busy &&
+                          snapshot?.phase === "answering" &&
+                          message.streaming === true
+                        }
+                      />
+                      {isLast && !busy && message.text && (
+                        <button
+                          type="button"
+                          onClick={() => void copyMessage(message.id, message.text)}
+                          className="mini-no-drag mt-1 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold text-sandrift hover:bg-alabaster hover:text-charcoal"
+                          aria-label="复制最后一条回答"
+                        >
+                          {copiedId === message.id ? (
+                            <Check className="h-3 w-3" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                          {copiedId === message.id ? "已复制" : "复制"}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    message.text
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </ExitCollapse>
-      )}
+          {hasNew && (
+            <button
+              type="button"
+              onClick={() => scrollToBottom(true)}
+              className="mini-no-drag absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-line bg-surface px-2 py-1 text-[10px] font-semibold text-satin-grey shadow-subtle animate-enter"
+            >
+              <ChevronDown className="h-3 w-3" />
+              新内容
+            </button>
+          )}
+        </div>
 
-      <MiniChatComposer
-        input={input}
-        onInput={setInput}
-        files={files}
-        onAddFiles={addFiles}
-        onRemoveFile={(file) => setFiles((prev) => prev.filter((f) => f !== file))}
-        onSend={send}
-        onQuickPrompt={quickSend}
-        onStop={() => {
-          try {
-            getClassFlowDesktopMiniBridge()?.stopRemote();
-          } catch {}
-        }}
-        sending={sending}
-        busy={busy}
-        configured={configured}
-        transitioning={transitioning}
-        suggestions={suggestions}
-        onFocusMain={() => focusMain(snapshot?.conversationId ?? undefined)}
-      />
+        {dragOver && (
+          <div className="pointer-events-none mx-2.5 mb-1.5 rounded-xl border-2 border-dashed border-line-strong bg-alabaster/60 px-3 py-2 text-center text-[11px] font-bold animate-enter">
+            释放以添加附件
+          </div>
+        )}
+
+        {noticePresence.mounted && (
+          <ExitCollapse exiting={!noticePresence.visible}>
+            <div
+              className="flex shrink-0 items-center gap-2 px-3 pb-1 text-[10px] font-semibold text-warning"
+              data-testid="kiro-mini-notice"
+            >
+              <span className="min-w-0 flex-1 truncate">{shownNotice}</span>
+              {syncError && (
+                <button
+                  type="button"
+                  onClick={() => void refreshState()}
+                  className="mini-no-drag shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold text-charcoal hover:bg-alabaster"
+                >
+                  重试
+                </button>
+              )}
+            </div>
+          </ExitCollapse>
+        )}
+
+        <MiniChatComposer
+          input={input}
+          onInput={setInput}
+          files={files}
+          onAddFiles={addFiles}
+          onRemoveFile={(file) => setFiles((prev) => prev.filter((f) => f !== file))}
+          onSend={send}
+          onQuickPrompt={quickSend}
+          onStop={() => {
+            try {
+              getClassFlowDesktopMiniBridge()?.stopRemote();
+            } catch {}
+          }}
+          sending={sending}
+          busy={busy}
+          configured={configured}
+          transitioning={transitioning}
+          suggestions={suggestions}
+          onFocusMain={() => focusMain(snapshot?.conversationId ?? undefined)}
+        />
+
+      </div>
 
       {menuOpen && (
         <>

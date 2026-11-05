@@ -274,7 +274,9 @@ describe("MiniChatApp", () => {
     expect(q('[data-testid="kiro-mini-morph"]')).toBeTruthy();
     expect(q('[data-testid="kiro-mini-app"]')).toBeNull();
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, MINI_MODE_ANIMATION_MS + 60));
+      await new Promise((resolve) =>
+        setTimeout(resolve, MINI_MODE_ANIMATION_MS.expanded + 80)
+      );
     });
     expect(q('[data-testid="kiro-mini-app"]')).toBeTruthy();
   });
@@ -289,7 +291,9 @@ describe("MiniChatApp", () => {
     expect(q('[data-testid="kiro-mini-morph"]')).toBeTruthy();
     expect(q('[data-testid="kiro-mini-app"]')).toBeNull();
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, MINI_MODE_ANIMATION_MS + 60));
+      await new Promise((resolve) =>
+        setTimeout(resolve, MINI_MODE_ANIMATION_MS.capsule + 80)
+      );
     });
     expect(q('[data-testid="kiro-mini-capsule"]')).toBeTruthy();
   });

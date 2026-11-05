@@ -1762,32 +1762,77 @@ html[data-motion-effective="reduced"] .sidebar-profile-progress {
   }
 
   /* Mini 展开/收起 morph：动画期间只有轻量表面 + Logo。
-     展开时 Logo 随窗口放大淡出，收起时快速淡入。 */
-  .mini-morph-logo-out {
-    animation: mini-morph-logo-out 180ms var(--ease-out-strong) both;
+     Logo 在「胶囊中心」与「展开态 Header 左上角」之间飞行（共享元素），
+     位移用 vw/vh 实时跟随窗口中心，纯 transform 合成；时间曲线与主进程
+     窗口动画保持一致（Material standard）。 */
+  .mini-morph-travel-to-header,
+  .mini-morph-travel-to-center,
+  .mini-morph-scale-to-header,
+  .mini-morph-scale-to-center {
+    will-change: transform;
   }
-  .mini-morph-logo-in {
-    animation: mini-morph-logo-in 120ms var(--ease-out-soft) both;
+  .mini-morph-travel-to-header {
+    animation: mini-morph-travel-to-header var(--mini-morph-ms, 220ms)
+      cubic-bezier(0.4, 0, 0.2, 1) both;
   }
-  @keyframes mini-morph-logo-out {
-    0%,
-    55% {
-      opacity: 1;
+  .mini-morph-travel-to-center {
+    animation: mini-morph-travel-to-center var(--mini-morph-ms, 170ms)
+      cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  @keyframes mini-morph-travel-to-header {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(calc(-50vw + 20px), calc(-50vh + 22px), 0);
+    }
+  }
+  @keyframes mini-morph-travel-to-center {
+    from {
+      transform: translate3d(calc(-50vw + 20px), calc(-50vh + 22px), 0);
+    }
+    to {
+      transform: translate3d(0, 0, 0);
+    }
+  }
+  .mini-morph-scale-to-header {
+    animation: mini-morph-scale-to-header var(--mini-morph-ms, 220ms)
+      cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  .mini-morph-scale-to-center {
+    animation: mini-morph-scale-to-center var(--mini-morph-ms, 170ms)
+      cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+  @keyframes mini-morph-scale-to-header {
+    from {
       transform: scale(1);
     }
-    100% {
-      opacity: 0;
-      transform: scale(0.9);
+    to {
+      /* 20 / 28：与 Header 的 KiroMark size="sm" 对齐 */
+      transform: scale(0.714);
     }
   }
-  @keyframes mini-morph-logo-in {
+  @keyframes mini-morph-scale-to-center {
+    from {
+      transform: scale(0.714);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+
+  /* 展开完成后，Header 先就位（Logo 连续），下方内容快速淡入，避免整块闪入 */
+  .mini-content-enter {
+    animation: mini-content-in 140ms var(--ease-out-soft) both;
+  }
+  @keyframes mini-content-in {
     from {
       opacity: 0;
-      transform: scale(0.92);
+      transform: translateY(3px);
     }
     to {
       opacity: 1;
-      transform: scale(1);
+      transform: none;
     }
   }
 

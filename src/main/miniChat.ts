@@ -219,6 +219,34 @@ function ensureWindowVisible(w: BrowserWindow): void {
   }
 }
 
+/** 窗口形变缓动：Material standard `cubic-bezier(0.4, 0, 0.2, 1)`。
+ *  慢起 → 中段加速 → 长尾柔和收束；避免 easeOutCubic 首帧跳一大截的“弹一下”。 */
+const MODE_EASE = { x1: 0.4, y1: 0, x2: 0.2, y2: 1 } as const;
+
+function bezierValue(p1: number, p2: number, t: number): number {
+  const mt = 1 - t;
+  return 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t;
+}
+
+function bezierSlope(p1: number, p2: number, t: number): number {
+  const mt = 1 - t;
+  return 3 * mt * mt * p1 + 6 * mt * t * (p2 - p1) + 3 * t * t * (1 - p2);
+}
+
+/** 由时间进度 x 反解 bezier 参数，再取 y（Newton 迭代 5 次已足够 60fps 精度） */
+function easeModeProgress(progress: number): number {
+  if (progress <= 0) return 0;
+  if (progress >= 1) return 1;
+  let u = progress;
+  for (let i = 0; i < 5; i += 1) {
+    const error = bezierValue(MODE_EASE.x1, MODE_EASE.x2, u) - progress;
+    const slope = bezierSlope(MODE_EASE.x1, MODE_EASE.x2, u);
+    if (Math.abs(error) < 1e-4 || Math.abs(slope) < 1e-6) break;
+    u = Math.min(1, Math.max(0, u - error / slope));
+  }
+  return bezierValue(MODE_EASE.y1, MODE_EASE.y2, u);
+}
+
 function animateBounds(
   w: BrowserWindow,
   target: { x?: number; y?: number; width: number; height: number },
@@ -256,6 +284,7 @@ function animateBounds(
   } catch {}
   // 按真实经过时间插值（而不是按帧数）：主进程偶发掉帧时动画仍按固定
   // 时长走完，不会出现忽快忽慢的“卡一下”。
+  const durationMs = MINI_MODE_ANIMATION_MS[currentMode];
   const startedAt = Date.now();
   let last = { ...start };
   boundsAnimationTimer = setInterval(() => {
@@ -263,8 +292,8 @@ function animateBounds(
       stopBoundsAnimation();
       return;
     }
-    const t = Math.min(1, (Date.now() - startedAt) / MINI_MODE_ANIMATION_MS);
-    const eased = 1 - Math.pow(1 - t, 3);
+    const t = Math.min(1, (Date.now() - startedAt) / durationMs);
+    const eased = easeModeProgress(t);
     const next = {
       x: Math.round(start.x + (end.x - start.x) * eased),
       y: Math.round(start.y + (end.y - start.y) * eased),
