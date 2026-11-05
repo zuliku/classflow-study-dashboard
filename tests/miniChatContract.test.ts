@@ -100,6 +100,10 @@ describe("Main 侧（src/main/miniChat.ts + index.ts 接线）", () => {
     expect(src).toContain("capsuleSettleTimer");
     expect(src).toContain("transparent: true");
     expect(src).toContain("hasShadow: false");
+    expect(src).toContain("resizable: true");
+    expect(src).toContain("useContentSize: true");
+    expect(src).toContain("setContentBounds");
+    expect(src).toContain("applyMiniSizeConstraints");
     expect(src).not.toContain("boundsAnimationTimer");
     const app = read("components/kiro/mini/MiniChatApp.tsx");
     const morph = read("components/kiro/mini/MiniChatMorph.tsx");

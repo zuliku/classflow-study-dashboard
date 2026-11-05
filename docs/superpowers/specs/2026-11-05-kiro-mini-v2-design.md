@@ -14,10 +14,10 @@ Kiro Mini is a separate persistent `BrowserWindow` (`?mini=1`) that mirrors the 
 
 ## 2. Window model
 
-- Expanded: 340×560 default (clamped 300×440–560×900); frameless, transparent, always-on-top by default, skipTaskbar. The expanded size is fixed for the session (transparent windows are not reliably user-resizable on Windows).
-- Capsule: 72×72, draggable, single-layer surface: logo + one status dot (busy/waiting only) + optional unread pill; top-left hide control appears on hover. No nested card/button chrome.
-- Mode is persisted in `mini-chat-bounds.json`; expanded size is preserved separately.
-- **No per-frame native window resizing.** The window is transparent with no native shadow. On expand, Main instantly grows the native window to the expanded size at the same top-left; the added area is fully transparent. On collapse, the window stays expanded until the card has shrunk, then instantly shrinks to 72×72; the removed area was already transparent. Both native bounds changes are invisible.
+- Expanded: 340×560 default (clamped 300×440–560×900); frameless, transparent, always-on-top by default, skipTaskbar. Native edge-drag resizing is enabled in expanded mode; size is saved through content bounds so the transparent window's 1–2 px non-client border does not accumulate drift.
+- Capsule: 72×72, draggable, single-layer surface: logo + one status dot (busy/waiting only) + optional unread pill; top-left hide control appears on hover. No nested card/button chrome. The capsule window is locked by `min=max=72`, so it cannot be user-resized.
+- Mode is persisted in `mini-chat-bounds.json`; expanded size is preserved separately (content size, not outer window size).
+- **No per-frame native window resizing during mode morphs.** The window is transparent with no native shadow. On expand, Main instantly grows the native window to the expanded size at the same top-left; the added area is fully transparent. On collapse, the window stays expanded until the card has shrunk, then instantly shrinks to 72×72; the removed area was already transparent. Both native bounds changes are invisible.
 - The visible card performs the actual morph with a CSS `width/height` animation inside the fixed window: expand 260 ms / collapse 200 ms, `cubic-bezier(0.4, 0, 0.2, 1)`. The target layout mounts on the card animation's `animationend` (fallback timer if interrupted).
 - The logo is a shared element: it flies between the capsule center (28 px) and the expanded header's top-left mark (20 px) using GPU transforms, so the header handoff is seamless.
 - Expanded and capsule surfaces use the same 20 px radius and inset ring; only the card paints, the rest of the window is transparent.

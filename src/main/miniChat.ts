@@ -140,13 +140,13 @@ function scheduleSaveBounds(): void {
 async function saveBoundsNow(): Promise<void> {
   if (!miniWindow || miniWindow.isDestroyed()) return;
   try {
-    const [x, y] = miniWindow.getPosition();
-    // 窗口不可用户调整大小；expandedSize 是程序设定的逻辑尺寸。
-    // 不读取 getSize() 覆盖它——透明窗口在 Windows 下可能包含 1–2px
-    // 非客户区，反复展开会把尺寸越滚越大。
+    const b = miniWindow.getContentBounds();
+    if (currentMode === "expanded") {
+      expandedSize = clampSize(b.width, b.height);
+    }
     const payload: MiniBounds = {
-      x,
-      y,
+      x: Math.round(b.x),
+      y: Math.round(b.y),
       width: currentMode === "capsule" ? MINI_CAPSULE_SIZE : expandedSize.width,
       height: currentMode === "capsule" ? MINI_CAPSULE_SIZE : expandedSize.height,
       expandedWidth: expandedSize.width,
@@ -191,12 +191,48 @@ function clearCapsuleSettleTimer(): void {
   }
 }
 
-/** 原生窗口瞬间改尺寸（仅模式切换用，不参与逐帧动画） */
+/** 原生窗口瞬间改尺寸（仅模式切换用，不参与逐帧动画）。
+ *  统一用 content bounds：它对应渲染层卡片本身，避免 Windows 透明窗口
+ *  1–2px 非客户区在保存/恢复时累积漂移。 */
 function setWindowSize(w: BrowserWindow, width: number, height: number): void {
-  const [x, y] = w.getPosition();
-  const target = clampBounds({ x, y, width, height });
+  const b = w.getContentBounds();
+  const target = clampBounds({ x: b.x, y: b.y, width, height });
   try {
-    w.setBounds(target);
+    w.setContentBounds({
+      x: target.x as number,
+      y: target.y as number,
+      width: target.width,
+      height: target.height,
+    });
+  } catch {
+    /* 窗口销毁竞态 */
+  }
+}
+
+/** 形态尺寸约束：胶囊固定 72；展开允许原生拖动缩放（300×440 – 560×900）。
+ *  始终 resizable=true，胶囊态靠 min=max 锁定，避免透明窗口切换 resizable
+ *  时重建非客户区导致的尺寸跳动。 */
+function applyMiniSizeConstraints(w: BrowserWindow): void {
+  const expanded = currentMode === "expanded";
+  try {
+    w.setMinimumSize(
+      expanded ? MINI_MIN_SIZE.width : MINI_CAPSULE_SIZE,
+      expanded ? MINI_MIN_SIZE.height : MINI_CAPSULE_SIZE
+    );
+    w.setMaximumSize(
+      expanded ? MINI_MAX_SIZE.width : MINI_CAPSULE_SIZE,
+      expanded ? MINI_MAX_SIZE.height : MINI_CAPSULE_SIZE
+    );
+  } catch {
+    /* 窗口销毁竞态 */
+  }
+}
+
+/** 形态切换前临时放宽约束，否则旧的最小尺寸会把目标尺寸夹住 */
+function loosenSizeConstraints(w: BrowserWindow): void {
+  try {
+    w.setMinimumSize(1, 1);
+    w.setMaximumSize(MINI_MAX_SIZE.width, MINI_MAX_SIZE.height);
   } catch {
     /* 窗口销毁竞态 */
   }
@@ -206,10 +242,15 @@ function setWindowSize(w: BrowserWindow, width: number, height: number): void {
 function ensureWindowVisible(w: BrowserWindow): void {
   if (!w || w.isDestroyed()) return;
   try {
-    const bounds = w.getBounds();
-    const clamped = clampBounds(bounds);
-    if (clamped.x !== bounds.x || clamped.y !== bounds.y) {
-      w.setPosition(clamped.x as number, clamped.y as number);
+    const b = w.getContentBounds();
+    const clamped = clampBounds(b);
+    if (clamped.x !== b.x || clamped.y !== b.y) {
+      w.setContentBounds({
+        x: clamped.x as number,
+        y: clamped.y as number,
+        width: b.width,
+        height: b.height,
+      });
     }
   } catch {
     /* 窗口销毁竞态：忽略 */
@@ -225,10 +266,14 @@ function setMiniMode(mode: MiniChatWindowMode, instant = false): void {
   if (mode === "expanded") {
     // 原生窗口瞬间扩到展开尺寸：新增区域完全透明，用户看不到窗口变大；
     // 卡片的形变全部由 renderer 的 CSS 完成（不逐帧 setBounds）。
+    loosenSizeConstraints(w);
     setWindowSize(w, expandedSize.width, expandedSize.height);
+    applyMiniSizeConstraints(w);
     scheduleSaveBounds();
   } else if (instant) {
+    loosenSizeConstraints(w);
     setWindowSize(w, MINI_CAPSULE_SIZE, MINI_CAPSULE_SIZE);
+    applyMiniSizeConstraints(w);
     scheduleSaveBounds();
   } else {
     // 收起：窗口先保持展开尺寸，等卡片 CSS 收缩到 72×72 后再瞬间缩窗；
@@ -238,7 +283,9 @@ function setMiniMode(mode: MiniChatWindowMode, instant = false): void {
       if (currentMode !== "capsule") return;
       const win = getMiniWindow();
       if (!win) return;
+      loosenSizeConstraints(win);
       setWindowSize(win, MINI_CAPSULE_SIZE, MINI_CAPSULE_SIZE);
+      applyMiniSizeConstraints(win);
       scheduleSaveBounds();
     }, MINI_MODE_ANIMATION_MS.capsule + 90);
   }
@@ -267,6 +314,8 @@ async function ensureMiniWindow(opts: {
   const w = new BrowserWindow({
     width: initial.width,
     height: initial.height,
+    // width/height 按“内容区”解释：卡片尺寸不会因透明窗口的 1–2px 边框漂移
+    useContentSize: true,
     minWidth: MINI_CAPSULE_SIZE,
     minHeight: MINI_CAPSULE_SIZE,
     ...(initial.x !== undefined && initial.y !== undefined ? { x: initial.x, y: initial.y } : {}),
@@ -280,7 +329,8 @@ async function ensureMiniWindow(opts: {
     autoHideMenuBar: true,
     title: "Kiro Mini",
     frame: false,
-    resizable: false,
+    // 原生缩放：展开态可通过窗口边缘拖动缩放；胶囊态由 min=max 锁定。
+    resizable: true,
     minimizable: true,
     maximizable: false,
     fullscreenable: false,
@@ -299,6 +349,7 @@ async function ensureMiniWindow(opts: {
     },
   });
   miniWindow = w;
+  applyMiniSizeConstraints(w);
   void w.loadURL(miniLoadTarget());
   // 与主窗同等导航硬化（此前缺失：mini 内 window.open/跳转无拦截）：
   // 外部链接走系统浏览器，内部仅允许可信渲染器，其余一律拒绝。
@@ -322,6 +373,7 @@ async function ensureMiniWindow(opts: {
     }
   });
   w.on("ready-to-show", () => {
+    applyMiniSizeConstraints(w);
     ensureWindowVisible(w);
     w.show();
     // 重开即推最新快照（relay 可能在 mini 关闭期间持续 publish，缓存保证不空白）
