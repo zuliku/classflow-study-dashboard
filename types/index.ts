@@ -137,10 +137,33 @@ export interface Subtask {
 /** Task 7F：重复任务规则（第一版四种；缺失 = 普通任务） */
 export type TaskRecurrence = "daily" | "weekly" | "biweekly" | "monthly";
 
+/** Phase 0：terminal transition 的来源（审计/恢复用） */
+export type TaskTransitionSource = "ui" | "batch" | "kiro" | "recurrence" | "migration";
+
+/**
+ * Phase 0：一次 submitted/completed 事务的最小恢复账本。
+ * 由 transitionTask 写入；undo/reopen 读取。不是完整历史（历史在 Learning History）。
+ */
+export interface TaskTerminalTransition {
+  id: string;
+  /** 本地墙钟 "YYYY-MM-DDTHH:mm:ss" */
+  at: string;
+  fromStatus: AssignmentStatus;
+  toStatus: "submitted" | "completed";
+  /** terminal 之前的 active 状态；reopen 时优先恢复它 */
+  activeStatusBeforeTerminal: "todo" | "doing";
+  releasedStudyBlockIds: string[];
+  cancelledReminderIds: string[];
+  generatedRecurrenceId?: string;
+  batchId?: string;
+  source: TaskTransitionSource;
+}
+
 /** Task 7G-A1：Reminder 目标类型 */
 export type ReminderTargetType = "assignment" | "studyBlock" | "calendarMark" | "standalone";
 export type ReminderTimingMode = "relative" | "absolute";
-export type ReminderStatus = "scheduled" | "fired" | "skipped";
+/** Phase 0：cancelled = 因任务 terminal / block released / 删除而取消；Reminder Runtime 只处理 scheduled */
+export type ReminderStatus = "scheduled" | "fired" | "skipped" | "cancelled";
 /** P1：source = manual（用户手建）/ kiro（Kiro 工具）/ auto（Domain 自动 DDL 提醒） */
 export type ReminderSource = "manual" | "kiro" | "auto";
 
@@ -162,6 +185,15 @@ export interface Reminder {
   status: ReminderStatus;
   firedAt?: string;
   readAt?: string;
+  /** Phase 0：取消时间与来源（仅 cancelled 状态使用；保留可恢复性） */
+  cancelledAt?: string;
+  cancelledByTaskId?: string;
+  cancelledReason?:
+    | "task-submitted"
+    | "task-completed"
+    | "task-deleted"
+    | "study-block-released"
+    | "manual";
   source: ReminderSource;
   createdAt: string;
   updatedAt: string;
@@ -230,6 +262,18 @@ export interface Assignment {
    * undefined / false：使用默认自动提醒策略；true：不生成 auto Reminder。
    */
   autoReminderDisabled?: boolean;
+  /** Phase 0：本地日期 "YYYY-MM-DD"；规划意图，不是 deadline */
+  doDate?: string;
+  /** Phase 0：true = 主操作是提交（等待反馈）；false = 主操作是完成 */
+  submissionRequired?: boolean;
+  /** Phase 0：进入 submitted 的本地墙钟时间 */
+  submittedAt?: string;
+  /** Phase 0：进入 completed 的本地墙钟时间 */
+  completedAt?: string;
+  /** Phase 0：最近一次 terminal 事务的恢复账本 */
+  lastTerminalTransition?: TaskTerminalTransition;
+  /** Phase 0：该 occurrence 已经生成过下一次重复任务的时间（幂等键） */
+  recurrenceSpawnedAt?: string;
 }
 
 export interface GroupMember {
@@ -297,6 +341,10 @@ export interface StudyBlock {
    * Focus anchor；记录仍可查看 / 打开原任务 / 手动删除。不是 delete，也不是 standalone。
    */
   planningState?: "released";
+  /** Phase 0：released 的 provenance（undo/reopen 只恢复本次 terminal 释放的 blocks） */
+  releasedAt?: string;
+  releasedBy?: "task-submitted" | "task-completed" | "manual" | "rebalance" | "legacy";
+  releasedByTaskId?: string;
 }
 
 /**

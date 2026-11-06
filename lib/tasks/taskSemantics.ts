@@ -4,12 +4,27 @@
  * 后续 Workspace / Timeline / Kiro Tools 一律经此取语义，不各自判断 task.ddl。
  */
 
-import { Assignment, AssignmentStatus, Priority, TaskRecurrence } from "@/types";
+import {
+  Assignment,
+  AssignmentStatus,
+  Priority,
+  TaskRecurrence,
+  TaskTerminalTransition,
+  TaskTransitionSource,
+} from "@/types";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { createId } from "@/lib/utils";
+import { normalizeLocalDate, normalizeLocalDateTime } from "@/lib/time/localWallClock";
+
+/**
+ * Phase 0：Domain 语义版本。
+ * 与 Zustand persist version 解耦：新字段全部 additive，persist 保持 v8，beta 可回退。
+ */
+export const TASK_MODEL_VERSION = 2 as const;
 
 /** 合法 recurrence 集合（非法 → undefined） */
 const RECURRENCE_VALUES: TaskRecurrence[] = ["daily", "weekly", "biweekly", "monthly"];
+const TRANSITION_SOURCES: readonly TaskTransitionSource[] = ["ui", "batch", "kiro", "recurrence", "migration"];
 
 function normalizeRecurrence(value: unknown): TaskRecurrence | undefined {
   return RECURRENCE_VALUES.includes(value as TaskRecurrence) ? (value as TaskRecurrence) : undefined;
@@ -89,6 +104,49 @@ export function normalizeMaterialIds(value: unknown): string[] | undefined {
   return ids.length > 0 ? ids : undefined;
 }
 
+/** ID 数组清洗：仅保留非空 string + 去重；空 → []（账本字段保持可迭代） */
+function normalizeIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids: string[] = [];
+  for (const v of value) {
+    if (typeof v === "string" && v.trim().length > 0 && !ids.includes(v)) ids.push(v);
+  }
+  return ids;
+}
+
+/**
+ * Phase 0：terminal transition 账本清洗。
+ * 任何一个必需字段非法 → 整个账本丢弃（不猜来源/不伪造恢复目标）。
+ */
+export function normalizeTaskTerminalTransition(raw: unknown): TaskTerminalTransition | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const t = raw as Record<string, unknown>;
+  if (typeof t.id !== "string" || t.id.length === 0) return undefined;
+  if (typeof t.at !== "string" || !normalizeLocalDateTime(t.at)) return undefined;
+  if (!ASSIGNMENT_STATUSES.includes(t.fromStatus as AssignmentStatus)) return undefined;
+  if (t.toStatus !== "submitted" && t.toStatus !== "completed") return undefined;
+  if (t.activeStatusBeforeTerminal !== "todo" && t.activeStatusBeforeTerminal !== "doing") return undefined;
+  if (!TRANSITION_SOURCES.includes(t.source as TaskTransitionSource)) return undefined;
+  const source = t.source as TaskTransitionSource;
+
+  return {
+    id: t.id,
+    at: t.at,
+    fromStatus: t.fromStatus as AssignmentStatus,
+    toStatus: t.toStatus,
+    activeStatusBeforeTerminal: t.activeStatusBeforeTerminal,
+    releasedStudyBlockIds: normalizeIdList(t.releasedStudyBlockIds),
+    cancelledReminderIds: normalizeIdList(t.cancelledReminderIds),
+    generatedRecurrenceId:
+      typeof t.generatedRecurrenceId === "string" && t.generatedRecurrenceId.length > 0
+        ? t.generatedRecurrenceId
+        : undefined,
+    batchId:
+      typeof t.batchId === "string" && t.batchId.length > 0 ? t.batchId : undefined,
+    source,
+  };
+}
+
 /**
  * Assignment 归一化（persist hydrate / backup restore / patch 入口共用）：
  * - ddl：字符串保留原值，非字符串/缺失 → undefined（旧数据 ddl 必然存在，原值保留）
@@ -131,5 +189,13 @@ export function normalizeAssignment(raw: unknown): Assignment {
         : undefined,
     // P1：autoReminderDisabled 仅 true 保留（false / undefined / 缺失 → undefined = 使用默认策略）
     autoReminderDisabled: a.autoReminderDisabled === true ? true : undefined,
+    // Phase 0：additive 字段；旧数据保持 undefined，创建边界再补默认值
+    doDate: normalizeLocalDate(a.doDate),
+    submissionRequired:
+      typeof a.submissionRequired === "boolean" ? a.submissionRequired : undefined,
+    submittedAt: normalizeLocalDateTime(a.submittedAt),
+    completedAt: normalizeLocalDateTime(a.completedAt),
+    lastTerminalTransition: normalizeTaskTerminalTransition(a.lastTerminalTransition),
+    recurrenceSpawnedAt: normalizeLocalDateTime(a.recurrenceSpawnedAt),
   };
 }

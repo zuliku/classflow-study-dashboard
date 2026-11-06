@@ -16,6 +16,7 @@ import {
 } from "@/types";
 import { combineLocalDateTime } from "@/lib/ddl";
 import { parseLocalDDL } from "@/lib/ddl";
+import { normalizeLocalDateTime } from "@/lib/time/localWallClock";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -77,7 +78,14 @@ export function resolveReminderTriggerAt(input: {
 
 const TARGET_TYPES: ReminderTargetType[] = ["assignment", "studyBlock", "calendarMark", "standalone"];
 const TIMING_MODES: ReminderTimingMode[] = ["relative", "absolute"];
-const STATUSES: ReminderStatus[] = ["scheduled", "fired", "skipped"];
+const STATUSES: ReminderStatus[] = ["scheduled", "fired", "skipped", "cancelled"];
+const CANCELLED_REASONS: NonNullable<Reminder["cancelledReason"]>[] = [
+  "task-submitted",
+  "task-completed",
+  "task-deleted",
+  "study-block-released",
+  "manual",
+];
 
 /** 校验并归一 Reminder；不能安全修复的 → null（不猜值） */
 export function normalizeReminder(raw: unknown): Reminder | null {
@@ -101,6 +109,17 @@ export function normalizeReminder(raw: unknown): Reminder | null {
     return null;
   }
 
+  const status = r.status as ReminderStatus;
+  const cancelledAt = status === "cancelled" ? normalizeLocalDateTime(r.cancelledAt) : undefined;
+  const cancelledByTaskId =
+    status === "cancelled" && typeof r.cancelledByTaskId === "string" && r.cancelledByTaskId
+      ? r.cancelledByTaskId
+      : undefined;
+  const cancelledReason =
+    status === "cancelled" && CANCELLED_REASONS.includes(r.cancelledReason as NonNullable<Reminder["cancelledReason"]>)
+      ? (r.cancelledReason as NonNullable<Reminder["cancelledReason"]>)
+      : undefined;
+
   return {
     id: r.id,
     title: r.title.trim(),
@@ -110,9 +129,12 @@ export function normalizeReminder(raw: unknown): Reminder | null {
     timingMode,
     offsetMinutes: timingMode === "relative" ? (r.offsetMinutes as number) : undefined,
     triggerAt: r.triggerAt,
-    status: r.status as ReminderStatus,
+    status,
     firedAt: typeof r.firedAt === "string" ? r.firedAt : undefined,
     readAt: typeof r.readAt === "string" ? r.readAt : undefined,
+    ...(cancelledAt ? { cancelledAt } : {}),
+    ...(cancelledByTaskId ? { cancelledByTaskId } : {}),
+    ...(cancelledReason ? { cancelledReason } : {}),
     source: (r.source === "kiro" ? "kiro" : r.source === "auto" ? "auto" : "manual") as ReminderSource,
     createdAt: typeof r.createdAt === "string" ? r.createdAt : "",
     updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : "",

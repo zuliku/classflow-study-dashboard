@@ -30,6 +30,7 @@ import {
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, parseLocalDDL } from "@/lib/ddl";
 import { normalizeAssignment, hasTaskDeadline, isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
+import { normalizeLocalDateTime } from "@/lib/time/localWallClock";
 import {
   didAssignmentLosePlanningEligibility,
   releaseFutureStudyBlocksForAssignment,
@@ -464,6 +465,22 @@ function normalizeHydratedStudyBlock(raw: unknown): StudyBlock | null {
   if (typeof b.startTime !== "string" || !/^\d{2}:\d{2}$/.test(b.startTime)) return null;
   if (typeof b.endTime !== "string" || !/^\d{2}:\d{2}$/.test(b.endTime)) return null;
   const source = b.source === "manual" || b.source === "kiro" ? b.source : undefined;
+  const planningState = b.planningState === "released" ? ("released" as const) : undefined;
+  // Phase 0：旧 released 无 provenance → legacy；reopen 不会自动恢复无法证明来源的旧计划。
+  const releasedBy =
+    planningState === "released"
+      ? b.releasedBy === "task-submitted" ||
+        b.releasedBy === "task-completed" ||
+        b.releasedBy === "manual" ||
+        b.releasedBy === "rebalance"
+        ? b.releasedBy
+        : "legacy"
+      : undefined;
+  const releasedAt = planningState === "released" ? normalizeLocalDateTime(b.releasedAt) : undefined;
+  const releasedByTaskId =
+    planningState === "released" && typeof b.releasedByTaskId === "string" && b.releasedByTaskId
+      ? b.releasedByTaskId
+      : undefined;
   return {
     id: b.id,
     title: b.title,
@@ -473,7 +490,10 @@ function normalizeHydratedStudyBlock(raw: unknown): StudyBlock | null {
     assignmentId: typeof b.assignmentId === "string" ? b.assignmentId : undefined,
     courseId: typeof b.courseId === "string" ? b.courseId : undefined,
     ...(source ? { source } : {}),
-    planningState: b.planningState === "released" ? "released" : undefined,
+    planningState,
+    ...(releasedBy ? { releasedBy } : {}),
+    ...(releasedAt ? { releasedAt } : {}),
+    ...(releasedByTaskId ? { releasedByTaskId } : {}),
     courseOverlapApprovals: Array.isArray(b.courseOverlapApprovals) ? b.courseOverlapApprovals : undefined,
   } as StudyBlock;
 }
