@@ -568,7 +568,7 @@ export function AssignmentDrawer() {
               >
                 <MoreHorizontal className="h-4 w-4" />
               </IconButton>
-              <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作" className="w-44">
+              <DropdownMenuPanel portal open={moreOpen} placement="bottom-end" aria-label="更多操作" className="w-44">
                 <DropdownMenuItem
                   icon={KIRO_ICON}
                   label="Ask Kiro"
@@ -812,7 +812,7 @@ export function AssignmentDrawer() {
                           <Plus className="h-3 w-3" />
                           添加
                         </Button>
-                        <DropdownMenuPanel open={addMenuOpen} placement="bottom-end" aria-label="添加资料" className="w-48">
+                        <DropdownMenuPanel portal open={addMenuOpen} placement="bottom-end" aria-label="添加资料" className="w-48">
                           <DropdownMenuItem
                             icon={BookOpen}
                             label="选择课程资料"

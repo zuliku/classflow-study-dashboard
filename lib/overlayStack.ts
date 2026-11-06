@@ -26,6 +26,24 @@ export function isTopmostOverlay(id: string): boolean {
   return !!top && top.id === id;
 }
 
+/** 当前最上层 z（无 overlay 时为 0）。Portal 浮层据此保证始终压在其宿主之上。 */
+export function getTopOverlayZ(): number {
+  return stack.length > 0 ? stack[stack.length - 1].z : 0;
+}
+
+/**
+ * 排除自身 overlay 后的最上层 z。
+ * Popover 自身以 z40 入栈；若宿主是 Dialog z50，测量时必须仍读到 50，
+ * 否则后续 resize 重测会把 portal 菜单降回 40、掉到 Dialog 背后。
+ */
+export function getTopOverlayZExcept(id?: string): number {
+  if (!id) return getTopOverlayZ();
+  for (let i = stack.length - 1; i >= 0; i--) {
+    if (stack[i].id !== id) return stack[i].z;
+  }
+  return 0;
+}
+
 /** 是否存在任何已挂载的 Overlay（用于单键快捷键的阻断判断，如 N） */
 export function hasAnyOverlay(): boolean {
   return stack.length > 0;

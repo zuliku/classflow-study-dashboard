@@ -33,9 +33,12 @@ import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { UISelect } from "@/components/ui/Select";
+import { Popover } from "@/components/ui/Popover";
+import { DropdownMenuPanel, DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ToastViewport } from "@/components/ui/ToastViewport";
 import { useToastStore } from "@/store/useToastStore";
 import { useAppStore } from "@/store/useAppStore";
+import { pushOverlay, popOverlay, clearOverlayStack, getTopOverlayZExcept } from "@/lib/overlayStack";
 
 /**
  * Motion Foundation V2 —— 共享 Primitive 的 presence lifecycle 行为契约：
@@ -64,6 +67,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   cleanup();
+  clearOverlayStack();
   setMotionPreference("system");
 });
 
@@ -407,6 +411,23 @@ describe("UISelect lifecycle（共享 usePresence）", () => {
     }
   });
 
+  it("Escape 只由 topmost 消费：上层 Confirm 存在时 Select 保持打开", () => {
+    render(<SelectHarness />);
+    fireEvent.click(getCombobox());
+    advanceTwoFrames();
+
+    pushOverlay("test-confirm-over-select", 60);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(getListbox()).not.toBeNull();
+
+    popOverlay("test-confirm-over-select");
+    fireEvent.keyDown(window, { key: "Escape" });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_EXIT_MS.fast);
+    });
+    expect(getListbox()).toBeNull();
+  });
+
   it("outside pointerdown 关闭（动画退出）", () => {
     render(<SelectHarness />);
     fireEvent.click(getCombobox());
@@ -455,6 +476,7 @@ describe("UISelect lifecycle（共享 usePresence）", () => {
       />
     );
     fireEvent.click(screen.getByRole("combobox", { name: "课程筛选" }));
+    advanceTwoFrames();
     const input = screen.getByPlaceholderText("搜索选项...") as HTMLInputElement;
     expect(document.activeElement).toBe(input);
     fireEvent.change(input, { target: { value: "课程1" } });
@@ -483,6 +505,7 @@ describe("UISelect lifecycle（共享 usePresence）", () => {
     const many = Array.from({ length: 12 }, (_, i) => ({ value: `c${i}`, label: `课程${i}` }));
     render(<UISelect value="c0" onChange={vi.fn()} options={many} ariaLabel="课程筛选" />);
     fireEvent.click(screen.getByRole("combobox", { name: "课程筛选" }));
+    advanceTwoFrames();
     const options = screen.getAllByRole("option");
     expect(document.activeElement).toBe(options[0]);
     fireEvent.mouseEnter(options[3]);
@@ -506,6 +529,56 @@ describe("UISelect lifecycle（共享 usePresence）", () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.queryByRole("listbox")).not.toBeNull();
     expect(input.value).toBe("课程 1");
+  });
+});
+
+describe("overlay z helper", () => {
+  it("排除自身后仍读到宿主层级（Popover 重测不会掉到 Dialog 背后）", () => {
+    pushOverlay("settings-dialog", 50);
+    pushOverlay("course-popover", 40);
+    expect(getTopOverlayZExcept("course-popover")).toBe(50);
+    expect(getTopOverlayZExcept("settings-dialog")).toBe(40);
+    popOverlay("course-popover");
+    expect(getTopOverlayZExcept("course-popover")).toBe(50);
+    expect(getTopOverlayZExcept("missing")).toBe(50);
+  });
+});
+
+describe("DropdownMenuPanel keyboard contract", () => {
+  function MenuHarness() {
+    const [open, setOpen] = useState(false);
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <button type="button" onClick={() => setOpen((v) => !v)}>
+          打开菜单
+        </button>
+        <DropdownMenuPanel open={open} aria-label="测试菜单">
+          <DropdownMenuItem label="甲" onClick={() => setOpen(false)} />
+          <DropdownMenuItem label="乙" onClick={() => setOpen(false)} />
+        </DropdownMenuPanel>
+      </Popover>
+    );
+  }
+
+  it("打开聚焦首项；Arrow 移动；Esc 关闭并归还 trigger", () => {
+    render(<MenuHarness />);
+    const trigger = screen.getByRole("button", { name: "打开菜单" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    advanceTwoFrames();
+
+    const items = screen.getAllByRole("menuitem");
+    expect(document.activeElement).toBe(items[0]);
+
+    fireEvent.keyDown(items[0], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items[1]);
+
+    fireEvent.keyDown(items[1], { key: "Escape" });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_EXIT_MS.fast);
+    });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });
 

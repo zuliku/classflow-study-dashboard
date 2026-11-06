@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef,
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { usePresence } from "@/lib/usePresence";
+import { useInertOnHidden } from "@/lib/useInertOnHidden";
+import { pushOverlay, popOverlay, isTopmostOverlay, getTopOverlayZ } from "@/lib/overlayStack";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +16,8 @@ import { cn } from "@/lib/utils";
  *   menu role=listbox；item role=option / aria-selected
  * - 键盘：Enter/Space 打开；↑↓ 导航；Home/End；Enter 选择；Escape 关闭并聚焦回 trigger；Tab 关闭
  * - 鼠标：click 打开/选择；outside click 关闭；scroll/resize 关闭
+ * - 层级：open 时进入 overlay 栈（z 跟随宿主 Dialog/Drawer），Esc 只由 topmost 消费者处理；
+ *   退出期 inert，避免 Tab 进入正在淡出的选项。
  * - 结构：外壳 overflow-hidden；searchable 时搜索栏固定在滚动区外，只有下方选项列表滚动，
  *   避免 sticky 搜索栏与滚动内容同容器时文字从搜索栏上方缝隙透出（模型/课程等长列表通用）
  * - 动画（Motion Contract）：open = opacity + translateY(2px→0)；enter = --motion-fast，
@@ -66,9 +70,12 @@ export function UISelect<T extends string | number>({
 }: UISelectProps<T>) {
   const baseId = useId().replace(/[^a-zA-Z0-9]/g, "");
   const listboxId = `select-listbox-${baseId}`;
+  const overlayId = `select-overlay-${baseId}`;
   // semantic state：open 拥有交互所有权；mounted/visible 仅表达 presentation（共享 presence lifecycle）
   const [open, setOpen] = useState(false);
   const { mounted, visible } = usePresence(open, MOTION_EXIT_MS.fast);
+  /** 退出窗口内 inert：正在淡出的选项不可 Tab/二次点击（进入期不阻断焦点） */
+  const inertRef = useInertOnHidden<HTMLDivElement>(!open);
   /**
    * 选择完成后的立即卸载旁路：跳过退出窗口，不拦截紧随其后的 Escape / 父 Overlay 交互。
    * （既有语义：selection 不做 animated close——普通 outside/Escape/Tab 关闭才走 exit 动画。）
@@ -83,8 +90,17 @@ export function UISelect<T extends string | number>({
   /** 水平定位：先 left-align，溢出 viewport 时右对齐修正（挂载后测量） */
   const [menuLeft, setMenuLeft] = useState<number | undefined>(undefined);
   const [viewportMaxWidth, setViewportMaxWidth] = useState<number>(320);
+  /** 菜单 z：跟随当前宿主 overlay（Dialog/Drawer 内同层后挂载，Confirm/Toast 仍在更上层） */
+  const [menuZ, setMenuZ] = useState(40);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const setMenuNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      menuRef.current = node;
+      inertRef(node);
+    },
+    [inertRef]
+  );
   const searchRef = useRef<HTMLInputElement | null>(null);
   /** 只有键盘导航才自动滚动/移焦；鼠标 hover 只换高亮，避免下方选项 hover 时硬跳 */
   const activeScrollRef = useRef<"keyboard" | "pointer">("keyboard");
@@ -122,6 +138,7 @@ export function UISelect<T extends string | number>({
     setTriggerWidth(rect.width);
     setMenuLeft(rect.left);
     setViewportMaxWidth(Math.min(320, window.innerWidth - 16));
+    setMenuZ(Math.max(40, getTopOverlayZ()));
     setSuppressRender(false);
     setQuery("");
     activeScrollRef.current = "keyboard";
@@ -141,6 +158,14 @@ export function UISelect<T extends string | number>({
       window.requestAnimationFrame(() => triggerRef.current?.focus());
     }
   }, []);
+
+  // Overlay 栈：Select 是真正的顶层消费者（此前仅靠 z=100 + capture Esc 越权）。
+  // 打开时按宿主层级入栈；语义关闭立即出栈，退出动画不占用下一层 Esc。
+  useEffect(() => {
+    if (!open) return;
+    pushOverlay(overlayId, menuZ);
+    return () => popOverlay(overlayId);
+  }, [open, overlayId, menuZ]);
 
   // outside click / scroll / resize 关闭
   useEffect(() => {
@@ -177,7 +202,8 @@ export function UISelect<T extends string | number>({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && visibleRef.current) {
+      // 只有 topmost 才消费 Esc：后台 Select 不再抢 Confirm/Dialog 的关闭
+      if (e.key === "Escape" && visibleRef.current && isTopmostOverlay(overlayId)) {
         // 注册在 window capture，先于上层 Overlay 的 window bubble listener 取得 Esc 所有权。
         e.stopPropagation();
         e.preventDefault();
@@ -187,13 +213,13 @@ export function UISelect<T extends string | number>({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, closeMenu, restoreTriggerFocus]);
+  }, [open, overlayId, closeMenu, restoreTriggerFocus]);
 
   // 打开时聚焦：searchable → 搜索框；否则当前选中项。
   // 只在 open/mounted 变化时执行一次，不跟随 hover 的 activeIndex（避免焦点被抢）。
   // useLayoutEffect：在 listbox 可见前完成聚焦，避免「Open 后立刻按方向键」被 trigger 吞掉。
   useLayoutEffect(() => {
-    if (!open || !mounted) return;
+    if (!open || !visible) return;
     if (searchable) {
       searchRef.current?.focus({ preventScroll: true });
       return;
@@ -201,11 +227,11 @@ export function UISelect<T extends string | number>({
     const el = menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
     el?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mounted, searchable]);
+  }, [open, visible, searchable]);
 
   // active 行滚动/聚焦：仅键盘导航。鼠标 hover 不滚动列表，避免下方选项硬跳。
   useEffect(() => {
-    if (!open || !mounted || activeScrollRef.current !== "keyboard") return;
+    if (!open || !visible || activeScrollRef.current !== "keyboard") return;
     const el = menuRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`);
     if (!el) return;
     if (!searchable) el.focus({ preventScroll: true });
@@ -215,7 +241,7 @@ export function UISelect<T extends string | number>({
     const elRect = el.getBoundingClientRect();
     if (elRect.top < listRect.top) scroller.scrollTop -= listRect.top - elRect.top;
     else if (elRect.bottom > listRect.bottom) scroller.scrollTop += elRect.bottom - listRect.bottom;
-  }, [activeIndex, open, mounted, searchable]);
+  }, [activeIndex, open, visible, searchable]);
 
   // 挂载后测量实际宽度：右侧溢出 → 右对齐修正；至少保留 8px viewport inset
   useEffect(() => {
@@ -267,6 +293,8 @@ export function UISelect<T extends string | number>({
     // 搜索框内空格是输入字符，不是选择（Enter 仍确认选择）
     const inSearch = (e.target as HTMLElement | null)?.tagName === "INPUT";
     if (e.key === "Escape") {
+      // 只有 topmost 才消费 Esc（上层 Confirm/Dialog 优先）
+      if (!isTopmostOverlay(overlayId)) return;
       // Portal 内由 React handler 同步消费，避免原生 window overlay listener 关闭父 Dialog。
       e.preventDefault();
       e.stopPropagation();
@@ -335,7 +363,7 @@ export function UISelect<T extends string | number>({
       {mounted && !suppressRender &&
         createPortal(
           <div
-            ref={menuRef}
+            ref={setMenuNode}
             id={listboxId}
             role="listbox"
             aria-label={ariaLabel}
@@ -345,7 +373,7 @@ export function UISelect<T extends string | number>({
               // 宽度与 trigger 解耦：min = trigger 宽（或 168px 下限），内容自动撑开，viewport 上限
               minWidth: Math.max(triggerWidth ?? 0, 168),
               maxWidth: viewportMaxWidth,
-              zIndex: 100,
+              zIndex: menuZ,
             }}
             className={cn(
               // 固定外壳：搜索栏在滚动区外，选项只在其下方的列表内滚动。
@@ -417,7 +445,7 @@ export function UISelect<T extends string | number>({
                     }}
                     className={cn(
                       "flex w-full items-center gap-1.5 px-2.5 text-xs font-semibold text-left",
-                      "focus:outline-none",
+                      "focus:outline-none active:opacity-70 transition-opacity duration-[var(--motion-fast)]",
                       itemClassName ?? "h-9",
                       isSelected
                         ? "bg-pastel-mint/50 text-charcoal font-bold"

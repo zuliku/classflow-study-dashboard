@@ -109,3 +109,90 @@ export function computeFloatingPosition(input: FloatingPositionInput): { x: numb
 
   return { x, y };
 }
+
+/**
+ * PopoverPanel Portal 定位（2026-11 裁切修复）：
+ * - 锚点 = 面板原宿主元素的 rect（不依赖 trigger 是否是直接兄弟）
+ * - placement 语义与原 absolute class 完全对应：bottom/top × start/end/center，right-end
+ * - 主方向空间不足自动翻转到对侧；最后 clamp 到 viewport 安全边距
+ * - menuHeight 为渲染后真实高度；菜单高于可视区时仍会 clamp，由面板自身滚动承接
+ */
+export type AnchoredPopoverPlacement =
+  | "bottom-end"
+  | "bottom-start"
+  | "top-end"
+  | "top-start"
+  | "top-center"
+  | "right-end";
+
+export interface AnchoredPopoverPositionInput {
+  anchorRect: { left: number; top: number; right: number; bottom: number };
+  menuWidth: number;
+  menuHeight: number;
+  placement: AnchoredPopoverPlacement;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  offset?: number;
+  padding?: number;
+}
+
+export interface AnchoredPopoverPosition {
+  x: number;
+  y: number;
+  side: "top" | "bottom" | "left" | "right";
+}
+
+export function computeAnchoredPopoverPosition(
+  input: AnchoredPopoverPositionInput
+): AnchoredPopoverPosition {
+  const {
+    anchorRect,
+    menuWidth,
+    menuHeight,
+    placement,
+    viewportWidth = window.innerWidth,
+    viewportHeight = window.innerHeight,
+    offset = 6,
+    padding = 8,
+  } = input;
+
+  // right-end：侧向菜单；右侧不足 → 翻到左侧，底缘对齐锚点
+  if (placement === "right-end") {
+    const spaceRight = viewportWidth - anchorRect.right - padding;
+    const spaceLeft = anchorRect.left - padding;
+    const openRight =
+      spaceRight >= menuWidth || (!(spaceLeft >= menuWidth) && spaceRight >= spaceLeft);
+    let x = openRight ? anchorRect.right + offset : anchorRect.left - menuWidth - offset;
+    let y = anchorRect.bottom - menuHeight;
+    x = Math.min(Math.max(x, padding), Math.max(padding, viewportWidth - menuWidth - padding));
+    y = Math.min(Math.max(y, padding), Math.max(padding, viewportHeight - menuHeight - padding));
+    return { x, y, side: openRight ? "right" : "left" };
+  }
+
+  const preferTop = placement.startsWith("top");
+  const spaceTop = anchorRect.top - padding;
+  const spaceBottom = viewportHeight - anchorRect.bottom - padding;
+  let side: "top" | "bottom" = preferTop ? "top" : "bottom";
+  if (side === "top" && spaceTop < menuHeight && spaceBottom > spaceTop) {
+    side = "bottom";
+  } else if (side === "bottom" && spaceBottom < menuHeight && spaceTop > spaceBottom) {
+    side = "top";
+  }
+
+  const anchorWidth = anchorRect.right - anchorRect.left;
+  let x: number;
+  if (placement.endsWith("-end")) {
+    x = anchorRect.right - menuWidth;
+  } else if (placement.endsWith("-start")) {
+    x = anchorRect.left;
+  } else {
+    // top-center：菜单中心对齐锚点中心
+    x = anchorRect.left + (anchorWidth - menuWidth) / 2;
+  }
+  let y = side === "top" ? anchorRect.top - menuHeight - offset : anchorRect.bottom + offset;
+
+  x = Math.min(Math.max(x, padding), Math.max(padding, viewportWidth - menuWidth - padding));
+  y = Math.min(Math.max(y, padding), Math.max(padding, viewportHeight - menuHeight - padding));
+
+  return { x, y, side };
+}

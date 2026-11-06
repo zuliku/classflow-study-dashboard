@@ -309,18 +309,25 @@ base("B2：关闭后重新打开，transient state 复位（Reminder 默认 coll
   await reminderTrigger.click();
   await expect(reminderTrigger).toHaveAttribute("aria-expanded", "true");
   await panel.getByRole("button", { name: "更多操作" }).click();
-  await expect(panel.getByRole("menuitem", { name: "Ask Kiro" })).toBeVisible();
+  // 菜单已 Portal 到 body（不再被 Drawer overflow 裁切），按页面级查询
+  const moreMenu = page.getByRole("menu", { name: "更多操作" });
+  await expect(moreMenu.getByRole("menuitem", { name: "Ask Kiro" })).toBeVisible();
+  expect(await moreMenu.evaluate((el) => el.parentElement === document.body)).toBe(true);
+  const menuBox = await moreMenu.boundingBox();
+  expect(menuBox).not.toBeNull();
+  expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
 
   // 关闭后重新打开：transient 全部复位（More 关闭；Reminder collapsed）
   // 注：Esc 先关闭顶层 More 菜单，再 Esc 才关闭抽屉（overlay 栈语义）
   await page.keyboard.press("Escape");
-  await expect(panel.getByRole("menuitem", { name: "Ask Kiro" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Ask Kiro" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0, { timeout: 8000 });
   await page.getByRole("button", { name: /置信区间作业.*截止/ }).click();
   await expect(panel).toBeVisible({ timeout: 8000 });
   await expect(page.getByTestId("reminder-disclosure-trigger")).toHaveAttribute("aria-expanded", "false");
-  await expect(panel.getByRole("menuitem", { name: "Ask Kiro" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Ask Kiro" })).toHaveCount(0);
 });
 
 base("C2：click Full Detail 立即关闭 hover preview（不等 mouseleave）", async ({ page }) => {

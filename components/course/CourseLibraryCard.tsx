@@ -194,6 +194,7 @@ export function CourseLibraryCard({
                   <ChevronRight className="w-3 h-3" />
                 </button>
                 <PopoverPanel
+                  portal
                   placement="bottom-end"
                   open={tasksPopoverOpen}
                   className="w-[340px] max-w-[calc(100vw-32px)] max-h-[min(360px,55vh)] p-1"
@@ -273,6 +274,7 @@ export function CourseLibraryCard({
                 <ChevronRight className="w-3 h-3" />
               </button>
               <PopoverPanel
+                portal
                 placement="top-end"
                 open={materialsPopoverOpen}
                 className="w-[340px] max-w-[calc(100vw-32px)] max-h-[min(360px,55vh)] p-1"

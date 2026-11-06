@@ -218,6 +218,33 @@ base("Actions smoke：标题 → Course Hub；任务行 → Assignment Detail；
   await expect(editor.getByRole("combobox", { name: "课程" })).toContainText("高级数据结构与算法设计及复杂度分析");
 });
 
+base("Popover Portal：靠近视口底部打开时翻转到上方，且不被 main 裁切", async ({ page }) => {
+  const { monday } = dayAnchor();
+  await page.addInitScript(seedScript(monday));
+  await openLibrary(page, 1280, 320);
+
+  const c1 = page.getByTestId("course-library-card-c1");
+  const trigger = c1.getByRole("button", { name: /全部 3 项/ });
+  await trigger.scrollIntoViewIfNeeded();
+  const triggerBox = await trigger.boundingBox();
+  expect(triggerBox).not.toBeNull();
+
+  await trigger.click();
+  const panel = page.locator("[data-popover-id]").filter({ has: page.getByLabel("搜索任务") }).first();
+  await expect(panel).toBeVisible({ timeout: 5000 });
+  // Portal 到 body：不再被 main/card overflow 裁切
+  expect(await panel.evaluate((el) => el.parentElement === document.body)).toBe(true);
+
+  const box = await panel.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(320);
+  // 下方空间不足 → 翻转到 trigger 上方
+  expect(box!.y + box!.height).toBeLessThanOrEqual(triggerBox!.y + 1);
+});
+
 base("V5.1：completed-only 课程 → 待处理 0 + 全部 2 项 → Popover 两个已完成任务可见", async ({ page }) => {
   const { monday } = dayAnchor();
   await page.addInitScript(seedScript(monday));

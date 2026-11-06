@@ -71,6 +71,7 @@ export function FocusStartPopover({
         开始专注
       </Button>
       <PopoverPanel
+        portal
         placement="bottom-start"
         open={open}
         className="w-[280px] p-3"

@@ -109,11 +109,12 @@ export function AssignmentWorkspaceViewBar({ controller }: { controller: Assignm
             </button>
             <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多视图" className="w-40 p-1">
               <button
+                role="menuitem"
                 onClick={() => {
                   setView("archive");
                   setMoreOpen(false);
                 }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster transition-colors"
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-semibold text-charcoal hover:bg-alabaster active:opacity-80 transition-[background-color,opacity] duration-[var(--motion-fast)]"
               >
                 查看已归档
                 <span className="ml-auto text-[10px] font-bold text-sandrift">{counts.archive}</span>

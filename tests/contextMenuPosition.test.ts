@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { computeContextMenuPosition, computeFloatingPosition } from "@/lib/contextMenuPosition";
+import {
+  computeContextMenuPosition,
+  computeFloatingPosition,
+  computeAnchoredPopoverPosition,
+} from "@/lib/contextMenuPosition";
 
 const VW = 1440;
 const VH = 900;
@@ -158,5 +162,82 @@ describe("computeFloatingPosition（Task 6B-A：Attachment Chip Portal Menu）",
     // 上方 392 < 500，下方 468 < 500；下方更大 → bottom(y=432)，
     // 但菜单不越出 viewport 底部：y ≤ 900-500-8=392
     expect(pos.y).toBe(VH - 500 - 8);
+  });
+});
+
+describe("computeAnchoredPopoverPosition（PopoverPanel Portal：翻转 + clamp）", () => {
+  const base = {
+    menuWidth: 340,
+    menuHeight: 320,
+    viewportWidth: VW,
+    viewportHeight: VH,
+  };
+
+  it("bottom-end：菜单右缘对齐锚点，向下展开；空间不足翻到上方", () => {
+    const lower = computeAnchoredPopoverPosition({
+      ...base,
+      anchorRect: { left: 500, top: 797, right: 560, bottom: 829 },
+      placement: "bottom-end",
+    });
+    // 下方 900-829-8=63 < 320，上方 789 ≥ 320 → top；右缘 560-340=220
+    expect(lower.side).toBe("top");
+    expect(lower.y).toBe(797 - 320 - 6);
+    expect(lower.x).toBe(220);
+
+    const upper = computeAnchoredPopoverPosition({
+      ...base,
+      anchorRect: { left: 500, top: 100, right: 560, bottom: 132 },
+      placement: "bottom-end",
+    });
+    expect(upper.side).toBe("bottom");
+    expect(upper.y).toBe(132 + 6);
+  });
+
+  it("top-center：菜单中心对齐锚点中心，并 clamp 到水平安全边距", () => {
+    const pos = computeAnchoredPopoverPosition({
+      ...base,
+      anchorRect: { left: 600, top: 500, right: 640, bottom: 524 },
+      placement: "top-center",
+    });
+    // 中心 620 - 170 = 450
+    expect(pos.x).toBe(450);
+    expect(pos.y).toBe(500 - 320 - 6);
+
+    const edge = computeAnchoredPopoverPosition({
+      ...base,
+      anchorRect: { left: 20, top: 500, right: 60, bottom: 524 },
+      placement: "top-center",
+    });
+    expect(edge.x).toBe(8);
+  });
+
+  it("bottom-start 右侧溢出 → x clamp 到 viewport 内", () => {
+    const pos = computeAnchoredPopoverPosition({
+      ...base,
+      anchorRect: { left: VW - 40, top: 200, right: VW - 10, bottom: 230 },
+      placement: "bottom-start",
+    });
+    expect(pos.x).toBe(VW - 340 - 8);
+    expect(pos.side).toBe("bottom");
+  });
+
+  it("right-end：右侧不足翻到左侧；纵向底缘对齐锚点", () => {
+    const right = computeAnchoredPopoverPosition({
+      ...base,
+      anchorRect: { left: 50, top: 200, right: 90, bottom: 230 },
+      placement: "right-end",
+    });
+    expect(right.side).toBe("right");
+    expect(right.x).toBe(90 + 6);
+    // 底缘对齐锚点会越出顶部 → clamp 到 8
+    expect(right.y).toBe(8);
+
+    const left = computeAnchoredPopoverPosition({
+      ...base,
+      anchorRect: { left: VW - 80, top: 200, right: VW - 40, bottom: 230 },
+      placement: "right-end",
+    });
+    expect(left.side).toBe("left");
+    expect(left.x).toBe(VW - 80 - 340 - 6);
   });
 });

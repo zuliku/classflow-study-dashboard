@@ -551,7 +551,8 @@ base("S：More → 删除课程：confirm 确认后删除点下 Delete 时的 di
   const drawer = await openCourseDrawer(page);
 
   await drawer.getByRole("button", { name: "更多操作" }).click();
-  await drawer.getByRole("menuitem", { name: "删除课程" }).click();
+  // 菜单 Portal 到 body：Drawer overflow 不再裁切
+  await page.getByRole("menuitem", { name: "删除课程" }).click();
   const confirm = page.getByRole("alertdialog").first();
   await expect(confirm).toBeVisible({ timeout: 5000 });
   await confirm.getByRole("button", { name: "删除课程" }).click();

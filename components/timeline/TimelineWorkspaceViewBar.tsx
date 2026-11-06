@@ -112,6 +112,7 @@ export function TimelineWorkspaceViewBar({
         </span>
       </IconButton>
       <PopoverPanel
+        portal
         open={filterOpen}
         placement="bottom-end"
         role="group"

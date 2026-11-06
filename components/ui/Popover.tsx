@@ -1,11 +1,16 @@
-﻿"use client";
+"use client";
 
-import React, { useEffect, useId, useRef } from "react";
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePresence } from "@/lib/usePresence";
 import { useInertOnHidden } from "@/lib/useInertOnHidden";
 import { useRestoreFocus } from "@/lib/useRestoreFocus";
 import { MOTION_EXIT_MS } from "@/lib/motion";
-import { pushOverlay, popOverlay, isTopmostOverlay } from "@/lib/overlayStack";
+import { pushOverlay, popOverlay, isTopmostOverlay, getTopOverlayZExcept } from "@/lib/overlayStack";
+import {
+  computeAnchoredPopoverPosition,
+  type AnchoredPopoverPlacement,
+} from "@/lib/contextMenuPosition";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,6 +35,19 @@ export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
 }
 
+interface PopoverContextValue {
+  popoverId: string;
+  onOpenChange: (open: boolean) => void;
+  isTopmost: () => boolean;
+}
+
+const PopoverContext = React.createContext<PopoverContextValue | null>(null);
+
+/** DropdownMenuPanel / PopoverPanel 共享：portal 面板需参与 outside-click 与 Esc 所有权 */
+export function usePopoverContext(): PopoverContextValue | null {
+  return React.useContext(PopoverContext);
+}
+
 export function Popover({ open, onOpenChange, className, children, ...props }: PopoverProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   // 关闭后焦点回到触发元素（Esc/点外关闭时焦点可能落在面板内）
@@ -46,7 +64,11 @@ export function Popover({ open, onOpenChange, className, children, ...props }: P
     };
     const onPointerDown = (event: PointerEvent) => {
       const root = ref.current;
-      if (root && !root.contains(event.target as Node)) onOpenChange(false);
+      const target = event.target as Element | null;
+      if (root && target && root.contains(target)) return;
+      // portal 面板不在 root DOM 子树内：用 popoverId 识别，避免点菜单先触发 outside close
+      if (target?.closest(`[data-popover-id="${overlayId}"]`)) return;
+      onOpenChange(false);
     };
     window.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
@@ -57,10 +79,21 @@ export function Popover({ open, onOpenChange, className, children, ...props }: P
     };
   }, [open, onOpenChange, overlayId]);
 
+  const contextValue = React.useMemo<PopoverContextValue>(
+    () => ({
+      popoverId: overlayId,
+      onOpenChange,
+      isTopmost: () => isTopmostOverlay(overlayId),
+    }),
+    [overlayId, onOpenChange]
+  );
+
   return (
-    <div ref={ref} className={cn("relative", className)} {...props}>
-      {children}
-    </div>
+    <PopoverContext.Provider value={contextValue}>
+      <div ref={ref} className={cn("relative", className)} {...props}>
+        {children}
+      </div>
+    </PopoverContext.Provider>
   );
 }
 
@@ -115,40 +148,153 @@ export interface PopoverPanelProps extends React.HTMLAttributes<HTMLDivElement> 
   placement?: PopoverPlacement;
   open?: boolean;
   /**
+   * Portal 到 body + fixed 定位（opt-in）：用于可能被祖先 overflow/transform 裁切的菜单。
+   * 锚点 = 面板原宿主元素 rect；空间不足自动翻转 + clamp。placement="anchor" 保持调用方手工定位。
+   */
+  portal?: boolean;
+  /**
    * Motion V1：kiro = 使用 ancestor Kiro scope CSS 变量（--kiro-motion-popover-*）+
    * scale .985→1 + 正确 transform-origin。默认行为保持全站不变。
    */
   motionProfile?: "default" | "kiro";
 }
 
-export function PopoverPanel({
-  open,
-  placement = "bottom-end",
-  motionProfile = "default",
-  className,
-  children,
-  ...props
-}: PopoverPanelProps) {
+interface PortalPosition {
+  left: number;
+  top: number;
+  zIndex: number;
+}
+
+export const PopoverPanel = React.forwardRef<HTMLDivElement, PopoverPanelProps>(function PopoverPanel(
+  {
+    open,
+    placement = "bottom-end",
+    portal = false,
+    motionProfile = "default",
+    className,
+    style,
+    children,
+    ...props
+  },
+  forwardedRef
+) {
   // kiro=160：见上方注释（Kiro scope 域独立定速）；default=fast exit（110）
   const { mounted, visible } = usePresence(
     open ?? true,
     motionProfile === "kiro" ? 160 : MOTION_EXIT_MS.fast
   );
   // 退出窗口内 inert：pointer-events-none 防不住 Tab，菜单项不可二次触发
-  const inertRef = useInertOnHidden<HTMLDivElement>(!visible);
+  // 进入期不加 inert：open=true 后焦点/键盘立即可用，不必等 opacity 过渡完成
+  const inertRef = useInertOnHidden<HTMLDivElement>(open === false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const popoverContext = usePopoverContext();
+  const anchorMarkerRef = useRef<HTMLSpanElement | null>(null);
+  const [portalPosition, setPortalPosition] = useState<PortalPosition | null>(null);
+  const shouldPortal = portal && placement !== "anchor";
+
+  const setPanelRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      panelRef.current = node;
+      inertRef(node);
+      if (typeof forwardedRef === "function") forwardedRef(node);
+      else if (forwardedRef) forwardedRef.current = node;
+    },
+    [inertRef, forwardedRef]
+  );
+
+  // Portal 定位：用未 portal 的 marker 找到原宿主锚点；每次 open/尺寸变化重新测量。
+  // 只负责把面板放进 viewport（翻转 + clamp），不改变内容宽度/高度策略。
+  useLayoutEffect(() => {
+    if (!shouldPortal || !mounted || !visible) return;
+    let raf = 0;
+    const measure = () => {
+      const anchor = anchorMarkerRef.current?.parentElement;
+      const panel = panelRef.current;
+      if (!anchor || !panel) return;
+      const anchorRect = anchor.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      if (panelRect.width < 1) return;
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const position = computeAnchoredPopoverPosition({
+        anchorRect,
+        menuWidth: panelRect.width,
+        menuHeight: Math.min(panelRect.height, viewportHeight - 16),
+        placement: placement as AnchoredPopoverPlacement,
+        viewportWidth,
+        viewportHeight,
+      });
+      const next: PortalPosition = {
+        left: Math.round(position.x),
+        top: Math.round(position.y),
+        // 排除 Popover 自身 z40：Dialog 内保持 >= 宿主层级（同层后挂载 → 视觉在上）
+        zIndex: Math.max(40, getTopOverlayZExcept(popoverContext?.popoverId)),
+      };
+      setPortalPosition((prev) =>
+        prev && prev.left === next.left && prev.top === next.top && prev.zIndex === next.zIndex
+          ? prev
+          : next
+      );
+    };
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        measure();
+      });
+    };
+    schedule();
+    const onScroll = (event: Event) => {
+      // 面板内部滚动不改变锚点位置
+      if (panelRef.current?.contains(event.target as Node)) return;
+      schedule();
+    };
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", schedule);
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+    const anchor = anchorMarkerRef.current?.parentElement;
+    if (observer && anchor) observer.observe(anchor);
+    if (observer && panelRef.current) observer.observe(panelRef.current);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", schedule);
+      observer?.disconnect();
+    };
+  }, [shouldPortal, mounted, visible, placement, popoverContext?.popoverId]);
+
   if (!mounted) return null;
 
-  return (
+  const panel = (
     <div
-      ref={inertRef}
+      ref={setPanelRef}
       data-kiro-open={motionProfile === "kiro" ? String(visible) : undefined}
       data-overlay-ignore="true"
+      data-popover-id={shouldPortal ? popoverContext?.popoverId : undefined}
+      style={
+        shouldPortal
+          ? {
+              position: "fixed",
+              left: portalPosition?.left ?? 0,
+              top: portalPosition?.top ?? 0,
+              right: "auto",
+              bottom: "auto",
+              margin: 0,
+              zIndex:
+                portalPosition?.zIndex ??
+                Math.max(40, getTopOverlayZExcept(popoverContext?.popoverId)),
+              visibility: portalPosition ? undefined : "hidden",
+              ...style,
+            }
+          : style
+      }
       className={cn(
-        "absolute z-40 bg-surface border border-line-strong rounded-2xl shadow-card",
+        "bg-surface border border-line-strong rounded-2xl shadow-card",
         // 纵向滚动容器：必须显式 overflow-x-clip——否则 overflow-x 按规范计算为 auto，
         // 进入/退出 ±3px 位移与 drill ±4px 切换会在面板底部闪出横向滚动条。
         "max-h-[min(420px,60vh)] overflow-y-auto overflow-x-clip",
-        PLACEMENT_CLASSES[placement],
+        shouldPortal ? "z-40" : cn("absolute z-40", PLACEMENT_CLASSES[placement]),
         PLACEMENT_ORIGIN[placement],
         motionProfile === "kiro" && "kiro-popover-motion",
         motionProfile === "default" &&
@@ -176,4 +322,15 @@ export function PopoverPanel({
       {children}
     </div>
   );
-}
+
+  if (!shouldPortal) return panel;
+
+  return (
+    <>
+      {/* 保持一个未 portal 的锚点标记：parentElement 即原宿主（Popover wrapper / relative ref） */}
+      <span ref={anchorMarkerRef} hidden aria-hidden="true" data-popover-anchor-marker="" />
+      {createPortal(panel, document.body)}
+    </>
+  );
+});
+PopoverPanel.displayName = "PopoverPanel";

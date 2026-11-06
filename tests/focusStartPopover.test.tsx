@@ -77,38 +77,38 @@ describe("FocusStartPopover", () => {
   });
 
   it("1. 首次打开默认 25（input 值 + 25 preset active）", () => {
-    const input = harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
     expect(input?.value).toBe("25");
-    expect(presetButton(harness.container, "25 分").getAttribute("aria-pressed")).toBe("true");
+    expect(presetButton(document.body, "25 分").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("2. 选择 60 → 关闭 → 重开 → 回到 25", async () => {
-    act(() => presetButton(harness.container, "60 分").click());
-    const input1 = harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
+    act(() => presetButton(document.body, "60 分").click());
+    const input1 = document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
     expect(input1?.value).toBe("60");
-    expect(presetButton(harness.container, "60 分").getAttribute("aria-pressed")).toBe("true");
+    expect(presetButton(document.body, "60 分").getAttribute("aria-pressed")).toBe("true");
     await harness.rerender(false);
     await harness.rerender(true);
-    const input2 = harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
+    const input2 = document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
     expect(input2?.value).toBe("25");
-    expect(presetButton(harness.container, "25 分").getAttribute("aria-pressed")).toBe("true");
+    expect(presetButton(document.body, "25 分").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("3. note 201+ 字符 → 截断 200（与 Overview 一致）", () => {
-    const note = harness.container.querySelector<HTMLInputElement>('input[aria-label="专注备注"]');
+    const note = document.body.querySelector<HTMLInputElement>('input[aria-label="专注备注"]');
     expect(note?.maxLength).toBe(200);
     setInputValue(note!, "x".repeat(250));
     expect(note?.value).toBe("x".repeat(200));
   });
 
   it("4. 非法时长（0 / 241 / 小数）→ 内联错误，不触发 onStart；合法值恢复", () => {
-    const input = harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
-    const confirm = harness.container.querySelector<HTMLButtonElement>('button[data-testid="focus-start-confirm"]');
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
+    const confirm = document.body.querySelector<HTMLButtonElement>('button[data-testid="focus-start-confirm"]');
     for (const bad of ["0", "241", "12.5"]) {
       setInputValue(input!, bad);
       act(() => confirm!.click());
       expect(harness.onStart).not.toHaveBeenCalled();
-      const error = harness.container.querySelector("p.text-danger");
+      const error = document.body.querySelector("p.text-danger");
       expect(error?.textContent).toContain("专注时长需为 1–240 的整数");
     }
     setInputValue(input!, "45");
@@ -117,41 +117,41 @@ describe("FocusStartPopover", () => {
   });
 
   it("5. 有效 start 传已 trim 备注", () => {
-    const note = harness.container.querySelector<HTMLInputElement>('input[aria-label="专注备注"]');
+    const note = document.body.querySelector<HTMLInputElement>('input[aria-label="专注备注"]');
     setInputValue(note!, "  复习笔记  ");
-    const confirm = harness.container.querySelector<HTMLButtonElement>('button[data-testid="focus-start-confirm"]');
+    const confirm = document.body.querySelector<HTMLButtonElement>('button[data-testid="focus-start-confirm"]');
     act(() => confirm!.click());
     expect(harness.onStart).toHaveBeenCalledWith(25, "复习笔记");
   });
 
   it("6. 已打开时用户改成 60，外部 preference 改成 15 → 当前 picker 仍保持 60（不被覆盖）", async () => {
-    act(() => presetButton(harness.container, "60 分").click());
-    const input1 = harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
+    act(() => presetButton(document.body, "60 分").click());
+    const input1 = document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
     expect(input1?.value).toBe("60");
     // 外部修改 preference
     useAppStore.getState().updatePreferences({ focusDefaultMinutes: 15 });
     // 仍打开状态，不应被覆盖
-    const input2 = harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
+    const input2 = document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
     expect(input2?.value).toBe("60");
   });
 
   it("7. 关闭后重开读取最新 preference 15", async () => {
-    act(() => presetButton(harness.container, "60 分").click());
+    act(() => presetButton(document.body, "60 分").click());
     useAppStore.getState().updatePreferences({ focusDefaultMinutes: 15 });
     // picker 仍 60
-    expect(harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]')?.value).toBe("60");
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]')?.value).toBe("60");
     await harness.rerender(false);
     await harness.rerender(true);
-    expect(harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]')?.value).toBe("15");
-    expect(presetButton(harness.container, "15 分").getAttribute("aria-pressed")).toBe("true");
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]')?.value).toBe("15");
+    expect(presetButton(document.body, "15 分").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("8. 默认值不再是硬编码 30，30 仅作为可选 preset 存在", async () => {
     // 默认应为 25，而非 30
-    const input = harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]');
     expect(input?.value).not.toBe("30");
     // 但 30 preset 仍可手动选择
-    act(() => presetButton(harness.container, "30 分").click());
-    expect(harness.container.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]')?.value).toBe("30");
+    act(() => presetButton(document.body, "30 分").click());
+    expect(document.body.querySelector<HTMLInputElement>('input[aria-label="自定义时长（分钟）"]')?.value).toBe("30");
   });
 });

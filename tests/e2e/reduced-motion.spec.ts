@@ -101,7 +101,9 @@ test.describe("reduced motion", () => {
     await page.getByRole("navigation", { name: "设置导航" }).getByRole("button", { name: "通用" }).click();
     const motion = page.getByRole("combobox", { name: "动效偏好" });
     await motion.click();
-    await page.getByRole("option", { name: "减少动效" }).click();
+    // 选中后菜单按既有语义立即卸载（不占退出窗口），Playwright 的 click 会因节点
+    // 在动作完成前 detach 而重试；用 dispatchEvent 触发真实 click 语义。
+    await page.getByRole("option", { name: "减少动效" }).dispatchEvent("click");
     await expect(page.locator("html")).toHaveAttribute("data-motion-effective", "reduced");
     await motion.click();
     await page.keyboard.press("Escape");

@@ -474,7 +474,7 @@ export function CourseDetailDrawer() {
               >
                 <MoreHorizontal className="h-4 w-4" />
               </IconButton>
-              <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作" className="w-44">
+              <DropdownMenuPanel portal open={moreOpen} placement="bottom-end" aria-label="更多操作" className="w-44">
                 <DropdownMenuItem label="Ask Kiro" onClick={handleAskKiro} />
                 <DropdownMenuDivider />
                 <DropdownMenuItem icon={Trash2} label="删除课程" danger onClick={handleDeleteCourse} />
