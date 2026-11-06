@@ -833,6 +833,8 @@ export function TimelineWorkspace() {
                 // drag engagement（跨 5px 阈值）后才 capture + 抑制 click。
                 studyBlockClickSuppressedRef.current = false;
                 if (!studyDragEnabled) return;
+                // 触屏/混合设备：手指滑动不得启动拖拽（同 TimetableGrid / MiniCalendar 语义）
+                if (e.pointerType === "touch") return;
                 // Workflow UX V15：released block 不进入 drag lifecycle（移动 = 重排已释放计划）
                 if (isReleasedBlock) return;
                 if (e.button !== 0) return;
@@ -1446,6 +1448,8 @@ export function TimelineWorkspace() {
       }
       onAssignmentPointerDown={(e, a) => {
         if (!unscheduledDragEnabled) return;
+        // 触屏/混合设备：手指滑动不得触发“快速安排”
+        if (e.pointerType === "touch") return;
         if (e.button !== 0) return;
         if (studyDragRef.current.type !== "idle") return;
         e.preventDefault();

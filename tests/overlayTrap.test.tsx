@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import React from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { Dialog } from "@/components/ui/Dialog";
 import { Drawer } from "@/components/ui/Drawer";
@@ -92,5 +92,24 @@ describe("Drawer trap：两种 presentation 均为真模态，默认 trap", () =
     };
     btns[1].dispatchEvent(ev);
     expect(prevented).toBe(false);
+  });
+});
+
+describe("Dialog backdrop close", () => {
+  it("点击居中 wrapper（遮罩的 padding 区域）也触发 closeOnBackdrop", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog open onOpenChange={onOpenChange} overlayId="test-backdrop" closeOnBackdrop>
+        <button type="button">面板内</button>
+      </Dialog>
+    );
+    const panel = screen.getByRole("dialog");
+    const wrapper = panel.parentElement!;
+    fireEvent.pointerDown(wrapper);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+
+    onOpenChange.mockClear();
+    fireEvent.pointerDown(panel);
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });

@@ -30,6 +30,7 @@ describe("Learning Analytics open motion contract", () => {
     const view = read("components/analytics/LearningAnalyticsView.tsx");
     expect(view).toContain("const refreshing = loading && !!data");
     expect(view).toContain('loading && !data ? "loading"');
+    expect(view).toContain('analyticsStageState === "loading" ?');
     expect(view).toContain("ux-analytics-enter");
     const momentum = read("components/analytics/AnalyticsMomentum.tsx");
     expect(momentum).toContain("const refreshing = loading && !!data");

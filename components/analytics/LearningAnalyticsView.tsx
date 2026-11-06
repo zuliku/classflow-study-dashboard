@@ -248,7 +248,7 @@ export function LearningAnalyticsView() {
         >
           {/* 历史分析 stage（loading/error/empty/normal 同一容器；preset 变化轻 settle） */}
           <div key={analyticsStageKey} className="ux-analytics-enter flex flex-col gap-4">
-          {loading ? (
+          {analyticsStageState === "loading" ? (
             <>
               <div className={ANALYTICS_TOP_GRID}>
                 <div className="rounded-xl border border-line bg-surface p-4">

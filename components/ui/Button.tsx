@@ -9,8 +9,10 @@ import { cn } from "@/lib/utils";
  * feature-neutral；不读 Store；透传全部原生 button props（aria / data 属性、type、disabled、title、onClick）。
  *
  * Press cycle：ux-press（active scale 0.97）+ ux-press-transition（颜色走 fast 档，
- * transform 走 spring-snappy 回弹）。Loading（可选，feature-neutral）：loading=true → disabled + aria-busy；
- * 原内容 opacity-0 保留占位（无 layout shift），absolute overlay 显示 spinner（+可选 loadingLabel）。Button 只知 idle/loading；success/error 归业务层（Toast/inline）。
+ * transform 走 spring-snappy 回弹）。Loading（可选，feature-neutral）：loading=true → aria-busy +
+ * aria-disabled + onClick 守卫（不设原生 disabled，保留焦点）；原内容 opacity-0 保留占位
+ * （无 layout shift），absolute overlay 显示 spinner（+可选 loadingLabel）。Button 只知 idle/loading；
+ * success/error 归业务层（Toast/inline）。
  */
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "accent";
 export type ButtonSize = "sm" | "md";
@@ -31,7 +33,7 @@ const BUTTON_SIZES: Record<ButtonSize, string> = {
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  /** 异步 pending：disabled + aria-busy + spinner overlay；原内容保留占位防 layout shift */
+  /** 异步 pending：aria-busy + aria-disabled + spinner overlay；保留焦点与原内容占位防 layout shift */
   loading?: boolean;
   /** loading 时 spinner 旁的文案（需短，避免明显宽于原内容） */
   loadingLabel?: React.ReactNode;
@@ -46,17 +48,27 @@ export function Button({
   className,
   children,
   disabled,
+  onClick,
   ...props
 }: ButtonProps) {
   return (
     <button
       type={type}
-      disabled={disabled || loading}
+      disabled={disabled}
       aria-busy={loading || undefined}
+      aria-disabled={loading || disabled || undefined}
+      onClick={(event) => {
+        if (loading || disabled) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.(event);
+      }}
       className={cn(
         "ux-press ux-press-transition relative inline-flex items-center justify-center gap-1.5 rounded-lg font-bold shrink-0",
         "focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-2",
         "disabled:opacity-50 disabled:cursor-not-allowed",
+        loading && "cursor-wait",
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
         className

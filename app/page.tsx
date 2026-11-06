@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { WorkspaceInboxButton } from "@/components/layout/WorkspaceInboxButton";
@@ -81,6 +81,12 @@ export default function Home() {
   // 精确 selector：避免整 store 订阅导致 UI Chrome 等无关 state 变化触发 Home 全量 render
   // （Overview 内容已抽至 OverviewWorkspace，其数据订阅由该组件自持）
   const activeTab = useAppStore((s) => s.activeTab);
+  const mainRef = useRef<HTMLElement | null>(null);
+  // 工作区切换统一回到顶部：main 是常驻滚动容器，PageTransition 只替换内容；
+  // 不重置会让长页面继承上一页 scrollTop（实测 700 → 课程页 196）。
+  useLayoutEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeTab]);
 
   // 启动时孤儿 Blob 对账（V1.3A.1 fail-closed）：
   // Course + Project 引用 key 必须全部枚举成功才执行 GC；
@@ -212,6 +218,7 @@ export default function Home() {
             Kiro 拥有自己的滚动（KiroConversation overflow-y-auto），main 不再成为第二个纵向滚动容器；
             其它页面（Overview/Assignments 等）保持 outer main scrolling。 */}
         <main
+          ref={mainRef}
           className={cn(
             "flex-1 min-h-0 flex flex-col [scrollbar-gutter:stable]",
             activeTab === "kiro" ? "overflow-hidden" : "overflow-y-auto"

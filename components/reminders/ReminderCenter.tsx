@@ -364,9 +364,9 @@ export function ReminderCenter() {
             "transition-[opacity,transform] ease-[var(--ease-spatial)]",
             isOpen
               ? visible
-                ? "opacity-100 translate-y-0 scale-100 md:translate-x-0 ![duration:var(--motion-overlay)]"
-                : "opacity-0 translate-y-1.5 scale-[0.985] md:translate-y-0 md:-translate-x-1.5 md:scale-[0.992] ![duration:var(--motion-overlay)]"
-              : "opacity-0 translate-y-1 scale-[0.99] md:translate-y-0 md:-translate-x-1 md:scale-[0.994] ![duration:var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
+                ? "opacity-100 translate-y-0 scale-100 md:translate-x-0 !duration-[var(--motion-overlay)]"
+                : "opacity-0 translate-y-1.5 scale-[0.985] md:translate-y-0 md:-translate-x-1.5 md:scale-[0.992] !duration-[var(--motion-overlay)]"
+              : "opacity-0 translate-y-1 scale-[0.99] md:translate-y-0 md:-translate-x-1 md:scale-[0.994] !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
           )}
         >
           {/* Header：Bell + 标题 + 数量 badge | 新建提醒 + 关闭（shrink-0 不滚动） */}

@@ -30,7 +30,7 @@ describe("Dialog initialFocusRef", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe("目标输入");
   });
 
-  it("不传 initialFocusRef 时不抢焦点（兼容各消费方自持 autoFocus）", async () => {
+  it("不传 initialFocusRef 时聚焦首个可聚焦元素（模态接管焦点）", async () => {
     function Harness() {
       return (
         <Dialog open onOpenChange={() => {}} overlayId="test-no-initial-focus" aria-label="测试弹窗">
@@ -40,7 +40,7 @@ describe("Dialog initialFocusRef", () => {
     }
     render(<Harness />);
     await settlePresence();
-    expect(document.activeElement?.getAttribute("aria-label")).not.toBe("普通输入");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("普通输入");
   });
 });
 

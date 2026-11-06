@@ -115,11 +115,20 @@ export function OverlayLayer({
         ...(visible ? {} : { transitionDuration: `${exitMs}ms` }),
       }}
       onPointerDown={(event) => {
-        // backdrop request-close：仅点击背景本身（target === currentTarget），面板内点击不关闭
-        if (closeOnBackdrop && event.target === event.currentTarget) {
-          popOverlay(overlayId);
-          onOpenChangeRef.current(false);
+        // backdrop request-close：点击面板外任何位置（含居中 wrapper 的 padding）都关闭；
+        // 之前只判断 target === currentTarget，Dialog 的满屏 wrapper 会让 backdrop 点击永远失效。
+        if (!closeOnBackdrop) return;
+        const target = event.target as Element | null;
+        // 点击面板、portal 菜单/Select 选项都不应关闭底层 Dialog（React portal 会沿 React 树冒泡到这里）
+        if (
+          target?.closest(
+            '[role="dialog"], [role="menu"], [role="listbox"], [data-overlay-ignore="true"]'
+          )
+        ) {
+          return;
         }
+        popOverlay(overlayId);
+        onOpenChangeRef.current(false);
       }}
     >
       {children({ visible })}

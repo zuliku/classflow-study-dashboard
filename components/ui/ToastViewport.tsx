@@ -36,6 +36,14 @@ export function ToastViewport() {
   const toastsRef = useRef(toasts);
   toastsRef.current = toasts;
 
+  const clearToastTracking = (id: string) => {
+    scheduledRef.current.delete(id);
+    timersRef.current.delete(id);
+    remainingRef.current.delete(id);
+    startedAtRef.current.delete(id);
+    actionTakenRef.current.delete(id);
+  };
+
   const dismiss = (id: string) => {
     if (dismissingRef.current.has(id)) return;
     dismissingRef.current.add(id);
@@ -43,6 +51,7 @@ export function ToastViewport() {
     // reduced-motion 下 CSS 过渡已近即时：跳过退出等待，直接移除（usePresence reduced 语义）
     if (reducedMotion) {
       dismissingRef.current.delete(id);
+      clearToastTracking(id);
       removeToast(id);
       toast?.onDismiss?.();
       return;
@@ -59,6 +68,7 @@ export function ToastViewport() {
         return next;
       });
       dismissingRef.current.delete(id);
+      clearToastTracking(id);
       removeToast(id);
       toast?.onDismiss?.();
     }, EXIT_MS);
@@ -121,7 +131,7 @@ export function ToastViewport() {
 
   return (
     <div
-      className="fixed z-[70] bottom-24 sm:bottom-5 right-4 left-4 sm:left-auto sm:right-5 flex flex-col items-end sm:items-end gap-2 pointer-events-none"
+      className="fixed z-[70] bottom-[calc(6rem+env(safe-area-inset-bottom))] md:bottom-5 right-4 left-4 sm:left-auto sm:right-5 flex flex-col items-end sm:items-end gap-2 pointer-events-none"
       aria-live="polite"
     >
       {toasts.map((toast) => {

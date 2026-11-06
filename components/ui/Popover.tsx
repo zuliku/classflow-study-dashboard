@@ -142,6 +142,7 @@ export function PopoverPanel({
     <div
       ref={inertRef}
       data-kiro-open={motionProfile === "kiro" ? String(visible) : undefined}
+      data-overlay-ignore="true"
       className={cn(
         "absolute z-40 bg-surface border border-line-strong rounded-2xl shadow-card",
         // 纵向滚动容器：必须显式 overflow-x-clip——否则 overflow-x 按规范计算为 auto，

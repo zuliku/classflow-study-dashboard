@@ -3,7 +3,7 @@
 import React, { useEffect, useRef } from "react";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
 import { MOTION_EXIT_MS } from "@/lib/motion";
-import { useFocusTrap } from "@/lib/useFocusTrap";
+import { useFocusTrap, getFocusableElements } from "@/lib/useFocusTrap";
 import { cn } from "@/lib/utils";
 
 /**
@@ -61,16 +61,25 @@ export function Dialog({
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trapTab = useFocusTrap(panelRef, open && trapFocus);
+  // 模态打开先接管焦点：否则 activeElement 仍在遮罩后的 App，面板级 Tab 陷阱永远收不到事件。
+  // initialFocusRef 优先；未指定时聚焦首个可聚焦元素，空面板则聚焦面板自身。
   useEffect(() => {
-    if (!open || !initialFocusRef?.current) return;
-    const target = initialFocusRef.current;
+    if (!open || !trapFocus) return;
+    const panel = panelRef.current;
+    if (!panel) return;
     const raf = requestAnimationFrame(() => {
+      if (panel.contains(document.activeElement)) return;
+      const preferred = initialFocusRef?.current;
+      const target =
+        preferred && panel.contains(preferred)
+          ? preferred
+          : getFocusableElements(panel)[0] ?? panel;
       if (document.contains(target) && typeof target.focus === "function") {
-        target.focus();
+        target.focus({ preventScroll: true });
       }
     });
     return () => cancelAnimationFrame(raf);
-  }, [open, initialFocusRef]);
+  }, [open, trapFocus, initialFocusRef]);
   // S2-1：trap 与 consumer onKeyDown 组合（此前 {...props} 后置会整体覆盖 trap）
   const { onKeyDown: consumerOnKeyDown, ...rest } = props;
   return (
@@ -90,6 +99,7 @@ export function Dialog({
           <div
             role="dialog"
             aria-modal="true"
+            tabIndex={-1}
             ref={panelRef}
             onKeyDown={
               trapFocus
@@ -100,7 +110,7 @@ export function Dialog({
                 : consumerOnKeyDown
             }
             className={cn(
-              "w-full max-w-md bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel",
+              "w-full max-w-md bg-surface border border-line rounded-2xl shadow-drawer overflow-hidden ux-modal-panel focus:outline-none",
               // enter 250ms spatial spring（scale .98→1 + 4px 上移归零）；exit 160ms（scale 1→.98 + 4px），exit < enter
               visible
                 ? "opacity-100 scale-100 translate-y-0 !duration-[var(--motion-overlay)] ease-[var(--ease-spatial)]"

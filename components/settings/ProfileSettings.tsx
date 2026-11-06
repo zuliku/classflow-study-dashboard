@@ -69,8 +69,9 @@ export function ProfileSettings({
     pickedFile !== null ||
     removeRequested;
 
-  // 脏状态上报（V4.1：Modal 据此决定是否要求显式放弃确认）
-  React.useEffect(() => {
+  // 脏状态上报（V4.1：Modal 据此决定是否要求显式放弃确认）。
+  // Layout effect：输入后立即点遮罩/关闭时必须读到本帧 dirty，否则会静默丢弃草稿。
+  React.useLayoutEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
 

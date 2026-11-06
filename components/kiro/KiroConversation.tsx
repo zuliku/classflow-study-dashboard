@@ -231,6 +231,9 @@ export function KiroConversation({
     lastScrollHeightRef.current = content.scrollHeight;
     const observer = new ResizeObserver(() => scheduleHeightReconcile());
     observer.observe(content);
+    // 同时观察视口：Composer / ContextBar / Sidecar follow-up suggestions 长高时
+    // 内容高度不变但 clientHeight 变小，仅观察 content 不会触发贴底补偿。
+    if (scrollRef.current) observer.observe(scrollRef.current);
     return () => {
       observer.disconnect();
       if (rafRef.current !== null) {

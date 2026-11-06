@@ -29,6 +29,8 @@ export function Switch({ checked, onChange, label, disabled, className }: Switch
       }}
       className={cn(
         "relative w-9 h-5 rounded-full transition-colors duration-[var(--motion-fast)] active:opacity-75",
+        // 触控命中区扩到 ~56×40，视觉尺寸不变（WCAG 2.5.8）
+        "before:absolute before:-inset-2.5 before:content-['']",
         "focus-visible:outline-2 focus-visible:outline-charcoal/30 focus-visible:outline-offset-2",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         checked ? "bg-charcoal" : "bg-alba",
@@ -37,7 +39,7 @@ export function Switch({ checked, onChange, label, disabled, className }: Switch
     >
       <span
         className={cn(
-          "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-subtle transition-transform duration-[var(--motion-fast)]",
+          "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-subtle transition-transform duration-[var(--motion-base)] ease-[var(--ease-selection)]",
           checked && "translate-x-4"
         )}
       />

@@ -278,11 +278,13 @@ describe("useExitPresenceList ↔ ExitCollapse contract", () => {
     const root = container.firstElementChild!;
     expect(root.getAttribute("data-axis")).toBe("horizontal");
     expect(root.className).toContain("grid-cols-[1fr]");
-    expect(root.className).toContain("duration-[var(--motion-exit-panel)]");
+    // V6 双向：present 使用 enter 档，exiting 才切到 exit-panel
+    expect(root.className).toContain("duration-[var(--motion-fast)]");
     rerender(<HProbe exiting />);
     expect(root.getAttribute("data-state")).toBe("exiting");
     expect(root.className).toContain("grid-cols-[0fr]");
     expect(root.className).toContain("opacity-0");
+    expect(root.className).toContain("duration-[var(--motion-exit-panel)]");
   });
 
   it("leaving 态删除：160ms 后才真正 onRemove（顺序天然保留）", () => {

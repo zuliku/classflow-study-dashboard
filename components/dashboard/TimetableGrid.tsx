@@ -862,6 +862,14 @@ export function TimetableGrid({
                           data-testid="schedule-card"
                           data-compact={compactCards || undefined}
                           title={compactCards ? cardTitle : undefined}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${cardTitle}，${sched.startTime}–${sched.endTime}`}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter" && e.key !== " ") return;
+                            e.preventDefault();
+                            setSelectedCourseId(course.id);
+                          }}
                           onClick={() => {
                             // 拖动结束后浏览器仍会在 capture 目标上派发 click，需吞掉
                             if (wasDraggedRef.current) {
@@ -991,7 +999,8 @@ export function TimetableGrid({
                         {editingEnabled && (!(sched as { source?: string }).source || (sched as { source?: string }).source === "base") && (
                           <button
                             data-testid="resize-handle"
-                            aria-label="调整课程结束时间"
+                            tabIndex={-1}
+                            aria-hidden="true"
                             onPointerDown={(e) => handleResizePointerDown(e, sched)}
                             onPointerMove={(e) => handleResizePointerMove(e, sched)}
                             onPointerUp={(e) => handleResizePointerUp(e, sched)}

@@ -180,6 +180,21 @@ export function AssignmentTable({
     [isWorkspace, workspaceItems, courseFilter, assignments]
   );
   const filteredIdsKey = filteredIds.join(",");
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  // 键盘 J/K 移动高亮时把它滚入列表视口（否则连续下移后高亮在视口外，屏幕不动）
+  useEffect(() => {
+    if (!isWorkspace || !highlightedAssignmentId) return;
+    const list = listRef.current;
+    if (!list) return;
+    const row = list.querySelector<HTMLElement>(
+      `[data-assignment-id="${highlightedAssignmentId}"]`
+    );
+    row?.scrollIntoView({ block: "nearest" });
+  }, [highlightedAssignmentId, isWorkspace]);
+
+  // View / Course / Risk 切换回到列表顶部（不继承上一视图的滚动深度）
+  // 依赖 contentTransitionKey，effect 声明在下方（避免 TDZ）。
 
   // ---- Compact 分页（纯展示状态，不写入 store；提前声明供过渡键使用） ----
   // workspace 模式保持完整列表（键盘导航/多选语义不截断）
@@ -200,6 +215,12 @@ export function AssignmentTable({
     // BUG-G3：timeSlice 是显式分段切换（与搜索不同），纳入过渡键 → 切段播放 settle；
     // compact 翻页同样纳入（此前点上一页/下一页整表硬换）
     : `compact|${courseFilter}|${assignmentTimeSlice}|p${compactSafePage}`;
+
+  // View / Course / Risk 切换回到列表顶部（不继承上一视图的滚动深度）
+  useEffect(() => {
+    if (!isWorkspace) return;
+    listRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [contentTransitionKey, isWorkspace]);
 
   // IM4A：Exit-only 列表保留——仅真实数据 mutation（完成/删除导致离开当前视图）触发 Row 退出；
   // View/筛选/搜索/风险过滤 变化（resetKey）直接同步新列表，不播放大面积退出
@@ -513,18 +534,20 @@ export function AssignmentTable({
       <div
         onClick={(e) => handleRowClick(e, task.id)}
         onContextMenu={(e) => handleRowContextMenu(e, task.id)}
-        onMouseEnter={() => {
-          // 触屏 tap 会触发 mouseenter 抢键盘 highlight：仅真实 hover 设备跟随
-          if (isWorkspace && window.matchMedia?.("(hover: hover)").matches) {
-            setHighlightedAssignmentId(task.id);
-          }
+        onMouseEnter={(e) => {
+          // 触屏 tap 会触发 mouseenter 抢键盘 highlight：仅真实 hover 设备跟随；
+          // 列表内已有键盘焦点时不抢占（J/K 连续导航不被鼠标扫过打断）。
+          if (!isWorkspace || !window.matchMedia?.("(hover: hover)").matches) return;
+          const list = (e.currentTarget as HTMLElement).closest('[data-testid="assignment-list"]');
+          if (list && list.contains(document.activeElement)) return;
+          setHighlightedAssignmentId(task.id);
         }}
         // 行容器是鼠标点击面，键盘走外层列表容器（J/K/Enter）；不声明 role=button，
         // 否则读屏报“按钮”却永远 Tab 不到（tabIndex -1）
         data-assignment-id={task.id}
         className={cn(
           isWorkspace && compactDensity ? "p-2" : "p-3",
-          "rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group",
+          "rounded-xl transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] cursor-pointer flex items-center justify-between group active:opacity-[0.82]",
           isNew && "animate-enter",
           isWorkspace
             ? isSelected
@@ -803,9 +826,16 @@ export function AssignmentTable({
           + keyed presentation stage（View/Course/Risk 切换轻 settle；不含 search） */}
       <div
         data-testid="assignment-list"
+        ref={listRef}
         data-density={isWorkspace ? contentDensity : undefined}
         tabIndex={isWorkspace ? 0 : undefined}
         onKeyDown={isWorkspace ? handleListKeyDown : undefined}
+        onMouseLeave={(e) => {
+          if (!isWorkspace) return;
+          // 键盘焦点仍在列表内时保留 keyboard highlight；鼠标会话离开则清掉 hover ring
+          if (e.currentTarget.contains(document.activeElement)) return;
+          setHighlightedAssignmentId(null);
+        }}
         className={cn(
           "flex-1 min-h-0",
           isWorkspace

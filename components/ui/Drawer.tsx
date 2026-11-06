@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { OverlayLayer } from "@/components/ui/OverlayLayer";
-import { useFocusTrap } from "@/lib/useFocusTrap";
+import { useFocusTrap, getFocusableElements } from "@/lib/useFocusTrap";
 import { MOTION_EXIT_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
@@ -79,11 +79,11 @@ export function resolveDrawerPresentation(
         // 有界浮层：宽度 min(470px, 100vw-32px)；高度 max calc(100dvh-32px)；圆角 + 完整边框 + shadow
         "w-full sm:w-[470px] h-full max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)]",
         "bg-surface rounded-2xl sm:rounded-[22px] border border-line-strong shadow-card",
-        "flex flex-col overflow-hidden ux-drawer-panel !ease-[var(--ease-spatial)] pointer-events-auto",
+        "flex flex-col overflow-hidden ux-drawer-panel pointer-events-auto",
         // enter：translate-x 0 + 淡入（--motion-panel 260ms，spatial spring）；
         // exit：右侧轻移 + 淡出（--motion-exit-panel 190ms）；无 scale（M4 Stable Edge Exit）
         visible
-          ? "translate-x-0 opacity-100 !duration-[var(--motion-panel)]"
+          ? "translate-x-0 opacity-100 !duration-[var(--motion-panel)] !ease-[var(--ease-spatial)]"
           : "translate-x-3 opacity-0 !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]"
       ),
     };
@@ -124,16 +124,24 @@ export function Drawer({
 }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trapTab = useFocusTrap(panelRef, open && trapFocus);
+  // 模态打开先接管焦点（同 Dialog）：initialFocusRef 优先，否则首个可聚焦元素；空面板聚焦面板自身。
   useEffect(() => {
-    if (!open || !initialFocusRef?.current) return;
-    const target = initialFocusRef.current;
+    if (!open || !trapFocus) return;
+    const panel = panelRef.current;
+    if (!panel) return;
     const raf = requestAnimationFrame(() => {
+      if (panel.contains(document.activeElement)) return;
+      const preferred = initialFocusRef?.current;
+      const target =
+        preferred && panel.contains(preferred)
+          ? preferred
+          : getFocusableElements(panel)[0] ?? panel;
       if (document.contains(target) && typeof target.focus === "function") {
-        target.focus();
+        target.focus({ preventScroll: true });
       }
     });
     return () => cancelAnimationFrame(raf);
-  }, [open, initialFocusRef]);
+  }, [open, trapFocus, initialFocusRef]);
   // S2-1：trap 与 consumer onKeyDown 组合（与 Dialog 同模式）
   const { onKeyDown: consumerOnKeyDown, ...rest } = props;
   // 未显式指定时：floating 默认 backdrop 点击关闭（真模态轻 dismiss），edge 保持 false
@@ -155,6 +163,7 @@ export function Drawer({
         <div
           role="dialog"
           aria-modal={resolveDrawerAriaModal(presentation)}
+          tabIndex={-1}
           ref={panelRef}
           onKeyDown={
             trapFocus
@@ -164,7 +173,7 @@ export function Drawer({
                 }
               : consumerOnKeyDown
           }
-          className={cn(resolveDrawerPresentation(presentation, visible).panelClassName, className)}
+          className={cn(resolveDrawerPresentation(presentation, visible).panelClassName, "focus:outline-none", className)}
           {...rest}
         >
           {children}

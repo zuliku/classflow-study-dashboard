@@ -279,3 +279,24 @@ test("Group：Master–Detail 结构不回归（项目选择 + 详情）", async
   await expect(page.getByRole("heading", { name: "项目B" })).toBeVisible();
 });
 
+
+test("Workspace 切换：长页面滚动位置归零（不继承上一页 scrollTop）", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  const main = page.locator("main").first();
+  await expect(main).toBeVisible();
+
+  await main.evaluate((el) => { el.scrollTop = 700; });
+  expect(await main.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "课程资料" }).first().click();
+  await expect(page.getByRole("heading", { name: "课程资料", exact: true })).toBeVisible();
+  await expect.poll(() => main.evaluate((el) => el.scrollTop)).toBe(0);
+
+  await main.evaluate((el) => { el.scrollTop = 500; });
+  expect(await main.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "总览" }).first().click();
+  await expect(page.getByTestId("timetable-card")).toBeVisible();
+  await expect.poll(() => main.evaluate((el) => el.scrollTop)).toBe(0);
+});

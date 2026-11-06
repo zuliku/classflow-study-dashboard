@@ -16,7 +16,8 @@ test("Case A：Drawer + Confirm 嵌套栈（Esc 先关 Confirm 再关 Drawer）"
   await expect(page.getByRole("dialog", { name: "课程详情" })).toBeVisible();
 
   // 触发删除课程 → ConfirmDialog（不真正确认）
-  await page.getByRole("button", { name: "删除课程" }).first().click();
+  await page.getByRole("button", { name: "更多操作" }).first().click();
+  await page.getByRole("menuitem", { name: "删除课程" }).click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm).toBeVisible();
 
@@ -34,7 +35,8 @@ test("Case A2：嵌套浮层连续 Esc 不被退出动画占用栈", async ({ pa
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await page.getByRole("heading", { name: "微观经济学" }).first().click();
-  await page.getByRole("button", { name: "删除课程" }).first().click();
+  await page.getByRole("button", { name: "更多操作" }).first().click();
+  await page.getByRole("menuitem", { name: "删除课程" }).click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
 
   await page.keyboard.press("Escape");
@@ -62,7 +64,7 @@ test("Case B：Settings backdrop close；面板内点击不关闭", async ({ pag
   // 重新打开 → backdrop 点击关闭
   await page.getByRole("button", { name: "设置" }).first().click();
   await expect(dialog).toBeVisible();
-  await page.mouse.click(10, 10); // 面板外（backdrop）
+  await page.mouse.click(10, 300); // 面板外（backdrop；避开 titlebar）
   await expect(dialog).toHaveCount(0);
 });
 
@@ -78,7 +80,7 @@ test("Case C：Timeline ArrangeSheet backdrop close；MarkSheet Esc close", asyn
   const arrange = page.getByRole("dialog", { name: "安排学习计划" });
   await expect(arrange).toBeVisible();
   // backdrop 点击关闭
-  await page.mouse.click(12, 12);
+  await page.mouse.click(12, 300);
   await expect(arrange).toHaveCount(0);
 
   // 新建 → 考试 / 日程

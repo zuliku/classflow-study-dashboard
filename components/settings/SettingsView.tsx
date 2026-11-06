@@ -82,6 +82,8 @@ export function SettingsView({
   const [section, setSection] = useState<SettingsSection>("general");
   const viewRootRef = useRef<HTMLDivElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
+  /** Mobile section tabs：active section 变化时滚入可视区（深链/搜索跳转后不留在旧位置） */
+  const mobileTabRefs = useRef<Map<SettingsSection, HTMLButtonElement>>(new Map());
 
   // 稳定的 per-section dirty 上报回调：Profile/Semester 的 dirty effect 以 onDirtyChange 为依赖，
   // inline 箭头会在每次 render 时产生新引用并重触发上报链（Maximum update depth）。
@@ -194,6 +196,21 @@ export function SettingsView({
     if (pendingTargetRef.current) return;
     detailRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [section, searching]);
+
+  // Mobile tabs：section 变化时把 active tab 滚入可视区（搜索跳转/深链后不留在旧位置）。
+  // 手动调整 strip.scrollLeft，避免 scrollIntoView 连带滚动 Modal/详情区。
+  useLayoutEffect(() => {
+    const el = mobileTabRefs.current.get(section);
+    const strip = el?.parentElement;
+    if (!el || !strip) return;
+    const er = el.getBoundingClientRect();
+    const sr = strip.getBoundingClientRect();
+    if (er.left < sr.left) {
+      strip.scrollLeft -= sr.left - er.left + 8;
+    } else if (er.right > sr.right) {
+      strip.scrollLeft += er.right - sr.right + 8;
+    }
+  }, [section]);
 
   // 开发期自动校验：Registry ID ↔ 真实 DOM（全部 section 常驻挂载，一次校验全量；只查 Settings 根）
   React.useEffect(() => {
@@ -312,10 +329,14 @@ export function SettingsView({
             return (
               <button
                 key={item.id}
+                ref={(el) => {
+                  if (el) mobileTabRefs.current.set(item.id, el);
+                  else mobileTabRefs.current.delete(item.id);
+                }}
                 onClick={() => setSection(item.id)}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-[var(--motion-fast)]",
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap transition-[background-color,color,box-shadow] duration-[var(--motion-fast)] active:opacity-80",
                   isActive
                     ? "bg-pastel-mint text-charcoal font-semibold"
                     : "text-satin-grey hover:bg-alabaster"

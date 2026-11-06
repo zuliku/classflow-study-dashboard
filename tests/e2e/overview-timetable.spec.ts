@@ -220,3 +220,11 @@ test("1280/1024 时间表：compact 卡优先显示完整课程名与教师名",
     expect(await withLocation.getAttribute("title")).toContain("教二 201");
   }
 });
+
+test("键盘：课程卡可聚焦并用 Enter 打开课程详情", async ({ page }) => {
+  await openOverview(page, 1440, 900);
+  const card = page.getByTestId("schedule-card").filter({ hasText: "微观经济学" }).first();
+  await card.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("course-detail-panel")).toBeVisible({ timeout: 8000 });
+});

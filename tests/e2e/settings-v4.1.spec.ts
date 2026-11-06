@@ -135,7 +135,7 @@ test("条件搜索：高级设置披露自动展开 →「扫描 PDF 识别」�
 
 // ==================== 3. 脏草稿保护 ====================
 
-test("脏草稿（Profile）：X 关闭需确认；取消保留草稿；确认后丢弃", async ({ page }) => {
+test("脏草稿（Profile）：X / backdrop 关闭需确认；取消保留草稿；确认后丢弃", async ({ page }) => {
   await openSettings(page);
   await page
     .getByRole("navigation", { name: "设置导航" })
@@ -143,6 +143,13 @@ test("脏草稿（Profile）：X 关闭需确认；取消保留草稿；确认�
     .click();
   const nameInput = page.getByTestId("settings-profile").getByLabel("姓名");
   await nameInput.fill("未保存的名字");
+
+  // backdrop → 统一 requestClose（脏状态同样弹确认，而不是静默无响应）
+  await page.mouse.click(10, 300);
+  await expect(page.getByRole("alertdialog", { name: "放弃未保存的更改？" })).toBeVisible();
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
+  await expect(nameInput).toHaveValue("未保存的名字");
 
   // X → 确认对话框
   await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "关闭", exact: true }).click();
@@ -166,7 +173,7 @@ test("脏草稿（Profile）：X 关闭需确认；取消保留草稿；确认�
   await expect(page.getByTestId("settings-profile").getByLabel("姓名")).not.toHaveValue("未保存的名字");
 });
 
-test("脏草稿（Profile）：Esc 关闭需确认；backdrop 关闭被禁用", async ({ page }) => {
+test("脏草稿（Profile）：Esc 关闭需确认", async ({ page }) => {
   await openSettings(page);
   await page
     .getByRole("navigation", { name: "设置导航" })
@@ -175,12 +182,7 @@ test("脏草稿（Profile）：Esc 关闭需确认；backdrop 关闭被禁用", 
   const nameInput = page.getByTestId("settings-profile").getByLabel("姓名");
   await nameInput.fill("Esc 草稿");
 
-  // backdrop 点击：脏状态下不关闭
-  await page.mouse.click(8, 8);
-  await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
-  await expect(nameInput).toHaveValue("Esc 草稿");
-
-  // Esc → 确认对话框（脏）；先回到输入框，避免 backdrop 点击后焦点落在页面外
+  // Esc → 确认对话框（脏）
   await nameInput.focus();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("alertdialog", { name: "放弃未保存的更改？" })).toBeVisible();
@@ -203,9 +205,12 @@ test("脏草稿（Semester）：X / backdrop 需确认；保存后清除脏状�
   const nameInput = page.getByTestId("settings-semester").getByLabel("学期名称");
   await nameInput.fill("修改后的学期名");
 
-  // backdrop 不关闭
-  await page.mouse.click(8, 8);
+  // backdrop → 确认（脏状态不静默关闭）
+  await page.mouse.click(10, 300);
+  await expect(page.getByRole("alertdialog", { name: "放弃未保存的更改？" })).toBeVisible();
+  await page.getByRole("button", { name: "取消", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
+  await expect(nameInput).toHaveValue("修改后的学期名");
   // X → 确认 → 取消 → 仍打开
   await page.getByRole("dialog", { name: "设置" }).getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("alertdialog", { name: "放弃未保存的更改？" })).toBeVisible();
@@ -462,4 +467,22 @@ test("smoke：桌面设置可开合、导航可用；移动端搜索与 tabs 可
     () => document.documentElement.scrollWidth > window.innerWidth + 1
   );
   expect(overflow).toBe(false);
+});
+
+test("学期编辑：非法值仍显示保存/放弃，状态提示先修正错误", async ({ page }) => {
+  await openSettings(page);
+  await page
+    .getByRole("navigation", { name: "设置导航" })
+    .getByRole("button", { name: "学期与课表" })
+    .click();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  const semester = page.getByTestId("settings-semester");
+  await semester.getByLabel("学期名称").fill("");
+
+  await expect(semester.getByTestId("settings-save-status")).toContainText("请先修正错误");
+  const save = semester.getByRole("button", { name: "保存", exact: true });
+  await expect(save).toBeVisible();
+  await expect(semester.getByRole("button", { name: "放弃更改" })).toBeVisible();
+  await save.click();
+  await expect(semester.getByText("学期名称不能为空", { exact: true })).toBeVisible();
 });

@@ -21,7 +21,7 @@ export function Checkbox({ checked, onChange, label, className, ...props }: Chec
   return (
     <label
       className={cn(
-        "relative inline-flex items-center gap-1.5 select-none",
+        "relative inline-flex items-center gap-1.5 select-none p-1 -m-1",
         props.disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
         className
       )}
@@ -46,7 +46,7 @@ export function Checkbox({ checked, onChange, label, className, ...props }: Chec
         {/* Check glyph：极轻 opacity + scale reveal（box 本身不缩放，避免列表布局跳动） */}
         <Check
           className={cn(
-            "h-3 w-3 transition-[opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+            "h-3 w-3 transition-[opacity,transform] duration-[var(--motion-fast)] ease-[var(--ease-selection)]",
             checked ? "opacity-100 scale-100" : "opacity-0 scale-[0.85]"
           )}
           strokeWidth={3}

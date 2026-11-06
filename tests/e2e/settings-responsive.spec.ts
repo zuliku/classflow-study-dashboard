@@ -98,3 +98,33 @@ test("mobile 390：通用页启动位置分段控件可用且无溢出", async (
   await group.getByRole("button", { name: "课表" }).click();
   await expect(group.getByRole("button", { name: "课表" })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("mobile 390：搜索跳转到 Kiro 后 active section tab 自动滚入可视区", async ({ page }) => {
+  await openSettingsAt(page, 390, 844);
+  await page.getByRole("textbox", { name: "搜索设置" }).fill("记忆");
+  const result = page.getByTestId("settings-search-results").getByRole("button").first();
+  await expect(result).toBeVisible();
+  await result.click();
+  await page.waitForTimeout(300);
+
+  const info = await page.evaluate(() => {
+    const view = document.querySelector('[data-testid="settings-view"]') as HTMLElement | null;
+    const strip = view?.querySelector("div.md\\:hidden .overflow-x-auto") as HTMLElement | null;
+    const active = strip?.querySelector('[aria-current="page"]') as HTMLElement | null;
+    if (!strip || !active) return null;
+    const ar = active.getBoundingClientRect();
+    const sr = strip.getBoundingClientRect();
+    return {
+      label: active.textContent,
+      activeLeft: ar.left,
+      activeRight: ar.right,
+      stripLeft: sr.left,
+      stripRight: sr.right,
+    };
+  });
+
+  expect(info).not.toBeNull();
+  expect(info!.label).toContain("Kiro");
+  expect(info!.activeLeft).toBeGreaterThanOrEqual(info!.stripLeft - 1);
+  expect(info!.activeRight).toBeLessThanOrEqual(info!.stripRight + 1);
+});

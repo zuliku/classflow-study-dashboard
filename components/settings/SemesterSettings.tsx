@@ -63,13 +63,12 @@ export function SemesterSettings({
   const hasErrors = !nameValid || !dateValid || !weeksValid;
   const previewEnd = dateValid ? getSemesterEndDate(startDate, weeksValid ? totalWeeks : 0) : null;
 
-  const dirty =
-    !hasErrors && (name !== semester.name || startDate !== semester.startDate || totalWeeks !== semester.totalWeeks);
   // 编辑期间存在任何未保存改动（含非法输入：关闭确认同样保护草稿不丢失）
   const editingDraft = editing && (name !== semester.name || startDate !== semester.startDate || totalWeeks !== semester.totalWeeks);
 
-  // 脏状态上报（V4.1：Modal 据此决定是否要求显式放弃确认）
-  React.useEffect(() => {
+  // 脏状态上报（V4.1：Modal 据此决定是否要求显式放弃确认）。
+  // Layout effect：输入后立即点遮罩/关闭时必须读到本帧 dirty，否则会静默丢弃草稿。
+  React.useLayoutEffect(() => {
     onDirtyChange?.(editingDraft);
   }, [editingDraft, onDirtyChange]);
 
@@ -213,7 +212,7 @@ export function SemesterSettings({
         </SettingsSection>
       )}
 
-      {editing && <SettingsSaveBar dirty={dirty} onSave={save} onDiscard={discard} />}
+      {editing && <SettingsSaveBar dirty={editingDraft} valid={!hasErrors} onSave={save} onDiscard={discard} />}
 
       {/* 课表显示偏好：显示周末（属于学期与课表范围） */}
       <SettingsSection title="课表显示">

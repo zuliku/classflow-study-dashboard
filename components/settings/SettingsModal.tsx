@@ -28,8 +28,6 @@ export function SettingsModal() {
   const [dirtySections, setDirtySections] = useState<ReadonlySet<SettingsSection>>(new Set());
   const [discardToken, setDiscardToken] = useState(0);
 
-  const isDirty = dirtySections.size > 0;
-
   const handleDirtyChange = useCallback((section: SettingsSection, dirty: boolean) => {
     setDirtySections((prev) => {
       // 无变化时返回原引用：section 以 inline 回调上报（如 ProfileSettings 的
@@ -106,11 +104,12 @@ export function SettingsModal() {
     <Dialog
       open={isOpen}
       onOpenChange={(next) => {
-        if (!next) setSettingsModalOpen(false);
+        if (!next) requestClose();
       }}
       overlayId="settings-modal"
       stackZ={50}
-      closeOnBackdrop={!isDirty}
+      closeOnBackdrop
+      initialFocusRef={searchInputRef}
       trapFocus
       onEscapeKeyDown={(event) => {
         // 搜索框有 query 时：第一次 Esc 只清空搜索，不关闭 Modal

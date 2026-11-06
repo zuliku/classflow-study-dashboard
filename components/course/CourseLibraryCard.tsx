@@ -232,7 +232,7 @@ export function CourseLibraryCard({
                 onClick={() => onOpenAssignment(row.id)}
                 className={cn(
                   "group/task flex w-full items-center justify-between gap-2 text-left",
-                  "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                  "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] active:opacity-70",
                   PREVIEW_ROW_HEIGHT
                 )}
               >
@@ -310,7 +310,7 @@ export function CourseLibraryCard({
                 onClick={() => onPreviewMaterial(m)}
                 className={cn(
                   "group/mat flex w-full items-center gap-2 text-left",
-                  "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
+                  "transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] active:opacity-70",
                   PREVIEW_ROW_HEIGHT,
                   newMaterialIds.has(m.id) && "animate-enter"
                 )}

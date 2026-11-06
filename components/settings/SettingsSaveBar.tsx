@@ -7,27 +7,28 @@ import { cn } from "@/lib/utils";
 
 interface SettingsSaveBarProps {
   dirty: boolean;
+  /** 有改动但字段非法：仍显示放弃/保存，状态明确提示先修正 */
+  valid?: boolean;
   onSave: () => void;
   onDiscard: () => void;
   saving?: boolean;
 }
 
 /** Profile / Semester 的保存体验：无变化显示"已保存"，有变化显示放弃/保存 */
-export function SettingsSaveBar({ dirty, onSave, onDiscard, saving = false }: SettingsSaveBarProps) {
+export function SettingsSaveBar({ dirty, valid = true, onSave, onDiscard, saving = false }: SettingsSaveBarProps) {
   return (
     <div className="flex items-center justify-between pt-1 border-t border-line-soft">
       <span
         className={cn(
           "text-[11px] font-medium",
-          dirty ? "text-warning" : "text-sandrift"
+          dirty ? (valid ? "text-warning" : "text-danger") : "text-sandrift"
         )}
         data-testid="settings-save-status"
       >
-        {dirty ? "有未保存的更改" : "已保存"}
+        {dirty ? (valid ? "有未保存的更改" : "请先修正错误") : "已保存"}
       </span>
-      {/* 脏按钮组进退场走横向折叠（此前输入即 dirty 瞬间弹出，右侧宽度突变） */}
+      {/* 脏按钮组始终挂载：dirty 变化只切换折叠，不先卸载内容（否则退出折叠的是空盒） */}
       <ExitCollapse exiting={!dirty} axis="horizontal" className="shrink-0">
-        {dirty && (
         <div className="flex items-center gap-2">
           <button
             onClick={onDiscard}
@@ -45,7 +46,6 @@ export function SettingsSaveBar({ dirty, onSave, onDiscard, saving = false }: Se
             保存
           </button>
         </div>
-        )}
       </ExitCollapse>
     </div>
   );
