@@ -4,6 +4,7 @@
 > 日期：2026-11-06
 > 适用范围：Today / Plan / Tasks / Courses / Review / Kiro 的任务事实层
 > 关联文档：`docs/task-v2-contract.md`、`docs/learning-analytics-v2.md`、`docs/learning-history-v1.md`、`docs/ui-product-system-v1.md`、`docs/motion-system-v6.md`
+> 下游文档：`docs/superpowers/plans/2026-11-06-today-plan-interaction-spec.md`、`docs/superpowers/plans/2026-11-06-phase-0-2-engineering-breakdown.md`
 
 ---
 
@@ -930,7 +931,8 @@ export interface CalendarMark {
 
 ### 8.2 持久化版本
 
-- `useAppStore` persist version：`8 → 9`。
+- **`useAppStore` persist version 保持 8**；新增 `TASK_MODEL_VERSION = 2` 作为 Domain 语义版本（写入 backup manifest / debug，不参与 Zustand 的拒载判断）。
+- 原因：Phase 0 的新字段全部 optional/additive；保持 persist v8 可以让 beta 回滚到旧构建。旧构建会忽略新字段，新构建每次 hydrate 都会重新归一化。若未来需要破坏性迁移（例如删除 `progress`、改变 status 枚举），再 bump persist version。
 - `PersistedAppState` 不变（新字段随 `Assignment` / `StudyBlock` / `Reminder` 自动进入）。
 - `normalizeAssignment` 增加：
   - `doDate` 校验（真实日期、`YYYY-MM-DD`）。
@@ -942,14 +944,14 @@ export interface CalendarMark {
 - `normalizeReminder` 接受 `"cancelled"`；旧 status 保持不变。
 - `normalizeHydratedStudyBlock` 清洗 provenance；旧 released 数据补 `releasedBy: "legacy"`（不补 `releasedAt`）。
 - `sanitizePersistedState` 继续在 hydrate 时运行 `reconcileTerminalAssignmentStudyBlocks`，但 release 时写 provenance。
-- `migrate`：v8 → v9 是 additive；不做破坏性状态转换。
+- `migrate`：保持 version 8；不新增破坏性迁移。旧 v8 数据直接经 `sanitizePersistedState` 归一化为 Task Model V2；不做破坏性状态转换。
   - 旧 submitted/completed 任务保持原状态。
   - 旧 `progress` 保留。
   - 旧 completed/submitted 时间戳保持 undefined（不伪造）。
   - 旧 `submissionRequired` 默认 false。
   - 旧 `doDate` undefined。
   - 旧 released blocks 标记 legacy。
-- 未来版本降级保护保持：version > 9 拒载。
+- 未来版本降级保护保持：version > 8 拒载；Phase 0 不 bump persist version。
 
 ### 8.3 备份版本
 
@@ -967,7 +969,7 @@ export type BackupScope =
   | "kiro";
 
 export interface BackupManifest {
-  schemaVersion: 9;
+  modelVersion: 2;
   createdAt: string;
   included: BackupScope[];
   excluded: BackupScope[];
@@ -1322,7 +1324,8 @@ Phase 0 必须：
 
 ### H. 数据与备份
 
-31. v8 → v9 迁移：
+31. v8 数据 hydrate 到 Task Model V2：
+    - 不 bump persist version；旧构建仍可打开；
     - 旧任务状态不变；
     - 旧 progress 保留但不显示；
     - 旧 submitted/completed 时间戳保持 undefined；
@@ -1439,7 +1442,7 @@ Phase 0 必须：
   - `updateAssignment`：内部使用，拒绝 lifecycle 字段。
   - `updateAssignmentPatch`：拒绝 lifecycle 字段；closed 任务限制 DDL/estimate/course。
 - terminal 事务统一走 `transitionTask`；`addAssignment` / recurrence spawn 不直接写 completed。
-- `persist` version 9；`migrate` additive。
+- `persist` version 保持 8；`TASK_MODEL_VERSION = 2`；`sanitizePersistedState` additive 归一化。
 - `restoreAppData` 增加 `replaceLearningHistory` 参数。
 - `deleteCourse` 级联规则修正。
 
@@ -1620,15 +1623,24 @@ Phase 0 必须：
 
 ---
 
-## 14. 下一步
+## 14. 后续文档与下一步
 
-1. 评审本契约，确认没有遗漏的 Domain 语义。
-2. 基于本契约写 `Today + Plan Interaction Spec`：
+已交付：
+
+1. `docs/superpowers/plans/2026-11-06-today-plan-interaction-spec.md`
    - 桌面 / 平板 / 移动端布局；
    - Today 首屏分组；
    - Plan 三栏（Backlog / Calendar / Inspector）；
    - 空态 / 加载 / 错误；
    - 键盘 / 动效 / 可访问性；
    - 组件树与状态所有权。
-3. 输出 Phase 0–2 工程拆解与迁移清单。
-4. 进入实现前，先补 Phase 0 的单元测试骨架与迁移 fixture。
+2. `docs/superpowers/plans/2026-11-06-phase-0-2-engineering-breakdown.md`
+   - 工作包、依赖图、文件级变更；
+   - 测试门禁、灰度、回滚；
+   - 14–15 周交付计划。
+
+下一步：
+
+1. 评审三份文档，冻结 Phase 0 范围。
+2. 先补 Phase 0 的单元测试骨架与迁移 fixture。
+3. 从 P0-01（types + normalize）开始实现，不先动 Today/Plan 视觉。

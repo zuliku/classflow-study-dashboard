@@ -1974,17 +1974,23 @@ Plan：
 
 ---
 
-## 13. 下一步
+## 13. 后续文档与下一步
+
+已交付：
+
+- `docs/superpowers/plans/2026-11-06-phase-0-2-engineering-breakdown.md`
+  - 文件级改造清单；
+  - 组件迁移顺序；
+  - 测试矩阵；
+  - Feature flag / 灰度 / 回滚；
+  - 14–15 周工期估算。
+
+下一步：
 
 1. 评审本规格，确认布局断点、Today 首屏顺序、Plan 三列策略。
-2. 输出 **Phase 0–2 工程拆解**：
-   - 文件级改造清单；
-   - 组件迁移顺序；
-   - 测试矩阵；
-   - Feature flag / 灰度 / 回滚；
-   - 工期估算。
-3. 进入实现前，先做：
+2. 进入实现前，先做：
    - Today 静态骨架（真实数据、无交互）；
-   - Plan Canvas 扩展验证（timeRange/hourHeight/deadline layer）；
+   - Plan Canvas 扩展 spike（timeRange/hourHeight/deadline layer）；
    - 拖拽性能 spike；
    - 移动端 Agenda 骨架。
+3. 按工程拆解从 P0-01 开始，不先做视觉换皮。
