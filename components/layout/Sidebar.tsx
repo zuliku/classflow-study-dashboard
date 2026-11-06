@@ -7,6 +7,7 @@ import { useUIChromeStore } from "@/store/useUIChromeStore";
 import { useReminderCenterStore } from "@/store/useReminderCenterStore";
 import { hasUnreadFiredReminders } from "@/lib/reminders/reminderCenterView";
 import { useEffectiveReducedMotion } from "@/hooks/useEffectiveReducedMotion";
+import { MOTION_MS } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import {
   MAIN_NAV_ITEMS,
@@ -90,6 +91,25 @@ export function Sidebar() {
   const [motionDirection, setMotionDirection] = useState<"collapse" | "expand" | null>(null);
   // ref 供 ResizeObserver 回调读取（回调闭包捕获旧 state 会失效）
   const motionActiveRef = useRef(false);
+  /** transitionend 兜底：极快连续 toggle 可能合并掉 width 过渡（不派发 transitionend），
+      用 panel 档 + 少量余量落 idle，避免 data-motion-active 永久卡 true。 */
+  const motionSettleTimerRef = useRef<number | null>(null);
+  const clearMotionSettleTimer = () => {
+    if (motionSettleTimerRef.current !== null) {
+      window.clearTimeout(motionSettleTimerRef.current);
+      motionSettleTimerRef.current = null;
+    }
+  };
+  function settleMotion() {
+    clearMotionSettleTimer();
+    if (pendingCollapsedRef.current !== null) {
+      setPersistedCollapsed(pendingCollapsedRef.current);
+      pendingCollapsedRef.current = null;
+    }
+    motionActiveRef.current = false;
+    setMotionActive(false);
+    setMotionDirection(null);
+  }
 
   const toggleCollapsed = () => {
     if (!isXl) return;
@@ -97,6 +117,7 @@ export function Sidebar() {
     pendingCollapsedRef.current = next;
     if (reducedMotion) {
       // Reduced Motion：瞬时落位 + 立即持久化
+      clearMotionSettleTimer();
       setVisualCollapsed(next);
       setPersistedCollapsed(next);
       pendingCollapsedRef.current = null;
@@ -110,22 +131,21 @@ export function Sidebar() {
     setMotionActive(true);
     setMotionDirection(next ? "collapse" : "expand");
     setVisualCollapsed(next);
+    clearMotionSettleTimer();
+    motionSettleTimerRef.current = window.setTimeout(settleMotion, MOTION_MS.panel + 200);
   };
 
   const handleShellTransitionEnd = (e: React.TransitionEvent<HTMLElement>) => {
     // 只认 Sidebar width 段：动画完成 → 回落 idle（CSS transition 可直接从当前位置反向，无 timer queue）
     // 且仅在 width transitionend 持久化 pending 值（single completion，无 timer 双触发）
     if (e.propertyName !== "width") return;
-    if (pendingCollapsedRef.current !== null) {
-      setPersistedCollapsed(pendingCollapsedRef.current);
-      pendingCollapsedRef.current = null;
-    }
-    motionActiveRef.current = false;
-    setMotionActive(false);
-    setMotionDirection(null);
+    settleMotion();
     // motion 结束后做一次最终 plate 校正（motionActive 期间冻结了 RO measure）
     requestAnimationFrame(() => measurePlate());
   };
+
+  // 卸载：清理未触发的兜底 timer
+  useEffect(() => () => clearMotionSettleTimer(), []);
 
   // ---- 共享 Navigation Active Plate（IM1）：MAIN_NAV 唯一 selection surface ----
   // 仅 transform/opacity 动画（无 top/margin/layout reflow）；首次加载直接定位不播放动画。

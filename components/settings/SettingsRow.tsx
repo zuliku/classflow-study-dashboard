@@ -15,6 +15,8 @@ interface SettingsRowProps {
   resetAriaLabel?: string;
   /** 高亮（搜索跳转短暂闪烁） */
   highlighted?: boolean;
+  /** 追加布局类（如被 Disclosure 包裹时显式保留分隔线） */
+  className?: string;
   children: React.ReactNode;
 }
 
@@ -29,6 +31,7 @@ export function SettingsRow({
   onReset,
   resetAriaLabel,
   highlighted = false,
+  className,
   children,
 }: SettingsRowProps) {
   return (
@@ -37,6 +40,7 @@ export function SettingsRow({
       className={[
         "flex flex-wrap items-center gap-x-4 gap-y-2 min-h-[62px] py-3 border-b border-line-soft last:border-b-0 transition-colors duration-[var(--motion-fast)]",
         highlighted ? "bg-pastel-mint/60" : "",
+        className ?? "",
       ].join(" ")}
     >
       <div className="min-w-[180px] flex-1 basis-[200px]">

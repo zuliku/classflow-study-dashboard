@@ -17,9 +17,9 @@ const DOCK_WIDTH = "w-[clamp(360px,25vw,480px)]";
  * - 仅在 2xl+ 由 GroupCollaborationView 渲染（窄屏仍走既有 Sidecar）；
  * - 面板自身不拥有 handoff / 会话切换逻辑，避免与 Sidecar 争夺会话所有权。
  *
- * Motion：宽度使用同一外层 wrapper 做 0 ↔ 目标宽度过渡（detail 同步 reflow），
- * 内层固定宽度以避免动画期间文字重排；opacity + 8px 位移由 presence 驱动。
- * 退出使用 --motion-exit-panel / --ease-exit，进入使用 --motion-panel / --ease-spring。
+ * Motion：外层宽度不做过渡——宽度是布局属性，0↔目标宽度的 260ms 过渡会让整行
+ * 成员/任务逐帧重排。打开时立即占位（一次 layout），内层用 opacity + 8px 位移完成
+ * 揭示/收起；退出期间保持占位，presence 卸载时一次收回，避免逐帧 reflow。
  */
 export function GroupKiroPanel({
   open,
@@ -40,10 +40,8 @@ export function GroupKiroPanel({
       data-state={visible ? "open" : "closed"}
       aria-hidden={!visible}
       className={cn(
-        "group-kiro-dock sticky top-20 ml-auto hidden h-[calc(100vh-120px)] shrink-0 self-start overflow-hidden transition-[width] 2xl:block",
-        visible
-          ? cn(DOCK_WIDTH, "duration-[var(--motion-panel)] ease-[var(--ease-spatial)]")
-          : "w-0 duration-[var(--motion-exit-panel)] ease-[var(--ease-exit)]"
+        "group-kiro-dock sticky top-20 ml-auto hidden h-[calc(100vh-120px)] shrink-0 self-start overflow-hidden 2xl:block",
+        DOCK_WIDTH
       )}
     >
       <aside

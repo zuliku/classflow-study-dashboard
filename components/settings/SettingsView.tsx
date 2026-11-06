@@ -194,7 +194,11 @@ export function SettingsView({
   // 搜索跳转有 pendingTarget，交给后面的 scrollIntoView 处理，不能抢先归零。
   useLayoutEffect(() => {
     if (pendingTargetRef.current) return;
-    detailRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    const detail = detailRef.current;
+    // jsdom 无 Element.scrollTo；真实浏览器有。
+    if (detail && typeof detail.scrollTo === "function") {
+      detail.scrollTo({ top: 0, behavior: "auto" });
+    }
   }, [section, searching]);
 
   // Mobile tabs：section 变化时把 active tab 滚入可视区（搜索跳转/深链后不留在旧位置）。

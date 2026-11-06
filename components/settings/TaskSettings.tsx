@@ -8,6 +8,7 @@ import { SettingsGroup } from "@/components/settings/SettingsGroup";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsToggle, SettingsSelect, SettingsSegmentedControl, SettingsInput, SettingsButton } from "@/components/settings/SettingsControls";
 import { SettingsSlider } from "@/components/settings/SettingsSlider";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { DDL_WARNING_DAYS, TASK_PRIORITIES, TASK_STATUSES, DEADLINE_REMINDER_MINUTES, DEADLINE_REMINDER_LABELS, DEFAULT_DEADLINE_REMINDER_MINUTES } from "@/lib/preferences";
 import { getModifiedPreferenceKeys, resetPreferencePatch } from "@/lib/preferences";
 import { PRIMARY_TASK_WORKSPACE_VIEWS } from "@/lib/tasks/taskViews";
@@ -293,7 +294,9 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
             />
           </SettingsRow>
 
-          {missedReminderPolicy === "recent-only" && (
+          {/* 条件行：补发时间范围。整行通过 Disclosure 展开，避免切换策略时下方行硬跳。
+              行被 Disclosure wrapper 包裹后不再是 group 的 last-child，显式保留分隔线。 */}
+          <DisclosureRegion open={missedReminderPolicy === "recent-only"} id="missed-reminder-window-disclosure">
             <SettingsRow
               settingId="missed-reminder-window"
               title="补发时间范围"
@@ -302,6 +305,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
               onReset={() => resetReminderPreference("missedReminderWindowHours")}
               resetAriaLabel="将补发时间范围恢复默认"
               highlighted={highlightedId === "missed-reminder-window"}
+              className="!border-b"
             >
               <SettingsSegmentedControl<MissedReminderWindowHours>
                 value={missedReminderWindowHours}
@@ -314,7 +318,7 @@ export function TaskSettings({ highlightedId }: { highlightedId?: string }) {
                 ]}
               />
             </SettingsRow>
-          )}
+          </DisclosureRegion>
 
           <SettingsRow settingId="reminder-sound" title="提醒声音" modified={reminderModified.has("reminderSoundEnabled")} onReset={() => resetReminderPreference("reminderSoundEnabled")} resetAriaLabel="将提醒声音恢复默认" highlighted={highlightedId === "reminder-sound"}>
             <SettingsToggle checked={reminderSoundEnabled} onChange={setReminderSoundEnabled} label="提醒声音" />

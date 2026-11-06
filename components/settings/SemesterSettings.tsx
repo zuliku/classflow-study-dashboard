@@ -10,6 +10,7 @@ import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 import { SettingsInput, SettingsToggle } from "@/components/settings/SettingsControls";
 import { Button } from "@/components/ui/Button";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { getModifiedPreferenceKeys } from "@/lib/preferences";
 import { getCurrentSemesterWeek, getSemesterEndDate } from "@/lib/semester";
 
@@ -150,69 +151,73 @@ export function SemesterSettings({
         </div>
       </SettingsSection>
 
-      {editing && (
-        <SettingsSection title="编辑学期">
-          <div className="space-y-4 text-xs">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label htmlFor="settings-semester-name" className="font-bold text-sandrift">学期名称</label>
-                <SettingsInput
-                  id="settings-semester-name"
-                  value={name}
-                  onChange={setName}
-                  error={touched && !!errors.name}
-                />
-                {touched && errors.name && <p className="text-[10px] text-danger font-bold">{errors.name}</p>}
+      {/* 编辑态作为一个整体展开/收起：表单与保存栏同进退，避免插入/移除造成整页跳动。
+          关闭后 presence 延迟卸载，退出折叠期间内容保持 inert。 */}
+      <DisclosureRegion open={editing} id="semester-edit-disclosure">
+        <div className="space-y-6">
+          <SettingsSection title="编辑学期">
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label htmlFor="settings-semester-name" className="font-bold text-sandrift">学期名称</label>
+                  <SettingsInput
+                    id="settings-semester-name"
+                    value={name}
+                    onChange={setName}
+                    error={touched && !!errors.name}
+                  />
+                  {touched && errors.name && <p className="text-[10px] text-danger font-bold">{errors.name}</p>}
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="settings-semester-start" className="font-bold text-sandrift">第一周开始日期</label>
+                  <SettingsInput
+                    id="settings-semester-start"
+                    type="date"
+                    value={startDate}
+                    onChange={setStartDate}
+                    error={touched && !!errors.startDate}
+                    mono
+                  />
+                  {touched && errors.startDate && <p className="text-[10px] text-danger font-bold">{errors.startDate}</p>}
+                  <p className="text-[10px] text-sandrift">周一为学期第 1 周起始日</p>
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="settings-semester-weeks" className="font-bold text-sandrift">总教学周数</label>
+                  <SettingsInput
+                    id="settings-semester-weeks"
+                    type="number"
+                    min={1}
+                    value={totalWeeks}
+                    onChange={(v) => setTotalWeeks(Number(v))}
+                    error={touched && !!errors.totalWeeks}
+                  />
+                  {touched && errors.totalWeeks && (
+                    <p className="text-[10px] text-danger font-bold">{errors.totalWeeks}</p>
+                  )}
+                </div>
               </div>
-              <div className="space-y-1">
-                <label htmlFor="settings-semester-start" className="font-bold text-sandrift">第一周开始日期</label>
-                <SettingsInput
-                  id="settings-semester-start"
-                  type="date"
-                  value={startDate}
-                  onChange={setStartDate}
-                  error={touched && !!errors.startDate}
-                  mono
-                />
-                {touched && errors.startDate && <p className="text-[10px] text-danger font-bold">{errors.startDate}</p>}
-                <p className="text-[10px] text-sandrift">周一为学期第 1 周起始日</p>
-              </div>
-              <div className="space-y-1">
-                <label htmlFor="settings-semester-weeks" className="font-bold text-sandrift">总教学周数</label>
-                <SettingsInput
-                  id="settings-semester-weeks"
-                  type="number"
-                  min={1}
-                  value={totalWeeks}
-                  onChange={(v) => setTotalWeeks(Number(v))}
-                  error={touched && !!errors.totalWeeks}
-                />
-                {touched && errors.totalWeeks && (
-                  <p className="text-[10px] text-danger font-bold">{errors.totalWeeks}</p>
-                )}
-              </div>
+
+              {/* 修改后即时预览（本地 form state 推导） */}
+              {(name !== semester.name || startDate !== semester.startDate || totalWeeks !== semester.totalWeeks) && (
+                <div className="p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-[11px]" data-testid="semester-preview">
+                  <p className="font-bold text-charcoal">修改后：</p>
+                  <p className="text-satin-grey">
+                    {dateValid ? `${format(new Date(startDate), "yyyy年M月d日", { locale: zhCN })}开始` : "日期无效"}
+                  </p>
+                  <p className="text-satin-grey">{weeksValid ? `${totalWeeks} 个教学周` : "周数无效"}</p>
+                  <p className="text-satin-grey">
+                    {previewEnd && weeksValid
+                      ? `预计于 ${format(previewEnd, "yyyy年M月d日", { locale: zhCN })}结束`
+                      : "预计结束日期暂不可用"}
+                  </p>
+                </div>
+              )}
             </div>
+          </SettingsSection>
 
-            {/* 修改后即时预览（本地 form state 推导） */}
-            {(name !== semester.name || startDate !== semester.startDate || totalWeeks !== semester.totalWeeks) && (
-              <div className="p-3 bg-pastel-mint/60 border border-line rounded-xl space-y-0.5 text-[11px]" data-testid="semester-preview">
-                <p className="font-bold text-charcoal">修改后：</p>
-                <p className="text-satin-grey">
-                  {dateValid ? `${format(new Date(startDate), "yyyy年M月d日", { locale: zhCN })}开始` : "日期无效"}
-                </p>
-                <p className="text-satin-grey">{weeksValid ? `${totalWeeks} 个教学周` : "周数无效"}</p>
-                <p className="text-satin-grey">
-                  {previewEnd && weeksValid
-                    ? `预计于 ${format(previewEnd, "yyyy年M月d日", { locale: zhCN })}结束`
-                    : "预计结束日期暂不可用"}
-                </p>
-              </div>
-            )}
-          </div>
-        </SettingsSection>
-      )}
-
-      {editing && <SettingsSaveBar dirty={editingDraft} valid={!hasErrors} onSave={save} onDiscard={discard} />}
+          <SettingsSaveBar forceActions dirty={editingDraft} valid={!hasErrors} onSave={save} onDiscard={discard} />
+        </div>
+      </DisclosureRegion>
 
       {/* 课表显示偏好：显示周末（属于学期与课表范围） */}
       <SettingsSection title="课表显示">
@@ -304,34 +309,37 @@ function BellScheduleSettings({ highlightedId }: { highlightedId?: string }) {
           ))}
         </div>
       )}
-      {editingId ? (
-        <div className="p-3 bg-white border border-line rounded-xl space-y-3">
-          <SettingsInput value={draftName} onChange={setDraftName} placeholder="方案名称" ariaLabel="作息方案名称" />
-          <div className="space-y-1.5 max-h-40 overflow-y-auto">
-            {draftPeriods.map((p, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <span className="text-[11px] font-bold w-12 shrink-0">第{p.period}节</span>
-                <span className="w-[104px] shrink-0">
-                  <SettingsInput type="time" value={p.startTime} onChange={(v) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, startTime: v } : x))} ariaLabel={`第${p.period}节开始时间`} mono />
-                </span>
-                <span className="text-sandrift" aria-hidden="true">-</span>
-                <span className="w-[104px] shrink-0">
-                  <SettingsInput type="time" value={p.endTime} onChange={(v) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, endTime: v } : x))} ariaLabel={`第${p.period}节结束时间`} mono />
-                </span>
-                <Button variant="ghost" size="sm" onClick={() => setDraftPeriods((arr) => arr.filter((_, i) => i !== idx))} className="h-7 px-2 text-[11px] text-danger">移除</Button>
-              </div>
-            ))}
+      <div className="mt-3">
+        <DisclosureRegion open={!!editingId} id="bell-schedule-editor">
+          <div className="p-3 bg-white border border-line rounded-xl space-y-3">
+            <SettingsInput value={draftName} onChange={setDraftName} placeholder="方案名称" ariaLabel="作息方案名称" />
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {draftPeriods.map((p, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold w-12 shrink-0">第{p.period}节</span>
+                  <span className="w-[104px] shrink-0">
+                    <SettingsInput type="time" value={p.startTime} onChange={(v) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, startTime: v } : x))} ariaLabel={`第${p.period}节开始时间`} mono />
+                  </span>
+                  <span className="text-sandrift" aria-hidden="true">-</span>
+                  <span className="w-[104px] shrink-0">
+                    <SettingsInput type="time" value={p.endTime} onChange={(v) => setDraftPeriods((arr) => arr.map((x, i) => i === idx ? { ...x, endTime: v } : x))} ariaLabel={`第${p.period}节结束时间`} mono />
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={() => setDraftPeriods((arr) => arr.filter((_, i) => i !== idx))} className="h-7 px-2 text-[11px] text-danger">移除</Button>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setDraftPeriods((arr) => [...arr, { period: arr.length + 1, startTime: "10:00", endTime: "11:40" }])} className="h-7 text-[11px]">添加节次</Button>
+              <div className="flex-1" />
+              <Button variant="secondary" size="sm" onClick={() => setEditingId(null)}>取消</Button>
+              <Button variant="primary" size="sm" onClick={save}>保存</Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setDraftPeriods((arr) => [...arr, { period: arr.length + 1, startTime: "10:00", endTime: "11:40" }])} className="h-7 text-[11px]">添加节次</Button>
-            <div className="flex-1" />
-            <Button variant="secondary" size="sm" onClick={() => setEditingId(null)}>取消</Button>
-            <Button variant="primary" size="sm" onClick={save}>保存</Button>
-          </div>
-        </div>
-      ) : (
-        <Button variant="secondary" size="sm" onClick={startCreate} className="w-full border-dashed">+ 新建作息方案</Button>
-      )}
+        </DisclosureRegion>
+        <DisclosureRegion open={!editingId}>
+          <Button variant="secondary" size="sm" onClick={startCreate} className="w-full border-dashed">+ 新建作息方案</Button>
+        </DisclosureRegion>
+      </div>
     </div>
   );
 }

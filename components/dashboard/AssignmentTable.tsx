@@ -190,7 +190,9 @@ export function AssignmentTable({
     const row = list.querySelector<HTMLElement>(
       `[data-assignment-id="${highlightedAssignmentId}"]`
     );
-    row?.scrollIntoView({ block: "nearest" });
+    if (row && typeof row.scrollIntoView === "function") {
+      row.scrollIntoView({ block: "nearest" });
+    }
   }, [highlightedAssignmentId, isWorkspace]);
 
   // View / Course / Risk 切换回到列表顶部（不继承上一视图的滚动深度）
@@ -219,7 +221,11 @@ export function AssignmentTable({
   // View / Course / Risk 切换回到列表顶部（不继承上一视图的滚动深度）
   useEffect(() => {
     if (!isWorkspace) return;
-    listRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    const list = listRef.current;
+    // jsdom 无 Element.scrollTo；真实浏览器有。仅在有实现时执行。
+    if (list && typeof list.scrollTo === "function") {
+      list.scrollTo({ top: 0, behavior: "auto" });
+    }
   }, [contentTransitionKey, isWorkspace]);
 
   // IM4A：Exit-only 列表保留——仅真实数据 mutation（完成/删除导致离开当前视图）触发 Row 退出；

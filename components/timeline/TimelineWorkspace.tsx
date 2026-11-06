@@ -26,6 +26,7 @@ import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { IconButton } from "@/components/ui/IconButton";
 import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
 import { Popover } from "@/components/ui/Popover";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import {
   TimelineWorkspaceViewBar,
   TimelineFilterOption,
@@ -98,6 +99,9 @@ function overlapsSchedule(
   if (s === null || e === null || ss === null || se === null) return false;
   return s < se && ss < e;
 }
+
+/** StudyBlock 列表稳定 id（useExitPresenceList 依赖稳定 getter） */
+const getStudyBlockId = (block: StudyBlock): string => block.id;
 
 /** 紧凑时长格式（Timeline 卡片空间紧）：30m / 1h / 1h30m（禁止出现 1min 式错误） */
 function formatCompactMinutes(minutes: number): string {
@@ -276,6 +280,22 @@ export function TimelineWorkspace() {
     [weekDays]
   );
   const dayCount = preferences.showWeekends ? 7 : 5;
+
+  // StudyBlock 删除保留退出快照：Store 立即 mutation，视觉块在 190ms 内淡出后移除。
+  // 只作用于当前周；切周 resetKey 直接同步，避免旧周块集体退场。
+  const weekStudyBlockItems = useMemo(
+    () => studyBlocks.filter((b) => weekDates.includes(b.date)),
+    [studyBlocks, weekDates]
+  );
+  const retainedStudyBlocks = useExitPresenceList({
+    items: weekStudyBlockItems,
+    getId: getStudyBlockId,
+    resetKey: `timeline-week-${currentSemesterWeek}`,
+  });
+  const exitingStudyBlockIds = new Set(
+    retainedStudyBlocks.filter((entry) => entry.exiting).map((entry) => entry.item.id)
+  );
+  const renderStudyBlocks = retainedStudyBlocks.map((entry) => entry.item);
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const isCurrentWeek = todayStr >= weekDates[0] && todayStr <= weekDates[6];
 
@@ -699,7 +719,7 @@ export function TimelineWorkspace() {
     const date = weekDates[ctx.dayOfWeek - 1];
     // 只与「当前教学周真正生效」的课程比较（Task 7：effective occurrences 含一次性调课）
     const daySchedules = weekSchedules.filter((s) => s.dayOfWeek === ctx.dayOfWeek);
-    const dayBlocks = studyBlocks.filter((b) => b.date === date);
+    const dayBlocks = renderStudyBlocks.filter((b) => b.date === date);
     const dayStart = ctx.dayStartMinutes;
     const dayEnd = ctx.dayStartMinutes + ctx.totalMinutes;
     // Kiro Proposal Ghost：ephemeral 预览（防御性冲突检查 → 标记「计划已过期」而非压课程）
@@ -741,6 +761,7 @@ export function TimelineWorkspace() {
           // Workflow UX V15：released block——时间 reservation 已释放（不 drag / 不占容量），
           // 仍可查看、打开原任务、手动删除
           const isReleasedBlock = !isStudyBlockPlanningActive(b);
+          const isExiting = exitingStudyBlockIds.has(b.id);
           // Workflow UX V9：linked = assignmentId 存在且 Assignment 真实存在（stale 防御）。
           // linked → 主区域是真实 <button>（原生键盘语义）；standalone → 普通 div，不伪造任务语义。
           const linkedAssignment = b.assignmentId
@@ -825,6 +846,7 @@ export function TimelineWorkspace() {
             <div
               key={b.id}
               data-testid="timeline-study-block"
+              data-state={isExiting ? "exiting" : undefined}
               data-start-time={b.startTime}
               data-end-time={b.endTime}
               onPointerDown={(e) => {
@@ -856,10 +878,12 @@ export function TimelineWorkspace() {
               className={cn(
                 "absolute left-1 right-1 rounded-lg border border-dashed border-line bg-pastel-mint/20 flex items-center overflow-hidden group select-none",
                 denseBlock ? "px-1 py-0 gap-0.5" : "px-1.5 py-0.5 gap-1",
-                "transition-[opacity,border-color,background-color] duration-[var(--motion-fast)]",
+                "transition-[opacity,border-color,background-color] duration-[var(--motion-fast)] ease-[var(--ease-standard)]",
                  // Workflow UX V15：released 低侵入（弱化 + 低 z，允许与 active block 同屏不遮挡）
                  isReleasedBlock && "z-[1] opacity-55 bg-transparent",
                  !isReleasedBlock && "z-[2]",
+                 // 删除：保留 snapshot 播放 panel 档淡出后再卸载；退出期不可交互/读屏
+                 isExiting && "opacity-0 pointer-events-none !duration-[var(--motion-exit-panel)] !ease-[var(--ease-exit)]",
                  // Motion M5 Grab 态：source 只是 placeholder（~40%），geometry 冻结（原位置原尺寸）；
                  // 真实拖动对象由 Candidate Ghost 表达，无 scale/rotate/shadow lift
                  isDraggingThis && "opacity-40",
@@ -910,7 +934,7 @@ export function TimelineWorkspace() {
                     pushToast({ message: "已删除学习计划" });
                   }}
                   aria-label={`删除学习计划 ${b.title}`}
-                  className="relative z-[2] ml-auto p-0.5 rounded text-sandrift hover:text-danger transition-colors shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                  className="relative z-[2] ml-auto p-0.5 rounded text-sandrift hover:text-danger transition-[color,background-color,opacity] duration-[var(--motion-fast)] shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                 >
                   <X className="w-2.5 h-2.5" />
                 </button>

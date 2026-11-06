@@ -138,7 +138,7 @@ export function UISelect<T extends string | number>({
     setTriggerWidth(rect.width);
     setMenuLeft(rect.left);
     setViewportMaxWidth(Math.min(320, window.innerWidth - 16));
-    setMenuZ(Math.max(40, getTopOverlayZ()));
+    setMenuZ(Math.max(40, getTopOverlayZ() + 1));
     setSuppressRender(false);
     setQuery("");
     activeScrollRef.current = "keyboard";
