@@ -78,11 +78,13 @@ test("Persist 双向：collapse→reload→仍折叠；expand→reload→仍展�
 
   await page.getByTestId("sidebar-collapse-toggle").click();
   await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-collapsed", "true");
+  await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-motion-active", "false");
   await page.reload();
   await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-collapsed", "true");
 
   await page.getByTestId("sidebar-collapse-toggle").click();
   await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-collapsed", "false");
+  await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-motion-active", "false");
   await page.reload();
   await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-collapsed", "false");
 });
@@ -140,11 +142,11 @@ test("Reduced Motion：点击瞬时切换，不进入 manual morph", async ({ pa
 test("Active Plate：折叠/展开后 active 项与 plate 仍正确", async ({ page }) => {
   await openDesktop(page);
   const sidebar = page.getByTestId("app-sidebar");
-  await sidebar.getByRole("button", { name: "总览" }).click();
+  await sidebar.getByRole("button", { name: "总览", exact: true }).click();
 
   await page.getByTestId("sidebar-collapse-toggle").click();
   await expect(page.getByTestId("nav-active-plate")).toHaveClass(/opacity-100/);
-  await expect(sidebar.getByRole("button", { name: "总览" })).toHaveAttribute(
+  await expect(sidebar.getByRole("button", { name: "总览", exact: true })).toHaveAttribute(
     "aria-current",
     "page"
   );

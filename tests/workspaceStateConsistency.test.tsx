@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within, waitFor } from "@testing-library/react";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -325,7 +325,7 @@ describe("Group selection ownership（transient store selection）", () => {
     expect(screen.getAllByText(/项目 B/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("删除当前项目 → fallback 剩余合理项；最后一个删除 → null + Workspace Empty", () => {
+  it("删除当前项目 → fallback 剩余合理项；最后一个删除 → null + Workspace Empty", async () => {
     setProjects([gp("g-only", "唯一项目")]);
     useAppStore.setState({ selectedGroupProjectId: "g-only" });
     render(<GroupCollaborationView />);
@@ -335,7 +335,8 @@ describe("Group selection ownership（transient store selection）", () => {
       useAppStore.setState({ groupProjects: [] });
     });
     expect(useAppStore.getState().selectedGroupProjectId).toBeNull();
-    expect(screen.getByTestId("workspace-empty-state")).toBeTruthy();
+    // 最后一个项目先播放 ExitCollapse 退场，presence 卸载后才进入空态
+    await waitFor(() => expect(screen.getByTestId("workspace-empty-state")).toBeTruthy());
 
     // 多项目场景：删 b（选中）→ fallback a
     cleanup();

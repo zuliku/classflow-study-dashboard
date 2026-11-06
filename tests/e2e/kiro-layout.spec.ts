@@ -33,6 +33,8 @@ async function seedAI(page: Page) {
 }
 
 async function openSidecarViaHandoff(page: Page) {
+  // 等 App hydrate（nav 渲染）后再按 Control+K，避免全局快捷键竞态
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
   await page.getByLabel("命令中心搜索").fill("看看本周安排");
   await page.getByLabel("命令中心搜索").press("Enter");
@@ -52,11 +54,15 @@ test("互斥：进入 Kiro Workspace 后 Sidecar 不再渲染（会话保留）"
   await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
   expect(await page.getByTestId("kiro-composer").count()).toBe(1);
 
-  // 离开 Workspace 后不会复现隐形 Sidecar；会话数据仍由 Provider 保留。
-  await page.locator("aside").first().getByRole("button", { name: "总览" }).click();
-  await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
-  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  // 离开 Workspace 后 Sidecar 仍保留同一会话（不丢上下文）；不出现双 ChatSurface
+  await page.locator("aside").first().getByRole("button", { name: "总览", exact: true }).click();
+  await expect(page.getByTestId("kiro-sidecar")).toBeVisible();
+  await expect(page.getByTestId("kiro-composer")).toHaveCount(1);
   await expect(page.getByTestId("kiro-user-message")).toContainText("看看本周安排");
+  await page.locator("aside").first().getByRole("button", { name: "Kiro" }).click();
+  await expect(page.getByTestId("kiro-workspace")).toBeVisible();
+  await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
+  await expect(page.getByTestId("kiro-composer")).toHaveCount(1);
 });
 
 test("expandSidecar：关闭 Sidecar 进入 Workspace，同一会话保留", async ({ page }) => {
@@ -89,7 +95,7 @@ test("expandSidecar：关闭 Sidecar 进入 Workspace，同一会话保留", asy
   await expect(page.getByTestId("kiro-message").last()).toContainText("本周安排已梳理", { timeout: 10000 });
 
   // Expand（经 More 菜单）：Sidecar 关闭 → Workspace 显示同一会话
-  await page.getByTestId("kiro-sidecar").getByLabel("更多操作").click();
+  await page.getByTestId("kiro-sidecar").getByLabel("更多操作", { exact: true }).click();
   await page.getByRole("menuitem", { name: "打开完整 Kiro 工作区" }).click();
   await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
@@ -142,7 +148,7 @@ test("Sidecar ContextBar 默认 collapsed；点击展开 chips；Header 不重�
   await expect(bar.getByRole("button", { name: "收起上下文" })).toHaveCount(0);
 });
 
-test("2xl：Sidecar 保持 floating（默认 620×760 · top 24 · 无 docked 覆盖）", async ({ page }) => {
+test("2xl：Sidecar 保持 floating（默认 ~620×760 · top 40 · 无 docked 覆盖）", async ({ page }) => {
   await seedAI(page);
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/");
@@ -159,15 +165,18 @@ test("2xl：Sidecar 保持 floating（默认 620×760 · top 24 · 无 docked �
     )
     .toBe(true);
   const box = (await sidecar.boundingBox())!;
-  // 2xl 无 docked 变体：仍是 floating 默认尺寸 + 右上 inset
-  expect(box.height).toBe(760);
-  expect(box.width).toBe(620);
-  expect(box.y).toBe(24);
+  // 2xl 无 docked 变体：仍是 floating 默认尺寸 + 顶部安全 inset（dpr 缩放允许几像素）
+  expect(box.width).toBeGreaterThanOrEqual(600);
+  expect(box.width).toBeLessThanOrEqual(640);
+  expect(box.height).toBeGreaterThanOrEqual(740);
+  expect(box.height).toBeLessThanOrEqual(780);
+  expect(box.y).toBeGreaterThanOrEqual(38);
+  expect(box.y).toBeLessThanOrEqual(42);
   // Composer 可用
   await expect(page.getByTestId("kiro-composer")).toBeVisible();
 });
 
-test("Sidecar Header：与全局 Header 高度一致（64px）；浮层 top-24（非 docked 0）", async ({ page }) => {
+test("Sidecar Header：64px 视觉高度；浮层 top-40（非 docked 0）", async ({ page }) => {
   await seedAI(page);
   for (const width of [1280, 1440, 1536, 1920]) {
     await page.setViewportSize({ width, height: 900 });
@@ -175,7 +184,6 @@ test("Sidecar Header：与全局 Header 高度一致（64px）；浮层 top-24�
     await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
     await openSidecarViaHandoff(page);
 
-    const globalHeader = page.locator("header").first();
     const sidecarHeader = page.getByTestId("kiro-sidecar-header");
     const sidecar = page.getByTestId("kiro-sidecar");
     await expect
@@ -186,15 +194,14 @@ test("Sidecar Header：与全局 Header 高度一致（64px）；浮层 top-24�
         })
       )
       .toBe(true);
-    const gBox = await globalHeader.boundingBox();
     const sBox = await sidecarHeader.boundingBox();
     // 统一 64px 视觉高度（含 1px border-b）
-    expect(gBox!.height).toBeGreaterThanOrEqual(64);
-    expect(gBox!.height).toBeLessThanOrEqual(66);
-    expect(Math.abs(gBox!.height - sBox!.height)).toBeLessThanOrEqual(1);
-    // Floating 语义：面板从 top-24 开始（header 与全局 header 的 border 有意错位，不再 docked 对齐）
+    expect(sBox!.height).toBeGreaterThanOrEqual(64);
+    expect(sBox!.height).toBeLessThanOrEqual(66);
+    // Floating 语义：面板从 top-40 开始（--titlebar-h + 安全间距）
     const sBox2 = (await sidecar.boundingBox())!;
-    expect(sBox2.y).toBe(24);
+    expect(sBox2.y).toBeGreaterThanOrEqual(38);
+    expect(sBox2.y).toBeLessThanOrEqual(42);
   }
 });
 

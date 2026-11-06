@@ -38,7 +38,7 @@ test("Sidebar ≥1280：展开 → 收起 → 展开；宽度 224/64，标签与
   await expect(page.getByTestId("nav-tooltip").first()).toBeVisible();
 
   // 导航仍可用（Active Plate 正常）：点击「总览」
-  await sidebar.getByRole("button", { name: "总览" }).click();
+  await sidebar.getByRole("button", { name: "总览", exact: true }).click();
   await expect(page.getByTestId("nav-active-plate")).toHaveClass(/opacity-100/);
 
   // 再展开 → 恢复
@@ -53,6 +53,8 @@ test("Sidebar ≥1280：手动折叠状态刷新后保持（持久化）", async
   await page.goto("/");
   await page.getByTestId("sidebar-collapse-toggle").click();
   await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-collapsed", "true");
+  // 持久化在 width transitionend 后写入：等 morph 结束再 reload
+  await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-motion-active", "false");
 
   await page.reload();
   await expect(page.getByTestId("app-sidebar")).toHaveAttribute("data-collapsed", "true");
@@ -154,7 +156,7 @@ test("Task View Bar：主视图 + counts + 课程筛选 + 搜索 + 归档迁移�
   await page.getByRole("listbox", { name: "课程筛选" }).getByRole("option", { name: /全部课程/ }).click();
   await bar.getByRole("button", { name: /^全部 \d+$/ }).click();
   await page.getByRole("button", { name: "更多视图" }).click();
-  await page.getByRole("button", { name: /查看已归档/ }).click();
+  await page.getByRole("menuitem", { name: /查看已归档/ }).click();
   await expect(bar.getByText("已归档")).toBeVisible();
   await expect(page.getByTestId("assignment-list").getByText("高等数学级数与重积分测试")).toBeVisible();
 });
@@ -192,8 +194,10 @@ test("Task View Bar：Quick Add 仍由 Header 驱动；键盘导航保留", asyn
 test("Command Center：导航命令与 Sidebar 文案一致；视图命令原子切换", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
 
   await page.keyboard.press("Control+k");
+  await expect(page.getByTestId("command-center")).toBeVisible();
   const results = page.getByTestId("command-results");
   // Sidebar 同源文案
   for (const label of ["前往总览", "前往时间表", "前往任务与 DDL", "前往课程资料", "前往学习洞察", "前往小组协作", "前往Kiro"]) {
@@ -203,9 +207,12 @@ test("Command Center：导航命令与 Sidebar 文案一致；视图命令原子
 
   // 视图命令：任务与 DDL → 今天（原子：切工作区 + 视图；「今天」唯一命中视图命令）
   await page.keyboard.press("Control+k");
-  await page.keyboard.type("今天");
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible();
+  const input = page.getByRole("combobox", { name: "命令中心搜索" });
+  await expect(input).toBeFocused();
+  await input.fill("今天");
+  await expect(page.getByRole("option", { name: /任务与 DDL → 今天/ })).toBeVisible();
+  await page.getByRole("option", { name: /任务与 DDL → 今天/ }).click();
+  await expect(page.getByRole("heading", { name: "任务与 DDL" })).toBeVisible({ timeout: 15000 });
   const todayTab = page
     .getByTestId("assignments-tab")
     .getByRole("button", { name: /^今天 \d+$/ });
@@ -216,17 +223,26 @@ test("Command Center：导航命令与 Sidebar 文案一致；视图命令原子
 test("Command Center：打开提醒 / 打开设置 全局动作可用", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
 
   await page.keyboard.press("Control+k");
-  await page.keyboard.type("打开提醒");
-  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("command-center")).toBeVisible();
+  const reminderInput = page.getByRole("combobox", { name: "命令中心搜索" });
+  await expect(reminderInput).toBeFocused();
+  await reminderInput.fill("打开提醒");
+  await expect(page.getByRole("option", { name: /打开提醒/ })).toBeVisible();
+  await reminderInput.press("Enter");
   await expect(page.getByTestId("reminder-center")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("reminder-center")).toHaveCount(0);
 
   await page.keyboard.press("Control+k");
-  await page.keyboard.type("打开设置");
-  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("command-center")).toBeVisible();
+  const settingsInput = page.getByRole("combobox", { name: "命令中心搜索" });
+  await expect(settingsInput).toBeFocused();
+  await settingsInput.fill("打开设置");
+  await expect(page.getByRole("option", { name: /打开设置/ })).toBeVisible();
+  await settingsInput.press("Enter");
   await expect(page.getByTestId("settings-view")).toBeVisible();
 });
 

@@ -93,7 +93,7 @@ test("Thread Header：不再显示 Kiro Logo / 名称 / AI Workspace；标题 = 
   await expect(page.getByTestId("kiro-header-title")).toHaveText("查看明天课程");
 
   // Empty State 大号 Logo（40px）
-  await page.getByLabel("新对话").click();
+  await page.getByTestId("kiro-header-new-chat").click();
   const emptyMark = page.getByTestId("kiro-empty").locator('img[src="/kiro/kiro-mark.png"]');
   // Motion V1：empty intro 的 logo 有 0.96→1 进入缩放；等 settle 后测量
   await expect(async () => {
@@ -151,10 +151,10 @@ test("Sidebar Kiro Active：无左侧黑线（active = 浅 Soft Plate + 常驻�
     .poll(() => ring.evaluate((el) => parseFloat(getComputedStyle(el).opacity)))
     .toBeGreaterThan(0.7);
 
-  // 普通导航保留左侧黑线（App Chrome V2：滑动指示 plate 在 nav 区域，非按钮内嵌）
-  const overviewBtn = page.locator("aside").first().getByRole("button", { name: "总览" });
+  // 普通导航：active surface 由 Sidebar 共享 moving plate 承担（不是按钮内嵌黑线）
+  const overviewBtn = page.locator("aside").first().getByRole("button", { name: "总览", exact: true });
   await overviewBtn.click();
-  await expect(page.locator("aside").first().locator("span.rounded-full.bg-charcoal")).toHaveCount(1);
+  await expect(page.locator("aside").first().getByTestId("nav-active-plate")).toHaveCount(1);
 });
 
 /** 覆盖持久化动效偏好（reload 后 pre-paint bootstrap 与 store 一并生效） */

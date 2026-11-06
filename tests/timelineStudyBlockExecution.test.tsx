@@ -33,6 +33,22 @@ class RO {
 if (typeof HTMLElement !== "undefined" && !HTMLElement.prototype.scrollIntoView) {
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: () => {} });
 }
+// jsdom 无布局：TimetableGrid 用 clientHeight/clientWidth 计算卡片密度/标题显隐。
+// 给 timetable-body 提供稳定几何，避免所有 StudyBlock 被误判为 dense（真实浏览器有布局）。
+if (typeof HTMLElement !== "undefined") {
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get() {
+      return (this as HTMLElement).dataset?.testid === "timetable-body" ? 780 : 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get() {
+      return (this as HTMLElement).dataset?.testid === "timetable-body" ? 700 : 0;
+    },
+  });
+}
 // V9 engagement 路径依赖 elementFromPoint（jsdom 未实现）：返回 null = 「pointer 不在有效 day 列」
 (document as unknown as Record<string, unknown>).elementFromPoint = () => null;
 // jsdom 无 PointerEvent：fireEvent.pointerDown 会退化为普通 Event（button/clientX 全丢），

@@ -255,6 +255,7 @@ test("Dashboard reflow：Docked Kiro 压窄容器时任务卡降为 1 列且不�
   // 1536：主内容 < 940 → 任务区 1 列
   await page.setViewportSize({ width: 1536, height: 900 });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
 
   // 关闭 Kiro 状态：任务区 1 列（~620）
   const tasksWrap = page.getByTestId("overview-tasks-wrap");
@@ -284,7 +285,7 @@ test("Dashboard reflow：Docked Kiro 压窄容器时任务卡降为 1 列且不�
   expect(overflow).toBe(false);
 
   // 关闭 Kiro → 布局恢复 2 列（无需刷新）
-  await page.getByLabel("关闭 Kiro").click();
+  await page.getByTestId("kiro-sidecar-header").getByLabel("关闭 Kiro").click();
   await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
   const w3 = (await tasksWrap.boundingBox())!.width;
   expect(w3).toBeGreaterThan(560);
@@ -295,6 +296,7 @@ test("1920：Docked Kiro 下任务卡保持 2 列", async ({ page }) => {
   await seedAI(page);
   await page.setViewportSize({ width: 1920, height: 1000 });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
   await page.keyboard.press("Control+K");
   await page.getByLabel("命令中心搜索").fill("看看本周安排");
   await page.getByLabel("命令中心搜索").press("Enter");

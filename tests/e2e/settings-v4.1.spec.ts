@@ -486,3 +486,53 @@ test("学期编辑：非法值仍显示保存/放弃，状态提示先修正错�
   await save.click();
   await expect(semester.getByText("学期名称不能为空", { exact: true })).toBeVisible();
 });
+
+test("Settings 条件区：学期编辑 / 补发范围 / 作息编辑器通过 Disclosure 进退", async ({ page }) => {
+  await openSettings(page);
+
+  // 学期编辑：表单 + 保存栏作为整体展开/收起
+  await page
+    .getByRole("navigation", { name: "设置导航" })
+    .getByRole("button", { name: "学期与课表" })
+    .click();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  const semesterDisclosure = page.locator("#semester-edit-disclosure");
+  await expect(semesterDisclosure).toHaveAttribute("data-state", "open");
+  await expect(semesterDisclosure.getByLabel("学期名称")).toBeVisible();
+  await page.waitForTimeout(260); // 等高度展开完成后再点底部保存栏，避免元素仍在移动
+  await page.getByRole("button", { name: "放弃更改" }).click();
+  await expect(semesterDisclosure).toHaveAttribute("data-state", "closed");
+  await expect(semesterDisclosure).toHaveCount(0);
+
+  // 任务与提醒：条件行展开/收起
+  await page
+    .getByRole("navigation", { name: "设置导航" })
+    .getByRole("button", { name: "任务与提醒" })
+    .click();
+  await expect(page.getByTestId("settings-tasks")).toBeVisible();
+  const policy = page.getByRole("combobox", { name: "错过提醒处理" });
+  await policy.click();
+  await page.getByRole("option", { name: "仅补发近期提醒" }).click();
+  const windowDisclosure = page.locator("#missed-reminder-window-disclosure");
+  await expect(windowDisclosure).toHaveAttribute("data-state", "open");
+  await expect(windowDisclosure.getByText("补发时间范围", { exact: true })).toBeVisible();
+
+  await policy.click();
+  await page.getByRole("option", { name: "补发所有未处理提醒" }).click();
+  await expect(windowDisclosure).toHaveAttribute("data-state", "closed");
+  await expect(windowDisclosure).toHaveCount(0);
+
+  // 作息编辑器：展开编辑，取消后回到新建按钮
+  await page
+    .getByRole("navigation", { name: "设置导航" })
+    .getByRole("button", { name: "学期与课表" })
+    .click();
+  await page.getByRole("button", { name: "+ 新建作息方案" }).click();
+  const bellEditor = page.locator("#bell-schedule-editor");
+  await expect(bellEditor).toHaveAttribute("data-state", "open");
+  await expect(bellEditor.getByLabel("作息方案名称")).toBeVisible();
+  await bellEditor.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(bellEditor).toHaveAttribute("data-state", "closed");
+  await expect(bellEditor).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "+ 新建作息方案" })).toBeVisible();
+});

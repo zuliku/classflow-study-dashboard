@@ -60,14 +60,14 @@ test("Desktop：@ Context picker（UI foundation）与 History 空状态", async
   const composer = page.getByTestId("kiro-composer");
 
   // @ → 课程上下文 chip（演示数据有课程；Task 2 起随消息发送）
-  await composer.getByLabel("选择上下文").click();
-  const picker = page.getByRole("dialog", { name: "选择上下文" });
+  const prompt = composer.getByLabel("Ask Kiro");
+  await prompt.fill("@");
+  const picker = page.getByRole("listbox", { name: "上下文" });
   await expect(picker).toBeVisible();
-  await picker.getByRole("menuitem", { name: /微观经济学/ }).first().click();
-  // Task 7E：Context Strip 直接展示 manual token（无展开/收起交互）
+  await picker.getByRole("option", { name: /微观经济学/ }).first().click();
+  // @ mention 选择后清空输入，Context Strip 直接展示 manual token
   await expect(page.getByTestId("kiro-context-bar")).toContainText("微观经济学");
   await expect(page.getByTestId("kiro-context-bar").getByRole("button", { expanded: false })).toHaveCount(0);
-  await expect(page.getByTestId("kiro-context-bar")).toContainText("本周 · 第");
 
   // Thread Rail：展开 → 空状态 + Esc 关闭（Desktop 历史入口已从 More 移入 Rail）
   await page.getByLabel("展开对话").click();
@@ -85,7 +85,7 @@ test("Tablet 1024：Icon Rail 有 Kiro（tooltip），点击进入", async ({ pa
   const sidebar = page.locator("aside").first();
   const kiroRail = sidebar.getByRole("button", { name: "Kiro" });
   await expect(kiroRail).toBeVisible();
-  const tooltip = kiroRail.locator('[role="tooltip"]');
+  const tooltip = kiroRail.locator('[data-testid="nav-tooltip"]');
   await expect(tooltip).toHaveCSS("opacity", "0");
   await kiroRail.hover();
   await expect(tooltip).toHaveCSS("opacity", "1");
@@ -107,10 +107,8 @@ test("Mobile 390：Bottom Nav 有 Kiro，进入后 Composer 可用且无横向�
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
   const composer = page.getByTestId("kiro-composer");
   await expect(composer.getByLabel("Ask Kiro")).toBeVisible();
-  // Mobile Header 显示当前页名 Kiro（App Shell structural header 标题）
-  await expect(
-    page.locator("header").first().getByRole("heading", { name: "Kiro" })
-  ).toBeVisible();
+  // Mobile：App Shell 的主标题在 main 内（本视图无独立 header）
+  await expect(page.getByRole("heading", { name: "Kiro", level: 1 })).toBeVisible();
   // 无横向溢出
   expect(await hasHorizontalOverflow(page)).toBe(false);
 });

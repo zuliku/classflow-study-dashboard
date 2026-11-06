@@ -701,4 +701,13 @@ describe("Composer 动效升级 P1-P3：对称进退源码契约", () => {
     expect(composer).toContain("overflow-x-clip");
     expect(composer).toContain("overflow-x-auto");
   });
+
+  it("GroupKiroPanel：宽度瞬时占位，不做 0↔dock 的 width 过渡（防逐帧 reflow）", () => {
+    const panel = read("components/group/GroupKiroPanel.tsx");
+    expect(panel).not.toContain("transition-[width]");
+    expect(panel).not.toContain('"w-0');
+    expect(panel).toContain("DOCK_WIDTH");
+    // 揭示/收起仍由内层 opacity + translate 承担
+    expect(panel).toContain("transition-[opacity,transform]");
+  });
 });

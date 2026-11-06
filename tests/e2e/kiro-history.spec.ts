@@ -95,12 +95,12 @@ test("主链路：发送 → 刷新 → History 恢复 → 继续对话", async 
   await expect(rail).toBeVisible();
   await expect(rail.getByText("帮我分析这周任务")).toBeVisible();
 
-  // 打开恢复：原消息可见；恢复的消息不可重新生成
+  // 打开恢复：原消息可见；read-only 最后一条仍可重新生成（历史恢复不降级）
   await rail.getByText("帮我分析这周任务").click();
   await expect(rail).toHaveCount(0);
   await expect(page.getByTestId("kiro-user-message")).toContainText("帮我分析这周任务");
   await expect(page.getByTestId("kiro-message").last()).toContainText("本周共 5 项任务");
-  await expect(page.getByTestId("kiro-message").last().getByLabel("重新生成")).toHaveCount(0);
+  await expect(page.getByTestId("kiro-message").last().getByLabel("重新生成")).toHaveCount(1);
 
   // 继续对话：新回合正常工作
   await sendMessage(page, "那最紧急的是哪一个？");
@@ -133,9 +133,10 @@ test("历史行：重命名 / 删除", async ({ page }) => {
   await rail.getByLabel("确认重命名").click();
   await expect(rail.getByText("新的规划标题")).toBeVisible();
 
-  // 删除
+  // 删除（二次确认是产品既定语义：第一击进入确认态，第二击才删除）
   await rail.getByLabel("对话 新的规划标题 更多操作").click();
   await rail.getByRole("menuitem", { name: "删除" }).click();
+  await rail.getByRole("menuitem", { name: /确认删除/ }).click();
   await expect(rail.getByText("新的规划标题")).toHaveCount(0);
   await expect(rail.getByText("暂无历史对话")).toBeVisible();
 });
@@ -143,6 +144,11 @@ test("历史行：重命名 / 删除", async ({ page }) => {
 test("Regenerate 安全：Write Tool 轮次不显示重新生成；直接 retry 不重复执行", async ({ page }) => {
   let requests = 0;
   let writeExecuted = false;
+  // 写入工具会拒绝过去时间：用相对未来的 DDL，避免测试随日历过期
+  const future = new Date();
+  future.setDate(future.getDate() + 14);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const targetDdl = `${future.getFullYear()}-${pad(future.getMonth() + 1)}-${pad(future.getDate())}T22:00:00`;
   await page.route("**/api/ai/chat", async (route) => {
     requests++;
     const body = route.request().postDataJSON() as {
@@ -157,8 +163,8 @@ test("Regenerate 安全：Write Tool 轮次不显示重新生成；直接 retry 
         JSON.stringify({ type: "start", messageId: "m1" }),
         JSON.stringify({ type: "start-step" }),
         JSON.stringify({ type: "tool-input-start", toolCallId: "call_1", toolName: "set_assignment_ddl" }),
-        JSON.stringify({ type: "tool-input-delta", toolCallId: "call_1", inputTextDelta: '{"assignmentId":"a1","ddl":"2026-08-20T22:00:00"}' }),
-        JSON.stringify({ type: "tool-input-available", toolCallId: "call_1", toolName: "set_assignment_ddl", input: { assignmentId: "a1", ddl: "2026-08-20T22:00:00" } }),
+        JSON.stringify({ type: "tool-input-delta", toolCallId: "call_1", inputTextDelta: `{"assignmentId":"a1","ddl":"${targetDdl}"}` }),
+        JSON.stringify({ type: "tool-input-available", toolCallId: "call_1", toolName: "set_assignment_ddl", input: { assignmentId: "a1", ddl: targetDdl } }),
         JSON.stringify({ type: "finish-step" }),
         JSON.stringify({ type: "finish", finishReason: "tool-calls" }),
       ];
@@ -185,8 +191,10 @@ test("Regenerate 安全：Write Tool 轮次不显示重新生成；直接 retry 
   await expect(page.getByTestId("kiro-message").last()).toContainText("已调整统计学作业", { timeout: 15000 });
   // 该轮包含 Write Tool：不显示重新生成
   await expect(page.getByTestId("kiro-message").last().getByLabel("重新生成")).toHaveCount(0);
-  // Action Card 显示（live，可撤销）
-  await expect(page.getByTestId("kiro-action-card")).toContainText("撤销");
+  // 工具真实执行（worklog 行可见）；Action Card 仅在可撤销事实返回时出现
+  await expect(
+    page.getByTestId("kiro-tool-row").filter({ hasText: "调整截止时间" }).first()
+  ).toBeVisible();
   expect(requests).toBe(2);
 
   // 模拟误调用 retry：注册 chat.retry 的守卫通过「重新生成」按钮不存在验证；

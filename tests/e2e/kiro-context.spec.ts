@@ -104,6 +104,7 @@ test("Command Center：输入查询 → 「交给 Kiro」→ 回车 → Sidecar 
   await seedAI(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
 
   // Cmd/Ctrl+K 打开 Command Center
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
@@ -112,7 +113,7 @@ test("Command Center：输入查询 → 「交给 Kiro」→ 回车 → Sidecar 
   // 输入查询 → 「交给 Kiro」row 出现（置顶、键盘可选）
   const input = page.getByLabel("命令中心搜索");
   await input.fill("帮我复习计量经济学");
-  const handoffRow = page.getByRole("button", { name: /交给 Kiro/ });
+  const handoffRow = page.getByRole("option", { name: /交给 Kiro/ });
   await expect(handoffRow).toBeVisible();
 
   // 回车 → Command Center 关闭 + Sidecar 打开 + 查询自动发送
@@ -136,6 +137,7 @@ test("Sidecar → 展开到 Kiro 工作区：同一会话保留；新对话清�
   await seedAI(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expect(page.getByRole("button", { name: "总览" }).first()).toBeVisible({ timeout: 15000 });
 
   // 从 Command Center 发起一次 handoff（Sidecar 中先有会话）
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
@@ -145,14 +147,17 @@ test("Sidecar → 展开到 Kiro 工作区：同一会话保留；新对话清�
   await expect(page.getByTestId("kiro-message").last()).toContainText("已收到你的问题", { timeout: 10000 });
 
   // Expand（经 More 菜单）：Sidecar 关闭 → Kiro 工作区显示同一会话
-  await page.getByTestId("kiro-sidecar").getByLabel("更多操作").click();
+  await page.getByTestId("kiro-sidecar").getByLabel("更多操作", { exact: true }).click();
   await page.getByRole("menuitem", { name: "打开完整 Kiro 工作区" }).click();
   await expect(page.getByTestId("kiro-sidecar")).toHaveCount(0);
   await expect(page.getByTestId("kiro-workspace")).toBeVisible();
   await expect(page.getByTestId("kiro-user-message")).toContainText("帮我整理本周任务");
 
   // 新对话（Thread Rail 内）：会话清空 → Empty State
-  await page.getByLabel("新对话").click();
+  await page
+    .getByTestId("kiro-navigator-shell")
+    .getByRole("button", { name: "新对话" })
+    .click();
   await expect(page.getByTestId("kiro-empty")).toBeVisible();
   await expect(page.getByTestId("kiro-message")).toHaveCount(0);
 });

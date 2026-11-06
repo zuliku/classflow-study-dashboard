@@ -187,3 +187,20 @@ base("周切换：外层统一播放一次动画，内层课程网格不重复",
     .locator(".ux-week-enter-a, .ux-week-enter-b");
   await expect(innerAnimation).toHaveCount(0);
 });
+
+base("StudyBlock 删除：保留退场态后再移除（无瞬切）", async ({ page }) => {
+  const { monday, dow1 } = dayAnchor();
+  await page.addInitScript(seedScript(monday, dow1));
+  await openTimeline(page);
+
+  const block = page
+    .locator('[data-testid="timeline-study-block"]')
+    .filter({ hasText: "一小时任务" })
+    .first();
+  await expect(block).toBeVisible();
+  await block.hover();
+  await page.getByRole("button", { name: "删除学习计划 一小时任务" }).click();
+
+  await expect(block).toHaveAttribute("data-state", "exiting");
+  await expect(block).toHaveCount(0);
+});
