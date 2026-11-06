@@ -9,6 +9,8 @@
 import { Assignment, StudyBlock } from "@/types";
 import { parseLocalDDL } from "@/lib/ddl";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
+import { isActiveTask } from "@/lib/tasks/taskLifecycle";
+import { isActiveStudyBlock } from "@/lib/tasks/taskPlanning";
 
 export type TaskHealthState =
   | "safe"
@@ -139,4 +141,18 @@ export function deriveAssignmentHealth(input: TaskHealthInput): TaskHealthResult
     reasons.push("deadline_soon");
   }
   return { ...base, state: "attention", reasons };
+}
+
+/**
+ * Phase 0：V2 Health。
+ * - submitted/completed → null（不显示 Health）
+ * - released StudyBlock 不参与计划覆盖度
+ * - 其余语义复用 deriveAssignmentHealth（timestamp overdue / unknown≠zero）
+ */
+export function deriveAssignmentHealthV2(input: TaskHealthInput): TaskHealthResult | null {
+  if (!isActiveTask(input.assignment)) return null;
+  return deriveAssignmentHealth({
+    ...input,
+    studyBlocks: input.studyBlocks.filter(isActiveStudyBlock),
+  });
 }
