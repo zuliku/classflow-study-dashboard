@@ -152,7 +152,19 @@ test("Profile dirty：修改姓名 → 未保存 → 放弃更改 → 恢复原�
   await page.getByRole("button", { name: "放弃更改" }).click();
   await expect(nameInput).toHaveValue(original);
   await expect(page.getByTestId("settings-profile").getByTestId("settings-save-status")).toContainText("已保存");
-  await expect(page.getByRole("button", { name: "放弃更改" })).toHaveCount(0);
+  // 保存栏常驻挂载，dirty 清除后使用 ExitCollapse 收起（宽度归零 + inert），
+  // 保留退出动画，不再瞬时卸载。
+  const discard = page.getByRole("button", { name: "放弃更改" });
+  await expect(discard).toHaveCount(1);
+  await expect
+    .poll(() =>
+      discard.evaluate((el) => {
+        const root = el.closest("[data-axis]") as HTMLElement | null;
+        return root ? Math.round(root.getBoundingClientRect().width) : -1;
+      })
+    )
+    .toBe(0);
+  await expect.poll(() => discard.evaluate((el) => el.closest("[inert]") !== null)).toBe(true);
 });
 
 test("Settings：切换分区回到顶部（不继承上一页滚动深度）", async ({ page }) => {
