@@ -828,6 +828,7 @@ export function TimetableGrid({
                     const showLocationMeta = compactCards
                       ? dayWidth >= 90 && cardHeightPx >= 56
                       : cardHeightPx >= 54;
+                    const hasMeta = showTeacherMeta || showLocationMeta;
                     const cardTitle = [
                       course.name,
                       course.teacher,
@@ -875,7 +876,8 @@ export function TimetableGrid({
                           onPointerUp={(e) => handleCardPointerUp(e, sched)}
                           onPointerCancel={cancelInteraction}
                           className={cn(
-                            "absolute inset-0 rounded-xl shadow-subtle border flex flex-col overflow-hidden group select-none justify-start",
+                            "absolute inset-0 rounded-xl shadow-subtle border flex flex-col overflow-hidden group select-none",
+                            hasMeta ? "justify-between" : "justify-start",
                             // 只过渡实际会变化的属性（透明度/阴影/边框），避免无关属性建立 transition
                             "transition-[opacity,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
                             // 紧凑卡：更小的卡内边距，把宽度让给课程名
@@ -899,112 +901,91 @@ export function TimetableGrid({
                             touchAction: editingEnabled ? "none" : "auto",
                           }}
                         >
-                        {/* Top Section */}
-                        <div className="space-y-0.5 min-w-0">
-                          {/* 1. Course Title
-                              课表卡是信息密集的软件特性：课程名/教师/地点保留原生 title，
-                              用于 hover 查看被 truncate 的完整文本（产品例外，见 nativeTitleContract）。 */}
-                          <div className="flex items-start justify-between">
-                            <h4
-                              title={course.name}
-                              className={cn(
-                                "font-extrabold tracking-tight leading-tight text-charcoal min-w-0 flex-1",
-                                compactCards
-                                  ? cardHeightPx < 26
-                                    ? "text-[9px] leading-none line-clamp-1"
-                                    : "text-[10.5px] leading-[1.25] line-clamp-2"
-                                  : cardHeightPx < 28
-                                    ? "text-[9px] leading-none truncate"
-                                    : "text-[11px] sm:text-xs truncate"
-                              )}
-                            >
-                              {course.name}
-                            </h4>
-                            {hasConflict && (
-                              compactCards ? (
-                                <span
-                                  role="img"
-                                  className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-danger ml-1"
-                                  aria-label="课程时间冲突"
-                                  title="课程时间冲突"
-                                />
-                              ) : (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const foundConf = conflicts.find(
-                                      (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
-                                    );
-                                    if (foundConf) {
-                                      setSelectedConflict(foundConf);
-                                      setConflictModalOpen(true);
-                                    }
-                                  }}
-                                  onPointerDown={(e) => e.stopPropagation()}
-                                  className="text-[10px] bg-danger text-white px-1.5 py-0.5 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
-                                >
-                                  冲突
-                                </button>
-                              )
+                        {/* Top：课程名 + 冲突入口；教师/地点统一放在底部（完整课表页语义） */}
+                        <div className="flex items-start justify-between min-w-0">
+                          <h4
+                            title={course.name}
+                            className={cn(
+                              "font-extrabold tracking-tight leading-tight text-charcoal min-w-0 flex-1",
+                              compactCards
+                                ? cardHeightPx < 26
+                                  ? "text-[9px] leading-none line-clamp-1"
+                                  : "text-[10.5px] leading-[1.25] line-clamp-2"
+                                : cardHeightPx < 28
+                                  ? "text-[9px] leading-none truncate"
+                                  : "text-[11px] sm:text-xs truncate"
                             )}
-                          </div>
-
-                          {/* 2. Teacher / Location Info
-                              compact：按列宽/高度分级恢复。宽列先恢复教师，再恢复地点；
-                              地点单独一行（不与教师挤在同一行），避免「王 · 教…」碎片。
-                              不满足宽度时仍保留 sr-only + 卡片 title。 */}
-                          {compactCards ? (
-                            <>
-                              {showTeacherMeta ? (
-                                <div className="flex items-center gap-1 text-[9px] sm:text-[10px] opacity-85 font-medium leading-none min-w-0">
-                                  {sched.source === "extra" && (
-                                    <span className="shrink-0 font-extrabold opacity-80" aria-hidden="true">+</span>
-                                  )}
-                                  <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                                  <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
-                                  {!showLocationMeta && sched.location && (
-                                    <span className="sr-only">，地点 {sched.location}</span>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="sr-only">
-                                  {sched.source === "extra" ? "补课，" : ""}
-                                  {course.teacher}
-                                  {sched.location ? `，地点 ${sched.location}` : ""}
-                                </span>
-                              )}
-                              {showLocationMeta && sched.location && (
-                                <div className="flex items-center gap-1 text-[9px] sm:text-[10px] opacity-85 font-medium leading-none min-w-0">
-                                  <MapPin className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                                  <span title={sched.location} className="truncate min-w-0">{sched.location}</span>
-                                </div>
-                              )}
-                            </>
-                          ) : showTeacherMeta ? (
-                            <div className="flex items-center gap-1 text-[10px] sm:text-[11px] opacity-85 font-medium leading-none min-w-0">
-                              {sched.source === "extra" && (
-                                <span className="shrink-0 font-extrabold opacity-80" aria-hidden="true">+</span>
-                              )}
-                              <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                              <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
-                              {!showLocationMeta && sched.location && (
-                                <span className="sr-only">，地点 {sched.location}</span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="sr-only">
-                              {sched.source === "extra" ? "补课，" : ""}
-                              {course.teacher}
-                              {sched.location ? `，地点 ${sched.location}` : ""}
-                            </span>
-                          )}
-                          {!compactCards && showLocationMeta && sched.location && (
-                            <div className="flex items-center gap-1 text-[10px] sm:text-[11px] opacity-85 font-medium leading-none min-w-0">
-                              <MapPin className="w-2.5 h-2.5 shrink-0 opacity-70" />
-                              <span title={sched.location} className="truncate min-w-0">{sched.location}</span>
-                            </div>
+                          >
+                            {course.name}
+                          </h4>
+                          {hasConflict && (
+                            compactCards ? (
+                              <span
+                                role="img"
+                                className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-danger ml-1"
+                                aria-label="课程时间冲突"
+                                title="课程时间冲突"
+                              />
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const foundConf = conflicts.find(
+                                    (c) => c.scheduleA.id === sched.id || c.scheduleB.id === sched.id
+                                  );
+                                  if (foundConf) {
+                                    setSelectedConflict(foundConf);
+                                    setConflictModalOpen(true);
+                                  }
+                                }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                className="text-[10px] bg-danger text-white px-1.5 py-0.5 rounded font-bold shrink-0 ml-1 hover:bg-danger/85 transition-colors"
+                              >
+                                冲突
+                              </button>
+                            )
                           )}
                         </div>
+
+                        {/* Bottom：执教老师 + 地点；按列宽/高度分级显示，矮卡优先保住课程名 */}
+                        {(showTeacherMeta || showLocationMeta) && (
+                          <div className="mt-0.5 min-w-0 space-y-0.5 border-t border-black/5 pt-0.5">
+                            {showTeacherMeta ? (
+                              <div
+                                className={cn(
+                                  "flex items-center gap-1 opacity-85 font-medium leading-none min-w-0",
+                                  compactCards ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"
+                                )}
+                              >
+                                {sched.source === "extra" && (
+                                  <span className="shrink-0 font-extrabold opacity-80" aria-hidden="true">+</span>
+                                )}
+                                <User className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                                <span title={course.teacher} className="truncate min-w-0">{course.teacher}</span>
+                                {!showLocationMeta && sched.location && (
+                                  <span className="sr-only">，地点 {sched.location}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="sr-only">
+                                {sched.source === "extra" ? "补课，" : ""}
+                                {course.teacher}
+                                {sched.location ? `，地点 ${sched.location}` : ""}
+                              </span>
+                            )}
+                            {showLocationMeta && sched.location && (
+                              <div
+                                className={cn(
+                                  "flex items-center gap-1 opacity-85 font-medium leading-none min-w-0",
+                                  compactCards ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"
+                                )}
+                              >
+                                <MapPin className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                                <span title={sched.location} className="truncate min-w-0">{sched.location}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Resize Handle：仅工作区显示（moved/extra 一次性 occurrence 不显示），hover/focus/拖拽中才明显 */}
                         {editingEnabled && (!(sched as { source?: string }).source || (sched as { source?: string }).source === "base") && (
