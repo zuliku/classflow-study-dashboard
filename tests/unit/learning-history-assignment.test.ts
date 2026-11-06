@@ -57,9 +57,28 @@ describe("Assignment History Events（纯函数）", () => {
       environment: ENV,
     });
     expect(typesOf(events)).toEqual(["assignment.status_changed", "assignment.completed"]);
-    expect((events[1] as { data: { completionTrigger: string; previousStatus: string } }).data).toEqual({
+    expect((events[1] as { data: { completionTrigger: string; previousStatus: string } }).data).toMatchObject({
       previousStatus: "doing",
       completionTrigger: "progress",
+    });
+  });
+
+  it("doing → submitted：status_changed + submitted（含 on-time 快照）", () => {
+    const events = deriveAssignmentTransitionEvents({
+      before: mkA({ status: "doing", ddl: "2026-08-10T23:59:00" }),
+      after: mkA({
+        status: "submitted",
+        ddl: "2026-08-10T23:59:00",
+        submittedAt: "2026-08-10T20:00:00",
+      }),
+      context: CTX,
+      completionTrigger: "status",
+      environment: ENV,
+    });
+    expect(typesOf(events)).toEqual(["assignment.status_changed", "assignment.submitted"]);
+    expect((events[1] as { data: { previousStatus: string; onTime: boolean | null } }).data).toMatchObject({
+      previousStatus: "doing",
+      onTime: true,
     });
   });
 

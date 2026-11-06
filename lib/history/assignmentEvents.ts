@@ -16,6 +16,7 @@ import {
   ResolvedLearningMutationContext,
   buildLearningHistoryEvent,
 } from "@/lib/history/recorder";
+import { isAcademicDoneOnTime } from "@/lib/tasks/taskLifecycle";
 
 export function buildAssignmentCreatedEvent(input: {
   assignment: Assignment;
@@ -80,7 +81,57 @@ export function deriveAssignmentTransitionEvents(input: {
         type: "assignment.completed",
         entityType: "assignment",
         entityId: after.id,
-        data: { previousStatus: before.status, completionTrigger },
+        data: {
+          previousStatus: before.status,
+          completionTrigger,
+          completedAt: after.completedAt ?? null,
+          submittedAt: after.submittedAt ?? null,
+          onTime: isAcademicDoneOnTime(after),
+        },
+      })
+    );
+  } else if (before.status !== "submitted" && after.status === "submitted") {
+    // 进入 submitted：status_changed + submitted（等待反馈，planning terminal）
+    events.push(
+      buildLearningHistoryEvent({
+        ...base,
+        type: "assignment.status_changed",
+        entityType: "assignment",
+        entityId: after.id,
+        data: { from: before.status, to: after.status },
+      }),
+      buildLearningHistoryEvent({
+        ...base,
+        type: "assignment.submitted",
+        entityType: "assignment",
+        entityId: after.id,
+        data: {
+          previousStatus: before.status,
+          submittedAt: after.submittedAt ?? null,
+          ddl: after.ddl ?? null,
+          onTime: isAcademicDoneOnTime(after),
+        },
+      })
+    );
+  } else if (
+    before.status === "submitted" &&
+    (after.status === "todo" || after.status === "doing")
+  ) {
+    // 从 submitted 重新打开：status_changed + reopened
+    events.push(
+      buildLearningHistoryEvent({
+        ...base,
+        type: "assignment.status_changed",
+        entityType: "assignment",
+        entityId: after.id,
+        data: { from: before.status, to: after.status },
+      }),
+      buildLearningHistoryEvent({
+        ...base,
+        type: "assignment.reopened",
+        entityType: "assignment",
+        entityId: after.id,
+        data: { from: "submitted", to: after.status },
       })
     );
   } else if (before.status === "completed" && after.status !== "completed") {

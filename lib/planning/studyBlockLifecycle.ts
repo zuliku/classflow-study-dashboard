@@ -121,6 +121,10 @@ export interface ReleaseFutureStudyBlocksInput {
   assignmentId: string;
   /** 本地 now（epoch ms）；只释放尚未结束的 blocks */
   now: number;
+  /** Phase 0：释放来源；提供时写入 provenance，供 undo/reopen 精确恢复 */
+  releasedBy?: "task-submitted" | "task-completed" | "manual" | "rebalance";
+  /** Phase 0：本地墙钟释放时间；提供 releasedBy 时建议同时提供 */
+  releasedAt?: string;
 }
 
 export interface ReleaseFutureStudyBlocksResult {
@@ -138,6 +142,8 @@ export function releaseFutureStudyBlocksForAssignment({
   studyBlocks,
   assignmentId,
   now,
+  releasedBy,
+  releasedAt,
 }: ReleaseFutureStudyBlocksInput): ReleaseFutureStudyBlocksResult {
   const releasedIds: string[] = [];
   const next = studyBlocks.map((b) => {
@@ -145,7 +151,17 @@ export function releaseFutureStudyBlocksForAssignment({
     if (isStudyBlockReleased(b)) return b; // idempotent
     if (isStudyBlockEnded(b, now)) return b; // past：历史证据保持
     releasedIds.push(b.id);
-    return { ...b, planningState: "released" as const };
+    return {
+      ...b,
+      planningState: "released" as const,
+      ...(releasedBy
+        ? {
+            releasedBy,
+            releasedByTaskId: assignmentId,
+            ...(releasedAt ? { releasedAt } : {}),
+          }
+        : {}),
+    };
   });
   return { studyBlocks: next, releasedIds };
 }
@@ -208,7 +224,7 @@ export function reconcileTerminalAssignmentStudyBlocks({
     if (isStudyBlockReleased(b) || isStudyBlockEnded(b, now)) return b;
     changed = true;
     releasedIds.add(b.id);
-    return { ...b, planningState: "released" as const };
+    return { ...b, planningState: "released" as const, releasedBy: "legacy" as const };
   });
   const nextReminders = changed
     ? clearScheduledRemindersForReleasedBlocks(reminders, releasedIds)

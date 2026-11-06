@@ -26,11 +26,12 @@ import {
   StudyBlockUpdatePatch,
   ScheduleOccurrenceOverride,
   BellScheduleTemplate,
+  TaskTransitionSource,
 } from "@/types";
 import { createDefaultSemester, getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, parseLocalDDL } from "@/lib/ddl";
 import { normalizeAssignment, hasTaskDeadline, isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
-import { normalizeLocalDateTime } from "@/lib/time/localWallClock";
+import { isValidLocalDate, normalizeLocalDateTime } from "@/lib/time/localWallClock";
 import {
   didAssignmentLosePlanningEligibility,
   releaseFutureStudyBlocksForAssignment,
@@ -51,7 +52,26 @@ import { createId } from "@/lib/utils";
 import { validateScheduleOccurrenceOverride } from "@/lib/scheduleOccurrences";
 import { calculateGroupProjectProgress, formatLocalDate, normalizeGroupProject } from "@/lib/groupProject";
 import { DEFAULT_PREFERENCES, sanitizePreferences } from "@/lib/preferences";
-import { buildNextRecurringAssignment } from "@/lib/tasks/taskRecurrence";
+import { buildNextRecurringAssignment, buildNextRecurringAssignmentV2 } from "@/lib/tasks/taskRecurrence";
+import {
+  buildTaskReopenPreview,
+  buildTaskTransitionPreview,
+  TaskFieldPatch,
+  TaskReopenInput,
+  TaskReopenPreview,
+  TaskReopenResult,
+  TaskTerminalStatus,
+  TaskTransitionPreview,
+  TaskTransitionRejected,
+  TaskTransitionResult,
+  TaskTransitionUndoResult,
+} from "@/lib/tasks/taskTransitions";
+import {
+  cancelScheduledAssignmentReminders,
+  cancelScheduledRemindersForReleasedBlocks,
+  restoreCancelledRemindersForTask,
+} from "@/lib/reminders/reminderCancellation";
+import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import {
   canRestoreWithParentCourse,
   collectAssignmentDeleteSnapshot,
@@ -149,6 +169,33 @@ function buildAssignmentLifecycleEvent(
 
 /** Task 7G-A1：Reminder 时间戳统一本地墙钟 */
 const nowLocalString = () => formatLocalDateTime(new Date());
+
+/** Phase 0：transition source → Learning History source */
+function historySourceForTransition(
+  source: TaskTransitionSource
+): ResolvedLearningMutationContext["source"] {
+  switch (source) {
+    case "kiro":
+      return "kiro";
+    case "ui":
+    case "batch":
+      return "manual";
+    case "recurrence":
+    case "migration":
+      return "system";
+  }
+}
+
+/** Phase 0：reopen 恢复前的简单硬冲突检查（同一天时间重叠） */
+function studyBlocksOverlap(a: StudyBlock, b: StudyBlock): boolean {
+  if (a.date !== b.date) return false;
+  const startA = timeToMinutes(a.startTime);
+  const endA = timeToMinutes(a.endTime);
+  const startB = timeToMinutes(b.startTime);
+  const endB = timeToMinutes(b.endTime);
+  if (startA === null || endA === null || startB === null || endB === null) return false;
+  return startA < endB && startB < endA;
+}
 
 /**
  * Task 7 Change Set V2：reserved-ID 创建任务（与 addAssignment 完全一致：linked DDL mark +
@@ -907,6 +954,28 @@ export interface AppState {
     patch: Partial<Omit<Assignment, "id">>,
     context?: LearningMutationContext
   ) => void;
+  /** Phase 0：只写非生命周期字段；closed 任务限制 planning 字段 */
+  updateTaskFields: (id: string, patch: TaskFieldPatch, context?: LearningMutationContext) => void;
+  /** Phase 0：设置/清除 doDate（仅 active） */
+  setTaskDoDate: (id: string, doDate: string | null, context?: LearningMutationContext) => void;
+  /** Phase 0：terminal transition 预览（无副作用） */
+  previewTaskTransition: (
+    id: string,
+    to: TaskTerminalStatus,
+    transitionId?: string
+  ) => TaskTransitionPreview | null;
+  /** Phase 0：原子提交/完成（preview → apply） */
+  transitionTask: (
+    id: string,
+    to: TaskTerminalStatus,
+    input: { transitionId: string; source: TaskTransitionSource; batchId?: string }
+  ) => TaskTransitionResult | TaskTransitionRejected;
+  /** Phase 0：撤销最近一次 terminal transition */
+  undoTaskTransition: (id: string, transitionId: string) => TaskTransitionUndoResult;
+  /** Phase 0：重新打开预览（可恢复 blocks/reminders/child） */
+  previewTaskReopen: (id: string) => TaskReopenPreview | null;
+  /** Phase 0：重新打开并可选恢复 */
+  reopenTask: (id: string, input: TaskReopenInput) => TaskReopenResult;
   updateAssignmentStatus: (
     id: string,
     status: Assignment["status"],
@@ -1980,6 +2049,8 @@ export const useAppStore = create<AppState>()(
               studyBlocks: newStudyBlocks,
               assignmentId: next.id,
               now: Date.now(),
+              releasedBy: next.status === "submitted" ? "task-submitted" : "task-completed",
+              releasedAt: nowLocalString(),
             });
             newStudyBlocks = released.studyBlocks;
             newReminders = clearScheduledRemindersForReleasedBlocks(
@@ -2038,6 +2109,460 @@ export const useAppStore = create<AppState>()(
         get().updateAssignment({ ...current, ...patch, id }, context);
       },
 
+      // ---- Phase 0：Task Lifecycle Commands ----
+
+      updateTaskFields: (id, patch, context) => {
+        const current = get().assignments.find((a) => a.id === id);
+        if (!current) return;
+        const safe: Record<string, unknown> = { ...patch };
+        if (current.status === "submitted" || current.status === "completed") {
+          // closed 任务不允许改 planning 字段；先 reopen 再编辑
+          for (const field of [
+            "ddl",
+            "estimatedMinutes",
+            "courseId",
+            "recurrence",
+            "submissionRequired",
+            "doDate",
+          ]) {
+            delete safe[field];
+          }
+        }
+        get().updateAssignment(
+          {
+            ...current,
+            ...safe,
+            id,
+            // 运行时防御：即使 caller 传入 lifecycle 字段也不改
+            status: current.status,
+            progress: current.progress,
+          } as Assignment,
+          context
+        );
+      },
+
+      setTaskDoDate: (id, doDate, context) => {
+        const current = get().assignments.find((a) => a.id === id);
+        if (!current) return;
+        if (current.status === "submitted" || current.status === "completed") return;
+        if (doDate !== null && !isValidLocalDate(doDate)) return;
+        get().updateAssignment(
+          { ...current, doDate: doDate ?? undefined },
+          context
+        );
+      },
+
+      previewTaskTransition: (id, to, transitionId) => {
+        const state = get();
+        const task = state.assignments.find((a) => a.id === id);
+        if (!task) return null;
+        return buildTaskTransitionPreview({
+          task,
+          studyBlocks: state.studyBlocks,
+          reminders: state.reminders,
+          focusSessions: state.focusSessions,
+          assignments: state.assignments,
+          now: new Date(),
+          nowLocal: nowLocalString(),
+          transitionId: transitionId ?? createId("tt"),
+          toStatus: to,
+        });
+      },
+
+      transitionTask: (id, to, input) => {
+        const state = get();
+        const task = state.assignments.find((a) => a.id === id);
+        if (!task) return { ok: false, blocker: "not-found" };
+
+        // idempotent：同一 transitionId 重试 → 直接返回上次结果，不重复副作用
+        if (task.lastTerminalTransition?.id === input.transitionId) {
+          return {
+            ok: true,
+            transitionId: input.transitionId,
+            taskId: id,
+            appliedStatus: task.lastTerminalTransition.toStatus,
+            releasedStudyBlockIds: task.lastTerminalTransition.releasedStudyBlockIds,
+            cancelledReminderIds: task.lastTerminalTransition.cancelledReminderIds,
+            generatedRecurrenceId: task.lastTerminalTransition.generatedRecurrenceId,
+          };
+        }
+        if (task.status === to) {
+          return { ok: false, blocker: "already-completed" };
+        }
+
+        const now = new Date();
+        const nowLocal = nowLocalString();
+        const preview = buildTaskTransitionPreview({
+          task,
+          studyBlocks: state.studyBlocks,
+          reminders: state.reminders,
+          focusSessions: state.focusSessions,
+          assignments: state.assignments,
+          now,
+          nowLocal,
+          transitionId: input.transitionId,
+          toStatus: to,
+        });
+        if (preview.blockers.includes("focus-running")) {
+          return { ok: false, blocker: "focus-running" };
+        }
+        if (preview.blockers.includes("already-completed")) {
+          return { ok: false, blocker: "already-completed" };
+        }
+
+        const released = releaseFutureStudyBlocksForAssignment({
+          studyBlocks: state.studyBlocks,
+          assignmentId: id,
+          now: now.getTime(),
+          releasedBy: to === "submitted" ? "task-submitted" : "task-completed",
+          releasedAt: nowLocal,
+        });
+        const releasedSet = new Set(released.releasedIds);
+        const blockTaskIds = new Map(
+          state.studyBlocks.map((block) => [block.id, block.assignmentId])
+        );
+        const cancelAssignment = cancelScheduledAssignmentReminders(
+          state.reminders,
+          id,
+          to === "submitted" ? "task-submitted" : "task-completed",
+          nowLocal
+        );
+        const cancelBlocks = cancelScheduledRemindersForReleasedBlocks(
+          cancelAssignment.reminders,
+          releasedSet,
+          blockTaskIds,
+          nowLocal
+        );
+        const cancelledReminderIds = [
+          ...cancelAssignment.cancelledIds,
+          ...cancelBlocks.cancelledIds,
+        ];
+
+        const terminalTask: Assignment = {
+          ...task,
+          status: to,
+          submittedAt: to === "submitted" ? nowLocal : task.submittedAt,
+          completedAt: to === "completed" ? nowLocal : task.completedAt,
+        };
+        const hasExistingChild = state.assignments.some(
+          (candidate) => candidate.recurrenceParentId === id
+        );
+        const shouldSpawn =
+          isAssignmentPlanningEligible(task) &&
+          !!task.recurrence &&
+          !!task.ddl &&
+          !task.recurrenceSpawnedAt &&
+          !hasExistingChild;
+        const childDraft = shouldSpawn
+          ? buildNextRecurringAssignmentV2(terminalTask, now)
+          : null;
+        const child = childDraft
+          ? normalizeAssignment({ ...childDraft, id: createId("a") })
+          : null;
+        const childMark = child ? buildAssignmentDDLMark(child) : null;
+
+        const previous = task.lastTerminalTransition;
+        const generatedRecurrenceId = previous?.generatedRecurrenceId ?? child?.id;
+        const lastTerminalTransition: NonNullable<Assignment["lastTerminalTransition"]> = {
+          id: input.transitionId,
+          at: nowLocal,
+          fromStatus: task.status,
+          toStatus: to,
+          activeStatusBeforeTerminal:
+            task.status === "todo" || task.status === "doing"
+              ? task.status
+              : (previous?.activeStatusBeforeTerminal ?? "doing"),
+          releasedStudyBlockIds: [
+            ...new Set([...(previous?.releasedStudyBlockIds ?? []), ...released.releasedIds]),
+          ],
+          cancelledReminderIds: [
+            ...new Set([...(previous?.cancelledReminderIds ?? []), ...cancelledReminderIds]),
+          ],
+          ...(generatedRecurrenceId ? { generatedRecurrenceId } : {}),
+          ...(input.batchId ? { batchId: input.batchId } : {}),
+          source: input.source,
+        };
+
+        const updatedTask: Assignment = {
+          ...terminalTask,
+          lastTerminalTransition,
+          ...(child ? { recurrenceSpawnedAt: nowLocal } : {}),
+        };
+
+        const assignments = state.assignments.map((candidate) =>
+          candidate.id === id ? updatedTask : candidate
+        );
+        if (child) assignments.push(child);
+        const calendarMarks = childMark
+          ? [...state.calendarMarks, childMark]
+          : state.calendarMarks;
+        const reminders = reconcileAllAuto({
+          assignments,
+          calendarMarks,
+          reminders: cancelBlocks.reminders,
+          preferences: state.preferences,
+        });
+
+        set({
+          assignments,
+          calendarMarks,
+          reminders,
+          studyBlocks: released.studyBlocks,
+        });
+
+        const resolved = resolveLearningMutationContext({
+          source: historySourceForTransition(input.source),
+        });
+        const events = deriveAssignmentTransitionEvents({
+          before: task,
+          after: updatedTask,
+          context: resolved,
+          completionTrigger: "status",
+          environment: historyEnvironment(state),
+        });
+        if (child) {
+          events.push(
+            buildAssignmentCreatedEvent({
+              assignment: child,
+              context: { ...resolved, source: "system" },
+              environment: historyEnvironment(state),
+            })
+          );
+        }
+        enqueueLearningHistoryEvents(events);
+
+        return {
+          ok: true,
+          transitionId: input.transitionId,
+          taskId: id,
+          appliedStatus: to,
+          releasedStudyBlockIds: released.releasedIds,
+          cancelledReminderIds,
+          ...(child ? { generatedRecurrenceId: child.id } : {}),
+        };
+      },
+
+      undoTaskTransition: (id, transitionId) => {
+        const state = get();
+        const task = state.assignments.find((a) => a.id === id);
+        if (!task || task.lastTerminalTransition?.id !== transitionId) {
+          return {
+            ok: false,
+            restoredStatus: task?.status ?? "todo",
+            restoredStudyBlockIds: [],
+            restoredReminderIds: [],
+            skipped: [{ kind: "recurrence", id: transitionId, reason: "transition-not-found" }],
+          };
+        }
+        const source = task.lastTerminalTransition.source;
+        const result = get().reopenTask(id, {
+          restoreStudyBlocks: true,
+          restoreReminders: true,
+          deletePristineRecurrence: true,
+          transitionId,
+          source,
+        });
+        const restored = get().assignments.find((a) => a.id === id);
+        return {
+          ok: result.ok,
+          restoredStatus: restored?.status ?? task.status,
+          restoredStudyBlockIds: result.restoredStudyBlockIds,
+          restoredReminderIds: result.restoredReminderIds,
+          ...(result.deletedRecurrenceId
+            ? { deletedRecurrenceId: result.deletedRecurrenceId }
+            : {}),
+          skipped: result.skipped,
+        };
+      },
+
+      previewTaskReopen: (id) => {
+        const state = get();
+        const task = state.assignments.find((a) => a.id === id);
+        if (!task) return null;
+        return buildTaskReopenPreview({
+          task,
+          studyBlocks: state.studyBlocks,
+          reminders: state.reminders,
+          assignments: state.assignments,
+          now: new Date(),
+          nowLocal: nowLocalString(),
+        });
+      },
+
+      reopenTask: (id, input) => {
+        const state = get();
+        const task = state.assignments.find((a) => a.id === id);
+        if (!task || (task.status !== "submitted" && task.status !== "completed")) {
+          return {
+            ok: false,
+            taskId: id,
+            appliedStatus: "doing",
+            restoredStudyBlockIds: [],
+            restoredReminderIds: [],
+            skipped: [{ kind: "recurrence", id, reason: "not-closed" }],
+          };
+        }
+
+        const now = new Date();
+        const nowLocal = nowLocalString();
+        const preview = buildTaskReopenPreview({
+          task,
+          studyBlocks: state.studyBlocks,
+          reminders: state.reminders,
+          assignments: state.assignments,
+          now,
+          nowLocal,
+        });
+        if (!preview) {
+          return {
+            ok: false,
+            taskId: id,
+            appliedStatus: "doing",
+            restoredStudyBlockIds: [],
+            restoredReminderIds: [],
+            skipped: [{ kind: "recurrence", id, reason: "preview-failed" }],
+          };
+        }
+
+        const skipped: TaskReopenResult["skipped"] = [];
+        const restorableBlockIds = new Set(
+          preview.restorableStudyBlocks.map((block) => block.id)
+        );
+        const activeBlocksBefore = state.studyBlocks.filter(
+          (block) => block.planningState !== "released"
+        );
+        const restoredStudyBlockIds: string[] = [];
+        let studyBlocks = state.studyBlocks;
+        if (input.restoreStudyBlocks) {
+          studyBlocks = state.studyBlocks.map((block) => {
+            if (!restorableBlockIds.has(block.id)) return block;
+            const conflict = activeBlocksBefore.some(
+              (active) => active.id !== block.id && studyBlocksOverlap(active, block)
+            );
+            if (conflict) {
+              skipped.push({ kind: "study-block", id: block.id, reason: "conflict" });
+              return block;
+            }
+            restoredStudyBlockIds.push(block.id);
+            return {
+              ...block,
+              planningState: undefined,
+              releasedAt: undefined,
+              releasedBy: undefined,
+              releasedByTaskId: undefined,
+            };
+          });
+        }
+
+        const restoredReminderIds: string[] = [];
+        let reminders = state.reminders;
+        if (input.restoreReminders) {
+          const validAssignmentIds = new Set(
+            state.assignments
+              .filter((assignment) => isAssignmentPlanningEligible(assignment))
+              .map((assignment) => assignment.id)
+          );
+          validAssignmentIds.add(id);
+          const validStudyBlockIds = new Set(
+            studyBlocks
+              .filter(
+                (block) =>
+                  block.planningState !== "released" &&
+                  (block.assignmentId === id || restoredStudyBlockIds.includes(block.id))
+              )
+              .map((block) => block.id)
+          );
+          const restored = restoreCancelledRemindersForTask({
+            reminders,
+            taskId: id,
+            transitionAt: task.lastTerminalTransition?.at ?? nowLocal,
+            now: nowLocal,
+            validAssignmentIds,
+            validStudyBlockIds,
+            validCalendarMarkIds: new Set(state.calendarMarks.map((mark) => mark.id)),
+          });
+          reminders = restored.reminders;
+          restoredReminderIds.push(...restored.restoredIds);
+          for (const skippedId of restored.skippedIds) {
+            skipped.push({ kind: "reminder", id: skippedId, reason: "not-restorable" });
+          }
+        }
+
+        let assignments = state.assignments;
+        let calendarMarks = state.calendarMarks;
+        let deletedRecurrenceId: string | undefined;
+        const child = preview.recurrenceChild;
+        const childAssignment = child
+          ? state.assignments.find((candidate) => candidate.id === child.id)
+          : undefined;
+        if (input.deletePristineRecurrence && child?.pristine) {
+          const snapshot = collectAssignmentDeleteSnapshot(state, child.id);
+          if (snapshot) {
+            const removed = removeAssignmentDeleteSnapshot(
+              { ...state, studyBlocks, reminders },
+              snapshot
+            );
+            assignments = removed.assignments;
+            calendarMarks = removed.calendarMarks;
+            studyBlocks = removed.studyBlocks;
+            reminders = removed.reminders;
+            deletedRecurrenceId = child.id;
+          }
+        }
+
+        const updatedTask: Assignment = {
+          ...task,
+          status: preview.toStatus,
+          submittedAt: undefined,
+          completedAt: undefined,
+          lastTerminalTransition: undefined,
+          ...(deletedRecurrenceId ? { recurrenceSpawnedAt: undefined } : {}),
+        };
+        assignments = assignments.map((candidate) =>
+          candidate.id === id ? updatedTask : candidate
+        );
+        reminders = reconcileAllAuto({
+          assignments,
+          calendarMarks,
+          reminders,
+          preferences: state.preferences,
+        });
+
+        set({ assignments, calendarMarks, reminders, studyBlocks });
+
+        const resolved = resolveLearningMutationContext({
+          source: historySourceForTransition(input.source),
+        });
+        const events = deriveAssignmentTransitionEvents({
+          before: task,
+          after: updatedTask,
+          context: resolved,
+          completionTrigger: "status",
+          environment: historyEnvironment(state),
+        });
+        if (deletedRecurrenceId && childAssignment) {
+          events.push(
+            buildAssignmentLifecycleEvent(
+              "assignment.deleted",
+              childAssignment,
+              resolved,
+              state
+            )
+          );
+        }
+        enqueueLearningHistoryEvents(events);
+
+        return {
+          ok: true,
+          taskId: id,
+          appliedStatus: preview.toStatus,
+          restoredStudyBlockIds,
+          restoredReminderIds,
+          ...(deletedRecurrenceId ? { deletedRecurrenceId } : {}),
+          skipped,
+        };
+      },
+
       /**
        * Task 6A：设置任务关联的课程资料 ID。
        * Workflow UX V7：invariant 由 updateAssignment 写入边界统一保证——
@@ -2082,6 +2607,8 @@ export const useAppStore = create<AppState>()(
               studyBlocks,
               assignmentId: id,
               now: Date.now(),
+              releasedBy: status === "submitted" ? "task-submitted" : "task-completed",
+              releasedAt: nowLocalString(),
             });
             studyBlocks = released.studyBlocks;
             reminders = clearScheduledRemindersForReleasedBlocks(
@@ -2153,6 +2680,8 @@ export const useAppStore = create<AppState>()(
               studyBlocks,
               assignmentId: id,
               now: Date.now(),
+              releasedBy: updated.status === "submitted" ? "task-submitted" : "task-completed",
+              releasedAt: nowLocalString(),
             });
             studyBlocks = released.studyBlocks;
             reminders = clearScheduledRemindersForReleasedBlocks(
@@ -2219,6 +2748,8 @@ export const useAppStore = create<AppState>()(
               studyBlocks,
               assignmentId,
               now: Date.now(),
+              releasedBy: updated.status === "submitted" ? "task-submitted" : "task-completed",
+              releasedAt: nowLocalString(),
             });
             studyBlocks = released.studyBlocks;
             reminders = clearScheduledRemindersForReleasedBlocks(

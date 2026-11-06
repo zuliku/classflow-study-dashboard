@@ -18,6 +18,7 @@ export type LearningHistoryEntityType =
 export type LearningHistoryEventType =
   | "assignment.created"
   | "assignment.status_changed"
+  | "assignment.submitted"
   | "assignment.completed"
   | "assignment.reopened"
   | "assignment.deadline_changed"
@@ -80,14 +81,33 @@ export interface AssignmentStatusChangedData {
 
 export type AssignmentCompletionTrigger = "status" | "progress" | "subtasks" | "update";
 
+export interface AssignmentSubmittedData {
+  previousStatus: import("@/types").Assignment["status"];
+  /** 本地墙钟；旧数据可缺失 */
+  submittedAt: string | null;
+  ddl: string | null;
+  /** 提交时是否按时；无可靠 DDL / 时间 → null */
+  onTime: boolean | null;
+}
+
 export interface AssignmentCompletedData {
   previousStatus: import("@/types").Assignment["status"];
   completionTrigger: AssignmentCompletionTrigger;
+  /** Phase 0：完成时间快照（旧事件可缺失） */
+  completedAt?: string | null;
+  /** Phase 0：若先提交，保留提交时间 */
+  submittedAt?: string | null;
+  /** Phase 0：按 academicDoneAt 判断；无可靠数据 → null */
+  onTime?: boolean | null;
 }
 
 export interface AssignmentReopenedData {
-  from: "completed";
+  from: "submitted" | "completed";
   to: import("@/types").Assignment["status"];
+  /** Phase 0：reopen 恢复的实体（旧事件可缺失） */
+  restoredStudyBlockIds?: string[];
+  restoredReminderIds?: string[];
+  deletedRecurrenceId?: string;
 }
 
 export interface AssignmentDeadlineChangedData {
@@ -181,6 +201,7 @@ export interface SemesterUpdatedData {
 export type LearningHistoryEvent =
   | (LearningHistoryEventBase & { type: "assignment.created"; data: AssignmentCreatedData })
   | (LearningHistoryEventBase & { type: "assignment.status_changed"; data: AssignmentStatusChangedData })
+  | (LearningHistoryEventBase & { type: "assignment.submitted"; data: AssignmentSubmittedData })
   | (LearningHistoryEventBase & { type: "assignment.completed"; data: AssignmentCompletedData })
   | (LearningHistoryEventBase & { type: "assignment.reopened"; data: AssignmentReopenedData })
   | (LearningHistoryEventBase & { type: "assignment.deadline_changed"; data: AssignmentDeadlineChangedData })
