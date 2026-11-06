@@ -116,16 +116,16 @@ describe("deriveTimelineItems（Projection + DDL 去重）", () => {
 });
 
 describe("deriveUnscheduledAssignments + analyzeStudyBlockPlacement", () => {
-  it("已完成或已安排的任务不进待安排", () => {
+  it("已完成不进待安排；已安排但未估时仍保留（unknown 不等于已排满）", () => {
     const out = deriveUnscheduledAssignments({
       assignments: [
         { id: "a1", courseId: "c1", title: "待安排", description: "", ddl: "2026-08-12T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] },
-        { id: "a2", courseId: "c1", title: "已安排", description: "", ddl: "2026-08-12T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] },
+        { id: "a2", courseId: "c1", title: "已安排但未估时", description: "", ddl: "2026-08-12T23:59:00", priority: "medium", status: "todo", progress: 0, tags: [] },
         { id: "a3", courseId: "c1", title: "已完成", description: "", ddl: "2026-08-12T23:59:00", priority: "medium", status: "completed", progress: 100, tags: [] },
       ],
       studyBlocks: [{ id: "sb1", title: "已安排", date: "2026-08-12", startTime: "19:00", endTime: "20:00", assignmentId: "a2", source: "manual" }],
     });
-    expect(out.map((a) => a.id)).toEqual(["a1"]);
+    expect(out.map((a) => a.id)).toEqual(["a1", "a2"]);
   });
 
   it("Workflow UX V14：submitted 与 completed 同为 terminal，不进入 Shelf；todo/doing 正常进入", () => {
@@ -141,7 +141,7 @@ describe("deriveUnscheduledAssignments + analyzeStudyBlockPlacement", () => {
     expect(out.map((a) => a.id).sort()).toEqual(["a-doing", "a-todo"]);
   });
 
-  it("已有 linked block 的 active 任务仍排除；standalone block 不影响其它任务资格", () => {
+  it("已有 linked block 但未估时仍保留；standalone block 不影响其它任务资格", () => {
     const out = deriveUnscheduledAssignments({
       assignments: [
         { id: "a-has", courseId: "c1", title: "已有计划", description: "", ddl: "", priority: "medium", status: "doing", progress: 10, tags: [] },
@@ -153,7 +153,7 @@ describe("deriveUnscheduledAssignments + analyzeStudyBlockPlacement", () => {
         { id: "sb-free", title: "自由学习", date: "2026-08-13", startTime: "19:00", endTime: "20:00", source: "manual" },
       ],
     });
-    expect(out.map((a) => a.id)).toEqual(["a-free"]);
+    expect(out.map((a) => a.id)).toEqual(["a-has", "a-free"]);
   });
 
   it("Case 9/29（Task 5 新语义）：与课程重叠 = soft（courseOverlaps，非 hard）；与另一 StudyBlock 重叠 = hard", () => {

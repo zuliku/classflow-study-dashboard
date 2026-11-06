@@ -6,6 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { format, formatDistanceToNow, differenceInCalendarDays, differenceInHours, startOfDay } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { parseLocalDDL } from "@/lib/ddl";
+import { isActiveTask } from "@/lib/tasks/taskLifecycle";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { paginate } from "@/lib/pagination";
 import { DDL_DENSITY_METRICS, resolveAdaptiveDdlLayout, DdlDensity } from "@/lib/ui/adaptiveDdlLayout";
@@ -44,9 +45,11 @@ export function UpcomingDDL() {
     () =>
       [...assignments]
         .filter((a) => {
-          if (a.status === "completed") return false;
+          // Phase 0：submitted/completed 不再作为待办 DDL；逾期始终置顶，不被 warning 窗口隐藏
+          if (!isActiveTask(a)) return false;
           const ddlDate = parseLocalDDL(a.ddl);
           if (!ddlDate) return false;
+          if (ddlDate.getTime() < nowTick) return true;
           const diff = differenceInCalendarDays(startOfDay(ddlDate), todayStart);
           return diff >= 0 && diff <= warningDays;
         })
@@ -55,7 +58,7 @@ export function UpcomingDDL() {
           const timeB = parseLocalDDL(b.ddl)?.getTime() ?? 0;
           return timeA - timeB;
         }),
-    [assignments, warningDays, todayStart]
+    [assignments, warningDays, todayStart, nowTick]
   );
 
   const containerRef = useRef<HTMLDivElement | null>(null);

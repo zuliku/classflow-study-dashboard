@@ -1,5 +1,6 @@
 /** 工作区页面 Tab（设置是 Modal Action，不是 Tab） */
 export type NavTab =
+  | "today"
   | "overview"
   | "timetable"
   | "assignments"
@@ -19,7 +20,7 @@ export type Priority = "urgent" | "high" | "medium" | "low";
 export type AssignmentStatus = "todo" | "doing" | "submitted" | "completed";
 
 /** 应用启动后进入的默认位置 */
-export type StartupView = "overview" | "timetable" | "assignments" | "last";
+export type StartupView = "today" | "overview" | "timetable" | "assignments" | "last";
 /** 新建任务的默认状态（禁止 submitted/completed，无合理产品语义） */
 export type DefaultTaskStatus = "todo" | "doing";
 /** 内容密度：影响任务列表/课程卡片/命令中心行高 */

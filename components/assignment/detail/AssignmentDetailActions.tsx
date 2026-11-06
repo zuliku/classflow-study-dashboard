@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
-import { Bell, CalendarPlus, Check, Edit3, RotateCcw } from "lucide-react";
+import { Bell, CalendarPlus, Check, Edit3, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { AssignmentStatus } from "@/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,8 +17,9 @@ import { cn } from "@/lib/utils";
  *   「在时间表查看」（View existing schedule）是独立语义，不受此影响
  */
 export function AssignmentDetailActions({
-  completed,
-  onComplete,
+  status,
+  submissionRequired,
+  onTerminal,
   onReopen,
   onSchedule,
   scheduleDisabled = false,
@@ -26,8 +28,9 @@ export function AssignmentDetailActions({
   onEdit,
   className,
 }: {
-  completed: boolean;
-  onComplete: () => void;
+  status: AssignmentStatus;
+  submissionRequired?: boolean;
+  onTerminal: () => void;
   onReopen: () => void;
   onSchedule: () => void;
   /** Workflow UX V14：submitted / completed → true（planning terminal） */
@@ -42,15 +45,26 @@ export function AssignmentDetailActions({
       data-testid="detail-primary-actions"
       className={cn("flex flex-wrap items-center gap-1.5", className)}
     >
-      {completed ? (
+      {status === "completed" ? (
         <Button variant="secondary" size="sm" onClick={onReopen} className="h-8 px-3">
           <RotateCcw className="h-3.5 w-3.5" />
           重新打开
         </Button>
+      ) : status === "submitted" ? (
+        <>
+          <Button variant="primary" size="sm" onClick={onTerminal} className="h-8 px-3">
+            <Check className="h-3.5 w-3.5" />
+            确认完成
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onReopen} className="h-8 px-3">
+            <RotateCcw className="h-3.5 w-3.5" />
+            重新打开
+          </Button>
+        </>
       ) : (
-        <Button variant="secondary" size="sm" onClick={onComplete} className="h-8 px-3">
-          <Check className="h-3.5 w-3.5" />
-          标记完成
+        <Button variant="secondary" size="sm" onClick={onTerminal} className="h-8 px-3">
+          {submissionRequired ? <Send className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+          {submissionRequired ? "提交" : "标记完成"}
         </Button>
       )}
       <Button

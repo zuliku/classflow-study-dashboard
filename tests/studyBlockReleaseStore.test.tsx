@@ -27,8 +27,8 @@ import type { Assignment, Reminder, Semester } from "@/types";
 
 /**
  * Workflow UX V15 —— Terminal → Release：Store boundary 行为锁定。
- * 所有 eligible → terminal 入口（status / update / progress=100 / last subtask）
- * 在同一 set 内 release 未来 blocks + 清理 scheduled reminder；
+ * 旧 terminal 入口（status / update / progress=100）仍在迁移期保留；
+ * Phase 0 起 subtask 不再写 status，也不触发 release。
  * terminal→active 不恢复；recurrence child 不继承 transfer。
  */
 
@@ -167,7 +167,7 @@ describe("所有 completion 路径最终一致", () => {
     expect(futureBlock().planningState).toBe("released");
   });
 
-  it("toggle 最后一个 subtask → completed → release", () => {
+  it("toggle subtask 只改子任务，不写 status / 不释放计划（Phase 0）", () => {
     seed({
       subtasks: [
         { id: "st-1", title: "子任务一", completed: false },
@@ -177,8 +177,9 @@ describe("所有 completion 路径最终一致", () => {
       useAppStore.getState().toggleSubtask("a-1", "st-1");
     });
     const a = useAppStore.getState().assignments.find((x) => x.id === "a-1")!;
-    expect(a.status).toBe("completed");
-    expect(futureBlock().planningState).toBe("released");
+    expect(a.status).toBe("todo");
+    expect(a.subtasks?.[0].completed).toBe(true);
+    expect(futureBlock().planningState).toBeUndefined();
   });
 });
 

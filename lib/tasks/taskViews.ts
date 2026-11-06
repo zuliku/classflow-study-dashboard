@@ -9,6 +9,13 @@ import { getTaskDeadline } from "@/lib/tasks/taskSemantics";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { TaskHealthState } from "@/lib/tasks/taskHealth";
 import { deriveAssignmentHealthWithAvailability } from "@/lib/tasks/taskHealthView";
+import { isDoToday, isDueToday, isTaskOverdue } from "@/lib/tasks/taskLifecycle";
+import {
+  isActiveStudyBlock,
+  remainingMinutes,
+  schedulingState,
+  TaskSchedulingState,
+} from "@/lib/tasks/taskPlanning";
 
 export type TaskWorkspaceView =
   | "focus"
@@ -58,7 +65,10 @@ export interface TaskWorkspaceMeta {
   studyBlockCount: number;
   scheduledToday: boolean;
   deadlineToday: boolean;
+  doToday: boolean;
   overdue: boolean;
+  remainingMinutes: number | null;
+  schedulingState: TaskSchedulingState;
   /** Deadline Health（planning 数据提供时才有） */
   health?: TaskHealthState;
 }
@@ -98,6 +108,8 @@ export function buildTaskWorkspaceMeta(
 export function indexStudyBlocksByAssignment(studyBlocks: StudyBlock[]): Map<string, StudyBlock[]> {
   const map = new Map<string, StudyBlock[]>();
   for (const b of studyBlocks) {
+    // Phase 0：released 是历史，不是有效计划
+    if (!isActiveStudyBlock(b)) continue;
     const key = b.assignmentId;
     if (!key) continue;
     const list = map.get(key);
@@ -123,11 +135,11 @@ export function buildTaskWorkspaceMetaWithIndex(
     scheduledMinutes,
     studyBlockCount: blocks.length,
     scheduledToday: blocks.some((b) => b.date === today),
-    deadlineToday: !!deadline && dayStr(deadline) === today,
-    overdue:
-      !!deadline &&
-      task.status !== "completed" &&
-      dayStr(deadline) < today,
+    deadlineToday: isDueToday(task, now),
+    doToday: isDoToday(task, now),
+    overdue: isTaskOverdue(task, now),
+    remainingMinutes: remainingMinutes(task, blocksById),
+    schedulingState: schedulingState(task, blocksById),
   };
   if (planning) {
     meta.health = deriveAssignmentHealthWithAvailability(task, blocks, planning, now).state;
@@ -236,14 +248,17 @@ function filterFor(view: TaskWorkspaceView, all: TaskWorkspaceItem[], now: Date)
     }
     case "today":
       return all
-        .filter((it) => isActiveTask(it.task) && (it.meta.deadlineToday || it.meta.scheduledToday))
+        .filter(
+          (it) =>
+            isActiveTask(it.task) &&
+            (it.meta.overdue || it.meta.deadlineToday || it.meta.doToday || it.meta.scheduledToday)
+        )
         .sort(deadlineAsc);
-    case "upcoming": {
-      const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    case "upcoming":
+      // Phase 0：逾期置顶，不再从“即将截止”中消失
       return all
-        .filter((it) => isActiveTask(it.task) && !!it.meta.deadline && it.meta.deadline > dayEnd)
+        .filter((it) => isActiveTask(it.task) && !!it.meta.deadline)
         .sort(deadlineAsc);
-    }
     case "at-risk": {
       // 只包含 Health 判定为 at-risk / overdue 的 active 任务；overdue 在前，内部 DDL 早优先
       const items = all.filter(
@@ -259,8 +274,9 @@ function filterFor(view: TaskWorkspaceView, all: TaskWorkspaceItem[], now: Date)
       });
     }
     case "unscheduled":
+      // Phase 0：部分安排 / 未估时也算待安排，不再“有任意 block 就消失”
       return all
-        .filter((it) => isActiveTask(it.task) && it.meta.studyBlockCount === 0)
+        .filter((it) => isActiveTask(it.task) && it.meta.schedulingState !== "full")
         .sort(deadlineAsc);
   }
 }

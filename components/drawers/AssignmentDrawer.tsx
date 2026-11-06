@@ -47,6 +47,8 @@ import { DetailContentStage } from "@/components/ui/DetailContentStage";
 import { DetailDisclosure } from "@/components/assignment/detail/DetailDisclosure";
 import { EntityActivitySection } from "@/components/history/EntityActivitySection";
 import { AssignmentDetailHero } from "@/components/assignment/detail/AssignmentDetailHero";
+import { TaskTerminalPreviewDialog } from "@/components/task/TaskTerminalPreviewDialog";
+import type { TaskTransitionPreview } from "@/lib/tasks/taskTransitions";
 import { AssignmentDetailActions } from "@/components/assignment/detail/AssignmentDetailActions";
 import { AssignmentDetailExecution } from "@/components/assignment/detail/AssignmentDetailExecution";
 import { MaterialTypeIcon, MATERIAL_TYPE_LABELS } from "@/components/ui/MaterialTypeIcon";
@@ -96,8 +98,10 @@ export function AssignmentDrawer() {
     setSelectedAssignmentId,
     setSelectedCourseId,
     setActiveTab,
-    updateAssignmentStatus,
-    updateAssignmentProgress,
+    previewTaskTransition,
+    transitionTask,
+    undoTaskTransition,
+    reopenTask,
     updateAssignmentPriority,
     toggleSubtask,
     setAssignmentMaterialIds,
@@ -126,8 +130,10 @@ export function AssignmentDrawer() {
       setSelectedAssignmentId: s.setSelectedAssignmentId,
       setSelectedCourseId: s.setSelectedCourseId,
       setActiveTab: s.setActiveTab,
-      updateAssignmentStatus: s.updateAssignmentStatus,
-      updateAssignmentProgress: s.updateAssignmentProgress,
+      previewTaskTransition: s.previewTaskTransition,
+      transitionTask: s.transitionTask,
+      undoTaskTransition: s.undoTaskTransition,
+      reopenTask: s.reopenTask,
       updateAssignmentPriority: s.updateAssignmentPriority,
       toggleSubtask: s.toggleSubtask,
       setAssignmentMaterialIds: s.setAssignmentMaterialIds,
@@ -160,6 +166,8 @@ export function AssignmentDrawer() {
   const [focusPickerOpen, setFocusPickerOpen] = useState(false);
   // Task Execution Loop：本任务最近一次完成专注的会话 id（inline follow-up，不持久化）
   const [recentCompletedSessionId, setRecentCompletedSessionId] = useState<string | null>(null);
+  // Phase 0：terminal transition preview（提交/完成 side effects）
+  const [terminalPreview, setTerminalPreview] = useState<TaskTransitionPreview | null>(null);
   // Task Execution Loop V1.1：Follow-up 实体归属 —— 只观察「当前实体自己的 active Focus」。
   // observedFocusRef 由纯函数 reconcileObservedAssignmentFocus 驱动（不建 store）：
   // - armed 条件 = currentId 且 active.assignmentId === currentId
@@ -189,6 +197,7 @@ export function AssignmentDrawer() {
     setMoreOpen(false);
     setFocusPickerOpen(false);
     setRecentCompletedSessionId(null);
+    setTerminalPreview(null);
   }, [currentId]);
 
   // Follow-up observation reconcile：currentId 为 ownership boundary（含 60ms swap 期间），
@@ -237,6 +246,83 @@ export function AssignmentDrawer() {
   );
 
   if (!assignment) return null;
+
+  const executeTerminal = (preview: TaskTransitionPreview) => {
+    const result = transitionTask(assignment.id, preview.toStatus, {
+      transitionId: preview.transitionId,
+      source: "ui",
+    });
+    setTerminalPreview(null);
+    if (!result.ok) {
+      pushToast({
+        type: "error",
+        message:
+          result.blocker === "focus-running"
+            ? "当前任务正在专注中，请先结束专注"
+            : result.blocker === "already-completed"
+              ? "任务已经处于该状态"
+              : "这个任务暂时无法更新，请刷新后重试",
+      });
+      return;
+    }
+    const isSubmit = preview.toStatus === "submitted";
+    pushToast({
+      message: isSubmit ? "已提交，等待反馈" : "已完成",
+      actionLabel: "撤销",
+      actionAriaLabel: `撤销${isSubmit ? "提交" : "完成"}《${assignment.title}》`,
+      duration: 10_000,
+      onAction: () => {
+        const undo = undoTaskTransition(assignment.id, preview.transitionId);
+        pushToast({
+          type: undo.ok ? "success" : "warning",
+          message: undo.ok ? "已撤销" : "撤销未完全成功，请检查任务",
+        });
+      },
+    });
+  };
+
+  const handleTerminal = () => {
+    const to =
+      assignment.status === "submitted"
+        ? "completed"
+        : assignment.submissionRequired
+          ? "submitted"
+          : "completed";
+    const preview = previewTaskTransition(assignment.id, to);
+    if (!preview) {
+      pushToast({ type: "error", message: "找不到这个任务" });
+      return;
+    }
+    const hasEffects =
+      preview.sideEffects.releaseStudyBlocks.count > 0 ||
+      preview.sideEffects.cancelReminders.count > 0 ||
+      preview.sideEffects.recurrence.willGenerate ||
+      preview.sideEffects.incompleteSubtasks.count > 0;
+    if (hasEffects || preview.blockers.length > 0) {
+      setTerminalPreview(preview);
+      return;
+    }
+    executeTerminal(preview);
+  };
+
+  const handleReopen = () => {
+    const result = reopenTask(assignment.id, {
+      restoreStudyBlocks: true,
+      restoreReminders: true,
+      deletePristineRecurrence: true,
+      source: "ui",
+    });
+    if (!result.ok) {
+      pushToast({ type: "warning", message: "重新打开失败，请刷新后重试" });
+      return;
+    }
+    pushToast({
+      message:
+        result.restoredStudyBlockIds.length > 0 || result.restoredReminderIds.length > 0
+          ? "已重新打开，并恢复可用的计划与提醒"
+          : "已重新打开",
+    });
+  };
 
   const handleDelete = () => {
     // 与列表右键/批量删除一致：先二次确认（课程删除同范式），确认后仍保留 Toast 撤销
@@ -424,8 +510,6 @@ export function AssignmentDrawer() {
     assignment.id,
     assignment.autoReminderDisabled === true
   );
-  const completed = assignment.status === "completed";
-
   // ---- Task Execution Loop：Focus 编排 ----
   // 开始专注：不传 courseId（Store 由 assignmentId 自动推导 + snapshot）；不自动改任务状态
   const handleStartFocus = (plannedMinutes: number, note: string) => {
@@ -608,7 +692,6 @@ export function AssignmentDrawer() {
             recurrenceLabel={
               assignment.recurrence ? RECURRENCE_LABELS[assignment.recurrence] : undefined
             }
-            onStatusChange={(s) => updateAssignmentStatus(assignment.id, s)}
             onPriorityChange={(p) => updateAssignmentPriority(assignment.id, p)}
           />
 
@@ -651,9 +734,10 @@ export function AssignmentDrawer() {
             ) : null}
             </div>
             <AssignmentDetailActions
-              completed={completed}
-              onComplete={() => updateAssignmentStatus(assignment.id, "completed")}
-              onReopen={() => updateAssignmentStatus(assignment.id, "todo")}
+              status={assignment.status}
+              submissionRequired={assignment.submissionRequired}
+              onTerminal={handleTerminal}
+              onReopen={handleReopen}
               onSchedule={handleArrangeStudyTime}
               scheduleDisabled={!planningEligible}
               scheduleDisabledTitle={scheduleDisabledTitle}
@@ -681,9 +765,6 @@ export function AssignmentDrawer() {
               completed: st.completed,
             }))}
             onToggleSubtask={(subtaskId) => toggleSubtask(assignment.id, subtaskId)}
-            progress={assignment.progress}
-            onProgressChange={(p) => updateAssignmentProgress(assignment.id, p)}
-            showProgressControl={!completed}
             focusSummary={{
               completedCount: focusView.completedCount,
               totalCompletedMs: focusView.totalCompletedMs,
@@ -702,17 +783,21 @@ export function AssignmentDrawer() {
                 本次专注完成{recentDuration ? ` · ${recentDuration}` : ""}
               </span>
               <div className="ml-auto flex shrink-0 items-center gap-1">
-                {!completed && (
+                {assignment.status !== "completed" && (
                   <Button
                     variant="secondary"
                     size="sm"
                     className="h-7 px-2 text-[11px]"
                     onClick={() => {
-                      updateAssignmentStatus(assignment.id, "completed");
+                      handleTerminal();
                       setRecentCompletedSessionId(null);
                     }}
                   >
-                    标记完成
+                    {assignment.status === "submitted"
+                      ? "确认完成"
+                      : assignment.submissionRequired
+                        ? "提交"
+                        : "标记完成"}
                   </Button>
                 )}
                 <Button
@@ -959,6 +1044,15 @@ export function AssignmentDrawer() {
           </div>
         </div>
       </DetailContentStage>
+
+      {terminalPreview && (
+        <TaskTerminalPreviewDialog
+          preview={terminalPreview}
+          taskTitle={assignment.title}
+          onCancel={() => setTerminalPreview(null)}
+          onConfirm={() => executeTerminal(terminalPreview)}
+        />
+      )}
     </Drawer>
   );
 }

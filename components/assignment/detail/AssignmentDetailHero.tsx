@@ -13,12 +13,19 @@ import {
   formatScheduleSummaryText,
 } from "@/lib/tasks/assignmentDetailView";
 
-const STATUS_OPTIONS: { value: AssignmentStatus; label: string }[] = [
-  { value: "todo", label: "待完成" },
-  { value: "doing", label: "进行中" },
-  { value: "submitted", label: "已提交" },
-  { value: "completed", label: "已完成" },
-];
+const STATUS_LABELS: Record<AssignmentStatus, string> = {
+  todo: "待完成",
+  doing: "进行中",
+  submitted: "等待反馈",
+  completed: "已完成",
+};
+
+const STATUS_CLASSES: Record<AssignmentStatus, string> = {
+  todo: "border-line bg-white text-satin-grey",
+  doing: "border-line bg-pastel-mint text-charcoal",
+  submitted: "border-warning-border bg-warning-bg text-warning",
+  completed: "border-success-border bg-success-bg text-success",
+};
 
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
   { value: "urgent", label: "紧急" },
@@ -48,7 +55,6 @@ export function AssignmentDetailHero({
   healthClassName,
   healthHint,
   recurrenceLabel,
-  onStatusChange,
   onPriorityChange,
 }: {
   assignment: Assignment;
@@ -60,7 +66,6 @@ export function AssignmentDetailHero({
   healthHint: string | null;
   /** 重复规则中文标签（如 每周）；无 recurrence → undefined */
   recurrenceLabel?: string;
-  onStatusChange: (status: AssignmentStatus) => void;
   onPriorityChange: (priority: Priority) => void;
 }) {
   return (
@@ -99,13 +104,14 @@ export function AssignmentDetailHero({
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <UISelect<AssignmentStatus>
-            value={assignment.status}
-            onChange={onStatusChange}
-            ariaLabel="任务状态"
-            options={STATUS_OPTIONS}
-            triggerClassName="h-7 bg-white border-line-strong text-[11px] font-bold text-charcoal rounded-lg"
-          />
+          <span
+            className={cn(
+              "inline-flex h-7 items-center rounded-lg border px-2 text-[11px] font-bold",
+              STATUS_CLASSES[assignment.status]
+            )}
+          >
+            {STATUS_LABELS[assignment.status]}
+          </span>
           <UISelect<Priority>
             value={assignment.priority}
             onChange={onPriorityChange}

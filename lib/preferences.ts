@@ -54,7 +54,7 @@ export const MOTION_PREFERENCES: readonly AppPreferences["motionPreference"][] =
   "full",
   "reduced",
 ];
-export const STARTUP_VIEWS: readonly StartupView[] = ["overview", "timetable", "assignments", "last"];
+export const STARTUP_VIEWS: readonly StartupView[] = ["today", "overview", "timetable", "assignments", "last"];
 export const TASK_PRIORITIES: readonly Priority[] = ["low", "medium", "high", "urgent"];
 export const TASK_STATUSES: readonly AppPreferences["defaultTaskStatus"][] = ["todo", "doing"];
 export const CONTENT_DENSITIES: readonly ContentDensity[] = ["comfortable", "compact"];

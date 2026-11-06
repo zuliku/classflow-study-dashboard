@@ -469,7 +469,7 @@ function buildScheduleOccurrenceOverride(
 
 const TIME_SLICES: TimeSliceFilter[] = ["all", "overdue", "today", "3days", "7days", "completed"];
 
-const NAV_TABS: NavTab[] = ["overview", "timetable", "assignments", "courses", "kiro", "analytics", "group"];
+const NAV_TABS: NavTab[] = ["today", "overview", "timetable", "assignments", "courses", "kiro", "analytics", "group"];
 
 function isValidSemester(v: unknown): v is Semester {
   return (
@@ -2715,72 +2715,26 @@ export const useAppStore = create<AppState>()(
           return { assignments, calendarMarks, reminders, studyBlocks };
         }),
 
-      toggleSubtask: (assignmentId, subtaskId, context) =>
+      /**
+       * Phase 0：子任务只改变自身 completed 状态。
+       * - 不写 status / progress
+       * - 不触发 terminal side effects / recurrence
+       * - closed 任务只读（先 reopen）
+       */
+      toggleSubtask: (assignmentId, subtaskId) =>
         set((state) => {
           const target = state.assignments.find((a) => a.id === assignmentId);
-          let assignments = state.assignments.map((a) => {
+          if (!target || !isAssignmentPlanningEligible(target) || !target.subtasks) return {};
+          const assignments = state.assignments.map((a) => {
             if (a.id !== assignmentId || !a.subtasks) return a;
-            const updatedSub = a.subtasks.map((st) =>
-              st.id === subtaskId ? { ...st, completed: !st.completed } : st
-            );
-            const compCount = updatedSub.filter((st) => st.completed).length;
-            const newProgress = Math.round((compCount / updatedSub.length) * 100);
-            const newStatus: Assignment["status"] =
-              newProgress === 100 ? "completed" : newProgress > 0 ? "doing" : "todo";
-            return { ...a, subtasks: updatedSub, progress: newProgress, status: newStatus };
+            return {
+              ...a,
+              subtasks: a.subtasks.map((st) =>
+                st.id === subtaskId ? { ...st, completed: !st.completed } : st
+              ),
+            };
           });
-          let calendarMarks = state.calendarMarks;
-          let reminders = state.reminders;
-          let studyBlocks = state.studyBlocks;
-          // Task 7F + 7G：完成最后一个子任务 → 同样 spawn + 清除 scheduled reminders
-          const updated = assignments.find((a) => a.id === assignmentId);
-          let spawnedChild: Assignment | undefined;
-          if (target && updated && target.status !== "completed" && updated.status === "completed") {
-            const applied = handleAssignmentCompleted(assignments, calendarMarks, reminders, updated);
-            assignments = applied.assignments;
-            calendarMarks = applied.calendarMarks;
-            reminders = applied.reminders;
-            spawnedChild = applied.spawnedAssignment;
-          }
-          // Workflow UX V15：subtask 驱动的 eligible → terminal → release future blocks（原子）
-          if (target && updated && didAssignmentLosePlanningEligibility(target.status, updated.status)) {
-            const released = releaseFutureStudyBlocksForAssignment({
-              studyBlocks,
-              assignmentId,
-              now: Date.now(),
-              releasedBy: updated.status === "submitted" ? "task-submitted" : "task-completed",
-              releasedAt: nowLocalString(),
-            });
-            studyBlocks = released.studyBlocks;
-            reminders = clearScheduledRemindersForReleasedBlocks(
-              reminders,
-              new Set(released.releasedIds)
-            );
-          }
-          // P2：统一自动 DDL 提醒 reconcile
-          reminders = reconcileAllAuto({ assignments, calendarMarks, reminders, preferences: state.preferences });
-          // History
-          if (target && updated) {
-            const resolved = resolveLearningMutationContext(context);
-            const events = deriveAssignmentTransitionEvents({
-              before: target,
-              after: updated,
-              context: resolved,
-              completionTrigger: "subtasks",
-              environment: historyEnvironment(state),
-            });
-            if (spawnedChild) {
-              events.push(
-                buildAssignmentCreatedEvent({
-                  assignment: spawnedChild,
-                  context: { ...resolved, source: "system" },
-                  environment: historyEnvironment(state),
-                })
-              );
-            }
-            enqueueLearningHistoryEvents(events);
-          }
-          return { assignments, calendarMarks, reminders, studyBlocks };
+          return { assignments };
         }),
 
       deleteAssignment: (id, context) => {

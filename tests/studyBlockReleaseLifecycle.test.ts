@@ -194,7 +194,7 @@ describe("Free Time / Placement / scheduledMinutes 尊重 released", () => {
 });
 
 describe("Unscheduled Shelf：released 不算已安排", () => {
-  it("只有 released block 的 todo 任务重新出现在 Shelf；active block 继续隐藏；completed 恒不出现", () => {
+  it("只有 released block 的 todo 任务重新出现在 Shelf；active block 但未估时也保留；completed 恒不出现", () => {
     const out = deriveUnscheduledAssignments({
       assignments: [
         { id: "a-rel-only", courseId: "c", title: "仅释放", description: "", ddl: "", priority: "medium", status: "todo", progress: 0, tags: [] },
@@ -207,7 +207,7 @@ describe("Unscheduled Shelf：released 不算已安排", () => {
         mk({ id: "b-term", assignmentId: "a-terminal" }),
       ],
     });
-    expect(out.map((a) => a.id)).toEqual(["a-rel-only"]);
+    expect(out.map((a) => a.id)).toEqual(["a-rel-only", "a-active"]);
   });
 });
 

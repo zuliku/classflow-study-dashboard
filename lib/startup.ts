@@ -6,6 +6,8 @@ import { StartupView, NavTab } from "@/types";
  */
 export function resolveStartupTab(startupView: StartupView, lastWorkspaceTab: NavTab): NavTab {
   switch (startupView) {
+    case "today":
+      return "today";
     case "timetable":
       return "timetable";
     case "assignments":

@@ -5,6 +5,7 @@ import { Calendar, ClipboardList, Clock } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { getSemesterWeek } from "@/lib/semester";
 import { parseLocalDDL } from "@/lib/ddl";
+import { isActiveTask } from "@/lib/tasks/taskLifecycle";
 import { isScheduleActive, timeToMinutes } from "@/lib/schedule";
 import { isSameWeek, differenceInDays, format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -51,7 +52,7 @@ export function TimetableQuickGlance() {
     () =>
       assignments
         .filter((a) => {
-          if (a.status === "completed") return false;
+          if (!isActiveTask(a)) return false;
           const ddl = parseLocalDDL(a.ddl);
           return !!ddl && isSameWeek(ddl, today, { weekStartsOn: 1 });
         })
@@ -64,9 +65,11 @@ export function TimetableQuickGlance() {
     () =>
       [...assignments]
         .filter((a) => {
-          if (a.status === "completed") return false;
+          if (!isActiveTask(a)) return false;
           const ddlDate = parseLocalDDL(a.ddl);
           if (!ddlDate) return false;
+          // 逾期也进入临近区，避免首屏“没有紧急事项”的假象
+          if (ddlDate.getTime() < today.getTime()) return true;
           const diff = differenceInDays(ddlDate, today);
           return diff >= 0 && diff <= warningDays;
         })

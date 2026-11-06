@@ -100,6 +100,7 @@ export interface AppCommand {
 
 /** 导航命令的补充关键词（label 已含工作区全名；这里保留旧版搜索习惯词） */
 const NAV_KEYWORDS: Record<NavTab, string[]> = {
+  today: ["今天", "今日", "行动"],
   overview: ["总览", "首页"],
   timetable: ["时间表", "课表"],
   assignments: ["任务", "ddl"],

@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { StudyBlock, Semester, CourseSchedule } from "@/types";
 import { getWeekDateRange } from "@/lib/semester";
 import { isScheduleActive } from "@/lib/schedule";
+import { isActiveStudyBlock } from "@/lib/tasks/taskPlanning";
 
 /** StudyBlock 与某课程是否同时间重叠（视觉层判断；课程生效周由调用方过滤） */
 function timeOverlap(
@@ -63,6 +64,7 @@ export function buildOverviewStudyBlockLayers(input: {
     const dayBlocks = studyBlocks
       .filter(
         (b) =>
+          isActiveStudyBlock(b) &&
           b.date === date &&
           // 与课程重叠：不绘制卡片（由 Task Marker 呈现），与时间表一致
           !daySchedules.some((s) => timeOverlap(b, s))
@@ -118,7 +120,7 @@ export function buildOverviewCourseTaskMarkers(input: {
     const date = dateByDay.get(ctx.dayOfWeek);
     if (!date) return null;
     const blocks = studyBlocks
-      .filter((b) => b.date === date && timeOverlap(b, ctx.schedule))
+      .filter((b) => isActiveStudyBlock(b) && b.date === date && timeOverlap(b, ctx.schedule))
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
     if (blocks.length === 0) return null;
     const label = blocks.map((b) => `${b.title}（${b.startTime}–${b.endTime}）`).join("、");

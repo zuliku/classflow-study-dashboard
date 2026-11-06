@@ -1,4 +1,5 @@
 import {
+  Sun,
   LayoutDashboard,
   CalendarDays,
   ClipboardCheck,
@@ -35,6 +36,7 @@ export interface GlobalAction {
 
 /** 工作区导航：Sidebar（Desktop/Icon Rail）与 Bottom Nav 共用；Kiro 独立为 AI 区域 */
 export const WORKSPACE_NAV_ITEMS: NavItem[] = [
+  { id: "today", label: "今天", icon: Sun, section: "main" },
   { id: "overview", label: "总览", icon: LayoutDashboard, section: "main" },
   { id: "timetable", label: "时间表", icon: CalendarDays, section: "main" },
   { id: "assignments", label: "任务与 DDL", icon: ClipboardCheck, section: "main" },
@@ -78,15 +80,16 @@ export const GLOBAL_NAV_ACTIONS: GlobalAction[] = [
 
 /** 移动端 Bottom Nav 主要入口（Kiro 是顶级入口，其余收进「更多」菜单） */
 export const BOTTOM_NAV_MAIN: NavItem[] = [
-  { id: "overview", label: "总览", icon: LayoutDashboard },
+  { id: "today", label: "今天", icon: Sun },
   { id: "timetable", label: "时间表", icon: CalendarDays },
   { id: "assignments", label: "任务", icon: ClipboardCheck },
   { id: "kiro", label: "Kiro", icon: KIRO_ICON },
 ];
 
-/** 更多菜单：课程/分析/小组为 workspace tab；提醒/设置是 action（面板 / Modal）。
+/** 更多菜单：总览/课程/分析/小组为 workspace tab；提醒/设置是 action（面板 / Modal）。
  *  课程资料图标与 WORKSPACE_NAV_ITEMS 同源（Library）。 */
 export const BOTTOM_NAV_MORE: (NavItem | GlobalAction)[] = [
+  { id: "overview", label: "总览", icon: LayoutDashboard },
   { id: "courses", label: "课程", icon: Library },
   { id: "analytics", label: "学习洞察", icon: BarChart3 },
   { id: "group", label: "小组协作", icon: Users2 },
@@ -95,4 +98,4 @@ export const BOTTOM_NAV_MORE: (NavItem | GlobalAction)[] = [
 ];
 
 /** 底部「更多」菜单命中判定：属于隐藏 workspace Tab 时高亮「更多」；settings 是 action，不参与 */
-export const MORE_TAB_IDS: NavTab[] = ["courses", "analytics", "group"];
+export const MORE_TAB_IDS: NavTab[] = ["overview", "courses", "analytics", "group"];

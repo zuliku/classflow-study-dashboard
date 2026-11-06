@@ -24,6 +24,7 @@ import { UI_FONT_LABELS } from "@/lib/typography/fonts";
 import type { StartupView, ContentDensity, UIFontPreset } from "@/types";
 
 const STARTUP_VIEW_LABELS: Record<StartupView, string> = {
+  today: "今天",
   overview: "总览",
   timetable: "课表",
   assignments: "任务",

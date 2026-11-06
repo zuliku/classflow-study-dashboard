@@ -209,8 +209,9 @@ describe("空查询展示顺序", () => {
   it("App Chrome V2：导航命令与 Sidebar 共享同一事实源（label/icon 一致）", () => {
     const navCommands = getCommands().filter((c) => c.group === "navigate");
     const labels = navCommands.map((c) => c.label);
-    // Sidebar 文案（WORKSPACE_NAV_ITEMS）：总览/时间表/任务与 DDL/课程资料/学习洞察/小组协作/Kiro
+    // Sidebar 文案（WORKSPACE_NAV_ITEMS）：今天/总览/时间表/任务与 DDL/课程资料/学习洞察/小组协作/Kiro
     expect(labels).toEqual([
+      "前往今天",
       "前往总览",
       "前往时间表",
       "前往任务与 DDL",

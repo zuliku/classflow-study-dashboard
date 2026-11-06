@@ -29,9 +29,10 @@ import { MOTION_EXIT_MS } from "@/lib/motion";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { cn, getPriorityMeta } from "@/lib/utils";
 import { UISelect } from "@/components/ui/Select";
-import { isToday, differenceInDays } from "date-fns";
+import { differenceInDays } from "date-fns";
 import { parseLocalDDL, getLocalDDLDate } from "@/lib/ddl";
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
+import { isActiveTask, isDueToday, isTaskOverdue } from "@/lib/tasks/taskLifecycle";
 import { RECURRENCE_LABELS } from "@/lib/tasks/taskRecurrence";
 import { createAssignmentActions } from "@/lib/assignmentActions";
 import { getAssignmentContextCommands } from "@/lib/commands";
@@ -45,6 +46,8 @@ import {
 } from "@/lib/assignmentSelection";
 import { AssignmentPeekPanel } from "@/components/assignment/AssignmentPeekPanel";
 import { AssignmentContextMenu, ContextMenuCommand } from "@/components/assignment/AssignmentContextMenu";
+import { TaskTerminalPreviewDialog } from "@/components/task/TaskTerminalPreviewDialog";
+import type { TaskTransitionPreview } from "@/lib/tasks/taskTransitions";
 import { healthViewMeta } from "@/lib/tasks/taskHealthView";
 import { useKiroHandoff } from "@/hooks/useKiroHandoff";
 import { SINGLE_KEY_SHORTCUTS, matchesShortcutKey } from "@/lib/shortcuts";
@@ -90,7 +93,9 @@ export function AssignmentTable({
   const courses = useAppStore((s) => s.courses);
   const assignmentTimeSlice = useAppStore((s) => s.assignmentTimeSlice);
   // actions（zustand 引用稳定）
-  const updateAssignmentStatus = useAppStore((s) => s.updateAssignmentStatus);
+  const previewTaskTransition = useAppStore((s) => s.previewTaskTransition);
+  const transitionTask = useAppStore((s) => s.transitionTask);
+  const undoTaskTransition = useAppStore((s) => s.undoTaskTransition);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setAssignmentTimeSlice = useAppStore((s) => s.setAssignmentTimeSlice);
   const pushToast = useToastStore((s) => s.pushToast);
@@ -107,6 +112,10 @@ export function AssignmentTable({
   const singleKeyEnabled = useAppStore((s) => s.preferences.enableSingleKeyShortcuts);
   const contentDensity = useAppStore((s) => s.preferences.contentDensity);
   const compactDensity = contentDensity === "compact";
+  const [pendingTransition, setPendingTransition] = useState<{
+    task: Assignment;
+    preview: TaskTransitionPreview;
+  } | null>(null);
 
   // compact：课程筛选（workspace 模式的 courseFilter 由 ViewBar 控制器持有）
   const [localCourseFilter, setLocalCourseFilter] = useState<string>("all");
@@ -138,13 +147,13 @@ export function AssignmentTable({
 
         switch (assignmentTimeSlice) {
           case "overdue":
-            return item.status !== "completed" && diff < 0 && !isToday(ddlDate);
+            return isTaskOverdue(item, today);
           case "today":
-            return isToday(ddlDate);
+            return isActiveTask(item) && isDueToday(item, today);
           case "3days":
-            return item.status !== "completed" && diff >= 0 && diff <= 3;
+            return isActiveTask(item) && !isTaskOverdue(item, today) && diff >= 0 && diff <= 3;
           case "7days":
-            return item.status !== "completed" && diff >= 0 && diff <= 7;
+            return isActiveTask(item) && !isTaskOverdue(item, today) && diff >= 0 && diff <= 7;
           default:
             return true;
         }
@@ -294,12 +303,7 @@ export function AssignmentTable({
     openAssignmentEditor({ assignmentId });
   };
 
-  const overdueCount = assignments.filter((a) => {
-    if (a.status === "completed") return false;
-    const ddlDate = parseLocalDDL(a.ddl);
-    if (!ddlDate) return false;
-    return differenceInDays(ddlDate, today) < 0 && !isToday(ddlDate);
-  }).length;
+  const overdueCount = assignments.filter((a) => isTaskOverdue(a, today)).length;
 
   // ---- Workspace：highlight / 键盘导航 / selection / peek / context menu ----
 
@@ -516,6 +520,60 @@ export function AssignmentTable({
     setCtxMenuOpen(false);
   };
 
+  const executeTerminalTransition = (task: Assignment, preview: TaskTransitionPreview) => {
+    const result = transitionTask(task.id, preview.toStatus, {
+      transitionId: preview.transitionId,
+      source: "ui",
+    });
+    setPendingTransition(null);
+    if (!result.ok) {
+      pushToast({
+        type: "error",
+        message:
+          result.blocker === "focus-running"
+            ? "当前任务正在专注中，请先结束专注"
+            : result.blocker === "already-completed"
+              ? "任务已经处于该状态"
+              : "这个任务暂时无法更新，请刷新后重试",
+      });
+      return;
+    }
+    const isSubmit = preview.toStatus === "submitted";
+    pushToast({
+      message: isSubmit ? "已提交，等待反馈" : "已完成",
+      actionLabel: "撤销",
+      actionAriaLabel: `撤销${isSubmit ? "提交" : "完成"}《${task.title}》`,
+      duration: 10_000,
+      onAction: () => {
+        const undo = undoTaskTransition(task.id, preview.transitionId);
+        pushToast({
+          type: undo.ok ? "success" : "warning",
+          message: undo.ok ? "已撤销" : "撤销未完全成功，请打开任务检查",
+        });
+      },
+    });
+  };
+
+  const requestTerminalTransition = (task: Assignment) => {
+    if (task.status !== "todo" && task.status !== "doing") return;
+    const to = task.submissionRequired ? "submitted" : "completed";
+    const preview = previewTaskTransition(task.id, to);
+    if (!preview) {
+      pushToast({ type: "error", message: "找不到这个任务" });
+      return;
+    }
+    const hasEffects =
+      preview.sideEffects.releaseStudyBlocks.count > 0 ||
+      preview.sideEffects.cancelReminders.count > 0 ||
+      preview.sideEffects.recurrence.willGenerate ||
+      preview.sideEffects.incompleteSubtasks.count > 0;
+    if (hasEffects || preview.blockers.length > 0) {
+      setPendingTransition({ task, preview });
+      return;
+    }
+    executeTerminalTransition(task, preview);
+  };
+
   // ---- IM4A：行渲染（workspace 与 compact 共用；ExitRow 只用于 workspace mutation exit） ----
   const renderAssignmentRow = (task: Assignment) => {
     const wsMeta = isWorkspace ? wsMetaById.get(task.id) : undefined;
@@ -524,13 +582,9 @@ export function AssignmentTable({
     const hasDdl = !!task.ddl && parseLocalDDL(task.ddl) !== null;
     const formattedDate = hasDdl ? getLocalDDLDate(task.ddl) : "无截止日期";
     const isCompleted = task.status === "completed";
+    const isActive = task.status === "todo" || task.status === "doing";
 
-    const ddlDate = parseLocalDDL(task.ddl);
-    const isOverdueTask =
-      !!ddlDate &&
-      !isCompleted &&
-      differenceInDays(ddlDate, today) < 0 &&
-      !isToday(ddlDate);
+    const isOverdueTask = isTaskOverdue(task, today);
 
     const isNew = newTaskIds.has(task.id);
     const isHighlighted = isWorkspace && highlightedAssignmentId === task.id;
@@ -572,15 +626,26 @@ export function AssignmentTable({
           <input
             type="checkbox"
             checked={isCompleted}
+            disabled={!isActive}
+            aria-label={
+              isActive
+                ? task.submissionRequired
+                  ? `提交《${task.title}》`
+                  : `完成《${task.title}》`
+                : `《${task.title}》${task.status === "submitted" ? "等待反馈" : "已完成"}`
+            }
             onChange={(e) => {
               e.stopPropagation();
-              updateAssignmentStatus(
-                task.id,
-                e.target.checked ? "completed" : "doing"
-              );
+              if (!isActive) return;
+              requestTerminalTransition(task);
             }}
             onClick={(e) => e.stopPropagation()}
-            className="w-4 h-4 rounded text-charcoal border-stone-beige focus:ring-0 cursor-pointer shrink-0"
+            className={cn(
+              "w-4 h-4 rounded border-stone-beige focus:ring-0 shrink-0",
+              isActive
+                ? "text-charcoal cursor-pointer"
+                : "cursor-default opacity-60"
+            )}
           />
 
           <div className="min-w-0 flex-1">
@@ -1137,6 +1202,15 @@ export function AssignmentTable({
 
       {/* ---- Workspace：Assignment Peek（Desktop >=1024） ---- */}
       {isWorkspace && desktop && <AssignmentPeekPanel />}
+
+      {pendingTransition && (
+        <TaskTerminalPreviewDialog
+          preview={pendingTransition.preview}
+          taskTitle={pendingTransition.task.title}
+          onCancel={() => setPendingTransition(null)}
+          onConfirm={() => executeTerminalTransition(pendingTransition.task, pendingTransition.preview)}
+        />
+      )}
     </div>
   );
 }

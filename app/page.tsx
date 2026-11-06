@@ -13,6 +13,7 @@ import { GroupCollaborationView } from "@/components/group/GroupCollaborationVie
 import { KiroWorkspace } from "@/components/kiro/KiroWorkspace";
 import { KiroSessionProvider } from "@/components/kiro/KiroSessionProvider";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
+import { TodayWorkspace } from "@/components/today/TodayWorkspace";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { LearningAnalyticsView } from "@/components/analytics/LearningAnalyticsView";
 import { CourseDetailDrawer } from "@/components/drawers/CourseDetailDrawer";
@@ -238,6 +239,8 @@ export default function Home() {
               />
             }
           >
+          {activeTab === "today" && <TodayWorkspace />}
+
           {activeTab === "overview" && <OverviewWorkspace />}
 
           {activeTab === "timetable" && <TimelineWorkspace />}

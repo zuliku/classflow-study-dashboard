@@ -9,7 +9,7 @@ import { Assignment, CalendarMark, GroupProject, StudyBlock, Priority } from "@/
 import { TimelineItem } from "@/lib/timeline/timelineTypes";
 import { timeToMinutes } from "@/lib/timeline/timelineGeometry";
 import { isAssignmentPlanningEligible } from "@/lib/tasks/taskSemantics";
-import { isStudyBlockPlanningActive } from "@/lib/planning/studyBlockLifecycle";
+import { indexActiveStudyBlocksByAssignment, schedulingState } from "@/lib/tasks/taskPlanning";
 
 /** 本地 "YYYY-MM-DDTHH:mm" → date "YYYY-MM-DD" */
 function ddlToDate(ddl: string): string {
@@ -41,7 +41,8 @@ export function deriveTimelineItems(input: DeriveTimelineInput): TimelineItem[] 
   // ---- Assignment DDL（Source of Truth；未完成才醒目；Task V2：无 DDL 不生成 deadline item） ----
   const assignmentDdlIds = new Set<string>();
   for (const a of assignments) {
-    if (a.status === "completed") continue;
+    // Phase 0：submitted / completed 都是 planning terminal，不再出现在活跃 DDL 轴
+    if (!isAssignmentPlanningEligible(a)) continue;
     if (!a.ddl) continue;
     const date = ddlToDate(a.ddl);
     if (!weekSet.has(date)) continue;
@@ -119,17 +120,11 @@ export function deriveUnscheduledAssignments(input: {
   studyBlocks: StudyBlock[];
 }): Assignment[] {
   const { assignments, studyBlocks } = input;
-  // Workflow UX V15：只有 planning active 的 StudyBlock 才算「已安排」——
-  // released block 不再从 Shelf 隐藏 Assignment（reopened 任务应重新出现）
-  const scheduledIds = new Set(
-    studyBlocks
-      .filter((b) => isStudyBlockPlanningActive(b))
-      .map((b) => b.assignmentId)
-      .filter((id): id is string => !!id)
-  );
-  // Workflow UX V14：planning eligibility 单一事实源（todo/doing）——
-  // submitted 与 completed 同为 terminal，不得再进入 Shelf（旧实现 status !== "completed" 漏掉 submitted）
+  // Phase 0：partial / unknown 也留在 Shelf；只有 full 才离开待安排
+  const blocksById = indexActiveStudyBlocksByAssignment(studyBlocks);
   return assignments.filter(
-    (a) => isAssignmentPlanningEligible(a) && !scheduledIds.has(a.id)
+    (a) =>
+      isAssignmentPlanningEligible(a) &&
+      schedulingState(a, blocksById) !== "full"
   );
 }

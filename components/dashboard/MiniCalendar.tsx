@@ -16,6 +16,7 @@ import { useToastStore } from "@/store/useToastStore";
 import { FocusControl } from "@/components/focus/FocusControl";
 import { getSemesterWeek } from "@/lib/semester";
 import { getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
+import { isActiveTask } from "@/lib/tasks/taskLifecycle";
 import { isScheduleActive } from "@/lib/schedule";
 import { openAssignmentEditor } from "@/lib/uiEvents";
 import { cn, cardKeyHandler } from "@/lib/utils";
@@ -475,9 +476,9 @@ export function MiniCalendar() {
       )
     : [];
 
-  // DDL assignments on selected date (本地日期匹配)
+  // DDL assignments on selected date (本地日期匹配；submitted/completed 不再出现)
   const dayAssignments = assignments.filter(
-    (a) => getLocalDDLDate(a.ddl) === selectedDateStr
+    (a) => isActiveTask(a) && getLocalDDLDate(a.ddl) === selectedDateStr
   );
 
   // Calendar marks: 严格按类型区分，考试只匹配 exam，活动只匹配 activity
@@ -703,7 +704,7 @@ export function MiniCalendar() {
               (s) => s.dayOfWeek === dayOfWeekNum && isScheduleActive(s, daySemesterWeek)
             );
           const hasDDL = assignments.some(
-            (a) => getLocalDDLDate(a.ddl) === dateStr
+            (a) => isActiveTask(a) && getLocalDDLDate(a.ddl) === dateStr
           );
           const hasExam = calendarMarks.some(
             (m) => m.date === dateStr && m.type === "exam"

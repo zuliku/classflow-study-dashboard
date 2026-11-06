@@ -69,21 +69,31 @@ describe("deriveTaskWorkspace", () => {
     ]);
   });
 
-  it("today = 今天截止 或 今天有 StudyBlock（Do Date ≠ Due Date）", () => {
+  it("today = 逾期 / 今天截止 / 今天做 / 今天有 StudyBlock", () => {
     const { items } = deriveTaskWorkspace(TASKS, BLOCKS, "today", NOW);
     const ids = items.map((i) => i.task.id).sort();
-    expect(ids).toEqual(["deadline-today", "no-ddl", "scheduled-today"]);
+    expect(ids).toEqual(["deadline-today", "no-ddl", "overdue", "scheduled-today"]);
   });
 
-  it("upcoming 只含今天结束之后的 DDL，升序排列", () => {
+  it("upcoming 含逾期与全部有 DDL 的 active 任务，升序排列", () => {
     const { items } = deriveTaskWorkspace(TASKS, BLOCKS, "upcoming", NOW);
-    expect(items.map((i) => i.task.id)).toEqual(["urgent-soon", "doing", "upcoming-far"]);
+    expect(items.map((i) => i.task.id)).toEqual([
+      "overdue",
+      "deadline-today",
+      "urgent-soon",
+      "doing",
+      "upcoming-far",
+    ]);
   });
 
-  it("unscheduled = active 且无任何 StudyBlock（不要求无 DDL；逾期未安排也在列）", () => {
+  it("unscheduled = active 且未完全安排（partial / unknown 也在列）", () => {
     const { items } = deriveTaskWorkspace(TASKS, BLOCKS, "unscheduled", NOW);
     const ids = items.map((i) => i.task.id).sort();
-    expect(ids).toEqual(["deadline-today", "overdue", "upcoming-far", "urgent-soon"]);
+    expect(ids).toEqual(
+      ["deadline-today", "doing", "no-ddl", "overdue", "upcoming-far", "urgent-soon"].sort()
+    );
+    // 3h blocks / 60min estimate → full，不再进入待安排
+    expect(ids).not.toContain("scheduled-today");
   });
 
   it("all 包含无 DDL 任务，active 在前 archive 在后", () => {
@@ -107,7 +117,7 @@ describe("deriveTaskWorkspace", () => {
     expect(Object.keys(counts).sort()).toEqual(TASK_WORKSPACE_VIEWS.map((v) => v.id).sort());
     expect(counts.archive).toBe(2);
     expect(counts.all).toBe(9);
-    expect(counts.today).toBe(3);
+    expect(counts.today).toBe(4);
   });
 });
 

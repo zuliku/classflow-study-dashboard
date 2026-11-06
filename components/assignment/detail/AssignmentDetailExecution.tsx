@@ -59,9 +59,6 @@ export function AssignmentDetailExecution({
   viewScheduleDisabledTitle,
   subtasks,
   onToggleSubtask,
-  progress,
-  onProgressChange,
-  showProgressControl,
   focusSummary,
 }: {
   deadline: DeadlineView;
@@ -76,9 +73,6 @@ export function AssignmentDetailExecution({
   viewScheduleDisabledTitle?: string;
   subtasks: { id: string; title: string; completed: boolean }[];
   onToggleSubtask: (subtaskId: string) => void;
-  progress: number;
-  onProgressChange: (progress: number) => void;
-  showProgressControl: boolean;
   /** Task Execution Loop：当前任务专注累计（completedCount/totalCompletedMs）与活跃会话（current 专属） */
   focusSummary: { completedCount: number; totalCompletedMs: number; active: FocusSession | null };
 }) {
@@ -146,23 +140,6 @@ export function AssignmentDetailExecution({
             <span className="text-xs font-semibold text-satin-grey/70">尚无专注记录</span>
           )}
         </div>
-        {showProgressControl && (
-          <div className="px-3.5 py-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-sandrift">进度</span>
-              <span className="text-xs font-bold text-charcoal">{progress}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={progress}
-              aria-label="完成进度"
-              onChange={(e) => onProgressChange(parseInt(e.target.value))}
-              className="mt-1.5 h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-line-strong accent-charcoal"
-            />
-          </div>
-        )}
       </div>
 
       {subtasks.length > 0 && (
