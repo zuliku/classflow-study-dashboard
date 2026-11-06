@@ -114,6 +114,33 @@ test("1920 总览：宽列恢复教师 + 地点，不再只剩课程名", async 
   await expect(card.getByText("教二 201", { exact: true })).toBeVisible();
 });
 
+test("1920：总览与时间表的课程卡使用同一完整卡样式", async ({ page }) => {
+  await openOverview(page, 1920, 1080);
+  const readCard = () =>
+    page.getByTestId("schedule-card").first().evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const title = el.querySelector("h4");
+      return {
+        compact: el.hasAttribute("data-compact"),
+        paddingTop: cs.paddingTop,
+        justifyContent: cs.justifyContent,
+        titleSize: title ? getComputedStyle(title).fontSize : null,
+      };
+    });
+
+  const overview = await readCard();
+  await page.getByRole("button", { name: "时间表" }).first().click();
+  await expect(page.getByTestId("timetable-card")).toBeVisible();
+  await page.waitForTimeout(400);
+  const timeline = await readCard();
+
+  expect(overview.compact).toBe(false);
+  expect(timeline.compact).toBe(false);
+  expect(overview.paddingTop).toBe(timeline.paddingTop);
+  expect(overview.justifyContent).toBe(timeline.justifyContent);
+  expect(overview.titleSize).toBe(timeline.titleSize);
+});
+
 test("1280/1024 总览：临近 DDL 行不撑破卡片，右侧时间不被裁切", async ({ page }) => {
   for (const width of [1280, 1024]) {
     await openOverview(page, width, width === 1024 ? 768 : 900);
