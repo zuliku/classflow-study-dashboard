@@ -1240,7 +1240,7 @@ export function TimelineWorkspace() {
         >
           <MoreHorizontal className="w-3.5 h-3.5" />
         </IconButton>
-        <DropdownMenuPanel open={moreOpen} placement="bottom-end" aria-label="更多操作">
+        <DropdownMenuPanel portal open={moreOpen} placement="bottom-end" aria-label="更多操作">
           <DropdownMenuItem
             icon={FileUp}
             label="导入课表"
@@ -1280,7 +1280,7 @@ export function TimelineWorkspace() {
       >
           <Plus className="w-3.5 h-3.5" />
       </IconButton>
-      <DropdownMenuPanel open={quickOpen} placement="bottom-end" aria-label="新建" className="w-52">
+      <DropdownMenuPanel portal open={quickOpen} placement="bottom-end" aria-label="新建" className="w-52">
         <DropdownMenuItem
           icon={GraduationCap}
           label="新建课程"
@@ -1388,6 +1388,7 @@ export function TimelineWorkspace() {
               variant="embedded"
               showHeader={false}
               showWeekdayHeader={false}
+              animateWeekChange={false}
               extraLayers={studyLayer}
               courseIndicators={courseIndicators}
             />

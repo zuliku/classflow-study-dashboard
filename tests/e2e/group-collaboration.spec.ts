@@ -71,3 +71,44 @@ test("Group：编辑任务 → 修改负责人 → 保存 → 正常显示", asy
   await expect(taskDialog).toHaveCount(0);
   await expect(page.getByText("已编辑任务").first()).toBeVisible();
 });
+
+test("Group：删除最后一个项目 → 先播行退出折叠，再进入空态", async ({ page }) => {
+  await openGroup(page);
+  await page.getByRole("button", { name: "新建项目" }).first().click();
+  const projectDialog = page.getByRole("dialog", { name: "小组项目" });
+  await projectDialog.getByLabel("项目名称").fill("退出动画项目");
+  await projectDialog.getByRole("button", { name: "创建项目" }).click();
+  await expect(page.getByText("退出动画项目").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "更多项目操作" }).click();
+  await page.getByRole("menuitem", { name: "删除项目" }).click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+
+  // 190ms 退出窗口内：项目行仍以 exiting 状态存在（不是整块瞬切空态）
+  await expect(
+    page.locator('[data-axis="vertical"][data-state="exiting"]').filter({ hasText: "退出动画项目" })
+  ).toHaveCount(1);
+  await expect(page.getByText("还没有小组项目").first()).toBeVisible();
+});
+
+test("Group：删除任务 → Toast 撤销按原 id/位置恢复", async ({ page }) => {
+  await openGroup(page);
+  await page.getByRole("button", { name: "新建项目" }).first().click();
+  const projectDialog = page.getByRole("dialog", { name: "小组项目" });
+  await projectDialog.getByLabel("项目名称").fill("撤销任务项目");
+  await projectDialog.getByRole("button", { name: "创建项目" }).click();
+
+  await page.getByRole("button", { name: "添加任务" }).first().click();
+  const taskDialog = page.getByRole("dialog", { name: "小组项目" });
+  await taskDialog.getByLabel("任务名称").fill("待撤销任务");
+  await taskDialog.getByRole("button", { name: "添加任务" }).last().click();
+  await expect(page.getByText("待撤销任务").first()).toBeVisible();
+
+  await page.getByText("待撤销任务").first().hover();
+  await page.getByRole("button", { name: "删除任务 待撤销任务" }).click();
+  await expect(page.getByText("任务已删除")).toBeVisible();
+  await expect(page.getByText("待撤销任务").first()).toHaveCount(0);
+
+  await page.getByRole("button", { name: "撤销删除任务 待撤销任务" }).click();
+  await expect(page.getByText("待撤销任务").first()).toBeVisible();
+});

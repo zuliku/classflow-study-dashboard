@@ -171,3 +171,19 @@ base("30min StudyBlock：标题在真实高度内可见（短块不裁切）", a
   const titleBox = (await title.boundingBox())!;
   expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(blockBox.y + blockBox.height + 0.5);
 });
+
+base("周切换：外层统一播放一次动画，内层课程网格不重复", async ({ page }) => {
+  const { monday, dow1 } = dayAnchor();
+  await page.addInitScript(seedScript(monday, dow1));
+  await openTimeline(page);
+
+  await page.getByRole("button", { name: "下一周" }).first().click();
+  await page.waitForTimeout(80);
+
+  const outer = page.getByTestId("timeline-workspace");
+  await expect(outer).toHaveClass(/ux-week-enter-/);
+  const innerAnimation = page
+    .getByTestId("timetable-card")
+    .locator(".ux-week-enter-a, .ux-week-enter-b");
+  await expect(innerAnimation).toHaveCount(0);
+});

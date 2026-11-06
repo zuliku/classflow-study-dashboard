@@ -85,6 +85,7 @@ export function TimetableGrid({
   fillAvailableHeight = false,
   extraLayers,
   courseIndicators,
+  animateWeekChange = true,
 }: {
   editable?: boolean;
   /** compact：仅 Overview 只读表示层（更紧凑的时间轴）；default 保持舒展（workspace / FullTimetableModal） */
@@ -117,6 +118,8 @@ export function TimetableGrid({
     dayStartMinutes: number;
     totalMinutes: number;
   }) => React.ReactNode;
+  /** Timeline 外层已统一播放周切换动画：嵌入时不重复播放（避免双淡入/双位移） */
+  animateWeekChange?: boolean;
   }) {
   const isCompactDensity = density === "compact";
   // 精确 selector：避免整 store 订阅导致无关 state 更新触发整卡 re-render
@@ -595,7 +598,7 @@ export function TimetableGrid({
             >
               <ChevronLeft className="w-3 h-3" />
             </button>
-            <span className="tabular-nums px-0.5">
+            <span key={currentSemesterWeek} className="tabular-nums px-0.5 ux-fade">
               第 {currentSemesterWeek} 周 · {formatWeekDateRange(semester, currentSemesterWeek)}
             </span>
             <button
@@ -650,15 +653,17 @@ export function TimetableGrid({
         ) : null}
       </DisclosureRegion>
 
-      {/* Grid Container：周切换时仅此区域（表头 + 课程网格）做方向淡入 */}
+      {/* Grid Container：周切换时仅此区域（表头 + 课程网格）做方向淡入。
+          不 key remount：保持横向 scrollLeft 与 ResizeObserver 绑定（Timeline 外层动画时跳过内层） */}
       <div
-        key={currentSemesterWeek}
         className={cn(
           "mt-2 flex-1 flex flex-col min-h-0 select-none overflow-x-auto",
-          weekDir !== 0 && (weekMotionNonce % 2 === 0 ? "ux-week-enter-a" : "ux-week-enter-b")
+          animateWeekChange &&
+            weekDir !== 0 &&
+            (weekMotionNonce % 2 === 0 ? "ux-week-enter-a" : "ux-week-enter-b")
         )}
         style={
-          weekDir !== 0
+          animateWeekChange && weekDir !== 0
             ? ({ "--motion-shift-y": weekDir === 1 ? "6px" : "-6px" } as React.CSSProperties)
             : undefined
         }

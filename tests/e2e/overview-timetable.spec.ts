@@ -228,3 +228,16 @@ test("键盘：课程卡可聚焦并用 Enter 打开课程详情", async ({ page
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("course-detail-panel")).toBeVisible({ timeout: 8000 });
 });
+
+test("390 周切换：课程网格横向滚动位置保持（不因 remount 归零）", async ({ page }) => {
+  await openOverview(page, 390, 844);
+  const scroller = page.getByTestId("timetable-card").locator("div.overflow-x-auto").first();
+  await scroller.evaluate((el) => {
+    el.scrollLeft = 160;
+  });
+  await expect.poll(() => scroller.evaluate((el) => Math.round(el.scrollLeft))).toBe(160);
+
+  await page.getByRole("button", { name: "下一周" }).first().click();
+  await page.waitForTimeout(400);
+  expect(await scroller.evaluate((el) => Math.round(el.scrollLeft))).toBe(160);
+});

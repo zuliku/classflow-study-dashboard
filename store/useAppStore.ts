@@ -1045,6 +1045,8 @@ export interface AppState {
   ) => string;
   updateGroupTask: (projectId: string, task: GroupTask) => void;
   deleteGroupTask: (projectId: string, taskId: string) => void;
+  /** 撤销删除：按原 id/位置恢复（不产生新 id，保持深链与引用稳定） */
+  restoreGroupTask: (projectId: string, task: GroupTask, index?: number) => void;
   toggleGroupTask: (projectId: string, taskId: string) => void;
 }
 
@@ -3155,6 +3157,17 @@ export const useAppStore = create<AppState>()(
           groupProjects: state.groupProjects.map((p) => {
             if (p.id !== projectId) return p;
             const tasks = p.tasks.filter((t) => t.id !== taskId);
+            return { ...p, tasks, progress: calculateGroupProjectProgress(tasks), updatedAt: formatLocalDate() };
+          }),
+        })),
+
+      restoreGroupTask: (projectId, task, index) =>
+        set((state) => ({
+          groupProjects: state.groupProjects.map((p) => {
+            if (p.id !== projectId || p.tasks.some((t) => t.id === task.id)) return p;
+            const tasks = [...p.tasks];
+            const at = Math.max(0, Math.min(index ?? tasks.length, tasks.length));
+            tasks.splice(at, 0, task);
             return { ...p, tasks, progress: calculateGroupProjectProgress(tasks), updatedAt: formatLocalDate() };
           }),
         })),

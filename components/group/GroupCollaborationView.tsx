@@ -137,6 +137,7 @@ export function GroupCollaborationView() {
     addGroupTask,
     updateGroupTask,
     deleteGroupTask,
+    restoreGroupTask,
     toggleGroupTask,
     setSelectedGroupProjectId,
   } = useAppStore(
@@ -153,6 +154,7 @@ export function GroupCollaborationView() {
       addGroupTask: s.addGroupTask,
       updateGroupTask: s.updateGroupTask,
       deleteGroupTask: s.deleteGroupTask,
+      restoreGroupTask: s.restoreGroupTask,
       toggleGroupTask: s.toggleGroupTask,
       setSelectedGroupProjectId: s.setSelectedGroupProjectId,
     }))
@@ -460,8 +462,16 @@ export function GroupCollaborationView() {
 
   const handleDeleteTask = (taskId: string) => {
     if (!selectedProject) return;
+    const index = selectedProject.tasks.findIndex((t) => t.id === taskId);
+    const task = selectedProject.tasks[index];
+    if (!task) return;
     deleteGroupTask(selectedProject.id, taskId);
-    pushToast({ message: "任务已删除" });
+    pushToast({
+      message: "任务已删除",
+      actionLabel: "撤销",
+      actionAriaLabel: `撤销删除任务 ${task.title}`,
+      onAction: () => restoreGroupTask(selectedProject.id, task, index),
+    });
   };
 
   const filteredTasks = selectedProject
@@ -561,8 +571,9 @@ export function GroupCollaborationView() {
         sticky
       />
 
-      {/* 水平 gutter 单一来源（workspace-gutter）；纵向节奏保持 16/24px */}
-      {groupProjects.length === 0 ? (
+      {/* 水平 gutter 单一来源（workspace-gutter）；纵向节奏保持 16/24px。
+          空态必须等最后一个项目的退出折叠播完，否则 ExitCollapse 永远不播（整块先切走）。 */}
+      {groupProjects.length === 0 && !retainedProjects.some((e) => e.exiting) ? (
         /* P0 修复：zero-project 时不再渲染 300px rail + 空 detail 的 split layout，
            而是全宽 Workspace Empty State（有项目后继续使用现有 master-detail） */
         <div key="empty" className="ux-settle workspace-gutter flex flex-1 min-h-0 flex-col pt-4 pb-24 md:pt-6 md:pb-6">
@@ -595,7 +606,7 @@ export function GroupCollaborationView() {
             </button>
           </div>
 
-          {groupProjects.length === 0 ? (
+          {retainedProjects.length === 0 ? (
             <div className="px-2 py-8 flex flex-col items-center gap-2 text-center">
               <p className="text-xs font-semibold text-charcoal">还没有小组项目</p>
               <p className="text-[11px] text-sandrift">创建项目，开始分工。</p>
@@ -683,7 +694,7 @@ export function GroupCollaborationView() {
                       >
                         <MoreHorizontal className="w-4 h-4" />
                       </IconButton>
-                      <DropdownMenuPanel open={projectMoreOpen} placement="bottom-end" aria-label="更多项目操作" className="w-44">
+                      <DropdownMenuPanel portal open={projectMoreOpen} placement="bottom-end" aria-label="更多项目操作" className="w-44">
                         <DropdownMenuItem icon={Trash2} label="删除项目" danger onClick={handleDeleteProject} />
                       </DropdownMenuPanel>
                     </Popover>

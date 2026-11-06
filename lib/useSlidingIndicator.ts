@@ -88,14 +88,16 @@ export function useSlidingIndicator<T extends HTMLElement = HTMLDivElement>(
     measure();
   }, [activeKey, measure]);
 
-  // 容器尺寸变化：重新测量（保留过渡，平滑跟随）
+  // 容器尺寸变化：重新测量（保留过渡，平滑跟随）。
+  // resetKey（如 MiniCalendar 切月 key remount）必须重建观察目标，否则窗口缩放仍测旧节点。
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const ro = new ResizeObserver(() => measure());
     ro.observe(container);
+    measure();
     return () => ro.disconnect();
-  }, [measure]);
+  }, [measure, resetKey]);
 
   return {
     containerRef,
