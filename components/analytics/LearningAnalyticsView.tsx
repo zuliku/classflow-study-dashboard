@@ -300,7 +300,7 @@ export function LearningAnalyticsView() {
                   </section>
                   <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
-                      <WeeklyReviewCard snapshot={data} />
+                      <WeeklyReviewCard snapshot={data} courseNameById={courseNameById} />
                     </div>
                   </DisclosureRegion>
                 </>
@@ -353,7 +353,7 @@ export function LearningAnalyticsView() {
 
                   <DisclosureRegion open={reviewExpanded}>
                     <div ref={reviewRef} className="scroll-mt-4">
-                      <WeeklyReviewCard snapshot={data} />
+                      <WeeklyReviewCard snapshot={data} courseNameById={courseNameById} />
                     </div>
                   </DisclosureRegion>
 

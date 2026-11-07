@@ -459,6 +459,8 @@ demoTest("J：周回顾 toggle（open→scroll→再点收起）；切 range 自
   const action = page.getByTestId("weekly-review-action");
   await action.click();
   await expect(page.getByTestId("weekly-review-card")).toBeVisible({ timeout: 8000 });
+  await expect(page.getByTestId("weekly-review-trend")).toBeVisible();
+  await expect(page.getByTestId("weekly-review-courses")).toBeVisible();
   await expect(action).toHaveAttribute("aria-expanded", "true");
   await expect(action).toContainText("收起周回顾");
 
@@ -493,4 +495,12 @@ demoTest("K：390px 无横向 overflow；Summary detail 可读；legend 可读",
   await expect(detail).toBeVisible();
   expect((await detail.getAttribute("class")) ?? "").not.toContain("truncate");
   await expect(page.getByText("单位：分钟", { exact: true })).toBeVisible();
+
+  // 本周回顾在 390：展开后无横向溢出
+  await page.getByTestId("weekly-review-action").click();
+  await expect(page.getByTestId("weekly-review-card")).toBeVisible({ timeout: 8000 });
+  const reviewOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
+  expect(reviewOverflow).toBeLessThanOrEqual(0);
 });

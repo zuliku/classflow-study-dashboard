@@ -91,15 +91,37 @@ describe("buildWeeklyReview（纯投影）", () => {
     expect(review.investment.topCourse?.courseName).toBe("概率论");
     expect(review.investment.topCourse?.minutes).toBe(134);
     expect(review.investment.topCourse?.share).toBeCloseTo(0.42);
+    expect(review.investment.courses).toEqual(snapshot.courseInvestment);
+
+    // trend / execution 只做投影
+    expect(review.trend).toBe(snapshot.trend);
+    expect(review.execution.reopenedAssignments).toBe(1);
+    expect(review.execution.lateAssignments).toBe(1);
+    expect(review.execution.avgFocusSessionMinutes).toBe(46);
 
     // rhythm 来自 focusRhythm
     expect(review.rhythm.activeDays).toBe(4);
     expect(review.rhythm.averageSessionMinutes).toBe(46);
+    expect(review.rhythm.longestSessionMinutes).toBe(90);
     expect(review.rhythm.dominantTimeOfDay).toBe("晚间");
 
     // signals 按 tone 分流
     expect(review.highlights.map((s) => s.id)).toEqual(["focus-up", "plan-actual"]);
     expect(review.attention).toEqual([]);
+  });
+
+  it("investment.courses 只取前 3 门，不改变原始顺序", () => {
+    const snapshot = baseSnapshot({
+      courseInvestment: [
+        { courseId: "c1", courseName: "A", minutes: 100, sessions: 2, share: 0.4 },
+        { courseId: "c2", courseName: "B", minutes: 80, sessions: 2, share: 0.32 },
+        { courseId: "c3", courseName: "C", minutes: 50, sessions: 1, share: 0.2 },
+        { courseId: "c4", courseName: "D", minutes: 20, sessions: 1, share: 0.08 },
+      ],
+    });
+    const review = buildWeeklyReview(snapshot);
+    expect(review.investment.topCourse?.courseName).toBe("A");
+    expect(review.investment.courses.map((course) => course.courseName)).toEqual(["A", "B", "C"]);
   });
 
   it("attention signals 分流；positive/neutral → highlights", () => {

@@ -10,6 +10,7 @@ import {
   FocusTimeOfDay,
   LearningAnalyticsSnapshot,
   LearningSignal,
+  LearningTrendPoint,
 } from "@/lib/analytics/types";
 import { formatDurationLabel } from "@/lib/analytics/learningAnalytics";
 
@@ -44,13 +45,23 @@ export interface WeeklyReview {
     /** comparisonAvailable=false 时给出替代文案 */
     comparisonUnavailable: boolean;
   };
+  /** 每日节奏：仍来自 snapshot.trend（不重新聚合） */
+  trend: LearningTrendPoint[];
   investment: {
     topCourse: CourseInvestment | null;
+    /** 前 3 门课程投入（未截断原始 share；由 UI 决定展示方式） */
+    courses: CourseInvestment[];
   };
   rhythm: {
     activeDays: number;
     averageSessionMinutes: number | null;
+    longestSessionMinutes: number;
     dominantTimeOfDay: FocusTimeOfDay | null;
+  };
+  execution: {
+    reopenedAssignments: number;
+    lateAssignments: number;
+    avgFocusSessionMinutes: number | null;
   };
   highlights: LearningSignal[];
   attention: LearningSignal[];
@@ -58,7 +69,7 @@ export interface WeeklyReview {
 
 /** 只读投影：所有字段必须来自 snapshot，禁止自行计算新指标 */
 export function buildWeeklyReview(snapshot: LearningAnalyticsSnapshot): WeeklyReview {
-  const { overview, coverage, courseInvestment, focusRhythm, signals } = snapshot;
+  const { overview, coverage, courseInvestment, focusRhythm, execution, signals } = snapshot;
 
   return {
     range: {
@@ -88,13 +99,21 @@ export function buildWeeklyReview(snapshot: LearningAnalyticsSnapshot): WeeklyRe
       focusDeltaPercent: overview.focusDeltaPercent,
       comparisonUnavailable: !coverage.comparisonAvailable,
     },
+    trend: snapshot.trend,
     investment: {
       topCourse: courseInvestment.length > 0 ? courseInvestment[0] : null,
+      courses: courseInvestment.slice(0, 3),
     },
     rhythm: {
       activeDays: focusRhythm.activeDays,
       averageSessionMinutes: focusRhythm.averageSessionMinutes,
+      longestSessionMinutes: focusRhythm.longestSessionMinutes,
       dominantTimeOfDay: focusRhythm.dominantTimeOfDay,
+    },
+    execution: {
+      reopenedAssignments: execution.reopenedAssignments,
+      lateAssignments: execution.late,
+      avgFocusSessionMinutes: execution.avgFocusSessionMinutes,
     },
     highlights: signals.filter((s) => s.tone === "positive" || s.tone === "neutral"),
     attention: signals.filter((s) => s.tone === "attention"),
