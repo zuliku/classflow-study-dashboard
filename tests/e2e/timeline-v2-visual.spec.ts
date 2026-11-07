@@ -44,7 +44,7 @@ function seedScript(monday: string, dow1: number) {
           { id: "b5", title: "半小时任务", date: "${dateStr(dow1)}", startTime: "15:00", endTime: "15:30", source: "manual" },
         ],
         assignmentTimeSlice: "all",
-        preferences: { showWeekends: true, ddlWarningDays: 3, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "system", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable" },
+        preferences: { showWeekends: true, ddlWarningDays: 3, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "system", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable", timetableMode: "classic" },
       },
     }));
   })()`;

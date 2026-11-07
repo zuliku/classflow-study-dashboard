@@ -191,13 +191,24 @@ test("StudyBlock drag 课程重叠是 soft：ghost 非 danger，落库并提示�
 test("Unscheduled 任务拖入时间表：创建 1h StudyBlock（周五 18:00–19:00）；Undo 回到 Shelf", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  const targetTitle = "计量经济学大作业（第3章）";
+  // Task Model V2：unknown（有块但无估时）会留在待安排；这里给任务 60min 估时，
+  // 让 1h 快速安排后进入 full，验证离开 Shelf → Undo 恢复。
+  await page.evaluate((title) => {
+    const raw = localStorage.getItem("classflow-storage-v2");
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const task = parsed.state.assignments.find((x: { title: string }) => x.title === title);
+    if (task) task.estimatedMinutes = 60;
+    localStorage.setItem("classflow-storage-v2", JSON.stringify(parsed));
+  }, targetTitle);
+  await page.reload();
   await page.locator("aside").first().getByRole("button", { name: "时间表" }).first().click();
   await page.waitForTimeout(800);
 
   // 找一个无 StudyBlock 的未完成任务（demo 数据均无 studyBlocks → 全部在 Shelf）
   const shelf = page.getByTestId("timeline-unscheduled");
   await expect(shelf).toBeVisible();
-  const targetTitle = "计量经济学大作业（第3章）";
   const item = shelf.getByText(targetTitle).first().locator("..");
   await expect(item).toBeVisible();
   const itemBox = await item.boundingBox();

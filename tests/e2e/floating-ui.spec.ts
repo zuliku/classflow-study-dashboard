@@ -41,7 +41,7 @@ function seedScript(monday: string, dow1: number) {
           { id: "b1", title: "重叠任务", date: "${dateStr(dow1)}", startTime: "08:30", endTime: "09:30", source: "manual" },
         ],
         assignmentTimeSlice: "all",
-        preferences: { showWeekends: true, ddlWarningDays: 3, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "system", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable" },
+        preferences: { showWeekends: true, ddlWarningDays: 3, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "system", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable", timetableMode: "classic" },
       },
     }));
   })()`;

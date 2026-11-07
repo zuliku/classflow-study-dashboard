@@ -86,7 +86,9 @@ async function seedDemoStorage(page: Page) {
         groupProjects: initialGroupProjects,
         semester: defaultSemesterState(),
         assignmentTimeSlice: "all",
-        preferences: DEFAULT_PREFERENCES,
+        // 旧版 Timeline E2E（时间表/拖拽/课表）默认验证经典模式；
+        // 新版计划画布 spec 会显式切回 plan。
+        preferences: { ...DEFAULT_PREFERENCES, timetableMode: "classic" },
       },
     }
   );

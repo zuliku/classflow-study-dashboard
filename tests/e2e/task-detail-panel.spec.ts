@@ -58,7 +58,7 @@ function seedScript(monday: string, opts?: { reducedMotion?: boolean }) {
           { id: "b1", title: "置信区间作业", date: "${dateStr(0)}", startTime: "19:00", endTime: "20:30", assignmentId: "a1", source: "manual" },
         ],
         assignmentTimeSlice: "all",
-        preferences: { showWeekends: true, ddlWarningDays: 3, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "${opts?.reducedMotion ? "reduced" : "system"}", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable", defaultTaskWorkspaceView: "focus", defaultDeadlineReminderMinutes: 1440 },
+        preferences: { showWeekends: true, ddlWarningDays: 3, defaultDDLTime: "23:59", enableScheduleDirectManipulation: true, enableDDLDirectManipulation: true, motionPreference: "${opts?.reducedMotion ? "reduced" : "system"}", startupView: "overview", defaultTaskPriority: "medium", defaultTaskStatus: "todo", enableSingleKeyShortcuts: true, contentDensity: "comfortable", defaultTaskWorkspaceView: "focus", defaultDeadlineReminderMinutes: 1440, timetableMode: "classic" },
         reminders: [],
         focusSessions: [],
       },
@@ -100,11 +100,11 @@ base("A：Timeline 点击 Assignment → floating panel 有界打开，首屏核
   expect(box.y).toBeGreaterThanOrEqual(10); // 顶部 16px inset
   expect(box.height).toBeLessThan(900);
 
-  // 首屏核心：标题 / 截止 / 状态 / 主操作
+  // 首屏核心：标题 / 截止 / 优先级 / 主操作；状态由命令与状态 chip 承载，不再提供下拉
   await expect(dialog.getByRole("heading", { name: "置信区间作业" })).toBeVisible();
   await expect(dialog.getByText("截止时间", { exact: true }).first()).toBeVisible();
   await expect(dialog.getByText(/还有|已逾期/).first()).toBeVisible();
-  await expect(dialog.getByRole("combobox", { name: "任务状态" })).toBeVisible();
+  await expect(dialog.getByRole("combobox", { name: "任务状态" })).toHaveCount(0);
   await expect(dialog.getByRole("combobox", { name: "优先级" })).toBeVisible();
   const actions = dialog.getByTestId("detail-primary-actions");
   await expect(actions.getByRole("button", { name: "标记完成" })).toBeVisible();

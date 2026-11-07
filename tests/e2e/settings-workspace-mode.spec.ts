@@ -15,22 +15,7 @@ test("设置：时间表样式可切换计划画布 / 经典时间表", async ({
   const row = general.locator('[data-setting-id="timetable-mode"]');
   await expect(row).toBeVisible();
 
-  await row.getByRole("button", { name: "经典时间表" }).click();
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId("settings-view")).toHaveCount(0);
-
-  await page.getByRole("button", { name: "时间表", exact: true }).first().click();
-  await page.waitForTimeout(700);
-  await expect(page.getByTestId("timeline-key-lane").first()).toBeVisible();
-  await expect(page.getByTestId("plan-workspace")).toHaveCount(0);
-
-  await page.getByRole("button", { name: "设置" }).first().click();
-  await expect(page.getByTestId("settings-view")).toBeVisible();
-  await page
-    .getByTestId("settings-general")
-    .locator('[data-setting-id="timetable-mode"]')
-    .getByRole("button", { name: "计划画布" })
-    .click();
+  await row.getByRole("button", { name: "计划画布" }).click();
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("settings-view")).toHaveCount(0);
 
@@ -38,6 +23,21 @@ test("设置：时间表样式可切换计划画布 / 经典时间表", async ({
   await page.waitForTimeout(700);
   await expect(page.getByTestId("plan-workspace")).toBeVisible();
   await expect(page.getByTestId("timeline-key-lane")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "设置" }).first().click();
+  await expect(page.getByTestId("settings-view")).toBeVisible();
+  await page
+    .getByTestId("settings-general")
+    .locator('[data-setting-id="timetable-mode"]')
+    .getByRole("button", { name: "经典时间表" })
+    .click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("settings-view")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "时间表", exact: true }).first().click();
+  await page.waitForTimeout(700);
+  await expect(page.getByTestId("timeline-key-lane").first()).toBeVisible();
+  await expect(page.getByTestId("plan-workspace")).toHaveCount(0);
 });
 
 test("设置：关闭今日页面后隐藏入口并回落到总览", async ({ page }) => {

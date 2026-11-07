@@ -47,6 +47,7 @@ function fullPreferences(patch: Record<string, unknown> = {}) {
     contentDensity: "comfortable",
     defaultTaskWorkspaceView: "focus",
     defaultDeadlineReminderMinutes: 1440,
+    timetableMode: "classic",
     ...patch,
   };
 }
