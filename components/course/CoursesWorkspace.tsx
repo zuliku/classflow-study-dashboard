@@ -7,7 +7,9 @@ import { useShallow } from "zustand/react/shallow";
 import { useToastStore } from "@/store/useToastStore";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { WorkspaceEmptyState } from "@/components/ui/WorkspaceEmptyState";
+import { CourseLibraryView } from "@/components/course/CourseLibraryView";
 import {
   CourseLibraryCard,
   CourseCardPopover,
@@ -66,6 +68,7 @@ export function CoursesWorkspace() {
     }))
   );
   const pushToast = useToastStore((s) => s.pushToast);
+  const [view, setView] = useState<"courses" | "library">("courses");
 
   const totalCredits = courses.reduce((sum, c) => sum + c.credit, 0);
   const totalMaterials = courses.reduce((sum, c) => sum + c.materials.length, 0);
@@ -163,7 +166,21 @@ export function CoursesWorkspace() {
       {/* 水平 gutter 单一来源（workspace-gutter）；纵向节奏保持 16/24px
           S4-2：纵向滚动唯一归 main，不再自建滚动上下文（与 Assignments/Timeline/Overview 一致） */}
       <div className="workspace-gutter flex-1 min-h-0 pt-4 pb-24 md:pt-6 md:pb-6">
-        {courses.length === 0 && !retainedCourses.some((e) => e.exiting) ? (
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <SegmentedControl<"courses" | "library">
+            value={view}
+            onChange={setView}
+            ariaLabel="课程资料视图"
+            options={[
+              { value: "courses", label: `课程 ${courses.length}` },
+              { value: "library", label: `资料库 ${totalMaterials}` },
+            ]}
+          />
+        </div>
+
+        {view === "library" ? (
+          <CourseLibraryView courses={courses} onPreviewMaterial={previewMaterial} />
+        ) : courses.length === 0 && !retainedCourses.some((e) => e.exiting) ? (
           <WorkspaceEmptyState
             className="ux-fade"
             icon={<BookOpen className="w-8 h-8" strokeWidth={1.5} />}
