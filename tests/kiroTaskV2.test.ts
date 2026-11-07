@@ -178,12 +178,13 @@ describe("Kiro Task V2 Read Tools", () => {
     expect(ids).toEqual(["a2", "a3"]); // a3 DDL 在未来但今天已安排
   });
 
-  it("search_assignments scope=unscheduled：无 StudyBlock 的 active 任务（无 DDL 也在列）", async () => {
+  it("search_assignments scope=unscheduled：未排满的 active 任务（partial / unknown 也在列）", async () => {
     seedState();
     const { store, read } = await freshModules();
     const r = read.executeKiroReadTool("search_assignments", { scope: "unscheduled" }, store.getState()) as { ok: true; data: { id: string }[] };
     const ids = r.data.map((x) => x.id).sort();
-    expect(ids).toEqual(["a1", "a2", "a4"]);
+    // a3 已排 1h / 预计 2h → partial：Task Model V2 仍属于待安排
+    expect(ids).toEqual(["a1", "a2", "a3", "a4"]);
   });
 
   it("search_assignments 旧参数（due）仍兼容", async () => {

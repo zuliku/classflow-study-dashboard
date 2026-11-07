@@ -60,14 +60,14 @@ export function TaskTerminalPreviewDialog({
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-satin-grey">
             {isSubmit
-              ? "任务会从今天/计划/DDL 中退出，之后可在“等待反馈”里重新打开。"
-              : "任务会进入已完成，不再占用学习计划与提醒。"}
+              ? "不再出现在今天和计划中，可在「等待反馈」里重新打开。"
+              : "已安排的学习时间和提醒会一并释放。"}
           </p>
         </div>
 
         {(release.count > 0 || reminders.count > 0 || recurrence.willGenerate) && (
           <div className="space-y-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift">将发生</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift">同时</p>
             {release.count > 0 && (
               <Row
                 icon={<CalendarDays className="h-3.5 w-3.5" />}
@@ -82,7 +82,7 @@ export function TaskTerminalPreviewDialog({
                 detail={
                   reminders.autoCount > 0
                     ? `${reminders.manualCount} 个手动 · ${reminders.autoCount} 个自动`
-                    : "可撤销"
+                    : `${reminders.manualCount} 个手动`
                 }
               />
             )}
@@ -99,14 +99,14 @@ export function TaskTerminalPreviewDialog({
         {incomplete.count > 0 && (
           <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning-bg/50 p-3 text-[11px] text-satin-grey">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-            <span>还有 {incomplete.count} 个子任务未完成。仍可继续，但建议先确认。</span>
+            <span>还有 {incomplete.count} 个子任务未完成。</span>
           </div>
         )}
 
         {preview.blockers.includes("focus-running") && (
           <div className="flex items-start gap-2 rounded-xl border border-danger-border bg-danger-bg/60 p-3 text-[11px] text-danger">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>当前任务正在专注中。请先结束专注，再提交/完成。</span>
+            <span>正在专注中，请先结束专注。</span>
           </div>
         )}
       </div>

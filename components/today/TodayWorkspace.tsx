@@ -4,29 +4,34 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  ArrowUpRight,
   CheckCircle2,
   ChevronDown,
   Clock,
+  Plus,
   Send,
-  Sparkles,
   Sun,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
+import { DisclosureRegion } from "@/components/ui/DisclosureRegion";
+import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { TodayTimeline } from "@/components/today/TodayTimeline";
 import { TaskTerminalPreviewDialog } from "@/components/task/TaskTerminalPreviewDialog";
 import { KiroLogoIcon } from "@/components/kiro/KiroLogo";
+import { KiroFlowButton } from "@/components/kiro/KiroFlow";
+import { KIRO_ICON } from "@/components/layout/navItems";
 import { useKiroSessionActions } from "@/components/kiro/KiroSessionProvider";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
 import { openAssignmentEditor } from "@/lib/uiEvents";
-import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
+import { useExitPresenceList } from "@/lib/useExitPresenceList";
+import { getWeekDateRange } from "@/lib/semester";
 import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
 import {
   buildTodayProjection,
   buildDeadlineFeed,
-  buildPlanBacklogProjection,
   type TaskProjectionItem,
 } from "@/lib/tasks/taskProjections";
 import {
@@ -46,7 +51,7 @@ import type { TaskTransitionPreview } from "@/lib/tasks/taskTransitions";
 import { cn } from "@/lib/utils";
 
 const KIRO_TODAY_PROMPT =
-  "帮我规划今天：结合今天的课程、截止任务、学习计划和可用时间，先判断最需要做的 1-3 件事，再给出可执行的时间安排建议。不要直接修改数据，先给我预览。";
+  "帮我安排今天：看课程、截止和可用时间，给出 1–3 件事的时间安排。先预览，不要写入。";
 
 type GroupTone = "danger" | "warning" | "mint" | "neutral";
 
@@ -123,11 +128,6 @@ export function TodayWorkspace() {
     () => buildDeadlineFeed(assignments, now, preferences.ddlWarningDays),
     [assignments, now, preferences.ddlWarningDays]
   );
-  const backlog = useMemo(() => {
-    const weekDates = getWeekDateRange(semester, currentSemesterWeek).map(localDateKey);
-    return buildPlanBacklogProjection(assignments, studyBlocks, weekDates, now);
-  }, [assignments, studyBlocks, semester, currentSemesterWeek, now]);
-
   const weekOccurrences = useMemo(
     () =>
       resolveCourseOccurrencesForWeek({
@@ -172,6 +172,13 @@ export function TodayWorkspace() {
       ].filter((group) => group.items.length > 0),
     [projection]
   );
+  // 最后一项目完成时组会从 groups 消失：保留整组 snapshot 播放折叠，
+  // 避免 singleton 组直接硬切；多项目组由 TodayTaskGroup 内部逐行退出。
+  const retainedGroups = useExitPresenceList({
+    items: groups,
+    getId: (group) => group.id,
+    resetKey: "today-groups",
+  });
 
   const weekDates = useMemo(() => getWeekDateRange(semester, currentSemesterWeek), [semester, currentSemesterWeek]);
   const weekPlannedMinutes = useMemo(
@@ -248,152 +255,137 @@ export function TodayWorkspace() {
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col" data-testid="today-workspace">
       <WorkspaceHeader
         title="今天"
-        context={
-          <>
-            <span className="md:hidden">
-              {now.getMonth() + 1}月{now.getDate()}日 · 第 {currentSemesterWeek} 周
-            </span>
-            <span className="hidden md:inline">
-              {now.getMonth() + 1}月{now.getDate()}日 · 周{"日一二三四五六"[now.getDay()]} · 第{" "}
-              {currentSemesterWeek} 周 · {formatWeekDateRange(semester, currentSemesterWeek)}
-            </span>
-          </>
-        }
+        context={`${now.getMonth() + 1}月${now.getDate()}日 · 周${
+          "日一二三四五六"[now.getDay()]
+        } · 第 ${currentSemesterWeek} 周`}
         actions={
           <KiroFlowButton
+            icon={KIRO_ICON}
             label="Ask Kiro"
+            size="sm"
+            className="hidden h-8 sm:block"
+            labelClassName="hidden md:inline"
             onClick={() => handoffPrompt(KIRO_TODAY_PROMPT)}
-            className="hidden sm:block"
           />
         }
         primaryAction={
           <Button variant="primary" onClick={() => openAssignmentEditor({})}>
-            + 添加任务
+            <Plus className="h-3.5 w-3.5" />
+            新建任务
           </Button>
         }
+        sticky
+        innerClassName="mx-auto w-full max-w-[1528px]"
       />
 
-      <div className="flex-1 px-4 py-4 md:px-6 md:py-5">
+      <div
+        className="workspace-gutter flex-1 pb-24 pt-4 md:pb-6 md:pt-6"
+        data-testid="today-content"
+      >
         <div className="mx-auto grid w-full max-w-[1480px] grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="min-w-0 space-y-4">
-            <NowNextCard
-              nowNext={nowNext}
-              courseById={courseById}
-              assignments={assignments}
-              onOpenCourse={(id) => setSelectedCourseId(id)}
-              onOpenAssignment={(id) => setSelectedAssignmentId(id)}
-              onOpenTasks={() => setActiveTab("assignments")}
-            />
+          <div className="min-w-0 space-y-4" data-testid="today-main">
+            <div className="ux-staged-s0">
+              <NowNextCard
+                nowNext={nowNext}
+                courseById={courseById}
+                assignments={assignments}
+                onOpenCourse={(id) => setSelectedCourseId(id)}
+                onOpenAssignment={(id) => setSelectedAssignmentId(id)}
+                onOpenTasks={() => setActiveTab("assignments")}
+              />
+            </div>
 
-            <section className="rounded-2xl border border-line bg-surface p-3.5 xl:hidden">
+            <section
+              className="dashboard-card ux-staged-s0 p-4 xl:hidden"
+              data-testid="today-kiro-brief-mobile"
+            >
               <div className="flex items-center gap-2">
                 <KiroLogoIcon className="h-4 w-4" />
-                <h2 className="text-[12px] font-bold text-charcoal">Kiro 简报</h2>
-                <span className="ml-auto text-[9px] font-semibold text-sandrift">本地摘要</span>
+                <h2 className="text-sm font-semibold tracking-tight text-charcoal">Kiro 简报</h2>
               </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-satin-grey">{brief}</p>
-              <Button
-                variant="accent"
+              <p className="mt-2 text-xs leading-relaxed text-satin-grey">{brief}</p>
+              <KiroFlowButton
+                icon={KIRO_ICON}
+                label="让 Kiro 规划今天"
                 size="sm"
-                className="mt-2"
+                className="mt-3 h-8"
                 onClick={() => handoffPrompt(KIRO_TODAY_PROMPT)}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                让 Kiro 规划今天
-              </Button>
+              />
             </section>
 
-            <AttentionStrip
-              overdue={projection.groups.overdue.length}
-              dueToday={projection.groups.dueToday.length}
-              unscheduled={unscheduledCount}
-              waiting={waiting.length}
-              onOverdue={() => scrollToGroup("overdue")}
-              onDueToday={() => scrollToGroup("dueToday")}
-              onUnscheduled={() => setActiveTab("timetable")}
-              onWaiting={() => setActiveTab("assignments")}
-            />
+            <div className="ux-staged-s1">
+              <AttentionStrip
+                overdue={projection.groups.overdue.length}
+                dueToday={projection.groups.dueToday.length}
+                unscheduled={unscheduledCount}
+                waiting={waiting.length}
+                onOverdue={() => scrollToGroup("overdue")}
+                onDueToday={() => scrollToGroup("dueToday")}
+                onUnscheduled={() => setActiveTab("timetable")}
+                onWaiting={() => setActiveTab("assignments")}
+              />
+            </div>
 
-            <section aria-labelledby="today-tasks-title" className="rounded-2xl border border-line bg-surface">
+            <section
+              aria-labelledby="today-tasks-title"
+              className="dashboard-card ux-staged-s2 overflow-hidden"
+            >
               <div className="flex items-center justify-between gap-3 border-b border-line-soft px-4 py-3">
                 <div>
-                  <h2 id="today-tasks-title" className="text-[13px] font-semibold text-charcoal">
+                  <h2
+                    id="today-tasks-title"
+                    className="text-sm font-semibold tracking-tight text-charcoal"
+                  >
                     今天要做
                   </h2>
-                  <p className="mt-0.5 text-[10px] text-sandrift">
-                    {projection.taskCount > 0
-                      ? `${projection.taskCount} 项任务 · 已安排 ${formatEstimatedMinutes(
-                          projection.plannedMinutes
-                        ) ?? "0 分钟"}`
-                      : "今天还没有任务"}
-                  </p>
+                  {projection.taskCount > 0 && (
+                    <p className="mt-0.5 text-[11px] text-sandrift">
+                      {`${projection.taskCount} 项任务${
+                        projection.plannedMinutes > 0
+                          ? ` · 已安排 ${formatEstimatedMinutes(projection.plannedMinutes)}`
+                          : ""
+                      }`}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveTab("assignments")}
-                  className="shrink-0 text-[11px] font-semibold text-satin-grey transition-colors hover:text-charcoal"
+                  className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-satin-grey transition-colors hover:text-charcoal"
                 >
                   全部任务
+                  <ArrowUpRight className="h-3 w-3" />
                 </button>
               </div>
 
-              {groups.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-1.5 px-4 py-10 text-center">
+              {retainedGroups.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-1.5 px-4 py-6 text-center">
                   <Sun className="h-5 w-5 text-sandrift" />
-                  <p className="text-[13px] font-semibold text-charcoal">今天没有任务</p>
-                  <p className="text-[11px] text-satin-grey">从本周挑一件事，或者给自己留一点空白。</p>
-                  <Button variant="secondary" className="mt-2" onClick={() => setActiveTab("assignments")}>
-                    去任务页看看
+                  <p className="text-sm font-semibold text-charcoal">今天没有任务</p>
+                  <p className="text-xs text-satin-grey">从任务页挑选一项，或添加新任务。</p>
+                  <Button variant="secondary" className="mt-1" onClick={() => setActiveTab("assignments")}>
+                    打开任务页
                   </Button>
                 </div>
               ) : (
                 <div className="divide-y divide-line-soft">
-                  {groups.map((group) => (
-                    <div key={group.id} id={`today-group-${group.id}`}>
-                      <button
-                        type="button"
-                        onClick={() =>
+                  {retainedGroups.map(({ item: group, exiting }) => (
+                    <ExitCollapse key={group.id} exiting={exiting}>
+                      <TodayTaskGroup
+                        group={group}
+                        open={expanded[group.id] !== false}
+                        courseById={courseById}
+                        onToggle={() =>
                           setExpanded((current) => ({ ...current, [group.id]: !current[group.id] }))
                         }
-                        aria-expanded={expanded[group.id] !== false}
-                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-alabaster/40"
-                      >
-                        <ChevronDown
-                          className={cn(
-                            "h-3.5 w-3.5 text-sandrift transition-transform duration-[var(--motion-fast)]",
-                            expanded[group.id] === false && "-rotate-90"
-                          )}
-                        />
-                        <span className={cn("h-1.5 w-1.5 rounded-full", toneDot(group.tone))} />
-                        <span className="text-[11px] font-bold text-charcoal">{group.title}</span>
-                        <span className="text-[10px] tabular-nums text-sandrift">{group.items.length}</span>
-                      </button>
-                      {expanded[group.id] !== false && (
-                        <div className="pb-1">
-                          {group.items.slice(0, 8).map((item) => (
-                            <TodayTaskRow
-                              key={item.task.id}
-                              item={item}
-                              courseName={courseById.get(item.task.courseId)?.name}
-                              onOpen={() => setSelectedAssignmentId(item.task.id)}
-                              onTerminal={() => handleTerminal(item.task)}
-                            />
-                          ))}
-                          {group.items.length > 8 && (
-                            <button
-                              type="button"
-                              onClick={() => setActiveTab("assignments")}
-                              className="w-full px-4 py-2 text-left text-[11px] font-semibold text-satin-grey hover:bg-alabaster/40 hover:text-charcoal"
-                            >
-                              查看全部 {group.items.length} 项
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                        onOpenTask={(id) => setSelectedAssignmentId(id)}
+                        onTerminal={handleTerminal}
+                        onViewAll={() => setActiveTab("assignments")}
+                      />
+                    </ExitCollapse>
                   ))}
                 </div>
               )}
@@ -402,70 +394,75 @@ export function TodayWorkspace() {
             <TodayTimeline now={now} />
           </div>
 
-          <aside className="min-w-0 space-y-3 xl:sticky xl:top-[calc(var(--titlebar-h)+72px)] xl:self-start">
-            <section className="hidden rounded-2xl border border-line bg-surface p-4 xl:block">
+          <aside
+            className="min-w-0 space-y-4 xl:sticky xl:top-[89px] xl:self-start"
+            data-testid="today-rail"
+          >
+            <section className="dashboard-card ux-staged-s1 hidden p-4 xl:block">
               <div className="flex items-center gap-2">
                 <KiroLogoIcon className="h-4 w-4" />
-                <h2 className="text-[12px] font-bold text-charcoal">Kiro 简报</h2>
-                <span className="ml-auto text-[9px] font-semibold text-sandrift">本地摘要</span>
+                <h2 className="text-sm font-semibold tracking-tight text-charcoal">Kiro 简报</h2>
               </div>
-              <p className="mt-2 text-[12px] leading-relaxed text-satin-grey">{brief}</p>
+              <p className="mt-2 text-xs leading-relaxed text-satin-grey">{brief}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button variant="accent" size="sm" onClick={() => handoffPrompt(KIRO_TODAY_PROMPT)}>
-                  <Sparkles className="h-3.5 w-3.5" />
-                  让 Kiro 规划今天
-                </Button>
+                <KiroFlowButton
+                  icon={KIRO_ICON}
+                  label="让 Kiro 规划今天"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => handoffPrompt(KIRO_TODAY_PROMPT)}
+                />
                 <button
                   type="button"
                   onClick={() => setActiveTab("kiro")}
-                  className="text-[10px] font-semibold text-sandrift transition-colors hover:text-charcoal"
+                  className="text-[11px] font-semibold text-sandrift transition-colors hover:text-charcoal"
                 >
                   打开 Kiro
                 </button>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-line bg-surface p-4">
+            <section className="dashboard-card ux-staged-s1 p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-[12px] font-bold text-charcoal">今日节奏</h2>
-                <span className="text-[10px] tabular-nums text-sandrift">
+                <h2 className="text-sm font-semibold tracking-tight text-charcoal">学习安排</h2>
+                <span className="text-[11px] tabular-nums text-sandrift">
                   {projection.taskCount} 项任务
                 </span>
               </div>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-2.5">
                 <MetricBar
-                  label="今天已安排"
-                  value={`${formatEstimatedMinutes(projection.plannedMinutes) ?? "0 分钟"}`}
+                  label="今日安排"
+                  value={formatEstimatedMinutes(projection.plannedMinutes) ?? "0 分钟"}
                   ratio={Math.min(1, projection.plannedMinutes / (6 * 60))}
                 />
                 <MetricBar
-                  label="本周已安排"
-                  value={`${formatEstimatedMinutes(weekPlannedMinutes) ?? "0 分钟"}`}
+                  label="本周安排"
+                  value={formatEstimatedMinutes(weekPlannedMinutes) ?? "0 分钟"}
                   ratio={Math.min(1, weekPlannedMinutes / (20 * 60))}
                   tone="neutral"
                 />
               </div>
-              <div className="mt-3 flex items-center justify-between border-t border-line-soft pt-2 text-[10px] text-sandrift">
-                <span>待安排 {backlog.counts.needsScheduling}</span>
+              <div className="mt-3 flex items-center justify-between border-t border-line-soft pt-2 text-[11px] text-sandrift">
+                <span>待安排 {unscheduledCount}</span>
                 <button
                   type="button"
                   onClick={() => setActiveTab("timetable")}
                   className="inline-flex items-center gap-0.5 font-semibold hover:text-charcoal"
                 >
-                  去时间表 <ArrowRight className="h-3 w-3" />
+                  打开时间表 <ArrowUpRight className="h-3 w-3" />
                 </button>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-line bg-surface p-4">
+            <section className="dashboard-card ux-staged-s2 p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-[12px] font-bold text-charcoal">等待反馈</h2>
-                <span className="text-[10px] tabular-nums text-sandrift">{waiting.length}</span>
+                <h2 className="text-sm font-semibold tracking-tight text-charcoal">等待反馈</h2>
+                <span className="text-[11px] tabular-nums text-sandrift">{waiting.length}</span>
               </div>
               {waiting.length === 0 ? (
-                <p className="mt-2 text-[11px] text-satin-grey">没有等待反馈的任务。</p>
+                <p className="mt-2 text-[11px] text-satin-grey">暂无</p>
               ) : (
-                <div className="mt-2 space-y-1.5">
+                <div className="mt-2 space-y-1">
                   {waiting.slice(0, 2).map((task) => (
                     <button
                       key={task.id}
@@ -477,17 +474,17 @@ export function TodayWorkspace() {
                       <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-charcoal">
                         {task.title}
                       </span>
-                      <span className="shrink-0 text-[9px] text-sandrift">已提交</span>
+                      <span className="shrink-0 text-[10px] text-sandrift">已提交</span>
                     </button>
                   ))}
                 </div>
               )}
             </section>
 
-            <section className="rounded-2xl border border-line bg-surface p-4">
+            <section className="dashboard-card ux-staged-s3 p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-[12px] font-bold text-charcoal">本周一览</h2>
-                <span className="text-[9px] text-sandrift">第 {currentSemesterWeek} 周</span>
+                <h2 className="text-sm font-semibold tracking-tight text-charcoal">本周一览</h2>
+                <span className="text-[11px] text-sandrift">第 {currentSemesterWeek} 周</span>
               </div>
               <WeekGlance
                 dates={weekDates}
@@ -531,12 +528,11 @@ function NowNextCard({
 }) {
   if (nowNext.kind === "empty") {
     return (
-      <section className="rounded-2xl border border-line bg-surface p-4 md:p-5">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift">今天</p>
-        <h2 className="mt-1 text-[17px] font-semibold text-charcoal">没有课程和截止</h2>
-        <p className="mt-1 text-[11px] text-satin-grey">给自己留一点空白，或者补一件事。</p>
+      <section className="dashboard-card p-4 md:p-5" data-testid="today-now-next">
+        <p className="text-[11px] font-semibold text-sandrift">今天</p>
+        <h2 className="mt-1 text-[17px] font-semibold text-charcoal">今天暂无课程或截止</h2>
         <Button variant="secondary" className="mt-3" onClick={onOpenTasks}>
-          去任务页
+          查看任务
         </Button>
       </section>
     );
@@ -545,16 +541,17 @@ function NowNextCard({
   const course = nowNext.courseId ? courseById.get(nowNext.courseId) : undefined;
   return (
     <section
-      className="relative overflow-hidden rounded-2xl border border-line bg-surface p-4 md:p-5"
+      className="dashboard-card relative overflow-hidden p-4 md:p-5"
+      data-testid="today-now-next"
       style={course ? { borderLeftColor: course.bgHex, borderLeftWidth: 3 } : undefined}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-sandrift">{nowNext.eyebrow}</p>
+          <p className="text-[11px] font-semibold text-sandrift">{nowNext.eyebrow}</p>
           <h2 className="mt-1 truncate text-[17px] font-semibold text-charcoal md:text-[18px]">
             {nowNext.title}
           </h2>
-          <p className="mt-1 truncate text-[11px] text-satin-grey">{nowNext.meta}</p>
+          <p className="mt-1 truncate text-xs text-satin-grey">{nowNext.meta}</p>
         </div>
         {nowNext.kind === "focus" && (
           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-pastel-mint px-2 py-1 text-[10px] font-bold text-charcoal">
@@ -613,7 +610,7 @@ function AttentionStrip({
     return (
       <div className="flex items-center gap-1.5 rounded-xl border border-line-soft bg-surface/60 px-3 py-2 text-[11px] text-satin-grey">
         <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-        今天没有需要特别关注的事。
+        暂无需要关注的事项
       </div>
     );
   }
@@ -626,7 +623,7 @@ function AttentionStrip({
           type="button"
           onClick={chip.onClick}
           className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold transition-colors",
+            "ux-press inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors",
             chip.tone === "danger" && "border-danger-border bg-danger-bg text-danger hover:bg-danger-border/60",
             chip.tone === "warning" && "border-warning-border bg-warning-bg text-warning hover:bg-warning-border/60",
             chip.tone === "mint" && "border-success-border bg-success-bg text-success hover:bg-success-border/60",
@@ -637,6 +634,81 @@ function AttentionStrip({
           {chip.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+type TodayGroup = {
+  id: string;
+  title: string;
+  tone: GroupTone;
+  items: TaskProjectionItem[];
+};
+
+function TodayTaskGroup({
+  group,
+  open,
+  courseById,
+  onToggle,
+  onOpenTask,
+  onTerminal,
+  onViewAll,
+}: {
+  group: TodayGroup;
+  open: boolean;
+  courseById: Map<string, { name: string }>;
+  onToggle: () => void;
+  onOpenTask: (id: string) => void;
+  onTerminal: (task: Assignment) => void;
+  onViewAll: () => void;
+}) {
+  // 完成任务后保留一行 snapshot 播放折叠退出，避免列表硬跳。
+  const retained = useExitPresenceList({
+    items: group.items,
+    getId: (item) => item.task.id,
+    resetKey: group.id,
+  });
+
+  return (
+    <div id={`today-group-${group.id}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={`today-group-body-${group.id}`}
+        className="flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-alabaster/40"
+      >
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-sandrift transition-transform duration-[var(--motion-fast)]",
+            !open && "-rotate-90"
+          )}
+        />
+        <span className={cn("h-1.5 w-1.5 rounded-full", toneDot(group.tone))} />
+        <span className="text-[11px] font-bold text-charcoal">{group.title}</span>
+        <span className="text-[11px] tabular-nums text-sandrift">{group.items.length}</span>
+      </button>
+      <DisclosureRegion open={open} id={`today-group-body-${group.id}`} innerClassName="pb-1">
+        {retained.slice(0, 8).map(({ item, exiting }) => (
+          <ExitCollapse key={item.task.id} exiting={exiting}>
+            <TodayTaskRow
+              item={item}
+              courseName={courseById.get(item.task.courseId)?.name}
+              onOpen={() => onOpenTask(item.task.id)}
+              onTerminal={() => onTerminal(item.task)}
+            />
+          </ExitCollapse>
+        ))}
+        {group.items.length > 8 && (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="w-full px-4 py-2 text-left text-[11px] font-semibold text-satin-grey hover:bg-alabaster/40 hover:text-charcoal"
+          >
+            查看全部任务
+          </button>
+        )}
+      </DisclosureRegion>
     </div>
   );
 }
@@ -670,7 +742,7 @@ function TodayTaskRow({
         aria-label={task.submissionRequired ? `提交《${task.title}》` : `完成《${task.title}》`}
         onClick={onTerminal}
         className={cn(
-          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+          "ux-press flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
           meta.overdue
             ? "border-danger-border text-danger hover:bg-danger-bg"
             : "border-line-strong text-sandrift hover:border-charcoal hover:text-charcoal"
@@ -685,8 +757,8 @@ function TodayTaskRow({
         className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-charcoal/30"
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[12px] font-semibold text-charcoal">{task.title}</span>
-          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-[10px] text-sandrift">
+          <span className="block truncate text-[13px] font-semibold text-charcoal">{task.title}</span>
+          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-[11px] text-sandrift">
             {courseName && (
               <span className="inline-flex min-w-0 items-center gap-1 truncate">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sandrift/60" />
@@ -754,21 +826,21 @@ function WeekGlance({
           key={row.key}
           type="button"
           onClick={onSelect}
-          title={`${row.key} · 已安排 ${formatEstimatedMinutes(row.load) ?? "0 分钟"} · ${row.taskCount} 个截止`}
+          aria-label={`${row.key} · 已安排 ${formatEstimatedMinutes(row.load) ?? "0 分钟"} · ${row.taskCount} 个截止`}
           className={cn(
             "flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 py-1.5 transition-colors hover:bg-alabaster",
             row.isToday && "bg-pastel-mint/60"
           )}
         >
-          <span className="text-[9px] font-bold text-sandrift">{WEEKDAY_LABELS[row.day - 1]}</span>
-          <span className="text-[9px] tabular-nums text-charcoal">{row.key.slice(8)}</span>
+          <span className="text-[10px] font-bold text-satin-grey">{WEEKDAY_LABELS[row.day - 1]}</span>
+          <span className="text-[10px] tabular-nums text-charcoal/80">{row.key.slice(8)}</span>
           <span className="flex h-7 w-full items-end justify-center">
             <span
-              className={cn("w-2 rounded-full", row.isToday ? "bg-charcoal" : "bg-sandrift/45")}
-              style={{ height: `${Math.max(3, (row.load / maxLoad) * 24)}px` }}
+              className={cn("w-2 rounded-full", row.isToday ? "bg-charcoal" : "bg-sandrift/65")}
+              style={{ height: row.load > 0 ? `${Math.max(3, (row.load / maxLoad) * 24)}px` : 0 }}
             />
           </span>
-          {row.taskCount > 0 && <span className="text-[8px] tabular-nums text-sandrift">{row.taskCount}</span>}
+          {row.taskCount > 0 && <span className="text-[10px] tabular-nums text-sandrift">{row.taskCount}</span>}
         </button>
       ))}
     </div>
@@ -788,34 +860,17 @@ function MetricBar({
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between text-[10px]">
+      <div className="flex items-center justify-between text-[11px]">
         <span className="text-satin-grey">{label}</span>
         <span className="font-semibold tabular-nums text-charcoal">{value}</span>
       </div>
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line-soft">
         <div
-          className={cn("h-full rounded-full", tone === "mint" ? "bg-success/55" : "bg-sandrift/50")}
-          style={{ width: `${Math.max(2, ratio * 100)}%` }}
+          className={cn("h-full rounded-full", tone === "mint" ? "bg-success/70" : "bg-sandrift/65")}
+          style={{ width: ratio > 0 ? `${Math.max(2, ratio * 100)}%` : 0 }}
         />
       </div>
     </div>
-  );
-}
-
-function KiroFlowButton({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className={cn(
-        "ux-press ux-press-transition inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-surface px-3 text-[11px] font-bold text-charcoal transition-colors hover:bg-alabaster",
-        className
-      )}
-    >
-      <KiroLogoIcon className="h-4 w-4" />
-      {label}
-    </button>
   );
 }
 
@@ -871,22 +926,30 @@ function buildNowNext(
 
   if (activeFocus) {
     const assignment = assignments.find((item) => item.id === activeFocus.assignmentId);
+    const elapsedMs =
+      activeFocus.accumulatedActiveMs +
+      (activeFocus.status === "running" && activeFocus.activeStartedAt
+        ? Math.max(0, now.getTime() - activeFocus.activeStartedAt)
+        : 0);
+    const focusedMinutes = Math.max(1, Math.round(elapsedMs / 60_000));
     return {
       kind: "focus",
-      eyebrow: "正在进行",
+      eyebrow: activeFocus.status === "paused" ? "专注 · 已暂停" : "正在进行",
       title: assignment?.title ?? "正在专注",
-      meta: "专注进行中 · 结束后可在任务里记录进度",
+      meta: `已专注 ${focusedMinutes} 分钟`,
       assignmentId: activeFocus.assignmentId,
     };
   }
 
   if (current) {
     const course = courseById.get(current.courseId);
+    const sourceLabel =
+      current.source === "moved" ? " · 临时调课" : current.source === "extra" ? " · 补课" : "";
     return {
       kind: "course",
       eyebrow: `现在 · ${current.startTime}–${current.endTime}`,
       title: course?.name ?? "课程",
-      meta: `${current.location || "地点未设置"} · ${current.source === "moved" ? "临时调课" : current.source === "extra" ? "补课" : "本周课程"}`,
+      meta: `${current.location || "地点未设置"}${sourceLabel}`,
       courseId: current.courseId,
     };
   }
@@ -916,7 +979,7 @@ function buildNowNext(
           : `${deadline.getMonth() + 1}月${deadline.getDate()}日`;
     return {
       kind: "deadline",
-      eyebrow: overdue ? "最早逾期" : "下一个截止",
+      eyebrow: overdue ? "逾期最久" : "下一个截止",
       title: nextDeadline.title,
       meta: `${timeLabel} · ${courseById.get(nextDeadline.courseId)?.name ?? "未关联课程"}`,
       assignmentId: nextDeadline.id,
@@ -932,15 +995,17 @@ function buildLocalBrief(
   firstTask: Assignment | undefined
 ): string {
   if (projection.groups.overdue.length > 0) {
-    return `有 ${projection.groups.overdue.length} 个任务已经逾期，建议先从最早的那个开始。`;
+    return firstTask
+      ? `有 ${projection.groups.overdue.length} 个任务已逾期，最近的是「${firstTask.title}」。`
+      : `有 ${projection.groups.overdue.length} 个任务已逾期。`;
   }
   if (projection.taskCount > 0) {
-    return `今天 ${projection.taskCount} 件事${firstTask ? `，建议先做「${firstTask.title}」` : ""}。`;
+    return `今天 ${projection.taskCount} 个任务${nextDeadline ? `，最近截止「${nextDeadline.title}」` : ""}。`;
   }
   if (nextDeadline) {
-    return `今天没有任务，最近截止是「${nextDeadline.title}」，可以提前准备。`;
+    return `今天没有任务，最近截止「${nextDeadline.title}」。`;
   }
-  return "今天没有任务和截止，适合补一件事，或者给自己留一点空白。";
+  return "今天没有任务和截止。";
 }
 
 function toneDot(tone: GroupTone): string {

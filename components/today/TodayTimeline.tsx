@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { CalendarDays, Clock, Flag, GraduationCap, Play } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Clock, Flag, GraduationCap } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/store/useAppStore";
 import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
@@ -204,12 +204,15 @@ export function TodayTimeline({ now }: { now: Date }) {
 
   if (timed.length === 0 && allDay.length === 0) {
     return (
-      <section className="rounded-2xl border border-line bg-surface p-5" aria-labelledby="today-timeline-title">
-        <TimelineHeader onEditPlan={() => setActiveTab("timetable")} />
-        <div className="mt-4 flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-line-soft py-8 text-center">
+      <section
+        className="dashboard-card ux-staged-s3 p-4 md:p-5"
+        aria-labelledby="today-timeline-title"
+      >
+        <TimelineHeader summary="" onEditPlan={() => setActiveTab("timetable")} />
+        <div className="mt-3 flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-line-soft py-6 text-center">
           <CalendarDays className="h-5 w-5 text-sandrift" />
-          <p className="text-[13px] font-semibold text-charcoal">今天没有安排</p>
-          <p className="text-[11px] text-satin-grey">在时间表里安排学习时间，或快速添加一件事。</p>
+          <p className="text-sm font-semibold tracking-tight text-charcoal">今天没有安排</p>
+          <p className="text-xs text-satin-grey">在时间表里添加学习块或日程。</p>
         </div>
       </section>
     );
@@ -226,10 +229,16 @@ export function TodayTimeline({ now }: { now: Date }) {
     { length: Math.floor((windowEnd - windowStart) / 60) + 1 },
     (_, index) => windowStart / 60 + index
   );
+  const summary = `${timed.length + allDay.length} 项安排 · ${formatTimeLabel(
+    windowStart
+  )}–${formatTimeLabel(windowEnd)}`;
 
   return (
-    <section className="rounded-2xl border border-line bg-surface p-4 md:p-5" aria-labelledby="today-timeline-title">
-      <TimelineHeader onEditPlan={() => setActiveTab("timetable")} />
+    <section
+      className="dashboard-card ux-staged-s3 p-4 md:p-5"
+      aria-labelledby="today-timeline-title"
+    >
+      <TimelineHeader summary={summary} onEditPlan={() => setActiveTab("timetable")} />
 
       {allDay.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -242,7 +251,7 @@ export function TodayTimeline({ now }: { now: Date }) {
                 else if (item.assignmentId) setSelectedAssignmentId(item.assignmentId);
               }}
               className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold",
+                "ux-press inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold",
                 item.type === "exam"
                   ? "border-warning-border bg-warning-bg text-warning"
                   : "border-success-border bg-success-bg text-success"
@@ -257,12 +266,19 @@ export function TodayTimeline({ now }: { now: Date }) {
 
       <div className="relative mt-3 overflow-hidden rounded-xl border border-line-soft bg-[#FBF9F6]">
         <div className="relative" style={{ height: totalHeight }}>
-          {hours.map((hour) => {
+          {hours.map((hour, index) => {
             const top = ((hour * 60 - windowStart) / 60) * HOUR_HEIGHT;
+            const isFirst = index === 0;
+            const isLast = index === hours.length - 1;
             return (
               <div key={hour} className="absolute inset-x-0" style={{ top }}>
                 <div className="flex items-start">
-                  <span className="w-11 shrink-0 -translate-y-1/2 pr-1 text-right text-[10px] tabular-nums text-sandrift">
+                  <span
+                    className={cn(
+                      "w-11 shrink-0 pr-1 text-right text-[10px] tabular-nums text-sandrift",
+                      isFirst ? "" : isLast ? "-translate-y-full" : "-translate-y-1/2"
+                    )}
+                  >
                     {String(hour).padStart(2, "0")}:00
                   </span>
                   <span className="mt-0 h-px flex-1 bg-line-soft" />
@@ -296,7 +312,7 @@ export function TodayTimeline({ now }: { now: Date }) {
                     else if (item.markId) setSelectedCalendarMarkId(item.markId);
                   }}
                   className={cn(
-                    "absolute overflow-hidden rounded-lg border px-1.5 py-1 text-left transition-[filter,box-shadow] duration-[var(--motion-fast)] hover:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-charcoal/30",
+                    "ux-fade absolute overflow-hidden rounded-lg border px-1.5 py-1 text-left transition-[filter,box-shadow] duration-[var(--motion-fast)] hover:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-charcoal/30",
                     item.type === "course" && "border-line shadow-subtle",
                     item.type === "study" && "border-dashed border-line-strong bg-pastel-mint/35",
                     item.type === "exam" && "border-warning-border bg-warning-bg",
@@ -316,7 +332,7 @@ export function TodayTimeline({ now }: { now: Date }) {
                     <span className="truncate text-[10px] font-bold leading-tight">{item.title}</span>
                   </span>
                   {height >= 34 && (
-                    <span className="mt-0.5 flex items-center gap-1 truncate text-[9px] opacity-75">
+                    <span className="mt-0.5 flex items-center gap-1 truncate text-[10px] opacity-75">
                       <Clock className="h-2.5 w-2.5 shrink-0" />
                       {String(Math.floor(item.start / 60)).padStart(2, "0")}:
                       {String(item.start % 60).padStart(2, "0")}
@@ -332,7 +348,7 @@ export function TodayTimeline({ now }: { now: Date }) {
                 className="pointer-events-none absolute inset-x-0 z-10 flex items-center"
                 style={{ top: ((nowMinutes - windowStart) / 60) * HOUR_HEIGHT }}
               >
-                <span className="rounded-full bg-danger px-1.5 py-0.5 text-[9px] font-bold text-white">
+                <span className="rounded-full bg-danger px-1.5 py-0.5 text-[10px] font-bold text-white">
                   现在
                 </span>
                 <span className="h-px flex-1 bg-danger/70" />
@@ -345,23 +361,30 @@ export function TodayTimeline({ now }: { now: Date }) {
   );
 }
 
-function TimelineHeader({ onEditPlan }: { onEditPlan: () => void }) {
+function TimelineHeader({ summary, onEditPlan }: { summary: string; onEditPlan: () => void }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <div>
-        <h2 id="today-timeline-title" className="text-[13px] font-semibold text-charcoal">
+        <h2 id="today-timeline-title" className="text-sm font-semibold tracking-tight text-charcoal">
           今天的时间
         </h2>
-        <p className="mt-0.5 text-[10px] text-sandrift">课程、学习块、考试与截止共用一条时间线</p>
+        {summary && <p className="mt-0.5 text-[11px] text-sandrift">{summary}</p>}
       </div>
       <button
         type="button"
         onClick={onEditPlan}
         className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-satin-grey transition-colors hover:bg-alabaster hover:text-charcoal"
       >
-        <Play className="h-3 w-3" />
-        在时间表编辑
+        打开时间表
+        <ArrowUpRight className="h-3 w-3" />
       </button>
     </div>
   );
+}
+
+function formatTimeLabel(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(
+    2,
+    "0"
+  )}`;
 }
