@@ -71,6 +71,8 @@ export const VISUAL_EVAL_WORLD: ReadToolState = {
     coursePalette: ["#FADCD9", "#F8E9A1", "#A8E6CF", "#A0C4FF", "#FFC8A2", "#D8B4FE", "#FFADAD", "#CAFFBF"],
     courseAutoPalette: true,
     uiFontScale: 1,
+    timetableMode: "plan",
+    todayWorkspaceEnabled: true,
   },
 };
 

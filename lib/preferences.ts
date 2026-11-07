@@ -46,6 +46,8 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   coursePalette: ["#FADCD9", "#F8E9A1", "#A8E6CF", "#A0C4FF", "#FFC8A2", "#D8B4FE", "#FFADAD", "#CAFFBF"],
   courseAutoPalette: true,
   uiFontScale: 1,
+  timetableMode: "plan",
+  todayWorkspaceEnabled: true,
 };
 
 export const DDL_WARNING_DAYS: readonly AppPreferences["ddlWarningDays"][] = [1, 3, 7];
@@ -58,6 +60,7 @@ export const STARTUP_VIEWS: readonly StartupView[] = ["today", "overview", "time
 export const TASK_PRIORITIES: readonly Priority[] = ["low", "medium", "high", "urgent"];
 export const TASK_STATUSES: readonly AppPreferences["defaultTaskStatus"][] = ["todo", "doing"];
 export const CONTENT_DENSITIES: readonly ContentDensity[] = ["comfortable", "compact"];
+export const TIMETABLE_MODES: readonly AppPreferences["timetableMode"][] = ["plan", "classic"];
 
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -127,6 +130,12 @@ export function sanitizePreferences(v: unknown): AppPreferences {
     coursePalette: Array.isArray(src.coursePalette) && src.coursePalette.every((c: unknown) => typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c as string)) ? (src.coursePalette as string[]) : DEFAULT_PREFERENCES.coursePalette,
     courseAutoPalette: isBool(src.courseAutoPalette) ? src.courseAutoPalette : DEFAULT_PREFERENCES.courseAutoPalette,
     uiFontScale: typeof src.uiFontScale === "number" && src.uiFontScale >= 0.9 && src.uiFontScale <= 1.2 ? Math.round(src.uiFontScale * 20) / 20 : DEFAULT_PREFERENCES.uiFontScale,
+    timetableMode: (TIMETABLE_MODES as readonly unknown[]).includes(src.timetableMode)
+      ? (src.timetableMode as AppPreferences["timetableMode"])
+      : DEFAULT_PREFERENCES.timetableMode,
+    todayWorkspaceEnabled: isBool(src.todayWorkspaceEnabled)
+      ? src.todayWorkspaceEnabled
+      : DEFAULT_PREFERENCES.todayWorkspaceEnabled,
     // V5A4：只输出当前已知字段，legacy persisted `shortcuts` 被自然忽略（无 migration）
   };
 }
@@ -157,6 +166,8 @@ export const PREFERENCE_SECTIONS: Record<
   coursePalette: "general",
   courseAutoPalette: "general",
   uiFontScale: "general",
+  timetableMode: "general",
+  todayWorkspaceEnabled: "general",
 };
 
 /**

@@ -21,6 +21,12 @@ describe("resolveStartupTab（启动位置解析，纯函数）", () => {
     expect(resolveStartupTab("last", "overview")).toBe("overview");
   });
 
+  it("Today 关闭时：today / last=today 都回落到总览", () => {
+    expect(resolveStartupTab("today", "overview", false)).toBe("overview");
+    expect(resolveStartupTab("last", "today", false)).toBe("overview");
+    expect(resolveStartupTab("today", "overview", true)).toBe("today");
+  });
+
   it("任何输入都返回合法 NavTab", () => {
     const tabs: string[] = ["overview", "timetable", "assignments", "courses", "kiro", "analytics", "group"];
     for (const v of ["overview", "timetable", "assignments", "last"] as const) {

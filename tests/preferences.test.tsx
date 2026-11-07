@@ -51,6 +51,15 @@ const validPrefs = {
 };
 
 describe("sanitizePreferences 逐字段回落", () => {
+  it("时间表样式 / 今日页面：默认值、合法值与非法回落", () => {
+    expect(DEFAULT_PREFERENCES.timetableMode).toBe("plan");
+    expect(DEFAULT_PREFERENCES.todayWorkspaceEnabled).toBe(true);
+    expect(sanitizePreferences({ timetableMode: "classic" }).timetableMode).toBe("classic");
+    expect(sanitizePreferences({ timetableMode: "hacked" }).timetableMode).toBe("plan");
+    expect(sanitizePreferences({ todayWorkspaceEnabled: false }).todayWorkspaceEnabled).toBe(false);
+    expect(sanitizePreferences({ todayWorkspaceEnabled: "no" }).todayWorkspaceEnabled).toBe(true);
+  });
+
   it("Settings V3：defaultTaskWorkspaceView 合法值通过、非法回落 focus", () => {
     expect(DEFAULT_PREFERENCES.defaultTaskWorkspaceView).toBe("focus");
     expect(sanitizePreferences({ defaultTaskWorkspaceView: "today" }).defaultTaskWorkspaceView).toBe("today");

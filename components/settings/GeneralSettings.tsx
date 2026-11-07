@@ -14,6 +14,7 @@ import {
   STARTUP_VIEWS,
   MOTION_PREFERENCES,
   CONTENT_DENSITIES,
+  TIMETABLE_MODES,
   getModifiedPreferenceKeys,
   resetPreferencePatch,
 } from "@/lib/preferences";
@@ -21,7 +22,7 @@ import { CoursePaletteEditor } from "@/components/settings/CoursePaletteEditor";
 import { ShortcutOverviewField } from "@/components/settings/ShortcutOverviewDialog";
 import { SettingsSlider } from "@/components/settings/SettingsSlider";
 import { UI_FONT_LABELS } from "@/lib/typography/fonts";
-import type { StartupView, ContentDensity, UIFontPreset } from "@/types";
+import type { StartupView, ContentDensity, TimetableMode, UIFontPreset } from "@/types";
 
 const STARTUP_VIEW_LABELS: Record<StartupView, string> = {
   today: "今天",
@@ -39,6 +40,13 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
   const preferences = useAppStore((s) => s.preferences);
   const updatePreferences = useAppStore((s) => s.updatePreferences);
   const modified = new Set(getModifiedPreferenceKeys(preferences));
+  const startupViews = preferences.todayWorkspaceEnabled
+    ? STARTUP_VIEWS
+    : STARTUP_VIEWS.filter((view) => view !== "today");
+  const startupView =
+    !preferences.todayWorkspaceEnabled && preferences.startupView === "today"
+      ? "overview"
+      : preferences.startupView;
 
   return (
     <div className="space-y-6" data-testid="settings-general">
@@ -56,9 +64,9 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
             highlighted={highlightedId === "startup-view"}
           >
             <SettingsSegmentedControl<StartupView>
-              value={preferences.startupView}
+              value={startupView}
               onChange={(v) => updatePreferences({ startupView: v })}
-              options={STARTUP_VIEWS.map((v) => ({ value: v, label: STARTUP_VIEW_LABELS[v] }))}
+              options={startupViews.map((v) => ({ value: v, label: STARTUP_VIEW_LABELS[v] }))}
               ariaLabel="默认打开位置"
             />
           </SettingsRow>
@@ -82,6 +90,49 @@ export function GeneralSettings({ highlightedId }: { highlightedId?: string }) {
                 value: d,
                 label: d === "comfortable" ? "舒适" : "紧凑",
               }))}
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="timetable-mode"
+            title="时间表样式"
+            description="计划画布包含待安排、统一时间轴与详情面板；经典时间表保留原布局。"
+            modified={modified.has("timetableMode")}
+            onReset={() => updatePreferences(resetPreferencePatch("timetableMode"))}
+            resetAriaLabel="将时间表样式恢复默认"
+            highlighted={highlightedId === "timetable-mode"}
+          >
+            <SettingsSegmentedControl<TimetableMode>
+              value={preferences.timetableMode}
+              onChange={(v) => updatePreferences({ timetableMode: v })}
+              options={TIMETABLE_MODES.map((mode) => ({
+                value: mode,
+                label: mode === "plan" ? "计划画布" : "经典时间表",
+              }))}
+              ariaLabel="时间表样式"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            settingId="today-workspace-enabled"
+            title="启用今日页面"
+            description="关闭后从侧栏和底部导航中隐藏「今天」，启动位置回落到总览。"
+            modified={modified.has("todayWorkspaceEnabled")}
+            onReset={() => updatePreferences(resetPreferencePatch("todayWorkspaceEnabled"))}
+            resetAriaLabel="将今日页面启用状态恢复默认"
+            highlighted={highlightedId === "today-workspace-enabled"}
+          >
+            <SettingsToggle
+              checked={preferences.todayWorkspaceEnabled}
+              onChange={(enabled) =>
+                updatePreferences({
+                  todayWorkspaceEnabled: enabled,
+                  ...(!enabled && preferences.startupView === "today"
+                    ? { startupView: "overview" as const }
+                    : {}),
+                })
+              }
+              label="启用今日页面"
             />
           </SettingsRow>
 

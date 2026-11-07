@@ -12,6 +12,7 @@ import { CoursesWorkspace } from "@/components/course/CoursesWorkspace";
 import { GroupCollaborationView } from "@/components/group/GroupCollaborationView";
 import { KiroWorkspace } from "@/components/kiro/KiroWorkspace";
 import { KiroSessionProvider } from "@/components/kiro/KiroSessionProvider";
+import { PlanWorkspace } from "@/components/plan/PlanWorkspace";
 import { TimelineWorkspace } from "@/components/timeline/TimelineWorkspace";
 import { TodayWorkspace } from "@/components/today/TodayWorkspace";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -82,12 +83,20 @@ export default function Home() {
   // 精确 selector：避免整 store 订阅导致 UI Chrome 等无关 state 变化触发 Home 全量 render
   // （Overview 内容已抽至 OverviewWorkspace，其数据订阅由该组件自持）
   const activeTab = useAppStore((s) => s.activeTab);
+  const timetableMode = useAppStore((s) => s.preferences.timetableMode);
+  const todayWorkspaceEnabled = useAppStore((s) => s.preferences.todayWorkspaceEnabled);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
   const mainRef = useRef<HTMLElement | null>(null);
   // 工作区切换统一回到顶部：main 是常驻滚动容器，PageTransition 只替换内容；
   // 不重置会让长页面继承上一页 scrollTop（实测 700 → 课程页 196）。
   useLayoutEffect(() => {
     mainRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [activeTab]);
+
+  // 今日页面关闭时，任何残留路由（含设置切换瞬间）回落到总览。
+  useEffect(() => {
+    if (!todayWorkspaceEnabled && activeTab === "today") setActiveTab("overview");
+  }, [todayWorkspaceEnabled, activeTab, setActiveTab]);
 
   // 启动时孤儿 Blob 对账（V1.3A.1 fail-closed）：
   // Course + Project 引用 key 必须全部枚举成功才执行 GC；
@@ -180,7 +189,11 @@ export default function Home() {
       if (startupApplied.current) return;
       startupApplied.current = true;
       const s = useAppStore.getState();
-      const tab = resolveStartupTab(s.preferences.startupView, s.lastWorkspaceTab);
+      const tab = resolveStartupTab(
+        s.preferences.startupView,
+        s.lastWorkspaceTab,
+        s.preferences.todayWorkspaceEnabled
+      );
       if (tab !== s.activeTab) s.setActiveTab(tab);
     };
     try {
@@ -222,7 +235,10 @@ export default function Home() {
           ref={mainRef}
           className={cn(
             "flex-1 min-h-0 flex flex-col [scrollbar-gutter:stable]",
-            activeTab === "kiro" ? "overflow-hidden" : "overflow-y-auto"
+            activeTab === "kiro" ||
+            (activeTab === "timetable" && timetableMode === "plan")
+              ? "overflow-hidden"
+              : "overflow-y-auto"
           )}
         >
           <PageTransition
@@ -243,7 +259,8 @@ export default function Home() {
 
           {activeTab === "overview" && <OverviewWorkspace />}
 
-          {activeTab === "timetable" && <TimelineWorkspace />}
+          {activeTab === "timetable" &&
+            (timetableMode === "classic" ? <TimelineWorkspace /> : <PlanWorkspace />)}
 
           {activeTab === "assignments" && <AssignmentsWorkspace />}
 

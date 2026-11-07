@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useUIChromeStore } from "@/store/useUIChromeStore";
@@ -51,6 +51,14 @@ export function shouldUpdatePlate(
 export function Sidebar() {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const todayWorkspaceEnabled = useAppStore((s) => s.preferences.todayWorkspaceEnabled);
+  const mainNavItems = useMemo(
+    () =>
+      todayWorkspaceEnabled
+        ? MAIN_NAV_ITEMS
+        : MAIN_NAV_ITEMS.filter((item) => item.id !== "today"),
+    [todayWorkspaceEnabled]
+  );
   const setSettingsModalOpen = useAppStore((s) => s.setSettingsModalOpen);
   // Workflow UX Sidebar Productization V2：Settings Modal 打开态 → Footer utility soft active surface
   const settingsModalOpen = useAppStore((s) => s.isSettingsModalOpen);
@@ -187,7 +195,7 @@ export function Sidebar() {
     return () => ro.disconnect();
   }, [measurePlate]);
 
-  const isMainActive = MAIN_NAV_ITEMS.some((i) => i.id === activeTab);
+  const isMainActive = mainNavItems.some((i) => i.id === activeTab);
   // 用户交互后才启用 transform transition；reduced motion 始终直接定位
   const plateAnimated = interactedRef.current && !reducedMotion;
 
@@ -308,7 +316,7 @@ export function Sidebar() {
             }}
           />
 
-          {MAIN_NAV_ITEMS.map((item) => {
+          {mainNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (

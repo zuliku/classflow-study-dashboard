@@ -408,7 +408,13 @@ export interface AppPreferences {
   courseAutoPalette: boolean;
   /** 全局字体缩放 0.9 - 1.2 */
   uiFontScale: number;
+  /** 时间表样式：plan = 新版三栏计划画布；classic = 旧版时间表 */
+  timetableMode: TimetableMode;
+  /** 是否启用「今天」驾驶舱（关闭后隐藏导航入口并使用总览兜底） */
+  todayWorkspaceEnabled: boolean;
 }
+
+export type TimetableMode = "plan" | "classic";
 
 /** 设置中心 section */
 export type SettingsSection =

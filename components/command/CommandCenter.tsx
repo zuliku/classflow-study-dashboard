@@ -58,6 +58,7 @@ export function CommandCenter() {
     resetToCurrentWeek,
     setSettingsModalOpen,
     setAssignmentWorkspaceView,
+    todayWorkspaceEnabled,
   } = useAppStore(
     useShallow((s) => ({
       isSearchModalOpen: s.isSearchModalOpen,
@@ -88,6 +89,7 @@ export function CommandCenter() {
       resetToCurrentWeek: s.resetToCurrentWeek,
       setSettingsModalOpen: s.setSettingsModalOpen,
       setAssignmentWorkspaceView: s.setAssignmentWorkspaceView,
+      todayWorkspaceEnabled: s.preferences.todayWorkspaceEnabled,
     }))
   );
 
@@ -200,7 +202,12 @@ export function CommandCenter() {
     [activeTab, selectedCourseId, selectedAssignmentId, highlightedAssignmentId, assignmentSelection, courses, assignments, calendarMarks, groupProjects, semester, currentSemesterWeek, assignmentActions, setActiveTab, setSelectedCourseId, setSelectedAssignmentId, setSelectedCalendarMarkId, setSelectedGroupProjectId, setPendingGroupTaskTarget, setAddCourseModalOpen, setImportScheduleModalOpen, setFullTimetableModalOpen, setAssignmentTimeSlice, resetToCurrentWeek, setSearchModalOpen, setSettingsModalOpen, setAssignmentWorkspaceView, openReminderCenter]
   );
 
-  const items = useMemo(() => buildPalette(deferredQuery, ctx), [deferredQuery, ctx]);
+  const items = useMemo(() => {
+    const all = buildPalette(deferredQuery, ctx);
+    return todayWorkspaceEnabled
+      ? all
+      : all.filter((item) => item.key !== "cmd-nav-today");
+  }, [deferredQuery, ctx, todayWorkspaceEnabled]);
 
   // Kiro Handoff：仅在有查询时显示（synthetic row，本地搜索主逻辑不动）
   const hasQuery = deferredQuery.trim().length > 0;
