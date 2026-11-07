@@ -1,4 +1,6 @@
 import type { TaskProjectionItem } from "@/lib/tasks/taskProjections";
+import type { StudyPlanProposal } from "@/lib/planning/studyPlanner";
+import type { StudyRebalanceProposal } from "@/lib/planning/studyRebalance";
 
 /** Plan 画布上的统一实体。所有 timed 实体共享同一垂直时间轴。 */
 export type PlanCanvasItemKind = "course" | "study" | "exam" | "activity" | "ddl";
@@ -60,3 +62,7 @@ export interface PlanBacklogGroup {
   title: string;
   items: TaskProjectionItem[];
 }
+
+export type PlanProposal =
+  | { kind: "plan"; items: StudyPlanProposal[] }
+  | { kind: "rescue"; proposal: StudyRebalanceProposal };

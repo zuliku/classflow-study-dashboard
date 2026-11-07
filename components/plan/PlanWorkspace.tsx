@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
+import { AssignmentsWorkspace } from "@/components/assignment/AssignmentsWorkspace";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { KiroFlowButton } from "@/components/kiro/KiroFlow";
@@ -16,8 +17,10 @@ import { planSelectionKey } from "@/lib/plan/selectionKey";
 import { PlanAgenda } from "@/components/plan/PlanAgenda";
 import { PlanInspector } from "@/components/plan/PlanInspector";
 import { PlanArrangeDialog } from "@/components/plan/PlanArrangeDialog";
+import { PlanProposalPanel } from "@/components/plan/PlanProposalPanel";
 import { useAppStore } from "@/store/useAppStore";
 import { useToastStore } from "@/store/useToastStore";
+import { useConfirmStore } from "@/store/useConfirmStore";
 import {
   buildPlanBacklogProjection,
   type TaskProjectionItem,
@@ -35,6 +38,19 @@ import {
 import { formatEstimatedMinutes } from "@/lib/tasks/taskSemantics";
 import { getWeekDateRange, formatWeekDateRange } from "@/lib/semester";
 import { resolveCourseOccurrencesForWeek } from "@/lib/scheduleOccurrences";
+import { proposeStudyPlan } from "@/lib/planning/studyPlanner";
+import {
+  applyStudyPlan,
+  preflightStudyPlan,
+} from "@/lib/planning/applyStudyPlan";
+import { proposeStudyRebalance } from "@/lib/planning/studyRebalance";
+import {
+  applyStudyRebalance,
+  preflightStudyRebalance,
+  undoStudyRebalance,
+  type RebalanceMoveInput,
+  type StudyRebalanceApprovalSnapshot,
+} from "@/lib/planning/applyStudyRebalance";
 import {
   analyzeStudyBlockPlacement,
   courseOverlapSuffix,
@@ -49,6 +65,7 @@ import type {
   PlanBacklogGroup,
   PlanCanvasItem,
   PlanDay,
+  PlanProposal,
   PlanSelection,
 } from "@/lib/plan/planTypes";
 import type { Assignment, CalendarMark, Course } from "@/types";
@@ -69,6 +86,7 @@ export function PlanWorkspace() {
     currentSemesterWeek,
     addStudyBlock,
     updateStudyBlock,
+    deleteStudyBlock,
     setSelectedAssignmentId,
     setSelectedCourseId,
     setSelectedCalendarMarkId,
@@ -84,6 +102,7 @@ export function PlanWorkspace() {
       currentSemesterWeek: s.currentSemesterWeek,
       addStudyBlock: s.addStudyBlock,
       updateStudyBlock: s.updateStudyBlock,
+      deleteStudyBlock: s.deleteStudyBlock,
       setSelectedAssignmentId: s.setSelectedAssignmentId,
       setSelectedCourseId: s.setSelectedCourseId,
       setSelectedCalendarMarkId: s.setSelectedCalendarMarkId,
@@ -93,6 +112,7 @@ export function PlanWorkspace() {
   const { handoffPrompt } = useKiroSessionActions();
 
   const [selectedWeek, setSelectedWeek] = useState(currentSemesterWeek);
+  const [view, setView] = useState<"timeline" | "tasks">("timeline");
   const [now, setNow] = useState(() => new Date());
   const [collapsed, setCollapsed] = useState(false);
   const [backlogSheetOpen, setBacklogSheetOpen] = useState(false);
@@ -100,7 +120,16 @@ export function PlanWorkspace() {
   const [draggingTask, setDraggingTask] = useState<Assignment | null>(null);
   const [arrangeFor, setArrangeFor] = useState<Assignment | null>(null);
   const [freeBlockOpen, setFreeBlockOpen] = useState(false);
+  const [proposal, setProposal] = useState<PlanProposal | null>(null);
+  const [proposalApplying, setProposalApplying] = useState(false);
+  const planCreatedIdsRef = useRef<string[]>([]);
+  const rescueRef = useRef<{
+    moves: RebalanceMoveInput[];
+    originalApprovals?: StudyRebalanceApprovalSnapshot;
+    afterApprovals?: StudyRebalanceApprovalSnapshot;
+  } | null>(null);
   const compact = useMediaQuery("(max-width: 1279px)");
+  const confirmRequest = useConfirmStore((s) => s.confirm);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -169,6 +198,48 @@ export function PlanWorkspace() {
     [weekDates, weekDateKeys, assignments, studyBlocks, occurrences, calendarMarks, courseById, now]
   );
 
+  const ghostItems = useMemo<PlanCanvasItem[]>(() => {
+    if (!proposal) return [];
+    if (proposal.kind === "plan") {
+      return proposal.items.flatMap((item) =>
+        item.proposedBlocks.flatMap((block, index) => {
+          const start = planTimeToMinutes(block.startTime);
+          const end = planTimeToMinutes(block.endTime);
+          if (start === null || end === null || end <= start) return [];
+          return [
+            {
+              id: `ghost-${item.assignmentId}-${block.date}-${index}`,
+              kind: "study" as const,
+              title: item.title,
+              date: block.date,
+              start,
+              end,
+              assignmentId: item.assignmentId,
+              courseId: item.courseId,
+            },
+          ];
+        })
+      );
+    }
+    return proposal.proposal.moves.flatMap((move) => {
+      const start = planTimeToMinutes(move.to.startTime);
+      const end = planTimeToMinutes(move.to.endTime);
+      if (start === null || end === null || end <= start) return [];
+      return [
+        {
+          id: `ghost-rescue-${move.blockId}`,
+          kind: "study" as const,
+          title: move.title,
+          date: move.to.date,
+          start,
+          end,
+          assignmentId: move.assignmentId,
+          courseId: move.courseId,
+        },
+      ];
+    });
+  }, [proposal]);
+
   const selectionKey = planSelectionKey(selection);
   const isCurrentWeek = selectedWeek === currentSemesterWeek;
   const backlogOpen = compact ? backlogSheetOpen : !collapsed;
@@ -176,6 +247,7 @@ export function PlanWorkspace() {
   const goToWeek = (week: number) => {
     setSelectedWeek(Math.min(Math.max(week, 1), semester.totalWeeks));
     setSelection(null);
+    setProposal(null);
   };
 
   const openArrange = (assignment: Assignment) => {
@@ -194,6 +266,7 @@ export function PlanWorkspace() {
   };
 
   const handleDropTask = (date: string, minutes: number) => {
+    setProposal(null);
     const task = draggingTask;
     setDraggingTask(null);
     if (!task) return;
@@ -209,7 +282,13 @@ export function PlanWorkspace() {
     scheduleTask(task, date, startTime, endTime);
   };
 
-  const handleMoveBlock = (blockId: string, date: string, minutes: number) => {
+  const handleMoveBlock = (
+    blockId: string,
+    date: string,
+    minutes: number,
+    silent = false
+  ) => {
+    setProposal(null);
     const block = studyBlocks.find((item) => item.id === blockId);
     if (!block) return;
     const duration = Math.max(30, planDurationMinutes(block.startTime, block.endTime));
@@ -235,8 +314,72 @@ export function PlanWorkspace() {
       pushToast({ type: "error", message: "学习块移动失败" });
       return;
     }
+    if (!silent) {
+      setSelection({ kind: "block", blockId: block.id });
+      pushToast({ message: `已移到 ${startTime}${courseOverlapSuffix(analysis.courseOverlaps)}` });
+    }
+  };
+
+  const handleResizeBlock = (blockId: string, date: string, endMinutes: number) => {
+    setProposal(null);
+    const block = studyBlocks.find((item) => item.id === blockId);
+    if (!block) return;
+    const start = planTimeToMinutes(block.startTime);
+    if (start === null) return;
+    const end = Math.max(
+      start + 30,
+      Math.min(22 * 60, Math.round(endMinutes / 15) * 15)
+    );
+    const endTime = minutesToPlanTime(end);
+    const analysis = analyzeStudyBlockPlacement(
+      { id: block.id, date, startTime: block.startTime, endTime },
+      { schedules: weekSchedules, studyBlocks, courses, currentSemesterWeek: selectedWeek }
+    );
+    if (analysis.hardConflict) {
+      pushToast({
+        type: "error",
+        message: `与《${analysis.hardConflict.title}》时间冲突`,
+      });
+      return;
+    }
+    const ok = updateStudyBlock(block.id, { endTime });
+    if (!ok) {
+      pushToast({ type: "error", message: "学习块调整失败" });
+      return;
+    }
     setSelection({ kind: "block", blockId: block.id });
-    pushToast({ message: `已移到 ${startTime}${courseOverlapSuffix(analysis.courseOverlaps)}` });
+    pushToast({ message: `已调整到 ${endTime}` });
+  };
+
+  const handleDeleteBlock = (blockId: string) => {
+    setProposal(null);
+    const block = studyBlocks.find((item) => item.id === blockId);
+    if (!block) return;
+    deleteStudyBlock(blockId);
+    setSelection(null);
+    pushToast({
+      message: "已删除学习块",
+      actionLabel: "撤销",
+      actionAriaLabel: `撤销删除《${block.title}》`,
+      duration: 10_000,
+      onAction: () => {
+        const restoredId = addStudyBlock({
+          title: block.title,
+          date: block.date,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          assignmentId: block.assignmentId,
+          courseId: block.courseId,
+          source: block.source,
+          courseOverlapApprovals: block.courseOverlapApprovals,
+        });
+        if (restoredId) {
+          setSelection({ kind: "block", blockId: restoredId });
+        } else {
+          pushToast({ type: "warning", message: "恢复失败，请手动重新安排" });
+        }
+      },
+    });
   };
 
   const scheduleTask = (
@@ -335,9 +478,183 @@ export function PlanWorkspace() {
     if (task) openArrange(task);
   };
 
+  const handlePlanWeek = () => {
+    const result = proposeStudyPlan({
+      assignments,
+      studyBlocks,
+      semester,
+      currentSemesterWeek: selectedWeek,
+      schedules,
+      calendarMarks,
+      fromDate: weekDateKeys[0],
+      toDate: weekDateKeys[6],
+      now,
+    });
+    const items = result.items.filter((item) => item.proposedBlocks.length > 0);
+    if (items.length === 0) {
+      pushToast({ message: "本周没有可自动安排的任务" });
+      return;
+    }
+    setSelection(null);
+    setProposal({ kind: "plan", items });
+  };
+
+  const handleRescue = () => {
+    const result = proposeStudyRebalance({
+      assignments,
+      studyBlocks,
+      schedules,
+      calendarMarks,
+      semester,
+      currentSemesterWeek: selectedWeek,
+      horizonDays: 7,
+      now,
+    });
+    if (result.moves.length === 0) {
+      pushToast({ message: "没有需要调整的学习块" });
+      return;
+    }
+    setSelection(null);
+    setProposal({ kind: "rescue", proposal: result });
+  };
+
+  const applyPlanProposal = (allowCourseOverlap: boolean) => {
+    if (!proposal || proposal.kind !== "plan") return;
+    setProposalApplying(true);
+    const blocks = proposal.items.flatMap((item) =>
+      item.proposedBlocks.map((block) => ({
+        assignmentId: item.assignmentId,
+        title: item.title,
+        courseId: item.courseId,
+        date: block.date,
+        startTime: block.startTime,
+        endTime: block.endTime,
+      }))
+    );
+    const state = useAppStore.getState();
+    const preflight = preflightStudyPlan({ blocks }, state);
+    if (!preflight.ok) {
+      setProposalApplying(false);
+      pushToast({ type: "error", message: "计划已过期，请重新生成" });
+      return;
+    }
+    if (preflight.courseOverlaps.length > 0 && !allowCourseOverlap) {
+      setProposalApplying(false);
+      confirmRequest({
+        title: "部分时段与课程重叠",
+        description: `有 ${preflight.courseOverlaps.length} 个学习时段会占用上课时间。仍要应用吗？`,
+        confirmLabel: "仍然应用",
+        onConfirm: () => applyPlanProposal(true),
+        onCancel: () => setProposalApplying(false),
+      });
+      return;
+    }
+    const result = applyStudyPlan(
+      { blocks },
+      useAppStore.getState(),
+      { allowCourseOverlap }
+    );
+    if (!result.ok) {
+      setProposalApplying(false);
+      pushToast({ type: "error", message: "计划已过期，请重新生成" });
+      return;
+    }
+    if (result.state === "needs-approval") {
+      setProposalApplying(false);
+      pushToast({ type: "warning", message: "课程时间发生变化，请重新生成建议" });
+      return;
+    }
+    planCreatedIdsRef.current = result.created.map((block) => block.id);
+    setProposal(null);
+    setProposalApplying(false);
+    pushToast({
+      message: `已创建 ${result.created.length} 个学习时段`,
+      actionLabel: "撤销",
+      onAction: () => {
+        const ids = planCreatedIdsRef.current;
+        if (ids.length === 0) return;
+        useAppStore.getState().deleteStudyBlocksBatch(ids, { source: "manual" });
+        planCreatedIdsRef.current = [];
+      },
+    });
+  };
+
+  const applyRescueProposal = (allowCourseOverlap: boolean) => {
+    if (!proposal || proposal.kind !== "rescue") return;
+    setProposalApplying(true);
+    const moves = proposal.proposal.moves.map((move) => ({
+      blockId: move.blockId,
+      from: move.from,
+      to: move.to,
+    }));
+    const preflight = preflightStudyRebalance(moves, useAppStore.getState());
+    if (!preflight.ok) {
+      setProposalApplying(false);
+      pushToast({ type: "error", message: "调整建议已过期，请重新生成" });
+      return;
+    }
+    if (preflight.courseOverlaps.length > 0 && !allowCourseOverlap) {
+      setProposalApplying(false);
+      confirmRequest({
+        title: "调整后的时段与课程重叠",
+        description: `有 ${preflight.courseOverlaps.length} 个学习时段会占用上课时间。仍要调整吗？`,
+        confirmLabel: "仍然调整",
+        onConfirm: () => applyRescueProposal(true),
+        onCancel: () => setProposalApplying(false),
+      });
+      return;
+    }
+    const result = applyStudyRebalance(moves, useAppStore.getState(), {
+      allowCourseOverlap,
+    });
+    if (!result.ok) {
+      setProposalApplying(false);
+      pushToast({ type: "error", message: "调整建议已过期，请重新生成" });
+      return;
+    }
+    if (result.state === "needs-approval") {
+      setProposalApplying(false);
+      pushToast({ type: "warning", message: "课程时间发生变化，请重新生成建议" });
+      return;
+    }
+    rescueRef.current = {
+      moves,
+      originalApprovals: result.originalApprovals,
+      afterApprovals: result.afterApprovals,
+    };
+    setProposal(null);
+    setProposalApplying(false);
+    pushToast({
+      message: `已调整 ${moves.length} 个学习时段`,
+      actionLabel: "撤销",
+      onAction: () => {
+        const current = rescueRef.current;
+        if (!current) return;
+        const undo = undoStudyRebalance(current.moves, useAppStore.getState(), {
+          originalApprovals: current.originalApprovals,
+          afterApprovals: current.afterApprovals,
+        });
+        if (!undo.ok) {
+          pushToast({ type: "error", message: "学习计划已变化，无法撤销本次调整" });
+          return;
+        }
+        rescueRef.current = null;
+      },
+    });
+  };
+
   const handleBacklogToggle = () => {
     if (compact) setBacklogSheetOpen((open) => !open);
     else setCollapsed((value) => !value);
+  };
+
+  const handleViewChange = (next: "timeline" | "tasks") => {
+    setView(next);
+    if (next === "tasks") {
+      setBacklogSheetOpen(false);
+      setSelection(null);
+      setProposal(null);
+    }
   };
 
   const backlogProps = {
@@ -394,8 +711,17 @@ export function PlanWorkspace() {
           setArrangeFor(null);
           setFreeBlockOpen(true);
         }}
+        onPlanWeek={handlePlanWeek}
+        onRescue={handleRescue}
+        view={view}
+        onViewChange={handleViewChange}
       />
 
+      {view === "tasks" ? (
+        <div className="workspace-gutter min-h-0 flex-1 overflow-y-auto pb-24 pt-4 md:pb-6 md:pt-6">
+          <AssignmentsWorkspace embedded />
+        </div>
+      ) : (
       <div className="workspace-gutter flex min-h-0 flex-1 pb-24 pt-4 md:pb-5 md:pt-5">
         <div
           className="relative flex min-h-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface shadow-subtle"
@@ -419,6 +745,10 @@ export function PlanWorkspace() {
               onSelect={handleSelect}
               onDropTask={handleDropTask}
               onMoveBlock={handleMoveBlock}
+              onResizeBlock={handleResizeBlock}
+              onDeleteBlock={handleDeleteBlock}
+              ghostItems={ghostItems}
+              ghostTone={proposal?.kind === "rescue" ? "rescue" : "plan"}
             />
           </div>
 
@@ -439,6 +769,21 @@ export function PlanWorkspace() {
             />
           )}
 
+          {proposal && (
+            <PlanProposalPanel
+              proposal={proposal}
+              applying={proposalApplying}
+              onClose={() => {
+                setProposal(null);
+                setProposalApplying(false);
+              }}
+              onApply={() => {
+                if (proposal.kind === "plan") applyPlanProposal(false);
+                else applyRescueProposal(false);
+              }}
+            />
+          )}
+
           <PlanInspector
             key={selectionKey ?? "empty"}
             selection={selection}
@@ -456,6 +801,7 @@ export function PlanWorkspace() {
           />
         </div>
       </div>
+      )}
 
       <PlanArrangeDialog
         open={arrangeFor !== null || freeBlockOpen}

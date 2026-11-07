@@ -20,7 +20,7 @@ import { useKiroHandoff } from "@/hooks/useKiroHandoff";
  * Quick Add 位于 Chrome 之下、内容之上；AssignmentTable 收缩为 list/selection/keyboard/rows。
  * 视图/筛选/搜索状态由 useAssignmentWorkspaceController 统一管理（ViewBar 与 Table 共享）。
  */
-export function AssignmentsWorkspace() {
+export function AssignmentsWorkspace({ embedded = false }: { embedded?: boolean }) {
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const assignments = useAppStore((s) => s.assignments);
   const highlightedAssignmentId = useAppStore((s) => s.highlightedAssignmentId);
@@ -61,14 +61,17 @@ export function AssignmentsWorkspace() {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col" data-testid="assignments-tab">
-      {/* Sticky Chrome：单一 sticky 容器承载 Header + ViewBar（无独立 top offset） */}
+      {/* Sticky Chrome：单一 sticky 容器承载 Header + ViewBar（无独立 top offset）；
+          Plan Tasks 嵌入时复用 ViewBar/Table，去掉重复 WorkspaceHeader。 */}
       <div className="sticky top-0 z-20 shrink-0">
-        <WorkspaceHeader
-          title="任务与 DDL"
-          context={`${incompleteCount} 项未完成`}
-          actions={headerActions}
-          primaryAction={primaryAction}
-        />
+        {!embedded && (
+          <WorkspaceHeader
+            title="任务与 DDL"
+            context={`${incompleteCount} 项未完成`}
+            actions={headerActions}
+            primaryAction={primaryAction}
+          />
+        )}
         <AssignmentWorkspaceViewBar controller={controller} />
       </div>
 

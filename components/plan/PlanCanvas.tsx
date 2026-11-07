@@ -18,6 +18,10 @@ export function PlanCanvas({
   onSelect,
   onDropTask,
   onMoveBlock,
+  onResizeBlock,
+  onDeleteBlock,
+  ghostItems,
+  ghostTone = "plan",
   onDragActiveChange,
 }: {
   days: PlanDay[];
@@ -25,11 +29,23 @@ export function PlanCanvas({
   selectionKey: string | null;
   onSelect: (selection: PlanSelection) => void;
   onDropTask: (date: string, minutes: number) => void;
-  onMoveBlock: (blockId: string, date: string, minutes: number) => void;
+  onMoveBlock: (blockId: string, date: string, minutes: number, silent?: boolean) => void;
+  onResizeBlock: (blockId: string, date: string, endMinutes: number) => void;
+  onDeleteBlock: (blockId: string) => void;
+  ghostItems?: PlanCanvasItem[];
+  ghostTone?: "plan" | "rescue";
   onDragActiveChange?: (active: boolean) => void;
 }) {
   const [drop, setDrop] = useState<{ date: string; minutes: number } | null>(null);
   const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
+  const [resize, setResize] = useState<{
+    blockId: string;
+    date: string;
+    start: number;
+    end: number;
+    originEnd: number;
+    pointerStartY: number;
+  } | null>(null);
 
   useEffect(() => {
     const clear = () => {
@@ -39,6 +55,37 @@ export function PlanCanvas({
     window.addEventListener("dragend", clear);
     return () => window.removeEventListener("dragend", clear);
   }, []);
+
+  useEffect(() => {
+    if (!resize) return;
+    const onMove = (event: PointerEvent) => {
+      setResize((current) => {
+        if (!current) return current;
+        const delta = Math.round(
+          ((event.clientY - current.pointerStartY) / HOUR_HEIGHT) * 60 / 15
+        ) * 15;
+        const nextEnd = Math.max(
+          current.start + 30,
+          Math.min(22 * 60, current.originEnd + delta)
+        );
+        return nextEnd === current.end ? current : { ...current, end: nextEnd };
+      });
+    };
+    const onUp = () => {
+      setResize((current) => {
+        if (current) onResizeBlock(current.blockId, current.date, current.end);
+        return null;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    window.addEventListener("pointercancel", onUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [resize?.blockId, onResizeBlock]);
 
   const { rangeStart, rangeEnd } = useMemo(() => {
     const starts = days.flatMap((day) => day.items.map((item) => item.start));
@@ -256,9 +303,12 @@ export function PlanCanvas({
                   {day.items.map((item) => {
                     const slot = layout.get(item.id) ?? { lane: 0, lanes: 1 };
                     const top = GRID_PAD_Y + ((item.start - rangeStart) / 60) * HOUR_HEIGHT;
+                    const activeResize =
+                      resize?.blockId === item.blockId ? resize : null;
+                    const effectiveEnd = activeResize ? activeResize.end : item.end;
                     const height = Math.max(
                       24,
-                      ((item.end - item.start) / 60) * HOUR_HEIGHT - 2
+                      ((effectiveEnd - item.start) / 60) * HOUR_HEIGHT - 2
                     );
                     const width = 100 / slot.lanes;
                     const selected = selectionKey === itemKey(item);
@@ -269,7 +319,7 @@ export function PlanCanvas({
                         tabIndex={0}
                         data-testid="plan-canvas-item"
                         data-kind={item.kind}
-                        aria-label={`${item.title}，${formatItemTime(item)}`}
+                        aria-label={`${item.title}，${formatTimeRange(item.start, effectiveEnd)}`}
                         draggable={item.kind === "study" && !!item.blockId}
                         onDragStart={(event) => {
                           if (item.kind !== "study" || !item.blockId) return;
@@ -279,6 +329,34 @@ export function PlanCanvas({
                         }}
                         onDragEnd={() => setDraggingBlockId(null)}
                         onKeyDown={(event) => {
+                          if (item.kind === "study" && item.blockId) {
+                            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                              event.preventDefault();
+                              const delta = event.key === "ArrowUp" ? -15 : 15;
+                              onMoveBlock(
+                                item.blockId,
+                                item.date,
+                                item.start + delta,
+                                true
+                              );
+                              return;
+                            }
+                            if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+                              event.preventDefault();
+                              const index = days.findIndex((day) => day.date === item.date);
+                              const nextDate =
+                                days[index + (event.key === "ArrowLeft" ? -1 : 1)]?.date;
+                              if (nextDate) {
+                                onMoveBlock(item.blockId, nextDate, item.start, true);
+                              }
+                              return;
+                            }
+                            if (event.key === "Delete" || event.key === "Backspace") {
+                              event.preventDefault();
+                              onDeleteBlock(item.blockId);
+                              return;
+                            }
+                          }
                           if (event.key !== "Enter" && event.key !== " ") return;
                           event.preventDefault();
                           const selection = selectionFor(item.kind, {
@@ -307,7 +385,7 @@ export function PlanCanvas({
                           if (selection) onSelect(selection);
                         }}
                         className={cn(
-                          "absolute overflow-hidden rounded-lg border px-1.5 py-1 text-left transition-[filter,box-shadow] duration-[var(--motion-fast)] hover:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-charcoal/30",
+                          "group absolute overflow-hidden rounded-lg border px-1.5 py-1 text-left transition-[filter,box-shadow] duration-[var(--motion-fast)] hover:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-charcoal/30",
                           item.kind === "course" && "border-line shadow-subtle",
                           item.kind === "study" &&
                             "border-dashed border-line-strong bg-pastel-mint/45",
@@ -336,13 +414,67 @@ export function PlanCanvas({
                         </span>
                         {height >= 36 && (
                           <span className="mt-0.5 block truncate text-[10px] opacity-75">
-                            {formatItemTime(item)}
+                            {formatTimeRange(item.start, effectiveEnd)}
                             {item.subtitle ? ` · ${item.subtitle}` : ""}
                           </span>
+                        )}
+                        {item.kind === "study" && item.blockId && (
+                          <span
+                            role="presentation"
+                            data-testid="plan-resize-handle"
+                            aria-label={`调整《${item.title}》时长`}
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setResize({
+                                blockId: item.blockId!,
+                                date: item.date,
+                                start: item.start,
+                                end: item.end,
+                                originEnd: item.end,
+                                pointerStartY: event.clientY,
+                              });
+                            }}
+                            className="absolute inset-x-0 bottom-0 z-10 h-2 cursor-ns-resize touch-none opacity-0 transition-opacity duration-[var(--motion-fast)] group-hover:opacity-100 group-focus-within:opacity-100"
+                          />
                         )}
                       </div>
                     );
                   })}
+
+                  {ghostItems
+                    ?.filter((ghost) => ghost.date === day.date)
+                    .map((ghost) => {
+                      const top =
+                        GRID_PAD_Y + ((ghost.start - rangeStart) / 60) * HOUR_HEIGHT;
+                      const height = Math.max(
+                        24,
+                        ((ghost.end - ghost.start) / 60) * HOUR_HEIGHT - 2
+                      );
+                      return (
+                        <div
+                          key={ghost.id}
+                          data-testid="plan-ghost-item"
+                          aria-hidden="true"
+                          className={cn(
+                            "pointer-events-none absolute left-1 right-1 z-[5] overflow-hidden rounded-lg border border-dashed px-1.5 py-1 opacity-70",
+                            ghostTone === "rescue"
+                              ? "border-warning-border bg-warning-bg/70 text-warning"
+                              : "border-success-border bg-pastel-mint/60 text-charcoal"
+                          )}
+                          style={{ top, height }}
+                        >
+                          <p className="truncate text-[10px] font-bold">
+                            建议 · {ghost.title}
+                          </p>
+                          {height >= 36 && (
+                            <p className="mt-0.5 truncate text-[10px] opacity-75">
+                              {formatTimeRange(ghost.start, ghost.end)}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               );
             })}
@@ -354,11 +486,11 @@ export function PlanCanvas({
   );
 }
 
-function formatItemTime(item: PlanCanvasItem): string {
-  return `${String(Math.floor(item.start / 60)).padStart(2, "0")}:${String(
-    item.start % 60
-  ).padStart(2, "0")}–${String(Math.floor(item.end / 60)).padStart(2, "0")}:${String(
-    item.end % 60
+function formatTimeRange(start: number, end: number): string {
+  return `${String(Math.floor(start / 60)).padStart(2, "0")}:${String(
+    start % 60
+  ).padStart(2, "0")}–${String(Math.floor(end / 60)).padStart(2, "0")}:${String(
+    end % 60
   ).padStart(2, "0")}`;
 }
 
