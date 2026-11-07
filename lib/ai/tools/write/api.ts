@@ -37,6 +37,11 @@ export function createKiroWriteApi({
     updateAssignmentStatus: (id, status) => useAppStore.getState().updateAssignmentStatus(id, status, kiro),
     updateAssignmentPriority: (id, priority) => useAppStore.getState().updateAssignmentPriority(id, priority, kiro),
     updateAssignmentProgress: (id, progress) => useAppStore.getState().updateAssignmentProgress(id, progress, kiro),
+    transitionTask: (id, to, input) => useAppStore.getState().transitionTask(id, to, input),
+    undoTaskTransition: (id, transitionId) => useAppStore.getState().undoTaskTransition(id, transitionId),
+    reopenTask: (id, input) => useAppStore.getState().reopenTask(id, input),
+    previewTaskTransition: (id, to, transitionId) =>
+      useAppStore.getState().previewTaskTransition(id, to, transitionId),
     toggleSubtask: (id, subtaskId) => useAppStore.getState().toggleSubtask(id, subtaskId, kiro),
     addScheduleSlot: (sl) => useAppStore.getState().addScheduleSlot(sl, kiro),
     updateSchedule: (sc) => useAppStore.getState().updateSchedule(sc, kiro),

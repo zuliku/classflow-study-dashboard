@@ -1,7 +1,7 @@
 import { tool, ToolSet } from "ai";
 import { z } from "zod";
 import { KIRO_READ_TOOLS } from "@/lib/ai/tools/read/registry";
-import { KIRO_WRITE_TOOLS } from "@/lib/ai/tools/write/registry";
+import { KIRO_WRITE_TOOLS, KIRO_WRITE_TOOL_NAMES } from "@/lib/ai/tools/write/registry";
 import { KIRO_MEMORY_TOOLS } from "@/lib/ai/memory/tools";
 import { COMPUTER_TOOLS, getComputerToolsForMode, ComputerToolDefinition } from "@/lib/ai/computer/tools/registry";
 import { ComputerActionFact } from "@/lib/ai/computer/types";
@@ -151,12 +151,25 @@ export function computerToolContractForVersion(
 /**
  * 请求级工具域组装（Kiro Computer Agent V1 Part 2 + V2.3 protocol negotiation）：
  * Computer 工具按 turn snapshot 条件加入（Computer OFF → 0 个；plan → 只读；guided/auto → read + mutation）。
+ * businessWriteAccess：Plan 模式对 ClassFlow 业务数据只读（不暴露 Write Tools / apply_change_set）；
+ * 读取与 proposal 工具始终可用。默认 approval 保持既有 Chat 行为（非 Plan 模式）。
  * documentAuthoringVersion：缺失 → legacy V1（Canonical schema）；2 → Draft schema。
  * Desktop Terminal V1（Part 14）：run_terminal_command 只在前三者同时满足时暴露——
  * terminalEnabled（偏好）+ terminalAvailable（Desktop Terminal Bridge）+ hasNativeRoot（冻结 workspace）。
  * 普通 Web：server-facing tool list 本身不存在 terminal（不是暴露后 runtime deny）。
  * server 过滤不是安全边界——Browser Executor 仍独立 policy 求值。
  */
+export type KiroBusinessWriteAccess = "none" | "approval";
+
+/** Plan 模式（Computer 开启且 agentMode=plan）→ 业务写只读；其余保持 approval */
+export function resolveKiroBusinessWriteAccess(computerSnapshot?: {
+  enabled: boolean;
+  agentMode: "plan" | "guided" | "workspace-auto";
+}): KiroBusinessWriteAccess {
+  if (computerSnapshot?.enabled && computerSnapshot.agentMode === "plan") return "none";
+  return "approval";
+}
+
 export function getKiroToolsForRequest(input: {
   computerSnapshot?: {
     enabled: boolean;
@@ -169,9 +182,16 @@ export function getKiroToolsForRequest(input: {
     desktopActionEnabled?: boolean;
     desktopActionAvailable?: boolean;
   };
+  businessWriteAccess?: KiroBusinessWriteAccess;
   documentAuthoringVersion?: unknown;
 }): ToolSet {
+  const writeAccess = input.businessWriteAccess ?? "approval";
   const base = { ...KIRO_TOOLS } as ToolSet;
+  if (writeAccess === "none") {
+    for (const name of KIRO_WRITE_TOOL_NAMES) {
+      delete (base as Record<string, unknown>)[name];
+    }
+  }
   const snap = input.computerSnapshot;
   if (!snap?.enabled) return base;
   const set = { ...base, ...buildComputerToolSet(snap.agentMode, input.documentAuthoringVersion) };

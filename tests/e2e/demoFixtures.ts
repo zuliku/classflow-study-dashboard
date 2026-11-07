@@ -100,13 +100,21 @@ export const test = base.extend({
     // Chromium E2E 无 preload，注入最小本地 stub（不改变生产鉴权）。
     await page.addInitScript(() => {
       const w = window as unknown as {
-        classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } };
+        classflowDesktop?: {
+          invocation?: {
+            beginLocal: () => Promise<{ invocationId: string }>;
+            assertCapability: (input: unknown) => Promise<unknown>;
+          };
+        };
       };
       if (!w.classflowDesktop) w.classflowDesktop = {};
       if (!w.classflowDesktop.invocation) {
         let seq = 0;
         w.classflowDesktop.invocation = {
           beginLocal: async () => ({ invocationId: `inv_e2e_${++seq}_00000000-0000-4000-8000-000000000000` }),
+          // Turn capability 边界在 Browser 侧通过同一 guard；Chromium 无 preload，
+          // local-user stub 允许 read/propose/write/delete（生产仍由 Main 鉴权）。
+          assertCapability: async () => ({ ok: true }),
         };
       }
     });

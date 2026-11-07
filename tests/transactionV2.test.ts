@@ -127,6 +127,33 @@ function run(api: FakeApi, actions: ChangeSetActionInput[], confirm = async () =
   });
 }
 
+describe("Task lifecycle write boundary", () => {
+  it("Change Set 不能绕过终态事务：完成 / 提交在 preflight 被拒绝且 0 mutation", async () => {
+    const state = makeState();
+    const api = new FakeApi(state);
+    const res = await run(api, [
+      { tool: "set_assignment_status", input: { assignmentId: "a1", status: "completed" } },
+    ] as never);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("TRANSACTION_PREFLIGHT_FAILED");
+    expect((state as any).assignments[0].status).toBe("todo");
+  });
+
+  it("Change Set 中 progress 100 同样被拒绝（不派生完成状态）", async () => {
+    const state = makeState();
+    const api = new FakeApi(state);
+    const res = await run(api, [
+      { tool: "set_assignment_progress", input: { assignmentId: "a1", progress: 100 } },
+    ] as never);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("TRANSACTION_PREFLIGHT_FAILED");
+    expect((state as any).assignments[0].status).toBe("todo");
+    expect((state as any).assignments[0].progress).toBe(0);
+  });
+});
+
 describe("Change Set V2：create actions（reserved-ID 事务化）", () => {
   it("混合成功：create_assignment + move_schedule_occurrence + set_assignment_ddl 全部原子写入", async () => {
     const state = makeState();

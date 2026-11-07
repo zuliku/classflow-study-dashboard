@@ -212,6 +212,21 @@ function prepareSetAssignmentStatus(toolName: TransactionSafeToolName, input: un
   const { assignmentId, status } = parsed.data;
   const before = state.assignments.find((a) => a.id === assignmentId);
   if (!before) return notFound("未找到对应任务。");
+  // Task Lifecycle V2：终态 / 重新打开具有跨实体副作用，不能塞进 Change Set 的“字段更新”投影。
+  if (status === "submitted" || status === "completed") {
+    return {
+      ok: false,
+      code: "UNSUPPORTED",
+      message: "完成 / 提交需要走任务终态事务，不能放进批量修改。",
+    };
+  }
+  if (before.status === "submitted" || before.status === "completed") {
+    return {
+      ok: false,
+      code: "UNSUPPORTED",
+      message: "重新打开已完成任务需要单独操作，不能放进批量修改。",
+    };
+  }
   const after = { ...before, status: status as never };
   const view: PreparedActionView = {
     tool: toolName, entityType: "assignment", entityId: assignmentId, title: before.title, operation: "update",
@@ -220,7 +235,7 @@ function prepareSetAssignmentStatus(toolName: TransactionSafeToolName, input: un
   return makeAction(state, view,
     (s) => projectReplace(s, "assignments", assignmentId, after),
     (api, callId) => {
-      api.updateAssignmentStatus(assignmentId, status as never); // 保留 completed → progress 100 语义
+      api.updateAssignmentStatus(assignmentId, status as never);
       return { undo: () => api.updateAssignment(before as never) };
     });
 }
@@ -231,6 +246,13 @@ function prepareSetAssignmentProgress(toolName: TransactionSafeToolName, input: 
   const { assignmentId, progress } = parsed.data;
   const before = state.assignments.find((a) => a.id === assignmentId);
   if (!before) return notFound("未找到对应任务。");
+  if (before.status === "submitted" || before.status === "completed") {
+    return conflict("已完成或已提交的任务不能修改进度；如需继续请先重新打开。");
+  }
+  if (progress >= 100) {
+    return { ok: false, code: "UNSUPPORTED", message: "进度 100 会改变任务生命周期；请使用完成/提交操作。" };
+  }
+  // Progress 仅作为展示字段，不再派生 status。
   const after = { ...before, progress };
   const view: PreparedActionView = {
     tool: toolName, entityType: "assignment", entityId: assignmentId, title: before.title, operation: "update",
@@ -239,7 +261,7 @@ function prepareSetAssignmentProgress(toolName: TransactionSafeToolName, input: 
   return makeAction(state, view,
     (s) => projectReplace(s, "assignments", assignmentId, after),
     (api, callId) => {
-      api.updateAssignmentProgress(assignmentId, progress); // status 由 store 自动同步
+      api.updateAssignment({ ...before, progress });
       return { undo: () => api.updateAssignment(before as never) };
     });
 }
@@ -603,9 +625,9 @@ function projectCreateAssignment(state: AppState, assignmentData: Omit<Assignmen
 }
 
 function prepareCreateAssignment(toolName: TransactionSafeToolName, input: unknown, state: AppState, fail: Fail, options?: { reservedId?: string }): PreparedWriteResult {
-  const parsed = safeParse<{ courseId: string; title: string; description?: string; ddl?: string; estimatedMinutes?: number; priority?: string; status?: string; progress?: number; tags?: string[] }>(toolName, input);
+  const parsed = safeParse<{ courseId: string; title: string; description?: string; ddl?: string; estimatedMinutes?: number; priority?: string; tags?: string[] }>(toolName, input);
   if (!parsed.ok) return parsed;
-  const { courseId, title, description, ddl, estimatedMinutes, priority, status, progress, tags } = parsed.data;
+  const { courseId, title, description, ddl, estimatedMinutes, priority, tags } = parsed.data;
   if (!state.courses.some((c) => c.id === courseId)) return notFound("未找到对应课程。");
   if (state.assignments.some((a) => a.id === (options?.reservedId ?? ""))) {
     return invalidInput("重复的预留任务 ID。");
@@ -619,8 +641,9 @@ function prepareCreateAssignment(toolName: TransactionSafeToolName, input: unkno
     ddl,
     estimatedMinutes,
     priority: (priority ?? prefs.defaultTaskPriority) as never,
-    status: (status ?? prefs.defaultTaskStatus) as never,
-    progress: progress ?? 0,
+    // Lifecycle V2：新建只能从偏好默认（todo/doing）开始；终态必须走 transitionTask。
+    status: prefs.defaultTaskStatus,
+    progress: 0,
     tags: tags ?? [],
   };
   const view: PreparedActionView = {

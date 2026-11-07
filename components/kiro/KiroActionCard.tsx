@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine, Layers, ChevronDown, Bell, Timer } from "lucide-react";
+import { ArrowUpRight, CalendarClock, CalendarDays, Plus, Check, ArrowDown, Undo2, PencilLine, Layers, ChevronDown, Bell, Timer } from "lucide-react";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime } from "@/lib/ddl";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -19,6 +19,7 @@ export interface KiroActionCardProps {
   bullets?: string[];
   footer?: string;
   onUndo?: () => void;
+  onView?: () => void;
   /** 可展开的明细行（Change Set 内部动作等） */
   details?: { label: string }[];
   /** 只在稳定 Action ID 首次出现时启用结构动画。 */
@@ -29,7 +30,7 @@ export interface KiroActionCardProps {
  * Action Result Card（真实 Tool Result 事实 UI）：
  * 内容只来自 ToolResult.action.before / after，模型不得生成。
  */
-export function KiroActionCard({ variant, heading, title, change, bullets, footer, onUndo, details, entering = false }: KiroActionCardProps) {
+export function KiroActionCard({ variant, heading, title, change, bullets, footer, onUndo, onView, details, entering = false }: KiroActionCardProps) {
   const Icon =
     variant === "ddl"
       ? CalendarClock
@@ -124,14 +125,32 @@ export function KiroActionCard({ variant, heading, title, change, bullets, foote
         ) : (
           <span />
         )}
-        {onUndo && (
-          <button
-            onClick={onUndo}
-            className="flex items-center gap-1 text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
-          >
-            <Undo2 className="w-3 h-3" />
-            撤销
-          </button>
+        {onUndo || onView ? (
+          <span className="flex items-center gap-3">
+            {onView && (
+              <button
+                type="button"
+                onClick={onView}
+                data-testid="kiro-action-view"
+                className="flex items-center gap-1 text-[11px] font-semibold text-satin-grey transition-colors hover:text-charcoal"
+              >
+                <ArrowUpRight className="w-3 h-3" />
+                查看
+              </button>
+            )}
+            {onUndo && (
+              <button
+                type="button"
+                onClick={onUndo}
+                className="flex items-center gap-1 text-[11px] font-semibold text-satin-grey hover:text-charcoal transition-colors"
+              >
+                <Undo2 className="w-3 h-3" />
+                撤销
+              </button>
+            )}
+          </span>
+        ) : (
+          <span />
         )}
       </div>
     </div>
@@ -273,6 +292,58 @@ export function actionToCardProps(
         to: scheduleDisplay(after as { dayOfWeek?: number; startTime?: string; endTime?: string }),
       },
       footer: "未发现课程冲突",
+    };
+  }
+
+  // 任务生命周期（Task V2）：终态 / 重新打开 / 进度都只展示真实 after 事实
+  if (tool === "set_assignment_status") {
+    const toStatus = String(after?.status ?? "");
+    const fromStatus = String(before?.status ?? "");
+    const statusLabel = (status: string) =>
+      status === "todo"
+        ? "待完成"
+        : status === "doing"
+          ? "进行中"
+          : status === "submitted"
+            ? "等待反馈"
+            : status === "completed"
+              ? "已完成"
+              : status;
+    const reopened = (fromStatus === "submitted" || fromStatus === "completed") && (toStatus === "todo" || toStatus === "doing");
+    const bullets: string[] = [];
+    const released = Number(after?.releasedStudyBlocks ?? 0);
+    const cancelled = Number(after?.cancelledReminders ?? 0);
+    const restoredBlocks = Number(after?.restoredStudyBlocks ?? 0);
+    const restoredReminders = Number(after?.restoredReminders ?? 0);
+    if (released > 0) bullets.push(`释放 ${released} 个未来学习计划`);
+    if (cancelled > 0) bullets.push(`取消 ${cancelled} 个提醒`);
+    if (restoredBlocks > 0) bullets.push(`恢复 ${restoredBlocks} 个学习计划`);
+    if (restoredReminders > 0) bullets.push(`恢复 ${restoredReminders} 个提醒`);
+    return {
+      variant: "generic",
+      heading:
+        toStatus === "completed"
+          ? "已完成任务"
+          : toStatus === "submitted"
+            ? "已提交任务"
+            : reopened
+              ? "已重新打开任务"
+              : "已更新任务状态",
+      title: action.title,
+      change: { from: statusLabel(fromStatus), to: statusLabel(toStatus) },
+      bullets: bullets.length > 0 ? bullets : undefined,
+    };
+  }
+
+  if (tool === "set_assignment_progress") {
+    return {
+      variant: "generic",
+      heading: "已更新任务进度",
+      title: action.title,
+      change: {
+        from: `${Number(before?.progress ?? 0)}%`,
+        to: `${Number(after?.progress ?? 0)}%`,
+      },
     };
   }
 

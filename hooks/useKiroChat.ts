@@ -783,6 +783,8 @@ export function useKiroChat({
 
   // Task 12: Invocation Trust — 每 Turn 冻结的 invocationId
   const activeInvocationIdRef = useRef<string | null>(null);
+  /** V4.6：每 Turn 冻结的业务写边界（Plan → none；其余 approval） */
+  const turnBusinessWriteAccessRef = useRef<"none" | "approval">("approval");
 
   const assertTurnCapability = async (capability: "read" | "propose" | "write" | "delete" | "terminal" | "filesystem-write" | "computer-mutation" | "mcp-call"): Promise<void> => {
     const invocationId = activeInvocationIdRef.current;
@@ -1960,6 +1962,13 @@ export function useKiroChat({
 
       // ---- Write Tools ----
       if ((KIRO_WRITE_TOOL_NAMES as string[]).includes(toolName)) {
+        if (turnBusinessWriteAccessRef.current === "none") {
+          failOutput(
+            "WRITE_ACCESS_READ_ONLY",
+            "当前为仅规划模式，ClassFlow 业务数据只读。请切换到「受控访问」或「自动执行」后再修改。"
+          );
+          return;
+        }
         // Task B V1.2 Visual Turn Mutation Guard：截图来源 / 澄清链的写操作必须先 propose_visual_actions
         if (
           isClassFlowMutationTool(toolName) &&
@@ -1989,6 +1998,65 @@ export function useKiroChat({
           },
           onCancelOutput: (msg) => failOutput("USER_CANCELLED", msg),
         });
+
+        // Phase 0 写边界：Kiro 的“完成/提交”不能绕过任务生命周期事务。
+        // 先展示同一 preview 事实（释放学习块 / 取消提醒 / 重复任务），用户确认后 executor 走 transitionTask。
+        if (toolName === "set_assignment_status") {
+          const parsedStatus = KIRO_WRITE_TOOL_SCHEMAS.set_assignment_status.safeParse(input);
+          if (parsedStatus.success) {
+            const nextStatus = parsedStatus.data.status;
+            if (nextStatus === "submitted" || nextStatus === "completed") {
+              const state = useAppStore.getState();
+              const task = state.assignments.find(
+                (candidate) => candidate.id === parsedStatus.data.assignmentId
+              );
+              if (!task) {
+                failOutput("NOT_FOUND", "未找到对应任务。");
+                return;
+              }
+              const preview = state.previewTaskTransition(task.id, nextStatus);
+              if (!preview) {
+                failOutput("NOT_FOUND", "未找到对应任务。");
+                return;
+              }
+              if (preview.blockers.includes("focus-running")) {
+                failOutput("TASK_TRANSITION_BLOCKED", "正在专注中，请先结束专注。");
+                return;
+              }
+              if (preview.blockers.includes("already-completed")) {
+                failOutput("TASK_TRANSITION_BLOCKED", "任务已经是完成状态。");
+                return;
+              }
+              const effects: string[] = [];
+              if (preview.sideEffects.releaseStudyBlocks.count > 0) {
+                effects.push(`释放 ${preview.sideEffects.releaseStudyBlocks.count} 个未来学习计划`);
+              }
+              if (preview.sideEffects.cancelReminders.count > 0) {
+                effects.push(`取消 ${preview.sideEffects.cancelReminders.count} 个提醒`);
+              }
+              if (preview.sideEffects.recurrence.willGenerate) {
+                effects.push("生成下一次重复任务");
+              }
+              if (preview.sideEffects.incompleteSubtasks.count > 0) {
+                effects.push(`还有 ${preview.sideEffects.incompleteSubtasks.count} 个子任务未完成`);
+              }
+              if (preview.warnings.includes("submission-required-direct-complete")) {
+                effects.push("该任务标记为需要提交，直接完成会跳过等待反馈");
+              }
+              confirmRequest({
+                title: `${nextStatus === "submitted" ? "提交" : "完成"}《${task.title}》？`,
+                description:
+                  effects.length > 0
+                    ? `同时会${effects.join("、")}。确认后仍可通过「撤销」恢复。`
+                    : `状态将变为「${nextStatus === "submitted" ? "等待反馈" : "已完成"}」，确认后仍可通过「撤销」恢复。`,
+                confirmLabel: nextStatus === "submitted" ? "确认提交" : "确认完成",
+                onConfirm: () => runWriteTool(toolName, toolCallId, input, api),
+                onCancel: () => failOutput("USER_CANCELLED", "用户取消了操作。"),
+              });
+              return;
+            }
+          }
+        }
 
         // 高风险工具：强制用户确认（Risk 由 ClassFlow 决定）
         if (isDestructiveWriteTool(toolName)) {
@@ -3341,6 +3409,10 @@ export function useKiroChat({
       const conversationIdAtSend = conversationIdRef.current;
       setTurnIntentFrozen(false);
       const intent = captureIntentRef.current();
+      turnBusinessWriteAccessRef.current =
+        intent.computerSnapshot?.enabled && intent.computerSnapshot.agentMode === "plan"
+          ? "none"
+          : "approval";
       // P0：项目归属同冻结（preflight 期切 Project 旧指令注入新轮 → 与 conversation 同级丢弃）
       const projectIdAtSend = intent.projectId;
       setTurnIntentFrozen(true);

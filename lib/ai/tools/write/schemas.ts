@@ -22,8 +22,6 @@ export const createAssignmentSchema = z.object({
   ddl: z.string().regex(LOCAL_DDL_RE, "截止时间必须为本地时间 YYYY-MM-DDTHH:mm[:ss]").optional(),
   estimatedMinutes: ESTIMATED_MINUTES.optional(),
   priority: PRIORITY.optional(),
-  status: ASSIGNMENT_STATUS.optional(),
-  progress: z.number().int().min(0).max(100).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
 });
 

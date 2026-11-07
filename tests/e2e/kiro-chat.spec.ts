@@ -18,14 +18,23 @@ const AI_SETTINGS = {
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     const w = window as unknown as {
-      classflowDesktop?: { invocation?: { beginLocal: () => Promise<{ invocationId: string }> } };
+      classflowDesktop?: {
+        invocation?: {
+          beginLocal: () => Promise<{ invocationId: string }>;
+          assertCapability: (input: unknown) => Promise<unknown>;
+        };
+      };
     };
     if (!w.classflowDesktop) w.classflowDesktop = {};
     if (!w.classflowDesktop.invocation) {
       let seq = 0;
       w.classflowDesktop.invocation = {
         beginLocal: async () => ({ invocationId: `inv_e2e_chat_${++seq}_00000000-0000-4000-8000-000000000000` }),
+        assertCapability: async () => ({ ok: true }),
       };
+    } else if (!w.classflowDesktop.invocation.assertCapability) {
+      (w.classflowDesktop.invocation as { assertCapability?: (input: unknown) => Promise<unknown> }).assertCapability =
+        async () => ({ ok: true });
     }
   });
 });

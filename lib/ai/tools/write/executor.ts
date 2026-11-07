@@ -1,4 +1,5 @@
 ﻿import {
+  Assignment,
   CourseSchedule,
   GroupTask,
   Reminder,
@@ -86,9 +87,9 @@ function validTimeRange(start: string, end: string): boolean {
 // ---------- Create（动态 ID 依赖，保持独立执行路径；不进入 Transaction V1） ----------
 
 function createAssignment(api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> {
-  const parsed = safeParse<{ courseId: string; title: string; description?: string; ddl?: string; estimatedMinutes?: number; priority?: string; status?: string; progress?: number; tags?: string[] }>("create_assignment", input);
+  const parsed = safeParse<{ courseId: string; title: string; description?: string; ddl?: string; estimatedMinutes?: number; priority?: string; tags?: string[] }>("create_assignment", input);
   if (!parsed.ok) return parsed;
-  const { courseId, title, description, ddl, estimatedMinutes, priority, status, progress, tags } = parsed.data;
+  const { courseId, title, description, ddl, estimatedMinutes, priority, tags } = parsed.data;
   if (!api.getState().courses.some((c) => c.id === courseId)) return notFound("未找到对应课程。");
 
   const prefs = api.getState().preferences;
@@ -100,8 +101,9 @@ function createAssignment(api: KiroWriteApi, input: unknown, toolCallId: string)
     ddl,
     estimatedMinutes,
     priority: (priority ?? prefs.defaultTaskPriority) as never,
-    status: (status ?? prefs.defaultTaskStatus) as never,
-    progress: progress ?? 0,
+    // 生命周期只从 todo/偏好默认开始；completed/submitted 只能通过终态事务写入。
+    status: prefs.defaultTaskStatus,
+    progress: 0,
     tags: tags ?? [],
   });
 
@@ -118,7 +120,7 @@ function createAssignment(api: KiroWriteApi, input: unknown, toolCallId: string)
       entityId: id,
       title,
       operation: "create",
-      after: { ddl: ddl ?? null, estimatedMinutes: estimatedMinutes ?? null, priority: priority ?? prefs.defaultTaskPriority, status: status ?? prefs.defaultTaskStatus },
+      after: { ddl: ddl ?? null, estimatedMinutes: estimatedMinutes ?? null, priority: priority ?? prefs.defaultTaskPriority, status: prefs.defaultTaskStatus },
       canUndo: true,
     },
   };
@@ -300,6 +302,162 @@ function createGroupTask(api: KiroWriteApi, input: unknown, toolCallId: string):
 }
 
 // ---------- 事务安全工具：委托 prepareKiroWriteTool（与 Change Set 共享同一套 domain validation） ----------
+
+/**
+ * Task Lifecycle V2：完成/提交不可直接写 status。
+ * - 终态：transitionTask（释放学习块 / 取消提醒 / recurrence / 历史）
+ * - 重新打开：reopenTask（恢复可选副作用；当前不提供一次性 Undo，避免伪造可逆性）
+ * - active ↔ active：仍允许状态标记，但不触发终态事务。
+ */
+function executeSetAssignmentStatus(
+  api: KiroWriteApi,
+  input: unknown,
+  toolCallId: string
+): WriteToolResult<unknown> {
+  const parsed = safeParse<{ assignmentId: string; status: Assignment["status"] }>(
+    "set_assignment_status",
+    input
+  );
+  if (!parsed.ok) return parsed;
+  const { assignmentId, status } = parsed.data;
+  const before = api.getState().assignments.find((assignment) => assignment.id === assignmentId);
+  if (!before) return notFound("未找到对应任务。");
+
+  if (status === "submitted" || status === "completed") {
+    if (before.status === status) return conflict("任务已经是该状态。");
+    const transitionId = `kt_${crypto.randomUUID()}`;
+    const result = api.transitionTask(assignmentId, status, {
+      transitionId,
+      source: "kiro",
+    });
+    if (!result.ok) {
+      return conflict(
+        result.blocker === "focus-running"
+          ? "正在专注中，请先结束专注。"
+          : result.blocker === "already-completed"
+            ? "任务已经是该状态。"
+            : "任务状态已变化，请刷新后重试。"
+      );
+    }
+    api.registerUndo(toolCallId, () => {
+      const undo = api.undoTaskTransition(assignmentId, result.transitionId);
+      if (!undo.ok) {
+        api.pushToast({
+          type: "warning",
+          message: "任务状态已变化，无法撤销本次完成 / 提交",
+        });
+      }
+    });
+    return {
+      ok: true,
+      data: { id: assignmentId },
+      action: {
+        tool: "set_assignment_status",
+        entityType: "assignment",
+        entityId: assignmentId,
+        title: before.title,
+        operation: "update",
+        before: { status: before.status },
+        after: {
+          status: result.appliedStatus,
+          releasedStudyBlocks: result.releasedStudyBlockIds.length,
+          cancelledReminders: result.cancelledReminderIds.length,
+          generatedRecurrence: result.generatedRecurrenceId ?? null,
+        },
+        canUndo: true,
+      },
+    };
+  }
+
+  if (before.status === "submitted" || before.status === "completed") {
+    const result = api.reopenTask(assignmentId, {
+      restoreStudyBlocks: true,
+      restoreReminders: true,
+      deletePristineRecurrence: true,
+      source: "kiro",
+    });
+    if (!result.ok) return conflict("任务重新打开失败，可能关联数据已变化。");
+    return {
+      ok: true,
+      data: { id: assignmentId },
+      action: {
+        tool: "set_assignment_status",
+        entityType: "assignment",
+        entityId: assignmentId,
+        title: before.title,
+        operation: "update",
+        before: { status: before.status },
+        after: {
+          status: result.appliedStatus,
+          restoredStudyBlocks: result.restoredStudyBlockIds.length,
+          restoredReminders: result.restoredReminderIds.length,
+        },
+        canUndo: false,
+      },
+    };
+  }
+
+  api.updateAssignmentStatus(assignmentId, status);
+  api.registerUndo(toolCallId, () => api.updateAssignment(before));
+  return {
+    ok: true,
+    data: { id: assignmentId },
+    action: {
+      tool: "set_assignment_status",
+      entityType: "assignment",
+      entityId: assignmentId,
+      title: before.title,
+      operation: "update",
+      before: { status: before.status },
+      after: { status },
+      canUndo: true,
+    },
+  };
+}
+
+/**
+ * Progress 不再驱动状态：closed 任务拒绝；100 必须走完成事务；其余只写 progress 字段。
+ */
+function executeSetAssignmentProgress(
+  api: KiroWriteApi,
+  input: unknown,
+  toolCallId: string
+): WriteToolResult<unknown> {
+  const parsed = safeParse<{ assignmentId: string; progress: number }>(
+    "set_assignment_progress",
+    input
+  );
+  if (!parsed.ok) return parsed;
+  const { assignmentId, progress } = parsed.data;
+  const before = api.getState().assignments.find((assignment) => assignment.id === assignmentId);
+  if (!before) return notFound("未找到对应任务。");
+  if (before.status === "submitted" || before.status === "completed") {
+    return conflict("已完成或已提交的任务不能修改进度；如需继续请先重新打开。");
+  }
+  if (progress >= 100) {
+    return {
+      ok: false,
+      code: "UNSUPPORTED",
+      message: "进度 100 会改变任务生命周期；请使用完成/提交操作。",
+    };
+  }
+  api.updateAssignment({ ...before, progress });
+  api.registerUndo(toolCallId, () => api.updateAssignment(before));
+  return {
+    ok: true,
+    data: { id: assignmentId },
+    action: {
+      tool: "set_assignment_progress",
+      entityType: "assignment",
+      entityId: assignmentId,
+      title: before.title,
+      operation: "update",
+      before: { progress: before.progress, status: before.status },
+      after: { progress, status: before.status },
+      canUndo: true,
+    },
+  };
+}
 
 function viaPrepare(toolName: TransactionSafeToolName) {
   return (api: KiroWriteApi, input: unknown, toolCallId: string): WriteToolResult<unknown> => {
@@ -1407,8 +1565,8 @@ const EXECUTORS: Record<KiroWriteToolName, (api: KiroWriteApi, input: unknown, t
   update_assignment: viaPrepare("update_assignment"),
   set_assignment_ddl: viaPrepare("set_assignment_ddl"),
   set_assignment_priority: viaPrepare("set_assignment_priority"),
-  set_assignment_status: viaPrepare("set_assignment_status"),
-  set_assignment_progress: viaPrepare("set_assignment_progress"),
+  set_assignment_status: executeSetAssignmentStatus,
+  set_assignment_progress: executeSetAssignmentProgress,
   toggle_assignment_subtask: viaPrepare("toggle_assignment_subtask"),
   delete_assignment: viaPrepare("delete_assignment"),
   create_schedule: createSchedule,

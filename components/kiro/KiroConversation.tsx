@@ -37,6 +37,53 @@ import { actionSummaryText } from "@/lib/ai/share";
 import { cn } from "@/lib/utils";
 import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { bumpStreamPerf } from "@/lib/ai/perf/streamPerf";
+import { useAppStore } from "@/store/useAppStore";
+import { useReminderCenterStore } from "@/store/useReminderCenterStore";
+import { resolveKiroActionTarget } from "@/lib/kiro/actionTarget";
+import type { WriteToolResult } from "@/lib/ai/tools/write/types";
+
+/**
+ * Action Result → 实体深链。
+ * 只导航到真实实体；无法解析（change-set / 已删除）时不显示「查看」。
+ */
+function openKiroActionTarget(action: Extract<WriteToolResult, { ok: true }>["action"]) {
+  const state = useAppStore.getState();
+  const target = resolveKiroActionTarget(action, state);
+  if (!target) return;
+  switch (target.kind) {
+    case "assignment":
+      state.setActiveTab("assignments");
+      state.setSelectedAssignmentId(target.assignmentId);
+      break;
+    case "course":
+      state.setActiveTab("courses");
+      state.setSelectedCourseId(target.courseId);
+      break;
+    case "group-project":
+      state.setActiveTab("group");
+      state.setSelectedGroupProjectId(target.projectId);
+      break;
+    case "group-task":
+      state.setActiveTab("group");
+      state.setSelectedGroupProjectId(target.projectId);
+      state.setPendingGroupTaskTarget({ projectId: target.projectId, taskId: target.taskId });
+      break;
+    case "group-member":
+      state.setActiveTab("group");
+      state.setSelectedGroupProjectId(target.projectId);
+      break;
+    case "study-block":
+      state.setActiveTab("timetable");
+      break;
+    case "calendar-mark":
+      state.setActiveTab("timetable");
+      state.setSelectedCalendarMarkId(target.markId);
+      break;
+    case "reminder":
+      useReminderCenterStore.getState().open();
+      break;
+  }
+}
 
 /**
  * Conversation 布局：max-width 820px 居中，纵向文档流。
@@ -616,6 +663,11 @@ const KiroConversationRow = React.memo(function KiroConversationRow({
                 key={a.toolCallId}
                 {...actionToCardProps(a.action)}
                 entering={enteringActionIds.has(a.toolCallId)}
+                onView={
+                  resolveKiroActionTarget(a.action, useAppStore.getState())
+                    ? () => openKiroActionTarget(a.action)
+                    : undefined
+                }
                 onUndo={a.action.canUndo ? () => onUndo(a.toolCallId) : undefined}
               />
             ))}

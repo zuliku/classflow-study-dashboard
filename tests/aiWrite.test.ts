@@ -74,6 +74,10 @@ function buildApi(store: { getState: () => any }, undos: Map<string, () => void>
     updateAssignmentStatus: (id, status) => store.getState().updateAssignmentStatus(id, status),
     updateAssignmentPriority: (id, priority) => store.getState().updateAssignmentPriority(id, priority),
     updateAssignmentProgress: (id, progress) => store.getState().updateAssignmentProgress(id, progress),
+    transitionTask: (id, to, input) => store.getState().transitionTask(id, to, input),
+    undoTaskTransition: (id, transitionId) => store.getState().undoTaskTransition(id, transitionId),
+    reopenTask: (id, input) => store.getState().reopenTask(id, input),
+    previewTaskTransition: (id, to, transitionId) => store.getState().previewTaskTransition(id, to, transitionId),
     toggleSubtask: (id, subtaskId) => store.getState().toggleSubtask(id, subtaskId),
     addScheduleSlot: (sl) => store.getState().addScheduleSlot(sl),
     updateSchedule: (sc) => store.getState().updateSchedule(sc),
@@ -186,24 +190,37 @@ describe("Write Executor — Assignment", () => {
     expect(s.calendarMarks.find((m) => m.id === "cm1")?.sourceId).toBe("a1");
   });
 
-  it("set_assignment_status completed：保留 store 语义（progress=100）", async () => {
+  it("set_assignment_status completed：走终态事务（completedAt + Undo 完整恢复）", async () => {
     seedStore();
     const { store, executeKiroWriteTool } = await freshModules();
     const undos = new Map();
     const api = buildApi(store, undos);
     const r = executeKiroWriteTool("set_assignment_status", { assignmentId: "a1", status: "completed" }, api, "c");
     expect(r.ok).toBe(true);
-    expect(store.getState().assignments.find((a) => a.id === "a1")?.progress).toBe(100);
+    const completed = store.getState().assignments.find((a) => a.id === "a1");
+    expect(completed?.status).toBe("completed");
+    expect(completed?.completedAt).toBeTruthy();
+    expect(completed?.lastTerminalTransition?.source).toBe("kiro");
+    undos.get("c")!();
+    expect(store.getState().assignments.find((a) => a.id === "a1")?.status).toBe("todo");
   });
 
-  it("set_assignment_progress：status 自动同步（100 → completed）", async () => {
+  it("set_assignment_progress 100：拒绝并交由完成事务；0-99 只写 progress 不派生 status", async () => {
     seedStore();
     const { store, executeKiroWriteTool } = await freshModules();
     const undos = new Map();
     const api = buildApi(store, undos);
-    const r = executeKiroWriteTool("set_assignment_progress", { assignmentId: "a1", progress: 100 }, api, "c");
-    expect(r.ok).toBe(true);
-    expect(store.getState().assignments.find((a) => a.id === "a1")?.status).toBe("completed");
+    const rejected = executeKiroWriteTool("set_assignment_progress", { assignmentId: "a1", progress: 100 }, api, "c1");
+    expect(rejected.ok).toBe(false);
+    if (rejected.ok) return;
+    expect(rejected.code).toBe("UNSUPPORTED");
+    expect(store.getState().assignments.find((a) => a.id === "a1")?.status).toBe("todo");
+
+    const ok = executeKiroWriteTool("set_assignment_progress", { assignmentId: "a1", progress: 40 }, api, "c2");
+    expect(ok.ok).toBe(true);
+    const task = store.getState().assignments.find((a) => a.id === "a1");
+    expect(task?.progress).toBe(40);
+    expect(task?.status).toBe("todo");
   });
 });
 

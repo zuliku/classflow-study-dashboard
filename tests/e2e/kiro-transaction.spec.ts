@@ -144,6 +144,101 @@ test("E2E A：Change Set 批量成功 → 全部修改 + 单个 Card + 单个 Un
   expect(afterUndo).not.toContain(d1);
 });
 
+test("E2E C：Action Card「查看」→ 打开真实任务详情", async ({ page }) => {
+  await page.route("**/api/ai/chat", async (route) => {
+    const body = route.request().postDataJSON() as { messages?: { role: string; parts?: { type: string; state?: string }[] }[] };
+    const hasToolOutput = (body?.messages ?? []).some(
+      (m) => m.role === "assistant" && (m.parts ?? []).some((p) => p.type.startsWith("tool-") && p.state === "output-available")
+    );
+    if (!hasToolOutput) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallSSE("set_assignment_priority", { assignmentId: "a1", priority: "high" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: textSSE("已把第一个任务设为高优先级。"),
+    });
+  });
+  await seedAI(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openWorkspace(page);
+
+  await sendMessage(page, "把第一个任务设为高优先级");
+  await expect(page.getByTestId("kiro-action-card").first()).toContainText("已修改", { timeout: 15000 });
+  await page.getByTestId("kiro-action-card").first().getByTestId("kiro-action-view").click();
+  const detail = page.getByRole("dialog", { name: "任务详情" });
+  await expect(detail).toBeVisible();
+  await expect(detail.getByRole("heading", { name: "计量经济学大作业（第3章）" })).toBeVisible();
+});
+
+test("E2E D：完成任务的 Kiro 写入先预览副作用，再走终态事务 + Undo", async ({ page }) => {
+  await page.route("**/api/ai/chat", async (route) => {
+    const body = route.request().postDataJSON() as { messages?: { role: string; parts?: { type: string; state?: string }[] }[] };
+    const hasToolOutput = (body?.messages ?? []).some(
+      (m) => m.role === "assistant" && (m.parts ?? []).some((p) => p.type.startsWith("tool-") && p.state === "output-available")
+    );
+    if (!hasToolOutput) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: toolCallSSE("set_assignment_status", { assignmentId: "a1", status: "completed" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: textSSE("已完成该任务。"),
+    });
+  });
+  await seedAI(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openWorkspace(page);
+
+  const before = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+    return s.assignments.find((a: { id: string }) => a.id === "a1")?.status;
+  });
+  expect(before).toBe("doing");
+
+  await sendMessage(page, "把这个任务标记完成");
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toBeVisible({ timeout: 15000 });
+  await expect(confirm).toContainText("完成《计量经济学大作业（第3章）》");
+  // 确认前零写入
+  const during = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+    return s.assignments.find((a: { id: string }) => a.id === "a1")?.status;
+  });
+  expect(during).toBe("doing");
+
+  await confirm.getByTestId("confirm-dialog-confirm").click();
+  await expect(page.getByTestId("kiro-message").last()).toContainText("已完成该任务", { timeout: 15000 });
+  const after = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+    const task = s.assignments.find((a: { id: string }) => a.id === "a1");
+    return { status: task?.status, completedAt: task?.completedAt, lastSource: task?.lastTerminalTransition?.source };
+  });
+  expect(after.status).toBe("completed");
+  expect(after.completedAt).toBeTruthy();
+  expect(after.lastSource).toBe("kiro");
+
+  const card = page.getByTestId("kiro-action-card").last();
+  await expect(card).toContainText("撤销");
+  await card.getByRole("button", { name: "撤销" }).click();
+  await page.waitForTimeout(500);
+  const undone = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("classflow-storage-v2")!).state;
+    return s.assignments.find((a: { id: string }) => a.id === "a1")?.status;
+  });
+  expect(undone).toBe("doing");
+});
+
 test("E2E B：课表冲突 → preflight 失败 → 0 mutation + 自然说明", async ({ page }) => {
   await page.route("**/api/ai/chat", async (route) => {
     const body = route.request().postDataJSON() as { messages?: { role: string; parts?: { type: string; state?: string }[] }[] };

@@ -12,13 +12,14 @@
   InvalidToolInputError,
 } from "ai";
 import { AI, KIRO_SYSTEM_PROMPT } from "@/lib/ai/config";
-import { KIRO_TOOLS, getKiroToolsForRequest } from "@/lib/ai/tools";
+import { KIRO_TOOLS, getKiroToolsForRequest, resolveKiroBusinessWriteAccess } from "@/lib/ai/tools";
 import { assembleKiroToolsForRequest } from "@/lib/ai/web/tool";
 import { buildKiroWebSearchCapabilitySection } from "@/lib/ai/web/capability";
 import { resolveKiroWebSearchAccessWithStoredRef } from "@/lib/ai/web/storedCredentials";
 import { normalizeAIError, AIError, AI_ERROR_MESSAGES } from "@/lib/ai/errors";
 import { logProviderError } from "@/lib/ai/providerLog";
 import { buildKiroResponsePreferenceContext } from "@/lib/ai/responsePreference";
+import { buildKiroWriteAccessSection } from "@/lib/ai/prompts/kiroSystemPrompt";
 import { resolveLanguageModel, resolveModelDefinition } from "@/lib/ai/providers/resolver";
 import { validateAIChatBody, createTimeoutController } from "@/lib/ai/server";
 import { normalizeProjectTurnContext, buildProjectInstructionsSection } from "@/lib/ai/projects/prompt";
@@ -195,6 +196,9 @@ export async function handleChat(req: Request) {
   const computerSnapshot = validateComputerTurnSnapshot(
     (body as Record<string, unknown>).computerSnapshot
   );
+  // 业务写边界：Plan 模式 → 只读（不暴露业务 Write Tools / apply_change_set）。
+  const businessWriteAccess = resolveKiroBusinessWriteAccess(computerSnapshot ?? undefined);
+  const writeAccessSection = buildKiroWriteAccessSection(businessWriteAccess);
 
   // Computer workspace trusted context（只含 logical IDs；文件内容是不可信数据）
   const computerWorkspaceContext = computerSnapshot?.enabled && computerSnapshot.workspaceId
@@ -467,8 +471,8 @@ export async function handleChat(req: Request) {
       : "";
 
   const systemMessage = baseContext
-    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${tierGuidanceSection}${textOnlySuffix}${desktopRuntimeCapabilityContext}${webSearchCapabilitySection}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}`
-    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + tierGuidanceSection + textOnlySuffix + desktopRuntimeCapabilityContext + webSearchCapabilitySection + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection;
+    ? `${trustedBasePrompt}${buildClassFlowContextSection(baseContext, contextRefs)}${projectInstructionsSection}${visualPendingContinuationSection}${memorySection}${attachmentSection(plan.attachmentContext)}${visionPagesSection}${computerWorkspaceContext}${approvedPlanSection}${tierGuidanceSection}${textOnlySuffix}${desktopRuntimeCapabilityContext}${webSearchCapabilitySection}${workspaceInstructionsSection}${artifactContextNotice}${skillCatalogSection}${slashSkillSection}${desktopRecipeSection}${writeAccessSection}`
+    : trustedBasePrompt + projectInstructionsSection + visualPendingContinuationSection + memorySection + attachmentSection(plan.attachmentContext) + visionPagesSection + computerWorkspaceContext + approvedPlanSection + tierGuidanceSection + textOnlySuffix + desktopRuntimeCapabilityContext + webSearchCapabilitySection + workspaceInstructionsSection + artifactContextNotice + skillCatalogSection + slashSkillSection + desktopRecipeSection + writeAccessSection;
 
   try {
     const modelMessages = await convertToModelMessages(plan.messages as never);
@@ -489,6 +493,7 @@ export async function handleChat(req: Request) {
         messages: parsed.messages as unknown[],
         clientTools: getKiroToolsForRequest({
           computerSnapshot: computerSnapshot ?? undefined,
+          businessWriteAccess,
           // V2.3：Document Authoring Protocol 握手（缺失 → legacy V1；deterministic，不猜）
           documentAuthoringVersion: resolveDocumentAuthoringVersion(computerSnapshot?.documentAuthoringVersion),
         }),

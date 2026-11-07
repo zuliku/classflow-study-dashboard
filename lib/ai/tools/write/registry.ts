@@ -10,7 +10,7 @@ export const KIRO_WRITE_TOOLS = {
   create_assignment: tool({
     description:
       "创建学习任务（标题与课程必填）。截止时间（ddl）与预计耗时（estimatedMinutes）可选——任务允许没有截止时间，" +
-      "不要为了满足参数而凭空生成 DDL。默认优先级/状态来自用户偏好。",
+      "不要为了满足参数而凭空生成 DDL。新任务从 todo（或用户偏好默认）开始；completed/submitted 只能通过完成/提交操作进入。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.create_assignment,
   }),
   update_assignment: tool({
@@ -27,11 +27,14 @@ export const KIRO_WRITE_TOOLS = {
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_assignment_priority,
   }),
   set_assignment_status: tool({
-    description: "修改任务状态（待完成/进行中/已提交/已完成）。",
+    description:
+      "修改任务状态。submitted（提交）/ completed（完成）会走任务终态事务，系统会先展示释放学习计划、取消提醒等副作用并由用户确认；" +
+      "已完成/已提交 → todo/doing 会重新打开任务（恢复可选副作用）。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_assignment_status,
   }),
   set_assignment_progress: tool({
-    description: "修改任务进度（0-100），状态自动同步。",
+    description:
+      "修改任务进度（0-99）。进度不再驱动状态：100 必须使用 submitted/completed 终态操作；已完成/已提交任务不能修改进度。",
     inputSchema: KIRO_WRITE_TOOL_SCHEMAS.set_assignment_progress,
   }),
   toggle_assignment_subtask: tool({

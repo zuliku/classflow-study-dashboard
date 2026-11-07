@@ -172,6 +172,11 @@ export interface KiroWriteApi {
   updateAssignmentStatus: (id: string, status: Assignment["status"]) => void;
   updateAssignmentPriority: (id: string, priority: Priority) => void;
   updateAssignmentProgress: (id: string, progress: number) => void;
+  /** Task Lifecycle V2：终态事务（submitted/completed）+ 一次性 Undo + 重新打开 */
+  transitionTask: AppState["transitionTask"];
+  undoTaskTransition: AppState["undoTaskTransition"];
+  reopenTask: AppState["reopenTask"];
+  previewTaskTransition: AppState["previewTaskTransition"];
   toggleSubtask: (assignmentId: string, subtaskId: string) => void;
 
   addScheduleSlot: (s: Omit<CourseSchedule, "id">) => string;
