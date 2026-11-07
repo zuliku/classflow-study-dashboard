@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useAppStore } from "@/store/useAppStore";
 import { seedDemoData } from "./demoSeed";
-import { calculateGroupProjectProgress, normalizeGroupProject, normalizeLocalDDL } from "@/lib/groupProject";
+import { calculateGroupProjectProgress, deriveGroupProjectStats, deriveMemberWorkload, filterGroupTasks, normalizeGroupProject, normalizeLocalDDL } from "@/lib/groupProject";
 import { combineLocalDateTime, getLocalDDLDate, getLocalDDLTime, parseLocalDDL } from "@/lib/ddl";
 import { GroupProject, ClassFlowBackupData } from "@/types";
 
@@ -40,6 +40,63 @@ describe("calculateGroupProjectProgress", () => {
     expect(calculateGroupProjectProgress(mkTasks(1, 4))).toBe(25);
     expect(calculateGroupProjectProgress(mkTasks(3, 5))).toBe(60);
     expect(calculateGroupProjectProgress(mkTasks(5, 5))).toBe(100);
+  });
+});
+
+describe("Group task projection（stats / filter / workload）", () => {
+  const now = new Date(2026, 7, 10, 12, 0, 0);
+  const project = {
+    id: "gp_stats",
+    courseId: "c_1",
+    title: "统计项目",
+    description: "",
+    progress: 25,
+    updatedAt: "2026-08-01",
+    members: [
+      { id: "m_1", name: "甲", role: "leader" as const },
+      { id: "m_2", name: "乙", role: "member" as const },
+    ],
+    tasks: [
+      { id: "t_overdue", title: "逾期任务", assigneeId: "m_1", ddl: "2026-08-09T23:59:00", completed: false },
+      { id: "t_soon", title: "本周任务", assigneeId: "m_1", ddl: "2026-08-12T23:59:00", completed: false },
+      { id: "t_later", title: "以后任务", ddl: "2026-08-30T23:59:00", completed: false },
+      { id: "t_done", title: "完成任务", assigneeId: "m_2", ddl: "2026-08-01T23:59:00", completed: true },
+    ],
+  } as GroupProject;
+
+  it("deriveGroupProjectStats：open/overdue/dueSoon/unassigned/nextDeadline 均为事实", () => {
+    const stats = deriveGroupProjectStats(project, now);
+    expect(stats.total).toBe(4);
+    expect(stats.completed).toBe(1);
+    expect(stats.open).toBe(3);
+    expect(stats.overdue).toBe(1);
+    expect(stats.dueSoon).toBe(1);
+    expect(stats.unassigned).toBe(1);
+    expect(stats.nextDeadline?.getTime()).toBe(new Date(2026, 7, 12, 23, 59, 0).getTime());
+  });
+
+  it("filterGroupTasks：状态 / 负责人 / 搜索组合过滤，不改变原数组", () => {
+    expect(filterGroupTasks(project.tasks, { filter: "open", now }).map((t) => t.id)).toEqual([
+      "t_overdue",
+      "t_soon",
+      "t_later",
+    ]);
+    expect(filterGroupTasks(project.tasks, { filter: "overdue", now }).map((t) => t.id)).toEqual(["t_overdue"]);
+    expect(filterGroupTasks(project.tasks, { filter: "due-soon", now }).map((t) => t.id)).toEqual(["t_soon"]);
+    expect(filterGroupTasks(project.tasks, { filter: "completed", now }).map((t) => t.id)).toEqual(["t_done"]);
+    expect(filterGroupTasks(project.tasks, { assigneeId: "unassigned", now }).map((t) => t.id)).toEqual(["t_later"]);
+    expect(filterGroupTasks(project.tasks, { assigneeId: "m_1", query: "本周", now }).map((t) => t.id)).toEqual([
+      "t_soon",
+    ]);
+    expect(project.tasks).toHaveLength(4);
+  });
+
+  it("deriveMemberWorkload：每位成员独立统计 open/overdue/completed", () => {
+    const workload = deriveMemberWorkload(project, now);
+    expect(workload).toEqual([
+      { memberId: "m_1", name: "甲", open: 2, overdue: 1, completed: 0, total: 2 },
+      { memberId: "m_2", name: "乙", open: 0, overdue: 0, completed: 1, total: 1 },
+    ]);
   });
 });
 

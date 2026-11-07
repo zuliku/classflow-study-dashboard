@@ -72,6 +72,46 @@ test("Group：编辑任务 → 修改负责人 → 保存 → 正常显示", asy
   await expect(page.getByText("已编辑任务").first()).toBeVisible();
 });
 
+test("Group：项目健康统计与任务筛选（待完成 / 已完成 / 负责人）", async ({ page }) => {
+  await openGroup(page);
+  await page.getByRole("button", { name: "新建项目" }).first().click();
+  const projectDialog = page.getByRole("dialog", { name: "小组项目" });
+  await projectDialog.getByLabel("项目名称").fill("筛选项目");
+  await projectDialog.getByRole("button", { name: "创建项目" }).click();
+  await expect(page.getByText("筛选项目").first()).toBeVisible();
+
+  for (const title of ["筛选任务甲", "筛选任务乙"]) {
+    await page.getByRole("button", { name: "添加任务" }).first().click();
+    const taskDialog = page.getByRole("dialog", { name: "小组项目" });
+    await taskDialog.getByLabel("任务名称").fill(title);
+    await taskDialog.getByRole("button", { name: "添加任务" }).last().click();
+    await expect(page.getByText(title).first()).toBeVisible();
+  }
+
+  const stats = page.getByTestId("group-project-stats");
+  await expect(stats).toBeVisible();
+  await expect(stats.getByText("待完成").locator("..")).toContainText("2");
+  await expect(page.locator('[data-testid^="group-task-row-"]')).toHaveCount(2);
+
+  await page.getByRole("button", { name: /^已完成/ }).click();
+  await expect(page.getByText("没有匹配的任务")).toBeVisible();
+  await page.getByRole("button", { name: /^待完成/ }).click();
+  await expect(page.locator('[data-testid^="group-task-row-"]')).toHaveCount(2);
+
+  await page.locator('label:has(input[aria-label="标记完成"])').first().click();
+  await expect(stats.getByText("待完成").locator("..")).toContainText("1");
+
+  await page.getByRole("button", { name: /^已完成/ }).click();
+  await expect(page.locator('[data-testid^="group-task-row-"]')).toHaveCount(1);
+
+  await page.getByRole("button", { name: "清除筛选" }).click();
+  await expect(page.locator('[data-testid^="group-task-row-"]')).toHaveCount(2);
+
+  await page.getByLabel("按负责人筛选").click();
+  await page.getByRole("option", { name: "未分配", exact: true }).click();
+  await expect(page.locator('[data-testid^="group-task-row-"]')).toHaveCount(2);
+});
+
 test("Group：删除最后一个项目 → 先播行退出折叠，再进入空态", async ({ page }) => {
   await openGroup(page);
   await page.getByRole("button", { name: "新建项目" }).first().click();

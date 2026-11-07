@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 
 import { WorkspaceHeader } from "@/components/layout/WorkspaceHeader";
 import { Button } from "@/components/ui/Button";
@@ -33,7 +33,13 @@ import { useEnterOnAdd } from "@/lib/useEnterOnAdd";
 import { useExitPresenceList } from "@/lib/useExitPresenceList";
 import { ExitCollapse } from "@/components/ui/ExitCollapse";
 import { parseLocalDDL, getLocalDDLDate, getLocalDDLTime, combineLocalDateTime } from "@/lib/ddl";
-import { formatLocalDate } from "@/lib/groupProject";
+import {
+  deriveGroupProjectStats,
+  deriveMemberWorkload,
+  filterGroupTasks,
+  formatLocalDate,
+  type GroupTaskFilter,
+} from "@/lib/groupProject";
 
 
 
@@ -68,6 +74,31 @@ function MemberAvatar({ member, size = "w-7 h-7", ring = false }: { member: Grou
       } shrink-0`}
     >
       {(member.name || "?").slice(0, 1).toUpperCase()}
+    </div>
+  );
+}
+
+/** 项目健康事实（只展示真实计数；0 仍是事实，不做伪进度） */
+function GroupStat({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: number;
+  tone?: "neutral" | "warning" | "danger";
+}) {
+  return (
+    <div className="rounded-lg border border-line-soft bg-background px-2.5 py-2">
+      <p className="text-[10px] font-medium text-sandrift">{label}</p>
+      <p
+        className={cn(
+          "mt-0.5 text-[15px] font-semibold tabular-nums",
+          tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning" : "text-charcoal"
+        )}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -169,11 +200,12 @@ export function GroupCollaborationView() {
   const selectedGroupProjectId = useAppStore((s) => s.selectedGroupProjectId);
 
   // 相对时间（“x分钟后”）随分钟流逝过期：60s 轻量重渲染刷新文案
-  const [, setNowTick] = useState(0);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
-    const timer = setInterval(() => setNowTick((v) => v + 1), 60_000);
+    const timer = setInterval(() => setNowTick(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
+  const now = useMemo(() => new Date(nowTick), [nowTick]);
 
   const [projectMoreOpen, setProjectMoreOpen] = useState(false);
 
@@ -182,6 +214,8 @@ export function GroupCollaborationView() {
   const [memberForm, setMemberForm] = useState<null | { mode: "create" } | { mode: "edit"; memberId: string }>(null);
   const [taskForm, setTaskForm] = useState<null | { mode: "create" } | { mode: "edit"; taskId: string }>(null);
   const [taskSearch, setTaskSearch] = useState("");
+  const [taskFilter, setTaskFilter] = useState<GroupTaskFilter>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
 
   // ---- Selection Normalization（单一 resolved project，消除双 fallback 轨道）----
   // - 空域 → null（Workspace Empty State）
@@ -262,6 +296,13 @@ export function GroupCollaborationView() {
     kiroToggleRef.current?.focus();
   };
   const newTaskIds = useEnterOnAdd(selectedProject?.tasks.map((t) => t.id) ?? [], selectedProjectId);
+
+  // 项目切换：过滤条件不跨项目残留（避免「看不到任务」被误判为数据丢失）
+  useEffect(() => {
+    setTaskFilter("all");
+    setAssigneeFilter("all");
+    setTaskSearch("");
+  }, [selectedProjectId]);
 
   const newProjectIds = useEnterOnAdd(groupProjects.map((p) => p.id));
   const retainedProjects = useExitPresenceList({
@@ -475,14 +516,39 @@ export function GroupCollaborationView() {
   };
 
   const filteredTasks = selectedProject
-    ? selectedProject.tasks.filter((t) => t.title.toLowerCase().includes(taskSearch.trim().toLowerCase()))
+    ? filterGroupTasks(selectedProject.tasks, {
+        filter: taskFilter,
+        assigneeId: assigneeFilter,
+        query: taskSearch,
+        now,
+      })
     : [];
+
+  const projectStats = useMemo(
+    () => (selectedProject ? deriveGroupProjectStats(selectedProject, now) : null),
+    [selectedProject, now]
+  );
+  const memberWorkload = useMemo(
+    () => (selectedProject ? deriveMemberWorkload(selectedProject, now) : []),
+    [selectedProject, now]
+  );
+  const workloadByMember = useMemo(
+    () => new Map(memberWorkload.map((workload) => [workload.memberId, workload])),
+    [memberWorkload]
+  );
+  const filtersActive =
+    taskFilter !== "all" || assigneeFilter !== "all" || taskSearch.trim().length > 0;
+  const clearTaskFilters = () => {
+    setTaskFilter("all");
+    setAssigneeFilter("all");
+    setTaskSearch("");
+  };
 
   // Task exit：真实删除 → exit；搜索/项目切换 → 直接同步
   const retainedTasks = useExitPresenceList({
     items: filteredTasks,
     getId: (t) => t.id,
-    resetKey: `${selectedProjectId}|${taskSearch}`,
+    resetKey: `${selectedProjectId}|${taskSearch}|${taskFilter}|${assigneeFilter}`,
   });
   const taskExitingIds = new Set(
     retainedTasks.filter((e) => e.exiting).map((e) => e.item.id)
@@ -592,7 +658,7 @@ export function GroupCollaborationView() {
       ) : (
       <div key="list" className="ux-settle workspace-gutter flex flex-1 min-h-0 flex-col lg:flex-row gap-4 pt-4 pb-24 md:pt-6 md:pb-6">
         {/* Left: Project List（扁平 rail：无外层卡片；selected 用中性底色 + 左侧标记） */}
-        <aside className="w-full lg:w-[268px] lg:shrink-0 min-h-0 flex flex-col lg:pr-5 lg:border-r lg:border-line-soft">
+        <aside className="w-full lg:w-[268px] lg:shrink-0 shrink-0 min-h-0 flex flex-col lg:pr-5 lg:border-r lg:border-line-soft">
           <div className="flex items-center justify-between px-1 pb-2">
             <h3 className="text-[11px] font-medium text-sandrift">项目 · {groupProjects.length}</h3>
             {/* 本地便捷入口（App Chrome V2.3）：Header Primary「新建项目」为权威入口，此处降为 icon-only */}
@@ -622,6 +688,7 @@ export function GroupCollaborationView() {
                 const isSelected = selectedProject?.id === p.id;
                 const course = courses.find((c) => c.id === p.courseId);
                 const completedCount = p.tasks.filter((t) => t.completed).length;
+                const rowStats = deriveGroupProjectStats(p, now);
                 return (
                   <ExitCollapse key={p.id} exiting={entry.exiting}>
                     <button
@@ -645,6 +712,9 @@ export function GroupCollaborationView() {
                       <p className="truncate text-[13px] font-semibold text-charcoal">{p.title}</p>
                       <p className="mt-0.5 truncate text-[11px] text-sandrift">
                         {course?.name || "通用课题"} · {completedCount}/{p.tasks.length} 任务
+                        {rowStats.overdue > 0 && (
+                          <span className="font-semibold text-danger"> · {rowStats.overdue} 逾期</span>
+                        )}
                       </p>
                       <div className="mt-2 h-[2px] w-full overflow-hidden rounded-full bg-line-soft">
                         <div
@@ -716,6 +786,30 @@ export function GroupCollaborationView() {
                   </span>
                 </div>
 
+                {projectStats && selectedProject.tasks.length > 0 && (
+                  <div
+                    className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+                    data-testid="group-project-stats"
+                  >
+                    <GroupStat label="待完成" value={projectStats.open} />
+                    <GroupStat
+                      label="已逾期"
+                      value={projectStats.overdue}
+                      tone={projectStats.overdue > 0 ? "danger" : "neutral"}
+                    />
+                    <GroupStat
+                      label="7 天内"
+                      value={projectStats.dueSoon}
+                      tone={projectStats.dueSoon > 0 ? "warning" : "neutral"}
+                    />
+                    <GroupStat
+                      label="未分配"
+                      value={projectStats.unassigned}
+                      tone={projectStats.unassigned > 0 ? "warning" : "neutral"}
+                    />
+                  </div>
+                )}
+
                 {selectedProject.description && (
                   <p className="max-w-[720px] text-[13px] leading-relaxed text-satin-grey">
                     {selectedProject.description}
@@ -754,6 +848,7 @@ export function GroupCollaborationView() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                       {retainedMembers.map((entry) => {
                         const m = entry.item;
+                        const workload = workloadByMember.get(m.id);
                         return (
                           <ExitCollapse key={m.id} exiting={entry.exiting}>
                             <div
@@ -768,6 +863,13 @@ export function GroupCollaborationView() {
                                 <p className="truncate text-[11px] text-sandrift">
                                   {m.role === "leader" ? "组长" : "组员"}
                                   {m.major ? ` · ${m.major}` : ""}
+                                  {workload
+                                    ? workload.total === 0
+                                      ? " · 暂无任务"
+                                      : ` · ${workload.open} 项待办${
+                                          workload.overdue > 0 ? ` · ${workload.overdue} 逾期` : ""
+                                        }`
+                                    : ""}
                                 </p>
                               </div>
                               <div className="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
@@ -801,13 +903,13 @@ export function GroupCollaborationView() {
 
               {/* Tasks：扁平任务区 + toolbar（无 Card grid） */}
               <div className="pt-2 space-y-3">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="text-[15px] font-semibold tracking-[-0.01em] text-charcoal">
                     任务 <span className="text-sandrift font-normal">
                       {selectedProject.tasks.filter((t) => t.completed).length}/{selectedProject.tasks.length}
                     </span>
                   </h4>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <SearchField
                       value={taskSearch}
                       onChange={(e) => setTaskSearch(e.target.value)}
@@ -815,6 +917,20 @@ export function GroupCollaborationView() {
                       placeholder="检索任务"
                       aria-label="检索任务"
                       className="w-28 sm:w-36"
+                    />
+                    <UISelect
+                      value={assigneeFilter}
+                      onChange={setAssigneeFilter}
+                      ariaLabel="按负责人筛选"
+                      options={[
+                        { value: "all", label: "全部成员" },
+                        ...selectedProject.members.map((m) => ({ value: m.id, label: m.name })),
+                        ...(selectedProject.tasks.some((t) => !t.assigneeId)
+                          ? [{ value: "unassigned", label: "未分配" }]
+                          : []),
+                      ]}
+                      triggerClassName="h-8 w-[112px] min-w-0 text-[11px]"
+                      itemClassName="h-8"
                     />
                     <Button
                       variant="primary"
@@ -828,28 +944,92 @@ export function GroupCollaborationView() {
                   </div>
                 </div>
 
+                <div
+                  className="flex flex-wrap items-center gap-1"
+                  data-testid="group-task-filters"
+                  role="group"
+                  aria-label="筛选小组任务"
+                >
+                  {(
+                    [
+                      { id: "all", label: "全部", count: projectStats?.total ?? 0 },
+                      { id: "open", label: "待完成", count: projectStats?.open ?? 0 },
+                      {
+                        id: "overdue",
+                        label: "已逾期",
+                        count: projectStats?.overdue ?? 0,
+                        danger: (projectStats?.overdue ?? 0) > 0,
+                      },
+                      { id: "due-soon", label: "7 天内", count: projectStats?.dueSoon ?? 0 },
+                      { id: "completed", label: "已完成", count: projectStats?.completed ?? 0 },
+                    ] as { id: GroupTaskFilter; label: string; count: number; danger?: boolean }[]
+                  ).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setTaskFilter(option.id)}
+                      aria-pressed={taskFilter === option.id}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold transition-colors",
+                        taskFilter === option.id
+                          ? option.danger
+                            ? "border-danger-border bg-danger-bg text-danger"
+                            : "border-line-strong bg-pastel-mint text-charcoal"
+                          : option.danger
+                            ? "border-line bg-surface text-danger/80 hover:bg-alabaster"
+                            : "border-line bg-surface text-satin-grey hover:bg-alabaster hover:text-charcoal"
+                      )}
+                    >
+                      {option.label}
+                      <span className="tabular-nums opacity-70">{option.count}</span>
+                    </button>
+                  ))}
+                  {filtersActive && (
+                    <button
+                      type="button"
+                      onClick={clearTaskFilters}
+                      className="ml-1 text-[10px] font-semibold text-sandrift transition-colors hover:text-charcoal"
+                    >
+                      清除筛选
+                    </button>
+                  )}
+                </div>
+
                 {retainedTasks.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={openAddTask}
-                    className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift transition-colors hover:bg-alabaster hover:text-charcoal ux-fade"
-                  >
+                  <div className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-[11px] font-semibold text-sandrift ux-fade">
                     <span>
-                      {selectedProject.tasks.length === 0 ? "还没有任务" : "没有匹配的任务"}
+                      {selectedProject.tasks.length === 0
+                        ? "还没有任务"
+                        : filtersActive
+                          ? "没有匹配的任务"
+                          : "暂无任务"}
                     </span>
-                    {selectedProject.tasks.length === 0 && (
-                      <span className="flex items-center gap-1 font-bold">
+                    {selectedProject.tasks.length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={openAddTask}
+                        className="flex items-center gap-1 font-bold transition-colors hover:text-charcoal"
+                      >
                         <Plus className="w-3.5 h-3.5" />
                         添加任务
-                      </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={clearTaskFilters}
+                        className="font-bold transition-colors hover:text-charcoal"
+                      >
+                        清除筛选
+                      </button>
                     )}
-                  </button>
+                  </div>
                 ) : (
                   <div className="divide-y divide-line-soft">
                     {retainedTasks.map((entry) => {
                       const task = entry.item;
                       const assignee = selectedProject.members.find((m) => m.id === task.assigneeId);
                       const ddlDate = parseLocalDDL(task.ddl);
+                      const overdue = !!ddlDate && !task.completed && ddlDate.getTime() < now.getTime();
                       return (
                         <ExitCollapse key={task.id} exiting={entry.exiting}>
                           <div
@@ -881,15 +1061,24 @@ export function GroupCollaborationView() {
                               >
                                 {task.title}
                               </p>
-                              <p className="mt-0.5 truncate text-[11px] text-sandrift">
-                                {assignee?.name ?? "未分配"}
+                              <p className="mt-0.5 flex min-w-0 items-center gap-1 truncate text-[11px] text-sandrift">
+                                <span className="truncate">{assignee?.name ?? "未分配"}</span>
                                 {ddlDate && (
                                   <>
-                                    {" · "}
-                                    {format(ddlDate, "M月d日 HH:mm", { locale: zhCN })}
-                                    {" · "}
-                                    {formatDistanceToNow(ddlDate, { addSuffix: true, locale: zhCN })}
+                                    <span aria-hidden="true">·</span>
+                                    <span className={cn("shrink-0 tabular-nums", overdue && "font-semibold text-danger")}>
+                                      {format(ddlDate, "M月d日 HH:mm", { locale: zhCN })}
+                                    </span>
+                                    <span aria-hidden="true">·</span>
+                                    <span className={cn("shrink-0", overdue && "font-semibold text-danger")}>
+                                      {formatDistanceToNow(ddlDate, { addSuffix: true, locale: zhCN })}
+                                    </span>
                                   </>
+                                )}
+                                {overdue && (
+                                  <span className="shrink-0 rounded bg-danger-bg px-1 py-px text-[9px] font-bold text-danger">
+                                    逾期
+                                  </span>
                                 )}
                               </p>
                             </div>
